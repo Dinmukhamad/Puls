@@ -187,57 +187,88 @@ function NumberField({ label, value, min, max, onChange }: { label: ReactNode; v
   return <label className="field"><span className="field__label">{label}</span><input className="input" type="number" inputMode="numeric" min={min} max={max} required value={value} onChange={e=>onChange(Math.max(0,Math.round(Number(e.target.value)||0)))}/></label>;
 }
 
-/** The game's numbers: head and admin edit them, trainers and supervisors read them. */
+type EconomyKey = "prices" | "points" | "projects" | "quests" | "land" | "estate" | "district" | "hq";
+/** Where each section lives in the settings: a save sends it over the latest values of the rest. */
+const ECONOMY_FIELD: Record<EconomyKey, keyof CityEconomy> = { prices: "prices", points: "points", projects: "projects", quests: "quest_coins", land: "land", estate: "estate", district: "district", hq: "hq" };
+/** One number of the game: how it reads, its limits, and how it lands in the settings. */
+interface EconomyValue { key: string; label: ReactNode; value: number; min: number; max: number; set: (draft: CityEconomy, value: number) => CityEconomy }
+interface EconomySection { key: EconomyKey; title: string; subtitle: string; note?: string; groups: { key: string; title?: string; values: EconomyValue[] }[] }
+
+/** The game's numbers by section, read from one set of settings: the page shows them, a dialog edits them. */
+function economySections(e: CityEconomy): EconomySection[] {
+  const levelName = (family: string, i: number) => (family === 'park' || family === 'bigpark') && i === 0 ? 'сбор из скверов (0 — бесплатно)' : i === 0 ? 'покупка' : `ступень ${i + 1}`;
+  const sections: EconomySection[] = [
+    { key: 'prices', title: 'Цены построек', subtitle: 'Коинов за покупку в учебном районе', groups: [{ key: 'all', values: (e.catalogue ?? []).map(b => ({ key: b.key, label: <><span aria-hidden="true">{b.icon}</span>{b.name}</>, value: e.prices[b.key], min: 1, max: 100000, set: (d, v) => ({ ...d, prices: { ...d.prices, [b.key]: v } }) })) }] },
+    { key: 'points', title: 'Очки для города группы', subtitle: 'Сколько очков приносит каждое действие', groups: [{ key: 'all', values: (Object.keys(POINT_KINDS) as PointKind[]).map(k => ({ key: k, label: POINT_KINDS[k], value: e.points[k], min: 0, max: 1000, set: (d, v) => ({ ...d, points: { ...d.points, [k]: v } }) })) }] },
+    { key: 'projects', title: 'Кварталы группы', subtitle: 'Очков на квартал; строятся по очереди: следующий начинается после предыдущего', groups: [{ key: 'all', values: e.projects.map((q, i) => ({ key: q.key, label: `${i + 1}. ${q.name}`, value: q.cost, min: 10, max: 1000000, set: (d, v) => ({ ...d, projects: d.projects.map(x => x.key === q.key ? { ...x, cost: v } : x) }) })) }] },
+    { key: 'quests', title: 'Задания дня', subtitle: 'Награда за ситуацию дня', groups: [{ key: 'all', values: [{ key: 'coins', label: 'Коинов за верный ответ', value: e.quest_coins, min: 0, max: 1000, set: (d, v) => ({ ...d, quest_coins: v }) }] }] },
+  ];
+  if (e.land) sections.push({ key: 'land', title: 'Стоимость земли по зонам', subtitle: 'Коинов за участок', note: 'Зоны идут от центра города к окраине: земля у центра дороже. Её стоимость добавляется к цене сквера, дома или офиса. Все зоны района доступны сразу; они различаются только ценой земли. В ОП три зоны — используются первые три цены.',
+    groups: [{ key: 'all', values: e.land.map((price, i) => ({ key: String(i), label: `Зона ${i + 1}${i === 0 ? ' · у центра' : i === e.land!.length - 1 ? ' · окраина' : ''}`, value: price, min: 0, max: 100000, set: (d, v) => ({ ...d, land: d.land!.map((x, j) => j === i ? v : x) }) })) }] });
+  if (e.estate) sections.push({ key: 'estate', title: 'Районы команд: постройки на участках', subtitle: 'Коинов за ступень', note: 'Первая ступень сквера и дома — покупка (вместе с участком), следующие — улучшения. Готовые дома и офисные здания покупаются целиком, по одной цене. Чем больше этажей и площадь дома, есть ли гараж и терраса — тем дороже. Парк и большой парк не покупаются: их собирают свои скверы, первая ступень — сбор (0 — бесплатно). Купленное не дорожает: новые цены действуют для новых операций, а открытая страница стройки попросит подтвердить новую цену.',
+    groups: estateRows(e.estate).map(row => ({ key: row.key, title: row.title ?? plotEconomyName(row.families[0]), values: row.families.flatMap(family => e.estate![family].map((price, i) => {
+      const gathered = (family === 'park' || family === 'bigpark') && i === 0;
+      return { key: `${family}-${i}`, label: row.title ? plotEconomyName(family) : levelName(family, i), value: price, min: gathered ? 0 : 1, max: 100000, set: (d: CityEconomy, v: number) => ({ ...d, estate: { ...d.estate, [family]: d.estate![family].map((x, j) => j === i ? v : x) } }) };
+    })) })) });
+  if (e.district) sections.push({ key: 'district', title: 'Общие проекты района', subtitle: 'Смета ступени, коинов', note: 'Смета фиксируется при открытии проекта; новая цена не переписывает уже открытые сборы.',
+    groups: Object.entries(e.district).map(([family, levels]) => ({ key: family, title: PROJECT_NAMES[family] ?? family, values: levels.map((cost, i) => ({ key: String(i), label: `ступень ${i + 1}`, value: cost, min: 1, max: 100000, set: (d: CityEconomy, v: number) => ({ ...d, district: { ...d.district, [family]: d.district![family].map((x, j) => j === i ? v : x) } }) })) })) });
+  if (e.hq) sections.push({ key: 'hq', title: 'Учёт прежних общих проектов', subtitle: 'Пороги ступеней', note: 'Ступени по возрастанию. Эти пороги относятся к прежним общим проектам. Главное здание района растёт автоматически при застройке 10, 25, 50 и 75 % всей земли.',
+    groups: [{ key: 'all', values: e.hq.map((need, i) => ({ key: String(i), label: `Ступень ${i + 2}`, value: need, min: 1, max: 1000, set: (d, v) => ({ ...d, hq: d.hq!.map((x, j) => j === i ? v : x) }) })) }] });
+  return sections;
+}
+
+/** The game's numbers at a glance; the head and the admin change one section at a time in a dialog. */
 function Economy() {
   const client=useQueryClient();
+  const toast=useToast();
   const query=useQuery({queryKey:['city-economy'],queryFn:city.economy,refetchOnWindowFocus:false});
-  const [draft,setDraft]=useState<CityEconomy|null>(()=>query.data?structuredClone(query.data):null),[saved,setSaved]=useState(false);
-  useEffect(()=>{if(query.data)setDraft(structuredClone(query.data));},[query.data]);
-  const mutation=useMutation({mutationFn:city.saveEconomy,onSuccess:async data=>{setSaved(true);client.setQueryData(['city-economy'],{...query.data,...data});await client.invalidateQueries({queryKey:['city']});await client.invalidateQueries({queryKey:['city-groups']});}});
+  const [editing,setEditing]=useState<EconomyKey|null>(null);
+  const save=useMutation({
+    mutationFn:city.saveEconomy,
+    onSuccess:async data=>{client.setQueryData<CityEconomy>(['city-economy'],current=>current&&{...current,...data});await client.invalidateQueries({queryKey:['city']});await client.invalidateQueries({queryKey:['city-groups']});},
+    onError:error=>{if(error instanceof ApiError&&error.status===409)void client.invalidateQueries({queryKey:['city-economy']});},
+  });
   if(query.isError)return <ErrorState error={query.error} onRetry={()=>query.refetch()}/>;
-  if(!draft)return <Skeleton height={350}/>;
-  const canEdit=!!draft.can_edit;
-  const change=(patch:Partial<CityEconomy>)=>{setSaved(false);setDraft(d=>d&&({...d,...patch}));};
-  return <form className="stack" onSubmit={e=>{e.preventDefault();if(canEdit)mutation.mutate(draft);}}>
+  if(!query.data)return <Skeleton height={350}/>;
+  const economy=query.data,canEdit=!!economy.can_edit,sections=economySections(economy);
+  const section=sections.find(s=>s.key===editing);
+  return <div className="stack">
     <p className="ui-note">Цены и награда за задание действуют для новых покупок и ответов: уже построенное остаётся по цене покупки. Очки и стоимость кварталов пересчитывают город группы сразу, стадии кварталов могут сдвинуться.{canEdit?'':' Менять настройки могут руководитель и администратор.'}</p>
-    <fieldset className="city-admin-fieldset city-admin-fieldset--sections" disabled={!canEdit||mutation.isPending}>
-      <Card title="Цены построек" subtitle="Коинов за покупку в учебном районе">
-        <div className="city-admin-grid">{(draft.catalogue??[]).map(b=><NumberField key={b.key} label={<><span aria-hidden="true">{b.icon}</span>{b.name}</>} value={draft.prices[b.key]} min={1} max={100000} onChange={value=>change({prices:{...draft.prices,[b.key]:value}})}/>)}</div>
-      </Card>
-      <Card title="Очки для города группы" subtitle="Сколько очков приносит каждое действие">
-        <div className="city-admin-grid">{(Object.keys(POINT_KINDS) as PointKind[]).map(k=><NumberField key={k} label={POINT_KINDS[k]} value={draft.points[k]} min={0} max={1000} onChange={value=>change({points:{...draft.points,[k]:value}})}/>)}</div>
-      </Card>
-      <Card title="Кварталы группы" subtitle="Строятся по очереди: следующий начинается после предыдущего">
-        <ol className="city-admin-quarter-list">{draft.projects.map((p,i)=><li key={p.key}>
+    {sections.map(s=><Card key={s.key} className="city-admin-economy-card" title={s.title} subtitle={s.subtitle} action={canEdit?<Button size="s" aria-label={`Изменить: ${s.title}`} disabled={save.isPending} onClick={()=>{save.reset();setEditing(s.key);}}>Изменить</Button>:undefined}>
+      <div className="city-admin-strips">{s.groups.map(g=><section key={g.key}>
+        {s.groups.length>1&&g.title&&<h3 className="city-admin-subtitle">{g.title}</h3>}
+        <dl className="city-admin-strip">{g.values.map(v=><div key={v.key}><dt>{v.label}</dt><dd>{coins(v.value)}</dd></div>)}</dl>
+      </section>)}</div>
+    </Card>)}
+    {section&&<EconomyDialog key={section.key} section={section.key} economy={economy} pending={save.isPending} error={save.isError?save.error:null} onClose={()=>setEditing(null)}
+      onSave={next=>save.mutate({...economy,[ECONOMY_FIELD[section.key]]:next[ECONOMY_FIELD[section.key]]},{onSuccess:()=>{toast.success(`Сохранено: ${section.title}`);setEditing(null);}})}/>}
+  </div>;
+}
+
+/** One section of the game's numbers in a dialog; the rest of the settings go back as they were. */
+function EconomyDialog({section,economy,pending,error,onClose,onSave}:{section:EconomyKey;economy:CityEconomy;pending:boolean;error:unknown;onClose:()=>void;onSave:(next:CityEconomy)=>void}) {
+  const [draft,setDraft]=useState(()=>structuredClone(economy));
+  const formId=useId();
+  const current=economySections(draft).find(s=>s.key===section)!;
+  const close=()=>{if(!pending)onClose();};
+  return <Sheet title={current.title} subtitle={current.subtitle} size={section==='estate'||section==='projects'?'l':'m'} onClose={close}
+    footer={<><Button disabled={pending} onClick={close}>Отмена</Button><Button type="submit" form={formId} variant="primary" disabled={pending}>{pending?'Сохраняем…':'Сохранить'}</Button></>}>
+    <form id={formId} className="stack city-admin-dialog" onSubmit={e=>{e.preventDefault();onSave(draft);}}>
+      {current.note&&<p className="city-admin-card-note">{current.note}</p>}
+      <fieldset className="city-admin-fieldset" disabled={pending}>
+        {section==='projects'?<ol className="city-admin-quarter-list">{draft.projects.map((q,i)=><li key={q.key}>
           <span className="city-admin-quarter-list__number" aria-hidden="true">{i+1}</span>
-          <label className="field"><span className="field__label">Название квартала {i+1}</span><input className="input" minLength={3} maxLength={60} required value={p.name} onChange={e=>change({projects:draft.projects.map(q=>q.key===p.key?{...q,name:e.target.value}:q)})}/></label>
-          <NumberField label="Стоимость, очков" value={p.cost} min={10} max={1000000} onChange={value=>change({projects:draft.projects.map(q=>q.key===p.key?{...q,cost:value}:q)})}/>
+          <label className="field"><span className="field__label">Название квартала {i+1}</span><input className="input" minLength={3} maxLength={60} required value={q.name} onChange={e=>{const name=e.target.value;setDraft(d=>({...d,projects:d.projects.map(x=>x.key===q.key?{...x,name}:x)}));}}/></label>
+          <NumberField label="Стоимость, очков" value={q.cost} min={10} max={1000000} onChange={value=>setDraft(d=>({...d,projects:d.projects.map(x=>x.key===q.key?{...x,cost:value}:x)}))}/>
         </li>)}</ol>
-      </Card>
-      <Card title="Задания дня">
-        <div className="city-admin-grid"><NumberField label="Коинов за верный ответ" value={draft.quest_coins} min={0} max={1000} onChange={value=>change({quest_coins:value})}/></div>
-      </Card>
-      {draft.land&&<Card title="Стоимость земли по зонам" subtitle="Коинов за участок">
-        <p className="city-admin-card-note">Зоны идут от центра города к окраине: земля у центра дороже. Её стоимость добавляется к цене сквера, дома или офиса. Все зоны района доступны сразу; они различаются только ценой земли. В ОП три зоны — используются первые три цены.</p>
-        <div className="city-admin-grid">{draft.land.map((price,i)=><NumberField key={i} label={`Зона ${i+1}${i===0?' · у центра':i===draft.land!.length-1?' · окраина':''}`} value={price} min={0} max={100000} onChange={value=>change({land:draft.land!.map((v,j)=>j===i?value:v)})}/>)}</div>
-      </Card>}
-      {draft.estate&&<Card title="Районы команд: постройки на участках" subtitle="Коинов за ступень">
-        <p className="city-admin-card-note">Первая ступень сквера и дома — покупка (вместе с участком), следующие — улучшения. Готовые дома и офисные здания покупаются целиком, по одной цене. Чем больше этажей и площадь дома, есть ли гараж и терраса — тем дороже. Парк и большой парк не покупаются: их собирают свои скверы, первая ступень — сбор (0 — бесплатно). Купленное не дорожает: новые цены действуют для новых операций, а открытая страница стройки попросит подтвердить новую цену.</p>
-        <div className="city-admin-subsections">{estateRows(draft.estate).map(row=><section key={row.key}>{row.title&&<h3 className="city-admin-subtitle">{row.title}</h3>}<div className="city-admin-grid">{row.families.flatMap(family=>draft.estate![family].map((price,i)=>{const levels=draft.estate![family],gathered=(family==='park'||family==='bigpark')&&i===0;return <NumberField key={`${family}-${i}`} label={row.title?plotEconomyName(family):`${plotEconomyName(family)} · ${gathered?'сбор из скверов (0 — бесплатно)':i===0?'покупка':`ступень ${i+1}`}`} value={price} min={gathered?0:1} max={100000} onChange={value=>change({estate:{...draft.estate,[family]:levels.map((v,j)=>j===i?value:v)}})}/>;}))}</div></section>)}</div>
-      </Card>}
-      {draft.district&&<Card title="Общие проекты района" subtitle="Смета ступени, коинов">
-        <p className="city-admin-card-note">Смета фиксируется при открытии проекта; новая цена не переписывает уже открытые сборы.</p>
-        <div className="city-admin-subsections">{Object.entries(draft.district).map(([family,levels])=><div key={family} className="city-admin-grid">{levels.map((cost,i)=><NumberField key={i} label={`${PROJECT_NAMES[family]??family} · ступень ${i+1}`} value={cost} min={1} max={100000} onChange={value=>change({district:{...draft.district,[family]:levels.map((v,j)=>j===i?value:v)}})}/>)}</div>)}</div>
-      </Card>}
-      {draft.hq&&<Card title="Учёт прежних общих проектов" subtitle="Пороги ступеней">
-        <p className="city-admin-card-note">Ступени по возрастанию. Эти пороги относятся к прежним общим проектам. Главное здание района растёт автоматически при застройке 10, 25, 50 и 75 % всей земли.</p>
-        <div className="city-admin-grid">{draft.hq.map((need,i)=><NumberField key={i} label={`Ступень ${i+2}`} value={need} min={1} max={1000} onChange={value=>change({hq:draft.hq!.map((v,j)=>j===i?value:v)})}/>)}</div>
-      </Card>}
-    </fieldset>
-    {canEdit&&<FormFooter status={<FormStatus error={mutation.isError&&mutation.error} saved={saved&&'Настройки игры сохранены.'}/>}>
-      <Button type="submit" variant="primary" disabled={mutation.isPending}>{mutation.isPending?'Сохраняем…':'Сохранить настройки'}</Button>
-    </FormFooter>}
-  </form>;
+        :current.groups.map(g=><section key={g.key} className="city-admin-dialog__group">
+          {current.groups.length>1&&g.title&&<h3 className="city-admin-subtitle">{g.title}</h3>}
+          <div className="city-admin-grid">{g.values.map(v=><NumberField key={v.key} label={v.label} value={v.value} min={v.min} max={v.max} onChange={value=>setDraft(d=>v.set(d,value))}/>)}</div>
+        </section>)}
+      </fieldset>
+      {error?<FormStatus error={error}/>:null}
+    </form>
+  </Sheet>;
 }
 
 const PROJECT_NAMES:Record<string,string>={square:'🌳 Сквер',gazebo:'🌷 Беседка',fountain:'⛲ Площадь с фонтаном',sports:'🏀 Спортплощадка',park:'🏞️ Парк на площади'};

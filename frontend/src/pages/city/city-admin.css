@@ -27,13 +27,11 @@
 
 /* Forms: fieldsets lose the browser frame; fields line up on their inputs, not on their labels. */
 .city-admin-fieldset { display: grid; gap: var(--sp-5); min-width: 0; margin: 0; padding: 0; border: 0; }
-.city-admin-fieldset--sections { gap: var(--sp-6); }
 .city-admin-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); align-items: end; gap: var(--sp-4); }
 .city-admin-grid--three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .city-admin-grid .field__label > span[aria-hidden] { font-size: 1.1em; }
 .city-admin-field-narrow { max-width: 520px; }
-.city-admin-subsections { display: grid; gap: var(--sp-5); }
-.city-admin-subsections > * + * { padding-top: var(--sp-5); border-top: 1px solid var(--separator); }
+.city-admin-dialog__group + .city-admin-dialog__group { padding-top: var(--sp-4); border-top: 1px solid var(--separator); }
 .city-admin-subtitle { margin: 0 0 var(--sp-3); color: var(--text-primary); font-size: var(--text-secondary-size); font-weight: 600; }
 
 /* A form's last row: the result of the save on the left, the buttons on the right. */
@@ -126,7 +124,32 @@
 .city-admin-option.is-correct .input { border-color: color-mix(in srgb, var(--status-success) 70%, transparent); background: color-mix(in srgb, var(--status-success) 8%, var(--surface-secondary)); }
 .city-admin-options__add { padding-left: calc(44px + var(--sp-2)); }
 
-/* «Экономика игры»: the quarters of a group, in the order they are built. */
+/*
+ * «Экономика игры»: each section's values in one row of cells that fills the card, label over
+ * number, both centred. A row too long for its card scrolls; a narrow card lists label and value.
+ */
+.city-admin-strips { display: grid; gap: var(--sp-4); }
+/* «Изменить» keeps the top right corner; a long title wraps beside it. */
+.city-admin-economy-card > .card__head { flex-wrap: nowrap; align-items: flex-start; }
+.city-admin-economy-card > .card__head > .card__titles { flex: 1 1 auto; }
+.city-admin-economy-card > .card__head > .card__action { flex: none; }
+.city-admin-strips > section { min-width: 0; container-type: inline-size; }
+.city-admin-strip { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(96px, 1fr); margin: 0; overflow-x: auto; border: 1px solid var(--separator); border-radius: var(--radius-m); background: var(--surface-secondary); scrollbar-width: thin; }
+.city-admin-strip > div { display: grid; grid-template-rows: 1fr auto; justify-items: center; align-items: start; gap: var(--sp-1); min-width: 0; padding: var(--sp-3) var(--sp-2); text-align: center; }
+.city-admin-strip > div + div { border-left: 1px solid var(--separator); }
+.city-admin-strip dt { color: var(--text-secondary); font-size: var(--text-caption); line-height: 1.35; overflow-wrap: break-word; }
+/* A building's icon sits over its name, so a name that wraps never leaves the icon alone. */
+.city-admin-strip dt > span[aria-hidden] { display: block; margin-bottom: 2px; font-size: 18px; line-height: 1.2; }
+.city-admin-strip dd { margin: 0; color: var(--text-primary); font-size: var(--text-card-title); font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; }
+@container (max-width: 559px) {
+  .city-admin-strip { grid-auto-flow: row; grid-auto-columns: auto; overflow: visible; }
+  .city-admin-strip > div { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-3); padding: var(--sp-2) var(--sp-3); text-align: left; }
+  .city-admin-strip > div + div { border-left: 0; border-top: 1px solid var(--separator); }
+  .city-admin-strip dd { font-size: var(--text-body); }
+  .city-admin-strip dt > span[aria-hidden] { display: inline; margin: 0 4px 0 0; font-size: inherit; }
+}
+
+/* «Экономика игры»: the quarters of a group in the dialog, in the order they are built. */
 .city-admin-quarter-list { display: grid; gap: var(--sp-3); margin: 0; padding: 0; list-style: none; }
 .city-admin-quarter-list li { display: grid; grid-template-columns: 32px minmax(0, 1fr) minmax(150px, 220px); align-items: end; gap: var(--sp-3) var(--sp-4); }
 .city-admin-quarter-list__number { display: grid; place-items: center; width: 32px; height: 32px; margin-bottom: 6px; border-radius: 50%; background: var(--surface-tertiary); color: var(--text-secondary); font-size: var(--text-caption); font-weight: 650; font-variant-numeric: tabular-nums; }

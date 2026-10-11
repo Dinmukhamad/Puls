@@ -168,15 +168,31 @@ test("daily situations are a list; a new one is created in a dialog from the car
   assert.equal((read.match(/>Открыть<\/button>/g) ?? []).length, 4);
 });
 
-test("the economy lines its numbers up in grids, and ready buildings are named once under their section", () => {
+test("the economy shows its numbers in rows of cells, and each section is changed in a dialog", () => {
   const html = page("economy");
-  assert.match(html, /<fieldset class="city-admin-fieldset city-admin-fieldset--sections">/);
-  assert.match(html, /<span aria-hidden="true">🎠<\/span>Детская площадка/);
-  assert.match(html, /<h3 class="city-admin-subtitle">Готовые дома<\/h3><div class="city-admin-grid"><label class="field"><span class="field__label">🏠 Коттедж с навесом<\/span>/);
+  const titles = [...html.matchAll(/<h2 class="card__title">([^<]+)<\/h2>/g)].map(match => match[1]);
+  assert.deepEqual(titles, ["Цены построек", "Очки для города группы", "Кварталы группы", "Задания дня", "Стоимость земли по зонам", "Районы команд: постройки на участках", "Общие проекты района", "Учёт прежних общих проектов"]);
+  assert.deepEqual([...html.matchAll(/aria-label="Изменить: ([^"]+)"[^>]*>Изменить<\/button>/g)].map(match => match[1]), titles);
+  // The page itself has no fields: values only, label over number.
+  assert.doesNotMatch(html, /<input|<fieldset|Сохранить настройки|готовый дом|офисное здание/);
+  assert.match(html, /<dl class="city-admin-strip"><div><dt><span aria-hidden="true">🌳<\/span>Сквер<\/dt><dd>40<\/dd><\/div><div><dt><span aria-hidden="true">🎠<\/span>Детская площадка<\/dt><dd>60<\/dd><\/div><\/dl>/);
+  assert.match(html, /<dt>1\. Квартал «Набережный»<\/dt><dd>150<\/dd><\/div><div><dt>2\. Квартал «Центральный»<\/dt><dd>1\s200<\/dd>/);
+  assert.match(html, /<dt>Коинов за верный ответ<\/dt><dd>10<\/dd>/);
+  assert.match(html, /<dt>Зона 1 · у центра<\/dt><dd>60<\/dd>.*<dt>Зона 3 · окраина<\/dt><dd>30<\/dd>/s);
+  // A section of several kinds names each kind over its row; a single row needs no heading.
+  assert.match(html, /<h3 class="city-admin-subtitle">🏡 Дом<\/h3><dl class="city-admin-strip"><div><dt>покупка<\/dt><dd>120<\/dd><\/div><div><dt>ступень 2<\/dt><dd>180<\/dd><\/div><\/dl>/);
+  assert.match(html, /<h3 class="city-admin-subtitle">Готовые дома<\/h3><dl class="city-admin-strip"><div><dt>🏠 Коттедж с навесом<\/dt><dd>300<\/dd>/);
   assert.match(html, /<h3 class="city-admin-subtitle">Офисные здания<\/h3>/);
-  assert.doesNotMatch(html, /готовый дом|офисное здание/);
-  assert.match(html, /🌲 Парк · сбор из скверов \(0 — бесплатно\)/);
-  assert.match(html, /<li><span class="city-admin-quarter-list__number" aria-hidden="true">2<\/span>/);
+  assert.match(html, /<h3 class="city-admin-subtitle">🌲 Парк<\/h3><dl class="city-admin-strip"><div><dt>сбор из скверов \(0 — бесплатно\)<\/dt><dd>0<\/dd>/);
+  assert.match(html, /<dt>Ступень 2<\/dt><dd>1<\/dd><\/div><div><dt>Ступень 3<\/dt><dd>3<\/dd>/);
+  assert.equal((html.match(/<h3 class="city-admin-subtitle">/g) ?? []).length, 5, "only the estate's five kinds are headed; one district project needs no heading");
+  // Trainers and supervisors read the numbers without the buttons.
+  const editable = fixtures["city-economy"];
+  fixtures["city-economy"] = { ...editable, can_edit: false };
+  const read = page("economy", "trainer");
+  fixtures["city-economy"] = editable;
+  assert.doesNotMatch(read, />Изменить</);
+  assert.match(read, /Менять настройки могут руководитель и администратор\./);
 });
 
 test("missions: a narrow chooser, the mission's card with its state, the site's switch", () => {
