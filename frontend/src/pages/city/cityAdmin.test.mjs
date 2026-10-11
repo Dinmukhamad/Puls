@@ -16,7 +16,10 @@ const require = createRequire(import.meta.url);
 const bundle = await build({
   entryPoints: [fileURLToPath(new URL("./CityAdminPage.tsx", import.meta.url))], bundle: true, platform: "node", format: "cjs", packages: "external", jsx: "automatic",
   loader: { ".css": "empty" }, define: { "import.meta.env": "{}" }, write: false,
-  plugins: [{ name: "test-auth", setup(plugin) { plugin.onResolve({ filter: /\/AuthContext$/ }, () => ({ path: "test:auth", external: true })); } }],
+  plugins: [{ name: "test-context", setup(plugin) {
+    plugin.onResolve({ filter: /\/AuthContext$/ }, () => ({ path: "test:auth", external: true }));
+    plugin.onResolve({ filter: /\/Toast$/ }, () => ({ path: "test:toast", external: true }));
+  } }],
 });
 const controls = await build({
   entryPoints: [fileURLToPath(new URL("./CityAdminControls.tsx", import.meta.url))], bundle: true, platform: "node", format: "cjs", packages: "external", jsx: "automatic",
@@ -35,9 +38,11 @@ const fixtures = {
     { key: "embankment", name: "Квартал «Набережный»", stage: "foundation", points: 40, cost: 150 },
     { key: "central", name: "Квартал «Центральный»", stage: "planned", points: 0, cost: 1200 },
   ] }] },
-  "city-situations": { revision: 1, can_edit: true, items: [
+  "city-situations": { revision: 1, can_edit: true, answered: { phone: 4, rude: 1 }, exhausted: 2, items: [
     { id: "phone", speaker: "Водитель", text: "Водитель просит сменить номер телефона.", options: ["Только новый номер", "Старый и новый номера"], correct: 1, explanation: "Нужны оба номера.", enabled: true },
     { id: "late", speaker: "Клиент", text: "Клиент спрашивает, где машина.", options: ["Проверить заказ", "Отменить заказ"], correct: 0, explanation: "", enabled: false },
+    { id: "rude", speaker: "Водитель", text: "Водитель повышает голос.", options: ["Выслушать", "Перебить", "Положить трубку"], correct: 0, explanation: "", enabled: true },
+    { id: "own-x", speaker: "Диспетчер", text: "Диспетчер просит уточнить адрес.", options: ["Уточнить", "Отказать"], correct: 0, explanation: "", enabled: true },
   ] },
   "city-economy": { revision: 3, can_edit: true, quest_coins: 10, points: kinds,
     prices: { garden: 40, gazebo: 50, playground: 60, sports: 70, fountain: 90, cottage: 120, house: 200, tower: 350 },
@@ -74,6 +79,7 @@ function load(code, role, tab) {
       Link: ({ to, className, children }) => React.createElement("a", { href: to, className }, children),
     };
     if (name === "test:auth") return { useAuth: () => ({ user: { role } }) };
+    if (name === "test:toast") return { useToast: () => ({ success() {}, error() {}, info() {} }) };
     return require(name);
   }, module, module.exports);
   return module.exports;
@@ -134,14 +140,32 @@ test("group cities show quarters with their stage above the name and members in 
   assert.match(html, /<strong class="nowrap">25 очков<\/strong>/);
 });
 
-test("daily situations: chooser with actions, marked correct answer and the save row", () => {
+test("daily situations are a list; a new one is created in a dialog from the card's button", () => {
   const html = page("situations");
-  assert.match(html, /<div class="city-admin-picker"><label class="field"><span class="field__label">Ситуация<\/span>/);
-  assert.match(html, /<div class="city-admin-option is-correct"><input type="radio"/);
-  assert.match(html, /<div class="city-admin-options__add"><button type="button" class="btn btn--secondary btn--s">\+ Вариант<\/button><\/div>/);
-  assert.match(html, /<label class="city-admin-switch"><input type="checkbox" role="switch" checked=""\/>.*Ситуация участвует в заданиях дня/s);
-  // One situation of two is on: the save row explains why saving is not possible yet.
-  assert.match(html, /<div class="city-admin-footer"><div class="city-admin-footer__status"><p class="city-admin-status">Включите не меньше 3 ситуаций, чтобы сохранить набор\.<\/p><\/div><div class="city-admin-footer__actions"><button type="submit" class="btn btn--primary btn--m" disabled="">Сохранить все ситуации<\/button>/);
+  assert.match(html, /<div class="card__action"><button type="button" class="btn btn--primary btn--m">\+ Новая ситуация<\/button><\/div>/);
+  assert.match(html, /<p class="card__subtitle">Включено 3 из 4 · в день — до 3<\/p>/);
+  assert.match(html, /<p class="ui-note city-admin-alert" role="status">У 2 операторов не осталось новых ситуаций\./);
+  assert.match(html, /<ol class="city-admin-situations"><li><span class="city-admin-situations__icon" aria-hidden="true">🚕<\/span>/);
+  assert.match(html, /<span class="city-admin-situations__facts">2 варианта ответа · прошли 4 оператора<\/span>/);
+  assert.match(html, /<span class="city-admin-situations__facts">3 варианта ответа · прошли 1 оператор<\/span>/);
+  assert.match(html, /<li class="is-off"><span class="city-admin-situations__icon" aria-hidden="true">📞<\/span>.*<span class="badge badge--neutral">Выключена<\/span>.*ещё никто не проходил/s);
+  assert.match(html, /<span class="city-admin-situations__icon" aria-hidden="true">💡<\/span>/);
+  // Three are on — as many as a day needs: they can be neither switched off nor deleted, the fourth can be switched on.
+  const rows = html.match(/<li[^>]*>.*?<\/li>/gs);
+  assert.equal(rows.length, 4);
+  assert.match(rows[0], /<input type="checkbox" disabled="" role="switch" checked=""\/>/);
+  assert.match(rows[0], /aria-label="Удалить ситуацию 1" disabled="">Удалить<\/button>/);
+  assert.match(rows[1], /<input type="checkbox" role="switch"\/>/);
+  assert.doesNotMatch(rows[1], /aria-label="Удалить ситуацию 2" disabled=""/);
+  assert.match(html, /Включено 3 — столько выдаётся в день\. Чтобы выключить или удалить ситуацию, сначала добавьте или включите другую\./);
+  assert.doesNotMatch(html, /city-admin-picker|Сохранить все ситуации/);
+  // A supervisor reads the set (the server says so with can_edit): the situations open, nothing changes.
+  const editable = fixtures["city-situations"];
+  fixtures["city-situations"] = { ...editable, can_edit: false };
+  const read = page("situations", "supervisor");
+  fixtures["city-situations"] = editable;
+  assert.doesNotMatch(read, /Новая ситуация|role="switch"|>Удалить</);
+  assert.equal((read.match(/>Открыть<\/button>/g) ?? []).length, 4);
 });
 
 test("the economy lines its numbers up in grids, and ready buildings are named once under their section", () => {

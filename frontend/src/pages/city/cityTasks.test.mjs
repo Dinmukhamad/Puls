@@ -47,6 +47,13 @@ test("the day's situations show what is left, what was right and what the reward
   assert.match(texts(done), /На сегодня всё\. Новые задания появятся завтра\./);
 });
 
+test("an operator who answered every situation is told so, not left with a missing button", () => {
+  const html = render({ quests: [], allPassed: true });
+  assert.match(html, /<h2 id="city-tasks-day">Задания дня<\/h2>/);
+  assert.match(texts(html), /Все ситуации дня пройдены: они не повторяются\. Новые появятся, когда тренер их добавит\./);
+  assert.doesNotMatch(render({ quests: [] }), /Задания дня/, "a staff preview has no situations at all");
+});
+
 test("trainer scenarios list what is left first, by deadline, with the right action", () => {
   const html = render({ assigned: [
     scenario(1, { state: "passed", completed: true }),

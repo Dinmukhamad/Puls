@@ -232,6 +232,8 @@ export function CityPage() {
   const quests = data.quests?.items ?? [];
   const assigned = data.inspecting ? [] : (assignments.data ?? []).filter(item => item.assigned);
   const todo = quests.filter(q => !q.answered).length + assigned.filter(item => !item.completed).length;
+  // Situations are never dealt twice: an empty day for the operator means every one is answered.
+  const allPassed = !!data.quests && !data.inspecting && quests.length === 0;
   function openQuest(quest: CityQuest) { answer.reset(); setQuestSlot(quest.slot); if (!quest.answered && department === "support") setQuestFocus({ slot: quest.slot, at: Date.now() }); }
   // A new operator meets the first mission as soon as the first visit's cards are answered or put off.
   const welcomeAhead = department === "support" && !data.inspecting && !data.preview && !building && mapStatus !== "loading" && !askGuide && !showControls
@@ -327,8 +329,8 @@ export function CityPage() {
     </aside></CityPeekPanel>
 
     <CitySkills labels={labels} selected={selected.id} onSelect={selectDistrict} /></>}
-    {!building && (quests.length > 0 || assigned.length > 0) && <CityPeekPanel className="city-tasks-peek" toolbarSlot="quests" label={todo ? `Задания: осталось ${todo}` : "Задания: всё выполнено"} compactLabel="Задания" icon={<>❗{todo > 0 && <b className="city-count">{todo}</b>}</>} holdOpen={startAssignment.isPending}>
-      <CityTasks quests={quests} coins={data.quests?.coins ?? 0} assigned={assigned} onQuest={openQuest} onStart={item => startAssignment.mutate(item)} starting={startAssignment.isPending ? startAssignment.variables?.id ?? null : null} error={startAssignment.isError ? startAssignment.error.message : null} />
+    {!building && (quests.length > 0 || allPassed || assigned.length > 0) && <CityPeekPanel className="city-tasks-peek" toolbarSlot="quests" label={todo ? `Задания: осталось ${todo}` : "Задания: всё выполнено"} compactLabel="Задания" icon={<>❗{todo > 0 && <b className="city-count">{todo}</b>}</>} holdOpen={startAssignment.isPending}>
+      <CityTasks quests={quests} coins={data.quests?.coins ?? 0} allPassed={allPassed} assigned={assigned} onQuest={openQuest} onStart={item => startAssignment.mutate(item)} starting={startAssignment.isPending ? startAssignment.variables?.id ?? null : null} error={startAssignment.isError ? startAssignment.error.message : null} />
     </CityPeekPanel>}
     {worldQuery.data && <CityWorldPanel world={worldQuery.data} current={department} selected={worldSelected} onPick={pickWorld} onClose={() => setWorldSelected(null)} ready={mapStatus === "ready"} onVisit={visit} onTravel={id => { setDestination(id); setWorldAction({ kind: "travel", target: id, at: Date.now() }); }}
       estates={department === "sales" ? salesLand.data : supportLand.data} mine={mineEstate} onMyEstate={canOpenBuild ? openBuild : undefined}

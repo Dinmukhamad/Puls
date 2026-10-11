@@ -1,11 +1,14 @@
 import { CityWorldEditor } from "./CityWorldEditor";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { city, MISSION_STATES, POINT_KINDS, SITE_STAGES, type CityEconomy, type CitySettings, type CitySituation, type CitySituations, type PointKind, type SiteStage } from "../../api/city";
+import { ApiError } from "../../api/client";
 import { cityEstate } from "../../api/cityEstate";
 import { useAuth } from "../../auth/AuthContext";
 import { Badge, Button, Card, EmptyState, ErrorState, IconButton, KPI, Pagination, Progress, SegmentedControl, Select, Skeleton, type Tone } from "../../components/ui";
+import { Sheet } from "../../components/Sheet";
+import { useToast } from "../../components/Toast";
 import { coins, plural } from "../../utils/format";
 import { FormFooter, FormStatus, Switch } from "./CityAdminControls";
 import { estateRows, plotEconomyName } from "./plotCatalogue";
@@ -99,50 +102,84 @@ function Groups() {
 }
 
 const SLOTS = 3;
-/** The daily situations' own set: trainers, the head and the admin edit it; supervisors read it. */
+/** Who asks decides where the situation waits on the map: the depot's taxi, the CRM centre or the guide. */
+const speakerIcon = (speaker: string) => /водител/i.test(speaker) ? "🚕" : /клиент|звонящ/i.test(speaker) ? "📞" : "💡";
+const newSituation = (): CitySituation => ({ id: `own-${Date.now().toString(36)}`, speaker: "Водитель", text: "", options: ["", ""], correct: 0, explanation: "", enabled: true });
+
+/** The daily situations' own set: trainers, the head and the admin create and edit them in a dialog; supervisors read them. */
 function Situations() {
   const client=useQueryClient();
+  const toast=useToast();
   const query=useQuery({queryKey:['city-situations'],queryFn:city.situations,refetchOnWindowFocus:false});
-  const [draft,setDraft]=useState<CitySituations|null>(()=>query.data?structuredClone(query.data):null),[selected,setSelected]=useState(()=>query.data?.items[0]?.id??''),[saved,setSaved]=useState(false);
-  useEffect(()=>{if(query.data){setDraft(structuredClone(query.data));setSelected(s=>s||query.data.items[0]?.id||'');}},[query.data]);
-  const mutation=useMutation({mutationFn:city.saveSituations,onSuccess:data=>{setSaved(true);client.setQueryData(['city-situations'],{...data,can_edit:query.data?.can_edit});}});
+  const [editing,setEditing]=useState<{item:CitySituation;isNew:boolean}|null>(null),[removing,setRemoving]=useState<CitySituation|null>(null);
+  // Every change is saved at once; the answer counts are read again with it.
+  const save=useMutation({
+    mutationFn:(items:CitySituation[])=>city.saveSituations({revision:query.data?.revision??0,items}),
+    onSuccess:data=>{client.setQueryData<CitySituations>(['city-situations'],current=>current&&{...current,...data});void client.invalidateQueries({queryKey:['city-situations']});},
+    onError:error=>{if(error instanceof ApiError&&error.status===409)void client.invalidateQueries({queryKey:['city-situations']});},
+  });
   if(query.isError)return <ErrorState error={query.error} onRetry={()=>query.refetch()}/>;
-  if(!draft)return <Skeleton height={350}/>;
-  const canEdit=!!draft.can_edit, item=draft.items.find(i=>i.id===selected), enabled=draft.items.filter(i=>i.enabled).length;
-  const setItems=(items:CitySituation[])=>{setSaved(false);setDraft(d=>d&&({...d,items}));};
-  const change=(patch:Partial<CitySituation>)=>setItems(draft.items.map(i=>i.id===selected?{...i,...patch}:i));
-  function add(){const id=`own-${Date.now().toString(36)}`;setItems([...draft!.items,{id,speaker:'Водитель',text:'',options:['',''],correct:0,explanation:'',enabled:true}]);setSelected(id);}
-  function remove(){const rest=draft!.items.filter(i=>i.id!==selected);setItems(rest);setSelected(rest[0]?.id??'');}
-  const options=draft.items.map((i,k)=>({value:i.id,label:`${k+1}. ${i.enabled?'':'(выключена) '}${i.speaker?`${i.speaker}: `:''}${i.text.slice(0,70)||'Новая ситуация'}`}));
-  return <form className="stack" onSubmit={e=>{e.preventDefault();if(canEdit)mutation.mutate(draft);}}>
-    <p className="ui-note">Каждый день оператор получает {SLOTS} ситуации. Сначала берутся вопросы из тестов, которые он уже прошёл, остальные — из этого набора. Изменения действуют с новых заданий: сегодняшние уже розданы.{canEdit?'':' Менять ситуации могут тренер, руководитель и администратор.'}</p>
-    <Card title="Ситуации дня" subtitle={`Включено ${enabled} из ${draft.items.length} · нужно не меньше ${SLOTS}`}>
-      <div className="city-admin-picker">
-        <label className="field"><span className="field__label">Ситуация</span><Select aria-label="Ситуация" value={selected} options={options} placeholder="Ситуаций нет" onChange={setSelected}/></label>
-        {canEdit&&<div className="city-admin-picker__actions"><Button onClick={add}>+ Добавить</Button>{item&&<Button variant="destructive" onClick={remove}>Удалить</Button>}</div>}
-      </div>
+  if(!query.data)return <Skeleton height={350}/>;
+  const {items,can_edit:canEdit=false,answered={},exhausted=0}=query.data;
+  const enabled=items.filter(i=>i.enabled).length;
+  // A day needs three situations: the last three enabled ones cannot be switched off or deleted.
+  const locked=(item:CitySituation)=>item.enabled&&enabled<=SLOTS;
+  const persist=(next:CitySituation[],done:string,then?:()=>void)=>save.mutate(next,{onSuccess:()=>{toast.success(done);then?.();}});
+  function open(item:CitySituation,isNew=false){save.reset();setEditing({item:structuredClone(item),isNew});}
+  return <div className="stack">
+    <p className="ui-note">Каждый день оператор получает до {SLOTS} ситуаций из этого набора. Ситуацию, на которую он уже ответил, верно или нет, он больше не получит. Когда пройдены все включённые, заданий дня нет, пока вы не добавите новые. Изменения действуют с новых заданий: сегодняшние уже розданы.{canEdit?'':' Менять ситуации могут тренер, руководитель и администратор.'}</p>
+    {exhausted>0&&<p className="ui-note city-admin-alert" role="status">У {exhausted} {plural(exhausted,'оператора','операторов','операторов')} не осталось новых ситуаций. Добавьте ситуации, чтобы им снова приходили задания дня.</p>}
+    <Card title="Ситуации дня" subtitle={`Включено ${enabled} из ${items.length} · в день — до ${SLOTS}`} action={canEdit?<Button variant="primary" disabled={save.isPending} onClick={()=>open(newSituation(),true)}>+ Новая ситуация</Button>:undefined} padded={false}>
+      {items.length?<ol className="city-admin-situations">{items.map((item,index)=>{const count=answered[item.id]??0;return <li key={item.id} className={item.enabled?undefined:'is-off'}>
+        <span className="city-admin-situations__icon" aria-hidden="true">{speakerIcon(item.speaker)}</span>
+        <div className="city-admin-situations__body">
+          <div className="city-admin-situations__title"><strong>{index+1}. {item.speaker||'Ситуация'}</strong>{!item.enabled&&<Badge>Выключена</Badge>}</div>
+          <p className="city-admin-situations__text">{item.text}</p>
+          <span className="city-admin-situations__facts">{item.options.length} {plural(item.options.length,'вариант','варианта','вариантов')} ответа · {count?`прошли ${count} ${plural(count,'оператор','оператора','операторов')}`:'ещё никто не проходил'}</span>
+        </div>
+        <div className="city-admin-situations__actions">{canEdit?<>
+          <Switch checked={item.enabled} disabled={save.isPending||locked(item)} onChange={on=>persist(items.map(i=>i.id===item.id?{...i,enabled:on}:i),on?'Ситуация включена':'Ситуация выключена')}>В заданиях<span className="sr-only">: ситуация {index+1}</span></Switch>
+          <Button size="s" aria-label={`Изменить ситуацию ${index+1}`} disabled={save.isPending} onClick={()=>open(item)}>Изменить</Button>
+          <Button size="s" variant="destructive" aria-label={`Удалить ситуацию ${index+1}`} disabled={save.isPending||locked(item)} onClick={()=>{save.reset();setRemoving(item);}}>Удалить</Button>
+        </>:<Button size="s" aria-label={`Открыть ситуацию ${index+1}`} onClick={()=>open(item)}>Открыть</Button>}</div>
+      </li>;})}</ol>:<EmptyState title="Ситуаций пока нет" hint={canEdit?'Создайте первую ситуацию.':undefined}/>}
     </Card>
-    {item?<Card title="Содержание ситуации">
-      <fieldset className="city-admin-fieldset" disabled={!canEdit||mutation.isPending}>
-        <label className="field"><span className="field__label">Кто обращается</span><input className="input" list="city-speakers" maxLength={60} value={item.speaker} onChange={e=>change({speaker:e.target.value})} placeholder="Водитель, Клиент…"/><datalist id="city-speakers"><option value="Водитель"/><option value="Клиент"/></datalist><span className="field__note">«Водитель» ждёт у такси автопарка, «Клиент» — у CRM-центра, остальные — у помощника.</span></label>
+    {canEdit&&enabled<=SLOTS&&<p className="field__note">Включено {enabled} — столько выдаётся в день. Чтобы выключить или удалить ситуацию, сначала добавьте или включите другую.</p>}
+    {!editing&&!removing&&save.isError&&<FormStatus error={save.error}/>}
+    {editing&&<SituationDialog initial={editing.item} isNew={editing.isNew} readOnly={!canEdit} canSwitchOff={editing.isNew||!locked(editing.item)} pending={save.isPending} error={save.isError?save.error:null} onClose={()=>setEditing(null)}
+      onSave={item=>persist(editing.isNew?[...items,item]:items.map(i=>i.id===item.id?item:i),editing.isNew?'Ситуация создана':'Ситуация сохранена',()=>setEditing(null))}/>}
+    {removing&&<Sheet title="Удалить ситуацию?" size="s" onClose={()=>{if(!save.isPending)setRemoving(null);}} footer={<><Button disabled={save.isPending} onClick={()=>setRemoving(null)}>Отмена</Button><Button variant="destructive" disabled={save.isPending} onClick={()=>persist(items.filter(i=>i.id!==removing.id),'Ситуация удалена',()=>setRemoving(null))}>{save.isPending?'Удаляем…':'Удалить'}</Button></>}>
+      <div className="stack stack--tight"><p>«{removing.text}»</p><p className="field__note">Операторы, которые на неё уже ответили, сохранят ответы и коины. Новым она больше не придёт.</p>{save.isError&&<FormStatus error={save.error}/>}</div>
+    </Sheet>}
+  </div>;
+}
+
+/** One situation in a dialog: who asks, what happened, the answers with the right one, and why. */
+function SituationDialog({initial,isNew,readOnly,canSwitchOff,pending,error,onClose,onSave}:{initial:CitySituation;isNew:boolean;readOnly:boolean;canSwitchOff:boolean;pending:boolean;error:unknown;onClose:()=>void;onSave:(item:CitySituation)=>void}) {
+  const [item,setItem]=useState(initial);
+  const formId=useId();
+  const change=(patch:Partial<CitySituation>)=>setItem(current=>({...current,...patch}));
+  const close=()=>{if(!pending)onClose();};
+  return <Sheet title={readOnly?'Ситуация дня':isNew?'Новая ситуация дня':'Изменить ситуацию'} subtitle={readOnly?undefined:'Действует с новых заданий дня'} onClose={close}
+    footer={readOnly?<Button onClick={onClose}>Закрыть</Button>:<><Button disabled={pending} onClick={close}>Отмена</Button><Button type="submit" form={formId} variant="primary" disabled={pending}>{pending?'Сохраняем…':isNew?'Создать ситуацию':'Сохранить'}</Button></>}>
+    <form id={formId} className="stack city-admin-dialog" onSubmit={e=>{e.preventDefault();if(!readOnly)onSave(item);}}>
+      <fieldset className="city-admin-fieldset" disabled={readOnly||pending}>
+        <label className="field"><span className="field__label">Кто обращается</span><input className="input" list={`${formId}-speakers`} maxLength={60} value={item.speaker} onChange={e=>change({speaker:e.target.value})} placeholder="Водитель, Клиент…"/><datalist id={`${formId}-speakers`}><option value="Водитель"/><option value="Клиент"/></datalist><span className="field__note">«Водитель» ждёт у такси автопарка, «Клиент» — у CRM-центра, остальные — у помощника.</span></label>
         <label className="field"><span className="field__label">Что случилось</span><textarea className="input" rows={3} minLength={5} maxLength={1000} required value={item.text} onChange={e=>change({text:e.target.value})}/></label>
         <fieldset className="city-admin-options"><legend className="field__label">Варианты ответа — отметьте верный</legend>
           {item.options.map((o,k)=><div key={k} className={`city-admin-option${item.correct===k?' is-correct':''}`}>
-            <input type="radio" name="city-correct" aria-label={`Вариант ${k+1} верный`} checked={item.correct===k} onChange={()=>change({correct:k})}/>
+            <input type="radio" name={`${formId}-correct`} aria-label={`Вариант ${k+1} верный`} checked={item.correct===k} onChange={()=>change({correct:k})}/>
             <input className="input" maxLength={300} required value={o} onChange={e=>change({options:item.options.map((x,j)=>j===k?e.target.value:x)})} placeholder={`Вариант ${k+1}`}/>
             {item.options.length>2&&<IconButton label={`Убрать вариант ${k+1}`} onClick={()=>change({options:item.options.filter((_,j)=>j!==k),correct:item.correct===k?0:item.correct>k?item.correct-1:item.correct})}>×</IconButton>}
           </div>)}
           {item.options.length<6&&<div className="city-admin-options__add"><Button size="s" onClick={()=>change({options:[...item.options,'']})}>+ Вариант</Button></div>}
         </fieldset>
         <label className="field"><span className="field__label">Пояснение после ответа</span><textarea className="input" rows={3} maxLength={1000} value={item.explanation} onChange={e=>change({explanation:e.target.value})}/></label>
-        <Switch checked={item.enabled} onChange={value=>change({enabled:value})}>Ситуация участвует в заданиях дня</Switch>
+        <Switch checked={item.enabled} disabled={item.enabled&&!canSwitchOff} onChange={value=>change({enabled:value})} hint={item.enabled&&!canSwitchOff?`Включено ${SLOTS} ситуации — столько выдаётся в день`:undefined}>Ситуация участвует в заданиях дня</Switch>
       </fieldset>
-    </Card>:<EmptyState title="Ситуаций пока нет" hint={canEdit?'Добавьте первую ситуацию.':undefined}/>}
-    {canEdit&&<FormFooter status={<FormStatus error={mutation.isError&&mutation.error} saved={saved&&'Ситуации сохранены.'} note={enabled<SLOTS&&`Включите не меньше ${SLOTS} ситуаций, чтобы сохранить набор.`}/>}>
-      <Button type="submit" variant="primary" disabled={mutation.isPending||enabled<SLOTS}>{mutation.isPending?'Сохраняем…':'Сохранить все ситуации'}</Button>
-    </FormFooter>}
-    {!canEdit&&saved&&<p role="status">Ситуации сохранены.</p>}
-  </form>;
+      {error?<FormStatus error={error}/>:null}
+    </form>
+  </Sheet>;
 }
 
 /** One numeric setting: the label above, the value in the site's field. */

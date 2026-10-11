@@ -1,8 +1,10 @@
-"""Daily situations on the city map: three a day, answered once each, right in the city.
+"""Daily situations on the city map: up to three a day, answered once each, right in the city.
 
 A day's situations come from the set of work situations the head edits (a built-in set until the
-first save). The question is frozen when the day is dealt, the answer is checked here, and a right
-answer pays a few coins once, with a key that cannot pay twice.
+first save). An operator never meets a situation they have already answered: when every enabled
+one is answered, the day has none until trainers add new ones. The question is frozen when the day
+is dealt, the answer is checked here, and a right answer pays a few coins once, with a key that
+cannot pay twice.
 """
 
 import random
@@ -10,7 +12,7 @@ from copy import deepcopy
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select, update
+from sqlalchemy import distinct, func, select, update
 from sqlalchemy.exc import IntegrityError
 
 from app.core.config import settings
@@ -18,6 +20,7 @@ from app.core.errors import ConflictError, DomainError, NotFoundError, Permissio
 from app.db.base import utcnow
 from app.models.city import CityQuest, CitySituations
 from app.models.enums import Role, TxType
+from app.models.user import User
 from app.services.coins import post_transaction
 from app.services.learning import lock_learner
 from app.services.rules import write_audit
@@ -184,6 +187,50 @@ async def situations(session):
     }
 
 
+def _ref():
+    """The situation a dealt question came from (its id in the set)."""
+    return CityQuest.snapshot["ref"].as_string()
+
+
+async def answered_refs(session, user_id):
+    """The situations this operator has already answered, on any day."""
+    # SELECT DISTINCT keeps the text type; distinct() around the JSON path reads it back as JSON
+    # on SQLite.
+    refs = await session.scalars(
+        select(_ref()).where(CityQuest.user_id == user_id, CityQuest.answer.is_not(None)).distinct()
+    )
+    return {ref for ref in refs if ref}
+
+
+async def situation_stats(session, items):
+    """For the editor: how many operators answered each situation, and how many have none left."""
+    ref = _ref()
+    rows = await session.execute(
+        select(ref, func.count(distinct(CityQuest.user_id)))
+        .where(CityQuest.answer.is_not(None))
+        .group_by(ref)
+    )
+    answered = {key: count for key, count in rows if key}
+    enabled = [item["id"] for item in items if item["enabled"]]
+    exhausted = 0
+    if enabled:
+        done = (
+            select(CityQuest.user_id)
+            .join(User, User.id == CityQuest.user_id)
+            .where(
+                CityQuest.answer.is_not(None),
+                ref.in_(enabled),
+                User.role == Role.OPERATOR,
+                User.is_active.is_(True),
+            )
+            .group_by(CityQuest.user_id)
+            .having(func.count(distinct(ref)) >= len(enabled))
+            .subquery()
+        )
+        exhausted = await session.scalar(select(func.count()).select_from(done))
+    return {"answered": answered, "exhausted": exhausted or 0}
+
+
 async def save_situations(session, actor, body):
     items = [item.model_dump() for item in body.items]
     revision = body.revision + 1
@@ -214,7 +261,10 @@ async def save_situations(session, actor, body):
 
 
 def deal(user_id, day, bank):
-    """The day's questions from the bank; the same for the same day."""
+    """The day's questions from the bank by slot, None where the bank ran short.
+
+    The same for the same day and bank.
+    """
     rng = random.Random(f"{user_id}:{day.isoformat()}")
     picks = rng.sample(bank, min(len(bank), SLOTS))
     # Drivers' questions wait at the depot's taxi, callers' at the CRM centre, others at the guide.
@@ -224,10 +274,13 @@ def deal(user_id, day, bank):
         match = next((q for q in picks if q not in slots and want in q["speaker"].lower()), None)
         slots[slot] = match
     rest = iter(q for q in picks if q not in slots)
-    picks = [q if q is not None else next(rest) for q in slots]
+    picks = [q if q is not None else next(rest, None) for q in slots]
     # The options come in a new order each time, so the right one cannot be learnt by its place.
     dealt = []
     for q in picks:
+        if q is None:
+            dealt.append(None)
+            continue
         order = list(range(len(q["options"])))
         rng.shuffle(order)
         dealt.append(
@@ -267,23 +320,33 @@ async def rows_for(session, user_id, day):
 
 
 async def quests(session, user, *, inspecting=False):
-    """Today's situations; the first read of the day deals them (never for staff)."""
+    """Today's situations; the first read of the day deals them (never for staff).
+
+    Situations the operator has answered before are never dealt again. With none left the day
+    stays empty, and a later read deals the new situations trainers add.
+    """
     if user.role != Role.OPERATOR:
         return None
     day = today()
     rows = await rows_for(session, user.id, day)
     if not rows and not inspecting:
-        await lock_learner(session, user.id)
-        rows = await rows_for(session, user.id, day)
-        if not rows:
-            bank = bank_questions((await situations(session))["items"])
-            picks = deal(user.id, day, bank)
-            rows = [
-                CityQuest(user_id=user.id, day=day, slot=slot, snapshot=deepcopy(q))
-                for slot, q in enumerate(picks)
-            ]
-            session.add_all(rows)
-            await session.commit()
+        passed = await answered_refs(session, user.id)
+        fresh = [
+            q
+            for q in bank_questions((await situations(session))["items"])
+            if q["ref"] not in passed
+        ]
+        if fresh:
+            await lock_learner(session, user.id)
+            rows = await rows_for(session, user.id, day)
+            if not rows:
+                rows = [
+                    CityQuest(user_id=user.id, day=day, slot=slot, snapshot=deepcopy(q))
+                    for slot, q in enumerate(deal(user.id, day, fresh))
+                    if q is not None
+                ]
+                session.add_all(rows)
+                await session.commit()
     return {
         "day": day.isoformat(),
         "coins": (await economy(session))["quest_coins"],

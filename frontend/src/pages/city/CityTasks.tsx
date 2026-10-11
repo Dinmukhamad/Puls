@@ -6,8 +6,11 @@ const GIVER_ICONS: Record<CityQuest["giver"], string> = { driver: "🚕", client
 /** The icon follows who speaks; a question without a speaker takes its place on the map. */
 export const speakerIcon = (quest: CityQuest) => /водител/i.test(quest.speaker) ? "🚕" : /клиент|звонящ/i.test(quest.speaker) ? "📞" : GIVER_ICONS[quest.giver];
 const ASSIGNMENT_STATES: Record<NonNullable<LearningContent["state"]>, string> = { new: "Новое", in_progress: "В процессе", passed: "Пройдено", failed: "Не пройдено" };
-/** Today's three situations and the simulator scenarios a trainer assigned: what is left comes first. */
-export function CityTasks({ quests, coins, assigned, onQuest, onStart, starting, error }: { quests: CityQuest[]; coins: number; assigned: LearningContent[]; onQuest: (quest: CityQuest) => void; onStart: (item: LearningContent) => void; starting: number | null; error: string | null }) {
+/**
+ * Today's situations and the simulator scenarios a trainer assigned: what is left comes first.
+ * A situation is never dealt twice, so an operator who answered them all sees that instead (`allPassed`).
+ */
+export function CityTasks({ quests, coins, assigned, onQuest, onStart, starting, error, allPassed = false }: { quests: CityQuest[]; coins: number; assigned: LearningContent[]; onQuest: (quest: CityQuest) => void; onStart: (item: LearningContent) => void; starting: number | null; error: string | null; allPassed?: boolean }) {
   const answered = quests.filter(q => q.answered).length;
   const scenarios = [...assigned].sort((a, b) => Number(!!a.completed) - Number(!!b.completed) || (a.deadline ?? "9999").localeCompare(b.deadline ?? "9999"));
   return <aside className="city-tasks glass glass--regular" aria-label="Задания">
@@ -21,6 +24,10 @@ export function CityTasks({ quests, coins, assigned, onQuest, onStart, starting,
         </button>
       </li>)}</ul>
       <p className="city-fine">{answered < quests.length ? `Верный ответ — +${coins} коинов и очки для города группы.` : "На сегодня всё. Новые задания появятся завтра."}</p>
+    </section>}
+    {quests.length === 0 && allPassed && <section aria-labelledby="city-tasks-day">
+      <div className="city-tasks__head"><h2 id="city-tasks-day">Задания дня</h2></div>
+      <p className="city-tasks__empty">Все ситуации дня пройдены: они не повторяются. Новые появятся, когда тренер их добавит.</p>
     </section>}
     {scenarios.length > 0 && <section aria-labelledby="city-tasks-trainer">
       <div className="city-tasks__head"><h2 id="city-tasks-trainer">От тренера</h2><span>{scenarios.filter(item => item.completed).length} из {scenarios.length}</span></div>
