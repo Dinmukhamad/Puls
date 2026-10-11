@@ -6,7 +6,7 @@
  */
 import { railCut, type RailLine } from "./railway";
 
-/** The fog swallows everything at this many world radii; the relief ends a little past it. */
+/** Far copies stay drawn out to this many world radii (render/instances.ts); the relief ends a little past it. */
 export const FOG_END = 2.9, RELIEF_END = 3.1;
 
 /** A value 0…1 per whole grid point. */

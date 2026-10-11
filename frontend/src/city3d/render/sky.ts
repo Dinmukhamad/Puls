@@ -1,17 +1,18 @@
 /**
  * Sky and sunlight (TZ §6.3): a TSL sky dome (the scene background, a gradient from the horizon to the
- * zenith with the sun's disc and glow), fog of the horizon colour so the city melts into it, the sky and
- * ground fill (HemisphereLight) and one warm sun about 35° high, from the old city's direction, so shadows
- * fall towards the viewer's lower left. The sun's shadow map is static: drawn once and again on
+ * zenith with the sun's disc and glow), a light haze of the horizon colour only on the far hills, so the
+ * city stays clear and the ranges still meet the sky without a seam, the sky and ground fill
+ * (HemisphereLight) and one warm sun about 35° high, from the old city's direction, so shadows fall towards
+ * the viewer's lower left. The sun's shadow map is static: drawn once and again on
  * ctx.requestShadowUpdate() (engine/renderer.ts setStaticShadows). There is no scene.environment: its even
  * light fills the shade and the shadows disappear.
  *
- * At night (TZ §6.7) the dome turns deep blue with a warm glow of the city's lights along the horizon,
- * twinkling stars and a moon: all in the one background shader, faded in by ctx.night.level.
+ * By day a few fair-weather clouds drift over the hills. At night (TZ §6.7) the dome turns deep blue with a
+ * warm glow of the city's lights along the horizon, twinkling stars and a moon: all in the one background
+ * shader, faded in by ctx.night.level.
  */
 import * as THREE from "three/webgpu";
-import { Fn, If, color, dot, exp, float, floor, fract, max, mix, normalize, pow, positionWorldDirection, smoothstep, step, time, uniform, vec3, type ShaderNodeObject } from "three/tsl";
-import { FOG_END } from "../world/relief";
+import { Fn, If, color, dot, exp, float, floor, fract, max, mix, mx_fractal_noise_float, normalize, pow, positionWorldDirection, smoothstep, step, time, uniform, vec3, type ShaderNodeObject } from "three/tsl";
 import type { CityContext } from "../engine/context";
 import type { QualitySettings } from "../engine/qualityTypes";
 import { requestShadowRedraw, setStaticShadows } from "../engine/renderer";
@@ -34,7 +35,15 @@ export interface Sky {
   dispose(): void;
 }
 
-const HORIZON = "#d6e9ef", ZENITH = "#86bfe4", SUN = "#ffe4bd", SUN_INTENSITY = 3.3;
+const HORIZON = "#cfe6f5", ZENITH = "#5aa6e3", SUN = "#ffe9c8", SUN_INTENSITY = 3.3;
+/** The haze starts past the city's flat land and is still light on the ridges (relief ends at 3.1 radii). */
+export const FOG_NEAR = 1.6, FOG_FAR = 6;
+/**
+ * The sun the camera can meet. The light's sun stands 36° up, far above anything a camera over the city
+ * looks at, so its disc is drawn lower, just over the ridges (about 8–12° high), and turned this far
+ * towards the default view, where tilting to the horizon shows it. Shading and shadows keep the light's sun.
+ */
+const SUN_DISC_ELEVATION = .27, SUN_DISC_TURN = -1.2;
 /** The old city's sun, seen from the plaza: 36.5° high, from the far left of the default view. */
 const SUN_POSITION = new THREE.Vector3(-52, 46, 34);
 /** The time of day that gives exactly that sun; setTimeOfDay moves it 15° an hour. */
@@ -49,11 +58,10 @@ const SHADOW_REACH = 130;
  */
 const NIGHT_HORIZON = "#15203f", NIGHT_ZENITH = "#030813", CITY_GLOW = "#6a4524", MOON_LIGHT = "#9fb8ee";
 /**
- * The moon disc sits low over the skyline, a little right of the default view: the camera tilts at most to
- * a few degrees above the horizon (MAX_POLAR), so a higher moon would never be seen. The moonlight keeps
- * the sun's higher path.
+ * The moon disc sits just over the ridges (8–12° high), a little right of the default view, where the gaze
+ * lifted at the full tilt (engine/camera.ts lookUp) meets it. The moonlight keeps the sun's higher path.
  */
-const MOON_AZIMUTH = 1.19, MOON_ELEVATION = .045, MOON_RADIUS = .0125;
+const MOON_AZIMUTH = 1.19, MOON_ELEVATION = .25, MOON_RADIUS = .0125;
 /** Stars: cells of about 5 px at 1440 × 900, a star in every 36th of them. */
 const STAR_GRID = 260, STAR_SHARE = .028;
 
@@ -67,6 +75,7 @@ export function createSky(ctx: CityContext): Sky {
   const { scene, world } = ctx;
   const horizon = uniform(new THREE.Color(HORIZON)), zenith = uniform(new THREE.Color(ZENITH));
   const sunDirection = uniform(SUN_POSITION.clone().normalize()), sunColor = uniform(new THREE.Color(SUN).multiplyScalar(SUN_INTENSITY));
+  const sunDisc = uniform(SUN_POSITION.clone().normalize());
   // Black by day, so the day's dome stays exactly as it was; `nightSky` 1 swaps the sun's disc for the moon and stars.
   const cityGlow = uniform(new THREE.Color(0)), nightSky = uniform(0);
   const nightFade = nightSky.mul(ctx.night.level);
@@ -86,6 +95,13 @@ export function createSky(ctx: CityContext): Sky {
     const shine = step(1 - STAR_SHARE, h).mul(float(1).sub(smoothstep(0, size, d))).mul(pow(bright, float(3)).mul(2.4).add(.35));
     return mix(color("#bcd0ff"), color("#fff0d6"), jitter.x).mul(shine).mul(twinkle).mul(smoothstep(.008, .09, direction.y));
   }) as unknown as (direction: Vec3Node) => Vec3Node;
+  /** Cloud cover 0…1: fractal noise on a flat layer high over the city, so far clouds bunch towards the horizon. */
+  const cloudCover = Fn(([direction]: [Vec3Node]) => {
+    const layer = direction.xz.div(max(direction.y, float(.035))).mul(.42);
+    const drift = ctx.reducedMotion ? vec3(0) : vec3(time.mul(.006), time.mul(.0025), 0);
+    const noise = mx_fractal_noise_float(vec3(layer.x, layer.y, 0).add(drift), 4, 2, .5, 1);
+    return smoothstep(.12, .5, noise).mul(smoothstep(.02, .12, direction.y)).mul(.9);
+  }) as unknown as (direction: Vec3Node) => Vec3Node;
   const moon = uniform(new THREE.Vector3(Math.cos(MOON_ELEVATION) * Math.cos(MOON_AZIMUTH), Math.sin(MOON_ELEVATION), Math.cos(MOON_ELEVATION) * Math.sin(MOON_AZIMUTH)));
   /** A pale disc with soft grey seas and a faint halo of moonlight around it. */
   const moonDisc = Fn(([direction]: [Vec3Node]) => {
@@ -98,18 +114,21 @@ export function createSky(ctx: CityContext): Sky {
     return color("#fff3de").mul(disc).add(color(MOON_LIGHT).mul(halo));
   }) as unknown as (direction: Vec3Node) => Vec3Node;
   const background = Fn(() => {
-    const direction = positionWorldDirection, toward = max(dot(direction, sunDirection), float(0));
-    // A small white-hot disc and a warm glow around it; at night the moonlight has no disc of its own.
-    const disc = smoothstep(.99955, .9998, toward).mul(8), glow = pow(toward, float(48)).mul(.35).add(pow(toward, float(6)).mul(.08));
-    const sky = gradient(direction).add(sunColor.mul(disc.add(glow).div(SUN_INTENSITY)).mul(float(1).sub(nightSky))).toVar();
-    // The dome is shaded behind the whole frame: stars and moon only where they can show, and not by day.
+    const direction = positionWorldDirection, toward = max(dot(direction, sunDisc), float(0)), daySky = float(1).sub(nightSky);
+    const sky = gradient(direction).toVar();
+    // The dome is shaded behind the whole frame: clouds, stars and the moon only where the sky can show.
+    If(daySky.greaterThan(0).and(direction.y.greaterThan(.02)), () => { sky.assign(mix(sky, color("#fbfdff"), cloudCover(direction).mul(daySky))); });
+    // A small white-hot disc, a bright corona and a wide warm halo over its side of the sky; at night the
+    // moonlight has no disc of its own.
+    const disc = smoothstep(.99982, .99992, toward).mul(12), glow = pow(toward, float(900)).mul(1.4).add(pow(toward, float(64)).mul(.35)).add(pow(toward, float(8)).mul(.12));
+    sky.addAssign(sunColor.mul(disc.add(glow).div(SUN_INTENSITY)).mul(daySky));
     If(nightFade.greaterThan(0).and(direction.y.greaterThan(-.03)), () => { sky.addAssign(starField(direction).add(moonDisc(direction)).mul(nightFade)); });
     return sky;
   })();
   const sceneNodes = scene as THREE.Scene & { backgroundNode: THREE.Node | null };
   sceneNodes.backgroundNode = background;
-  // The fog matches the horizon, so land and sky meet without a seam; it scales with the world (v1: 118…330).
-  scene.fog = new THREE.Fog(HORIZON, world.radius * .79, world.radius * FOG_END);
+  // The haze matches the horizon, so the ranges and the sky meet without a seam; it scales with the world (v1: 240…900).
+  scene.fog = new THREE.Fog(HORIZON, world.radius * FOG_NEAR, world.radius * FOG_FAR);
 
   // A warm late-morning sun, low enough for long shadows; the sky and the grass fill the shade softly.
   const hemisphere = new THREE.HemisphereLight("#d9ebff", "#71805c", 1.15);
@@ -163,6 +182,8 @@ export function createSky(ctx: CityContext): Sky {
     cityGlow.value.set(night ? CITY_GLOW : 0x000000); nightSky.value = night ? 1 : 0;
     (scene.fog as THREE.Fog).color.copy(horizon.value);
     sunDirection.value.copy(direction); sunColor.value.copy(sun.color).multiplyScalar(sun.intensity);
+    const discAzimuth = azimuth + SUN_DISC_TURN, discAltitude = Math.min(altitude, SUN_DISC_ELEVATION);
+    sunDisc.value.set(Math.cos(discAzimuth) * Math.cos(discAltitude), Math.sin(discAltitude), Math.sin(discAzimuth) * Math.cos(discAltitude));
     ctx.requestShadowUpdate();
   }
   setTimeOfDay(DEFAULT_HOURS);

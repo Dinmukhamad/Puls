@@ -19,6 +19,16 @@ export const DEFAULT_VIEW: CityView = { azimuth: -2.62, polar: .95, distance: 90
 /** The old city's limits. Its world reached 150 units and its inner ring road 25; bigger worlds scale them. */
 const V1_RADIUS = 150, V1_RING = 25;
 export const MIN_DISTANCE = 18, MAX_DISTANCE = 140, MIN_POLAR = .18, MAX_POLAR = 1.3, PAN_RADIUS = 40;
+/**
+ * Tilted towards the horizon past LOOK_UP_FROM, the gaze lifts off the ground: at the full tilt the view's
+ * centre looks LOOK_UP_PITCH above the horizon, so the hills, the sky and the sun come into the picture.
+ */
+export const LOOK_UP_FROM = 1.12, LOOK_UP_PITCH = .06;
+/** How far above the view's centre the camera aims at this tilt (0 below LOOK_UP_FROM). */
+export function lookUp(polar: number, distance: number) {
+  const t = THREE.MathUtils.smoothstep(polar, LOOK_UP_FROM, MAX_POLAR);
+  return t * distance * (Math.cos(polar) + Math.sin(polar) * Math.tan(LOOK_UP_PITCH));
+}
 /** A press that moves less than this (CSS px) stays a tap for the picker: it does not glide. */
 export const TAP_SLOP = 6;
 /** Mouse turning, radians per canvas height of drag (OrbitControls' 2π at rotateSpeed .75). */
@@ -184,7 +194,7 @@ export function createCameraRig(camera: THREE.PerspectiveCamera, options: Camera
     const far = distance + options.radius * RELIEF_END + 50;
     if (far > camera.far) { camera.far = far; camera.updateProjectionMatrix(); }
     camera.position.copy(target).add(offset.setFromSpherical(spherical.set(distance, polar, azimuth)));
-    camera.lookAt(target);
+    camera.lookAt(target.x, target.y + lookUp(polar, distance), target.z);
     camera.updateMatrixWorld();
     moved = true;
   }
