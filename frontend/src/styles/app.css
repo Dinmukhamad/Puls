@@ -214,7 +214,7 @@ a {
 .da-person-card,
 .access-save-panel,
 .access-help,
-.city-person,
+.city-admin-footer,
 .table th {
   -webkit-backdrop-filter: blur(22px) saturate(170%);
   backdrop-filter: blur(22px) saturate(170%);
@@ -227,7 +227,8 @@ a {
 .training-hero,
 .training-category,
 .analytics-metric-card,
-.da-person-card {
+.da-person-card,
+.city-admin-footer {
   box-shadow: inset 0 1px 0 var(--surface-highlight), var(--shadow-card);
 }
 
