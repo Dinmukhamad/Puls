@@ -91,11 +91,11 @@ async def test_warm_dashboard_batches_team_evidence_without_changing_city_or_coi
         event.remove(engine.sync_engine, "before_cursor_execute", record)
     crm_reads = [sql for sql in statements if "FROM crm_appeals" in sql]
     print(f"warm_city_startup_sql={len(statements)} crm_reads={len(crm_reads)}")
-    assert len(statements) <= 19
+    assert len(statements) <= 18
     assert len(crm_reads) == 1
     assert "GROUP BY crm_appeals.author_id" in crm_reads[0]
     assert data["group"]["mine"] == {
-        "missions": 0, "materials": 0, "quests": 0, "orders": 0,
+        "missions": 0, "quests": 0, "orders": 0,
         "appeals": 300, "closed": 75, "points": 1275,
     }
     assert [project["stage"] for project in data["group"]["projects"]] == [

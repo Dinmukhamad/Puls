@@ -9,9 +9,10 @@ export const GUIDE_AVATAR: Record<Gender, string> = { female: "👩‍💻", mal
 
 /**
  * Оператор выбирает фигуру в центре города (если пол не указан при создании) и называет помощника.
- * Карточка лежит поверх карты; `onClose` передают, когда её открыли, чтобы сменить имя.
+ * Карточка лежит поверх карты; `onClose` передают, когда её открыли, чтобы сменить имя, `onLater` —
+ * при первом входе, чтобы вопрос можно было отложить.
  */
-export function CityGuideSetup({ onClose }: { onClose?: () => void }) {
+export function CityGuideSetup({ onClose, onLater }: { onClose?: () => void; onLater?: () => void }) {
   const { user, applyProfile } = useAuth(), client = useQueryClient();
   const [gender, setGender] = useState<Gender | null>(user?.gender ?? null);
   const [name, setName] = useState(user?.guide_name ?? "");
@@ -39,6 +40,7 @@ export function CityGuideSetup({ onClose }: { onClose?: () => void }) {
     <div className="city-guide-setup__actions">
       <button className="city-action" disabled={!gender || name.trim().length < 2 || save.isPending}>{save.isPending ? "Сохраняем…" : "Готово"}</button>
       {onClose && <button type="button" className="city-secondary" onClick={onClose}>Отмена</button>}
+      {onLater && <button type="button" className="city-secondary" disabled={save.isPending} onClick={onLater}>Позже</button>}
     </div>
   </form>;
 }

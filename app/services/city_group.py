@@ -1,20 +1,19 @@
 """The group city: quarters a supervisor's group builds together from its members' real work.
 
-Nothing is stored: points are counted from the same evidence as the missions (and passed learning
-materials), so they cannot be forged or double counted. Operators see only coarse stages of the
-group's quarters and their own points, never another operator's; staff see the breakdown.
+Nothing is stored: points are counted from the same evidence as the missions, so they cannot be
+forged or double counted. Operators see only coarse stages of the group's quarters and their own
+points, never another operator's; staff see the breakdown.
 """
 
 from sqlalchemy import func, select
 
 from app.models.city import CityAward, CityQuest
 from app.models.enums import Role
-from app.models.learning import LearningAward
 from app.models.user import Group, User
 from app.services.city import evidence
 
 # Points for every piece of work, as the operator's guide explains them.
-POINTS = {"missions": 20, "materials": 10, "quests": 5, "orders": 3, "appeals": 3, "closed": 5}
+POINTS = {"missions": 20, "quests": 5, "orders": 3, "appeals": 3, "closed": 5}
 # The quarters, built one after another; `cost` is the points each one takes.
 PROJECTS = [
     {"key": f"site-{i}", "name": name, "cost": cost}
@@ -53,15 +52,6 @@ async def contributions(session, user_ids, weights=None, *, facts=None):
             )
         ).all()
     )
-    materials = dict(
-        (
-            await session.execute(
-                select(LearningAward.user_id, func.count())
-                .where(LearningAward.user_id.in_(ids))
-                .group_by(LearningAward.user_id)
-            )
-        ).all()
-    )
     quests = dict(
         (
             await session.execute(
@@ -75,7 +65,6 @@ async def contributions(session, user_ids, weights=None, *, facts=None):
     for uid in ids:
         parts = {
             "missions": missions.get(uid, 0),
-            "materials": materials.get(uid, 0),
             "quests": quests.get(uid, 0),
             "orders": int(facts[uid]["orders"] or 0),
             "appeals": facts[uid]["appeals"],

@@ -66,7 +66,7 @@ export interface UserOut {
 }
 
 export type Gender = "male" | "female";
-/** «orbit» — как раньше: тянуть вращает, правая кнопка двигает. «map» — как карту: тянуть двигает, правая кнопка поворачивает. */
+/** «orbit» — вращение: тянуть вращает, правая кнопка двигает. «map» — как карту: тянуть двигает, правая кнопка поворачивает. */
 export type CityControls = "orbit" | "map";
 
 export interface Page<T> {

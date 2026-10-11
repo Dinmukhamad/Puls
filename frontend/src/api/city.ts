@@ -18,13 +18,13 @@ export interface CityBuilt { plot: string; item: BuildingKey; name: string; pric
 export interface CityQuest { slot: number; giver: "driver" | "client" | "guide"; title: string; speaker: string; text: string; options: string[]; answered: boolean; answer: number | null; correct: boolean | null; right: number | null; explanation: string | null; coins: number }
 export interface CityQuests { day: string; coins: number; items: CityQuest[] }
 export type SiteStage = "planned" | "foundation" | "frame" | "floors" | "done";
-export type PointKind = "missions" | "materials" | "quests" | "orders" | "appeals" | "closed";
+export type PointKind = "missions" | "quests" | "orders" | "appeals" | "closed";
 /** The operator's group city: stages only, and the operator's own points. */
 export interface CityGroup { name: string; small: boolean; projects: { key: string; name: string; stage: SiteStage }[]; mine: Record<PointKind | "points", number>; points: Record<PointKind, number> }
 /** Staff: a group's quarters with points, and every member's contribution. */
 export interface CityGroupOverview { id: number; name: string; total: number; projects: { key: string; name: string; stage: SiteStage; points: number; cost: number }[]; members: ({ user_id: number; full_name: string } & Record<PointKind | "points", number>)[] }
 export const SITE_STAGES: Record<SiteStage, string> = { planned: "Запланирован", foundation: "Фундамент", frame: "Каркас", floors: "Этажи", done: "Построен" };
-export const POINT_KINDS: Record<PointKind, string> = { missions: "Миссии города", materials: "Пройденные материалы", quests: "Задания дня", orders: "Учебные заказы", appeals: "Обращения CRM", closed: "Закрытые тикеты" };
+export const POINT_KINDS: Record<PointKind, string> = { missions: "Миссии города", quests: "Задания дня", orders: "Учебные заказы", appeals: "Обращения CRM", closed: "Закрытые тикеты" };
 /** The game's numbers the head sets (app/services/city_economy.py); `catalogue` and `can_edit` are not saved. */
 export interface CityEconomy { revision: number; prices: Record<BuildingKey, number>; points: Record<PointKind, number>; projects: { key: string; name: string; cost: number }[]; quest_coins: number; catalogue?: { key: BuildingKey; name: string; icon: string }[]; can_edit?: boolean;
   /** Team districts (docs/CITY_ESTATES.md): coins per level of a personal building, estimates per level of a shared one, headquarters steps. */

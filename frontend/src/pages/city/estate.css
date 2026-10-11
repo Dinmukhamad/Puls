@@ -1,6 +1,6 @@
 /* Стройка в районе команды: панель рядом с картой (не модальная), карточки построек и общих проектов. */
 /* Окна открываются поверх страницы, вне .city-immersive: им нужны те же цвета кнопок города. */
-.estate-district,.city-world-sheet{--city-accent:var(--btn-primary-bg);--city-on-accent:var(--btn-primary-fg);--city-soft:color-mix(in srgb,var(--text-primary) 7%,var(--surface-primary));--city-glass-soft:color-mix(in srgb,var(--surface-primary) 62%,transparent)}
+.estate-district{--city-accent:var(--btn-primary-bg);--city-on-accent:var(--btn-primary-fg);--city-soft:color-mix(in srgb,var(--text-primary) 7%,var(--surface-primary));--city-glass-soft:color-mix(in srgb,var(--surface-primary) 62%,transparent)}
 .estate-dock{position:fixed;top:var(--city-free-top);right:var(--city-right);bottom:var(--city-bottom);width:var(--city-panel);z-index:22;display:flex;flex-direction:column;border-radius:24px;overflow:hidden;color:var(--text-primary)}
 .estate-dock__head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:16px 16px 8px}.estate-dock__head p{margin:6px 0 0;font-size:12.5px;color:var(--text-secondary)}.estate-dock__head strong{color:var(--text-primary)}
 .estate-dock__close{flex:none;width:44px;height:44px;margin:-6px -6px 0 0;border:0;border-radius:14px;background:transparent;color:var(--text-primary);font:inherit;font-size:24px;line-height:1;cursor:pointer}.estate-dock__close:hover{background:var(--surface-hover)}.estate-dock__close:focus-visible{outline:2px solid var(--accent-primary);outline-offset:-2px}

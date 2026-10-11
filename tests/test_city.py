@@ -569,11 +569,13 @@ async def test_daily_quests_are_dealt_once_and_hide_answers(client, session, ope
     assert city["quests"]["items"][0]["answered"] and city["quests"]["items"][2]["right"] is None
 
 
-async def test_quests_review_passed_materials_and_count_for_the_group(client, session, operator):
+async def test_quests_come_from_the_bank_and_count_for_the_group(client, session, operator):
     from app.models.learning import LearningAttempt, LearningAward, LearningContent
 
     group = await make_group(session, code="GQ")
     operator.group_id = group.id
+    # A material passed before materials left the operator's menu feeds neither the day's
+    # situations nor the group's points.
     content = LearningContent(
         kind="test",
         title="Смена номера",
@@ -600,9 +602,9 @@ async def test_quests_review_passed_materials_and_count_for_the_group(client, se
     await session.commit()
     headers = auth(await login(client, operator.login))
     items = (await client.get(BASE, headers=headers)).json()["quests"]["items"]
-    assert all(q["title"] == "Смена номера" for q in items)
+    assert len(items) == 3 and not any(q["title"] == "Смена номера" for q in items)
     rows = await quest_rows(session, operator.id)
-    assert all(r.snapshot["options"][r.snapshot["correct"]] == "В" for r in rows)
+    assert all(r.snapshot["source"] == "bank" for r in rows)
     for row in rows:
         await client.post(
             f"{BASE}/quests/{row.slot}/answer",
@@ -610,7 +612,8 @@ async def test_quests_review_passed_materials_and_count_for_the_group(client, se
             json={"answer": row.snapshot["correct"]},
         )
     mine = (await client.get(BASE, headers=headers)).json()["group"]["mine"]
-    assert mine["quests"] == 3 and mine["materials"] == 1 and mine["points"] == 3 * 5 + 10
+    assert "materials" not in mine
+    assert mine["quests"] == 3 and mine["points"] == 3 * 5
 
 
 async def test_concurrent_answers_pay_once_and_staff_never_deal(client, session, operator):
@@ -650,7 +653,7 @@ async def test_deal_places_speakers_by_their_spot_and_shuffles_options():
     from app.services.city_quests import bank_questions, deal
 
     for uid in range(1, 40):
-        picks = deal(uid, date(2026, 9, 29), [], bank_questions())
+        picks = deal(uid, date(2026, 9, 29), bank_questions())
         assert len(picks) == 3 and len({q["ref"] for q in picks}) == 3
         speakers = [q["speaker"] for q in picks]
         if "Водитель" in speakers:
@@ -659,12 +662,12 @@ async def test_deal_places_speakers_by_their_spot_and_shuffles_options():
             assert speakers[1] == "Клиент" or (
                 speakers[0] == "Клиент" and "Водитель" not in speakers
             )
-        assert deal(uid, date(2026, 9, 29), [], bank_questions()) == picks
+        assert deal(uid, date(2026, 9, 29), bank_questions()) == picks
     # The right answer is not always in the same place.
     places = {
         q["correct"]
         for uid in range(1, 40)
-        for q in deal(uid, date(2026, 9, 29), [], bank_questions())
+        for q in deal(uid, date(2026, 9, 29), bank_questions())
     }
     assert len(places) == 3
 
