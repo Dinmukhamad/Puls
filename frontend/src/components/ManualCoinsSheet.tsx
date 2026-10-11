@@ -9,7 +9,7 @@ import { clearPendingCoins, confirmManualCoins, needsNewCoinCheck, readPendingCo
 import { Sheet } from "./Sheet";
 import { useToast } from "./Toast";
 import { Button, ErrorState, SegmentedControl, Skeleton } from "./ui";
-import { coins, signed } from "../utils/format";
+import { coins, plural, signed } from "../utils/format";
 import "../pages/wallet.css";
 import "./manualCoins.css";
 
@@ -148,7 +148,7 @@ function AuthorizedManualCoinsSheet({ operator, onClose }: ManualCoinsProps) {
   const finalDirection = confirmation?.command.direction ?? direction;
   const frozenNames = confirmation?.recipients.slice((recipientPage - 1) * 20, recipientPage * 20) ?? [];
   return <Sheet title="Операция с коинами" subtitle={confirmation ? "Шаг 2 из 2 · Подтверждение" : "Шаг 1 из 2 · Параметры"} onClose={() => { if (!inFlight.current && !save.isPending) onClose(); }} footer={<div className="manual-coins-footer">
-    <div className="manual-coins-footer__total" aria-live="polite"><span className="small secondary">{footerCount !== undefined ? `${footerCount} операторов` : "Выберите получателей"} · общий итог</span><strong>{footerAmount !== undefined ? `${signed(footerAmount)} коинов` : "—"}</strong></div>
+    <div className="manual-coins-footer__total" aria-live="polite"><span className="small secondary">{footerCount !== undefined ? `${footerCount} ${plural(footerCount, "оператор", "оператора", "операторов")}` : "Выберите получателей"} · общий итог</span><strong>{footerAmount !== undefined ? `${signed(footerAmount)} коинов` : "—"}</strong></div>
     <div className="manual-coins-footer__actions">
       {confirmation && !submitted && <Button onClick={() => { if (inFlight.current || save.isPending) return; restoreDraft(confirmation); setCheckError(null); save.reset(); }}>Изменить параметры</Button>}
       <Button type="submit" form={formId} variant={confirmation && finalDirection === "debit" ? "destructive" : "primary"} disabled={!valid || checking} aria-disabled={save.isPending || checking || undefined}>
@@ -191,8 +191,14 @@ function AuthorizedManualCoinsSheet({ operator, onClose }: ManualCoinsProps) {
           {!submitted && hasSelection && amountValid && preview.isFetching && <p className="small secondary" role="status">Проверяем получателей и балансы…</p>}
           {!submitted && preview.isError && <ErrorState error={preview.error} onRetry={() => preview.refetch()} />}
           {!submitted && amountValid && summary && !preview.isFetching && <div className="wallet-preview" role="status" aria-label="Предварительный итог операции">
-            <p>Получателей: <strong>{summary.count}</strong>. Каждому: <strong>{signed(change)} коинов</strong>. Общая сумма: <strong>{signed(summary.total_amount)} коинов</strong>.</p>
-            {summary.count > 0 && <p>{summary.count === 1 ? "Баланс после операции" : "Общий баланс после операции"}: <strong>{coins(summary.balance + summary.total_amount)}</strong>; доступно: <strong>{coins(summary.available + summary.total_amount)}</strong>.</p>}
+            {/* One value per line: a sentence of numbers wrapped mid-phrase in the narrow sheet. */}
+            <dl className="wallet-preview__rows">
+              <div><dt>Получателей</dt><dd>{summary.count}</dd></div>
+              <div><dt>Каждому</dt><dd>{signed(change)} {plural(change, "коин", "коина", "коинов")}</dd></div>
+              <div className="wallet-preview__total"><dt>Общая сумма</dt><dd>{signed(summary.total_amount)} {plural(summary.total_amount, "коин", "коина", "коинов")}</dd></div>
+              {summary.count > 0 && <div><dt>{summary.count === 1 ? "Баланс после операции" : "Общий баланс после операции"}</dt><dd>{coins(summary.balance + summary.total_amount)}</dd></div>}
+              {summary.count > 0 && <div><dt>{summary.count === 1 ? "Доступно после операции" : "Всего доступно после операции"}</dt><dd>{coins(summary.available + summary.total_amount)}</dd></div>}
+            </dl>
             {summary.count === 0 && <p className="field__error">В выбранных группах нет доступных операторов.</p>}
             {summary.insufficient_count > 0 && <p className="field__error" role="alert">Недостаточно доступных коинов у {summary.insufficient_count} операторов. У всех выбранных операторов должно быть не менее {coins(value)} доступных коинов. Ничего не будет списано, пока баланс не позволяет выполнить операцию всем.</p>}
           </div>}

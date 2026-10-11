@@ -211,7 +211,6 @@ a {
 .training-hero,
 .training-category,
 .analytics-metric-card,
-.week-metric-tile,
 .da-person-card,
 .access-save-panel,
 .access-help,
@@ -228,7 +227,6 @@ a {
 .training-hero,
 .training-category,
 .analytics-metric-card,
-.week-metric-tile,
 .da-person-card {
   box-shadow: inset 0 1px 0 var(--surface-highlight), var(--shadow-card);
 }

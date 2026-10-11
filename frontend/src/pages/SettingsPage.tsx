@@ -9,7 +9,7 @@ import { Sheet } from "../components/Sheet";
 import { useToast } from "../components/Toast";
 import { Badge, Button, Card, EmptyState, ErrorState, RowsSkeleton, Select } from "../components/ui";
 import { visibleNavigation } from "../navigation";
-import { coins } from "../utils/format";
+import { coins, plural } from "../utils/format";
 import { createInternalCode } from "../utils/internalCode";
 import { definitionPresentation } from "./definitionPresentation";
 import "./configuration.css";
@@ -111,7 +111,7 @@ function RulesEditor({ initial, metrics }: { initial: Rules; metrics: Definition
       {field({ key: "discipline_requires_reported", label: "Бонус за дисциплину только при загруженных данных", type: "boolean", hint: "Если выключить, отсутствие отчёта о нарушениях разрешает бонус." })}
       {field({ key: "rating_show_balance_to_operators", label: "Показывать операторам баланс коллег в рейтинге", type: "boolean", hint: "Индивидуальная история операций остаётся доступна по правам." })}
     </div></Card>
-    <Card title="Проверка курса" subtitle="Предварительный пример без дополнительных бонусов"><div className="configuration-example"><label className="field"><span className="field__label">Баллы конкурса</span><input className="input" type="number" min={0} step="any" value={sample} onChange={(e) => setSample(e.target.value)} /></label><span className="configuration-example__result">{Number.isFinite(rate) && rate > 0 && Number.isFinite(Number(sample)) ? coins(Math.floor(Math.max(0, Number(sample)) / rate)) : "—"} коинов</span></div></Card>
+    <Card title="Проверка курса" subtitle="Предварительный пример без дополнительных бонусов"><div className="configuration-example"><label className="field"><span className="field__label">Баллы конкурса</span><input className="input" type="number" min={0} step="any" value={sample} onChange={(e) => setSample(e.target.value)} /></label><span className="configuration-example__equals" aria-hidden="true">=</span><output className="configuration-example__result" aria-live="polite"><strong>{Number.isFinite(rate) && rate > 0 && Number.isFinite(Number(sample)) ? coins(Math.floor(Math.max(0, Number(sample)) / rate)) : "—"}</strong> коинов</output>{Number.isFinite(rate) && rate > 0 && <span className="configuration-example__rate">Курс: {coins(rate)} {plural(rate, "балл", "балла", "баллов")} = 1 коин, дробная часть отбрасывается</span>}</div></Card>
     {save.isError && <p role="alert" className="configuration-error">{configurationError(save.error)}</p>}
     {editable && <div className="configuration-save"><p className="muted small">Изменения сохраняются в журнале аудита.</p><Button type="submit" variant="primary" disabled={save.isPending}>{save.isPending ? "Сохраняем…" : "Сохранить правила"}</Button></div>}
   </form>;
@@ -138,7 +138,7 @@ function DefinitionSection({ kind, navigation }: { kind: DefinitionKind; navigat
     <div className="configuration-cards definition-cards">{items?.map((row) => {
       const presentation = definitionPresentation(kind, row, metrics);
       return <article key={row.id} className="card card--standard definition-card">
-        <header className="definition-card__head"><div className="definition-card__status"><Badge tone={row.is_active ? "success" : "neutral"}>{row.is_active ? "Активно" : "Неактивно"}</Badge></div><h2 className="definition-card__title">{row.title}</h2></header>
+        <header className="definition-card__head"><h2 className="definition-card__title">{row.title}</h2><div className="definition-card__status"><Badge tone={row.is_active ? "success" : "neutral"}>{row.is_active ? "Активно" : "Неактивно"}</Badge></div></header>
         <p className="definition-card__description">{presentation.description}</p>
         <dl className="definition-card__facts">{presentation.facts.map((fact) => <div key={fact.label} className="definition-card__fact"><dt>{fact.label}</dt><dd>{fact.value}</dd></div>)}</dl>
         <footer className="definition-card__footer">{atLeast("head") && <Button onClick={() => setEditor(row)}>Изменить</Button>}<Button variant="plain" onClick={() => setDetails(row)} aria-label={`Подробнее: ${row.title}`}>Подробнее</Button></footer>

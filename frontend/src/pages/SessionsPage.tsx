@@ -4,7 +4,7 @@ import { systemApi, type DeviceSession } from "../api/system";
 import { useAuth } from "../auth/AuthContext";
 import { Sheet } from "../components/Sheet";
 import { useToast } from "../components/Toast";
-import { Badge, Button, Card, EmptyState, ErrorState, KPI, Skeleton, SegmentedControl } from "../components/ui";
+import { Badge, Button, Card, EmptyState, ErrorState, KPI, Select, Skeleton, SegmentedControl } from "../components/ui";
 import { dateTime, parseTimestamp, plural } from "../utils/format";
 import "./workflow.css";
 
@@ -103,6 +103,11 @@ export function filterSessions(sessions: DeviceSession[], f: SessionFilters, now
 }
 
 export type SortKey = "active" | "created" | "name";
+const SORTS: { value: SortKey; label: string }[] = [
+  { value: "active", label: "Сначала активные" },
+  { value: "created", label: "Сначала новые входы" },
+  { value: "name", label: "По имени" },
+];
 
 export function SessionsPage() {
   const data = useQuery({ queryKey: ["sessions", "developer"], queryFn: () => systemApi.sessions(true) });
@@ -200,7 +205,7 @@ export function SessionsPage() {
           </div>
 
           <Card>
-            <div className="workflow-toolbar">
+            <div className="workflow-toolbar sessions-filters">
               {/* Переключатель стоит первым и здесь же, а не отдельной полосой
                   во всю ширину: это такой же отбор, как остальные, и держать
                   его в стороне значит заставлять искать фильтры в двух местах. */}
@@ -227,44 +232,39 @@ export function SessionsPage() {
               </label>
               <label className="field">
                 <span className="field__label">Сотрудник</span>
-                <select className="input" value={person} onChange={(e) => setPerson(e.target.value)}>
-                  <option value="">Все сотрудники</option>
-                  {people.map(([id, name]) => (
-                    <option key={id} value={id}>
-                      {name}
-                    </option>
-                  ))}
-                </select>
+                <Select
+                  aria-label="Сотрудник"
+                  value={person}
+                  onChange={setPerson}
+                  options={[{ value: "", label: "Все сотрудники" }, ...people.map(([id, name]) => ({ value: id, label: name }))]}
+                />
               </label>
               <label className="field">
                 <span className="field__label">Платформа</span>
-                <select className="input" value={platform} onChange={(e) => setPlatform(e.target.value)}>
-                  <option value="">Любая</option>
-                  {platforms.map((name) => (
-                    <option key={name} value={name}>
-                      {name}
-                    </option>
-                  ))}
-                </select>
+                <Select
+                  aria-label="Платформа"
+                  value={platform}
+                  onChange={setPlatform}
+                  options={[{ value: "", label: "Любая" }, ...platforms.map((name) => ({ value: name, label: name }))]}
+                />
               </label>
               <label className="field">
                 <span className="field__label">Активность</span>
-                <select className="input" value={freshness} onChange={(e) => setFreshness(e.target.value)}>
-                  <option value="">Любая</option>
-                  {Object.entries(FRESHNESS).map(([key, item]) => (
-                    <option key={key} value={key}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
+                <Select
+                  aria-label="Активность"
+                  value={freshness}
+                  onChange={setFreshness}
+                  options={[{ value: "", label: "Любая" }, ...Object.entries(FRESHNESS).map(([key, item]) => ({ value: key, label: item.label }))]}
+                />
               </label>
               <label className="field">
                 <span className="field__label">Сортировка</span>
-                <select className="input" value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
-                  <option value="active">Сначала активные</option>
-                  <option value="created">Сначала новые входы</option>
-                  <option value="name">По имени</option>
-                </select>
+                <Select
+                  aria-label="Сортировка"
+                  value={sort}
+                  onChange={(value) => setSort(SORTS.some((item) => item.value === value) ? value as SortKey : "active")}
+                  options={SORTS}
+                />
               </label>
               <Button disabled={!filtered} onClick={reset}>
                 Сбросить

@@ -21,7 +21,8 @@ async def summary(
     session: SessionDep,
     actor: StaffUser,
     week_id: Annotated[int | None, Query(gt=0)] = None,
-    grain: Literal["day", "week", "month"] = "week",
+    #: "range" covers the whole of date_from…date_to; the others show its last period.
+    grain: Literal["day", "week", "month", "range"] = "week",
     date_from: date | None = None,
     date_to: date | None = None,
     group_id: Annotated[int | None, Query(gt=0)] = None,

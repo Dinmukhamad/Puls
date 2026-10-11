@@ -1,12 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { games, type WheelSpin } from "../api/games";
 import { useAuth } from "../auth/AuthContext";
-import { Badge, Button, Card, EmptyState, ErrorState, Pagination, RowsSkeleton, SegmentedControl } from "../components/ui";
-import { dateTime, points } from "../utils/format";
+import { Sheet } from "../components/Sheet";
+import { Badge, Button, Card, ErrorState, RowsSkeleton, SegmentedControl } from "../components/ui";
+import { coins, plural, points } from "../utils/format";
 import { Raffles, WheelSettings } from "./GamesSettings";
 import { PrizeStrip } from "./PrizeStrip";
+import { prizeChances, prizeSticker } from "./wheelPrizes";
 import "./games.css";
 import "./learning.css";
 
@@ -16,12 +18,12 @@ export function GamesPage({ administrative = false }: { administrative?: boolean
   const tab = params.get("tab") === "raffles" ? "raffles" : "wheel";
   return <div className="stack games-page"><div className="page-head"><div><h1 className="page-title">{administrative ? "Управление играми" : "Моменты WOW"}</h1><p className="page-subtitle">{administrative ? "Награды и правила участия" : "Небольшие приятные события в рабочем дне"}</p></div>{!administrative && atLeast("supervisor") && <Link className="btn btn--secondary" to="/admin/games">Управление</Link>}</div>{!administrative && atLeast("supervisor") && <SegmentedControl label="Игры" value={tab} options={[{ value:"wheel",label:"Колесо WOW" },{ value:"raffles",label:"Розыгрыши" }]} onChange={(value) => setParams({tab:value})} />}{tab === "wheel" ? administrative ? <WheelSettings /> : <Wheel /> : <Raffles administrative={administrative} />}</div>;
 }
-export function invalidateRewards(client: ReturnType<typeof useQueryClient>) { for (const key of ["wheel","wheel-history","dashboard","wallet","coin-progress", "badges","notifications"]) void client.invalidateQueries({ queryKey:[key] }); }
+export function invalidateRewards(client: ReturnType<typeof useQueryClient>) { for (const key of ["wheel","dashboard","wallet","coin-progress", "badges","notifications"]) void client.invalidateQueries({ queryKey:[key] }); }
 const MUTE_KEY = "puls:wheel-muted";
 
 function Wheel() {
   const query = useQuery({ queryKey:["wheel"], queryFn:games.wheel });
-  const [page,setPage] = useState(1); const history = useQuery({ queryKey:["wheel-history",page],queryFn:()=>games.history(page) });
+  const [prizesOpen,setPrizesOpen] = useState(false);
   const [result,setResult] = useState<WheelSpin|null>(null); const [animating,setAnimating] = useState(false);
   const [snapshot,setSnapshot] = useState<WheelSpin["segments"]|null>(null);
   // Запрос на прокрутку для холста: меняется id — колесо едет к нужному сектору.
@@ -48,10 +50,26 @@ function Wheel() {
   }
   if(query.isLoading) return <RowsSkeleton />; if(query.isError) return <ErrorState error={query.error} onRetry={()=>query.refetch()} />;
   const config=query.data!;const segments=snapshot??config.segments;
-  const totalWeight=segments.reduce((total,item)=>total+item.weight,0);
-  return <div className="wheel-layout"><Card className="wheel-card"><span className="training-eyebrow">КОЛЕСО WOW</span><h2>Пусть день удивит.</h2><p className="secondary">Небольшая возможность для приятного бонуса</p><div className="strip-stage"><PrizeStrip segments={segments} colors={COLORS} spin={request} muted={muted} onSettled={settled} /></div><Button className="wheel-spin" variant="primary" disabled={!config.enabled||config.used_today>=config.daily_spins||spin.isPending||animating} onClick={()=>spin.mutate()}>{spin.isPending?"Готовим результат…":animating?"Вращаем…":!config.enabled?"Скоро вернёмся":config.used_today>=config.daily_spins?"На сегодня всё":"Крутить"}</Button><p className="secondary small">Бесплатно · Осталось {Math.max(0,config.daily_spins-config.used_today)} из {config.daily_spins}<br/>Попытки обновляются в 00:00 UTC</p><button type="button" className="wheel-mute" aria-pressed={muted} onClick={()=>setMuted((on)=>!on)}>{muted?"Включить звук":"Выключить звук"}</button>{spin.isError&&<ErrorState error={spin.error}/>}</Card>
-    <div className="stack">{result&&<Card className="wheel-result" title={result.reward.coins?"Ваш результат":"В этот раз без награды"}><div role="status" className="stack stack--tight"><h3>{result.reward.title}</h3><div className="row">{result.reward.coins>0&&<Badge tone="coin">+{result.reward.coins} коинов</Badge>}</div><p className="secondary">{result.reward.coins?"Награда уже зачислена.":"Спасибо за участие. Следующая попытка будет новой возможностью."}</p></div></Card>}
-      <Card title="Что может выпасть" subtitle="Вероятности указаны рядом с каждым результатом"><ol className="wheel-legend">{segments.map((item,index)=><li key={index}><span className="wheel-legend__dot" style={{background:COLORS[index%COLORS.length]}}>{index+1}</span><span>{item.title}</span><strong>{points(item.weight/totalWeight*100)}%</strong></li>)}</ol></Card>
-      <Card title="История розыгрышей">{history.isLoading&&<RowsSkeleton/>}{history.isError&&<ErrorState error={history.error} onRetry={()=>history.refetch()}/>} {!history.data?.total&&!history.isLoading&&!history.isError&&<EmptyState title="Первое вращение впереди"/>}{history.data?.items.map((item)=><div className="game-history" key={item.id}><span><strong>{item.reward.title}</strong><small>{dateTime(item.created_at)}</small></span><span>{[item.reward.coins?`+${item.reward.coins} коинов`:""].filter(Boolean).join(" · ")||"Без награды"}</span></div>)}<Pagination page={page} size={20} total={history.data?.total??0} onChange={setPage}/></Card>
-    </div></div>;
+  return <div className="wheel-layout"><Card className="wheel-card">
+      <button type="button" className="wheel-prizes-button" aria-haspopup="dialog" onClick={()=>setPrizesOpen(true)}><span className="wheel-prizes-button__sticker" aria-hidden="true">🎁</span><span>Что может выпасть</span></button>
+      <span className="training-eyebrow">КОЛЕСО WOW</span><h2>Пусть день удивит.</h2><p className="secondary">Небольшая возможность для приятного бонуса</p><div className="strip-stage"><PrizeStrip segments={segments} colors={COLORS} icons={segments.map((item)=>prizeSticker(item,segments).icon)} spin={request} muted={muted} onSettled={settled} /></div><Button className="wheel-spin" variant="primary" disabled={!config.enabled||config.used_today>=config.daily_spins||spin.isPending||animating} onClick={()=>spin.mutate()}>{spin.isPending?"Готовим результат…":animating?"Вращаем…":!config.enabled?"Скоро вернёмся":config.used_today>=config.daily_spins?"На сегодня всё":"Крутить"}</Button><p className="secondary small">Бесплатно · Осталось {Math.max(0,config.daily_spins-config.used_today)} из {config.daily_spins}<br/>Попытки обновляются в 00:00 UTC</p><button type="button" className="wheel-mute" aria-pressed={muted} onClick={()=>setMuted((on)=>!on)}>{muted?"Включить звук":"Выключить звук"}</button>{spin.isError&&<ErrorState error={spin.error}/>}</Card>
+    {result&&<Card className="wheel-result" title={result.reward.coins?"Ваш результат":"В этот раз без награды"}><div role="status" className="wheel-result__body"><span className="prize-sticker prize-sticker--small" style={stickerStyle(result.reward,segments,0)} aria-hidden="true">{prizeSticker(result.reward,segments).icon}</span><div className="stack stack--tight"><h3>{result.reward.title}</h3><div className="row">{result.reward.coins>0&&<Badge tone="coin">+{coins(result.reward.coins)} {plural(result.reward.coins,"коин","коина","коинов")}</Badge>}</div><p className="secondary">{result.reward.coins?"Награда уже зачислена.":"Спасибо за участие. Следующая попытка будет новой возможностью."}</p></div></div></Card>}
+    {prizesOpen&&<Sheet title="Что может выпасть" subtitle="Призы колеса и шанс выпадения каждого" onClose={()=>setPrizesOpen(false)}><PrizeStickers segments={segments} /></Sheet>}
+  </div>;
+}
+
+function stickerStyle(prize: WheelSpin["reward"], prizes: WheelSpin["segments"], index: number): CSSProperties {
+  return { "--sticker": prizeSticker(prize, prizes).color, "--tilt": `${index % 2 ? 4 : -4}deg` } as CSSProperties;
+}
+
+/** The prize list as stickers: what can drop, its reward and the chance. */
+export function PrizeStickers({ segments }: { segments: WheelSpin["segments"] }) {
+  const chances = prizeChances(segments);
+  if (!segments.length) return <p className="secondary">Призы колеса ещё не настроены.</p>;
+  return <ul className="prize-stickers">{segments.map((item, index) => <li className="prize-sticker-card" key={index}>
+    <span className="prize-sticker" style={stickerStyle(item, segments, index)} aria-hidden="true">{prizeSticker(item, segments).icon}</span>
+    <strong className="prize-sticker-card__title">{item.title}</strong>
+    {item.coins > 0 && <span className="prize-sticker-card__reward">+{coins(item.coins)} {plural(item.coins, "коин", "коина", "коинов")}</span>}
+    <span className="prize-sticker-card__chance">Шанс {points(chances[index])}%</span>
+  </li>)}</ul>;
 }

@@ -58,7 +58,11 @@ test("ledger identifies reason, actor, operation and resulting balance without m
     "@tanstack/react-query": { useQuery: ({ queryKey }) => ({ data: queryKey[0] === "wallet" ? report : undefined }) },
   });
   const html = renderToStaticMarkup(React.createElement(WalletPage, { administrative: true }));
-  for (const expected of [/Исправление ошибки/, /Руководитель · Руководитель/, /Операция №23/, /Баланс после 80/, /-20/]) assert.match(html, expected);
+  for (const expected of [/Исправление ошибки/, /Руководитель · Руководитель/, /Операция №23/, /Баланс после<\/dt><dd>80<\/dd>/, /-20/]) assert.match(html, expected);
+  // Wide screens get one ledger row per operation with fixed columns.
+  assert.match(html, /<th>Дата<\/th><th>Оператор<\/th><th>Операция<\/th><th>Провёл<\/th><th class="num">Сумма<\/th><th class="num">Баланс после<\/th>/);
+  assert.match(html, /<td class="wallet-ledger__author"><span>Руководитель<\/span><span class="wallet-ledger__role">Руководитель<\/span><\/td>/);
+  assert.doesNotMatch(html, /type="date"|<select(?![^>]*puls-select__native)/);
 });
 
 test("manual validation protects reserved coins and rejects invalid amounts and empty reasons even with a zero configured minimum", () => {
@@ -182,7 +186,7 @@ test("amount starts empty and debit check has no writes before a separate danger
   assert.equal(finalButton(initial).props.disabled, true);
   changeForm(harness.render(ManualCoinsSheet), { direction: "debit", amount: "20", reason: "За качество" });
   const tree = harness.render(ManualCoinsSheet), html = renderToStaticMarkup(tree);
-  assert.match(html, /В резерве/); assert.match(html, /Баланс после операции: <strong>80<\/strong>; доступно: <strong>10<\/strong>/); assert.doesNotMatch(html, /Исправление ошибочного начисления/);
+  assert.match(html, /В резерве/); assert.match(html, /Баланс после операции<\/dt><dd>80<\/dd>/); assert.match(html, /Доступно после операции<\/dt><dd>10<\/dd>/); assert.doesNotMatch(html, /Исправление ошибочного начисления/);
   await Promise.all([submitForm(tree), submitForm(tree)]); assert.equal(harness.calls.length, 0); assert.equal(harness.checks, 1);
   const reviewed = harness.render(ManualCoinsSheet), confirmation = renderToStaticMarkup(reviewed);
   assert.match(confirmation, /Шаг 2 из 2/); assert.match(confirmation, /Оператор команды/); assert.match(confirmation, /За качество/); assert.equal(find(reviewed, (node) => node.type === "fieldset"), undefined);
@@ -203,7 +207,7 @@ test("uncertain group debit retries exact selection after balances and membershi
 test("9999 can be credited to all scoped operators but 10000 disables confirmation", async () => {
   const harness = sheetHarness({ available: 0, previewCount: 61 }), { ManualCoinsSheet } = await load("../components/ManualCoinsSheet.tsx", harness.mocks);
   changeForm(harness.render(ManualCoinsSheet), { mode: "all", amount: "9999", reason: "За качество" }); let tree = harness.render(ManualCoinsSheet);
-  assert.equal(finalButton(tree).props.disabled, false); const html = renderToStaticMarkup(tree); assert.match(html, /Получателей: <strong>61<\/strong>/); assert.match(html, /max="9999"/);
+  assert.equal(finalButton(tree).props.disabled, false); const html = renderToStaticMarkup(tree); assert.match(html, /Получателей<\/dt><dd>61<\/dd>/); assert.match(html, /max="9999"/);
   await submitForm(tree); assert.equal(harness.calls.length, 0);
   tree = harness.render(ManualCoinsSheet); assert.equal(find(tree, (node) => node.type === "ol").props.children.length, 20);
   assert.match(renderToStaticMarkup(tree.props.footer), /Начислить 609\s*939 коинов/);

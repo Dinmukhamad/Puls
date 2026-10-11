@@ -5,7 +5,7 @@ export interface DateRange {
   date_to: string;
 }
 
-export type DateRangePreset = "today" | "three-days" | "ten-days" | "this-month" | "last-month";
+export type DateRangePreset = "today" | "three-days" | "ten-days" | "this-week" | "last-week" | "this-month" | "last-month";
 
 export function validDateRange(range: DateRange | undefined): range is DateRange {
   return !!range && !!calendarDate(range.date_from) && !!calendarDate(range.date_to) &&
@@ -37,6 +37,11 @@ export function presetDateRange(preset: DateRangePreset, today = todayDateKey())
   if (preset === "today") return { date_from: today, date_to: today };
   if (preset === "three-days" || preset === "ten-days") {
     return { date_from: dateKey(shiftDays(date, preset === "three-days" ? -2 : -9)), date_to: today };
+  }
+  if (preset === "this-week" || preset === "last-week") {
+    // Contest weeks run from Monday to Sunday.
+    const monday = shiftDays(date, -((date.getUTCDay() + 6) % 7) - (preset === "last-week" ? 7 : 0));
+    return { date_from: dateKey(monday), date_to: dateKey(shiftDays(monday, 6)) };
   }
   const month = preset === "last-month" ? shiftMonth(monthKey(date), -1) : monthKey(date);
   const next = calendarDate(`${month}-01`)!;

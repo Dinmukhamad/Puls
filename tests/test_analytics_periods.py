@@ -175,3 +175,170 @@ async def test_days_are_judged_against_a_days_share_of_weekly_targets(
     targets = {m["code"]: m["target"] for m in weekly_report["metrics"]}
     assert (targets["hours_worked"], targets["driver_gratitudes"]) == (40, 5)
     assert "делится на 5" not in weekly_report["methodology"]
+
+
+async def test_a_chosen_range_averages_every_day_and_compares_with_the_days_before(
+    client, session, operator, supervisor
+):
+    headers = auth(await login(client, supervisor.login))
+    values = [
+        {"user_id": operator.id, "day": day, "metric_code": "quality", "value": value}
+        for day, value in (("2026-08-01", 60), ("2026-08-03", 90), ("2026-08-04", 70))
+    ]
+    uploaded = await client.post(
+        "/api/v1/admin/day-metrics", json={"values": values}, headers=headers
+    )
+    assert uploaded.status_code == 200, uploaded.text
+
+    path = (
+        "/api/v1/analytics/summary?grain=range"
+        "&date_from=2026-08-03&date_to=2026-08-04&metric_code=quality"
+    )
+    report = (await client.get(path, headers=headers)).json()
+    assert (report["custom_range"], report["grain"]) == (True, "day")
+    assert (report["period_from"], report["period_to"], report["period_label"]) == (
+        "2026-08-03",
+        "2026-08-04",
+        "03.08.2026–04.08.2026",
+    )
+    # The cards cover both days; the comparison is the two days before them.
+    quality = next(m for m in report["metrics"] if m["code"] == "quality")
+    assert (quality["value"], quality["previous"], quality["delta"], quality["improved"]) == (
+        80,
+        60,
+        20,
+        True,
+    )
+    row = report["operators"][0]
+    assert (row["value"], row["previous"], row["values"]["quality"]) == (80, 60, 80)
+    assert row["previous_values"]["quality"] == 60
+    assert report["operators_with_data"] == 1
+    # A short range is drawn after the days right before it.
+    assert report["context_points"] == 5
+    assert [p["label"] for p in report["trend"]] == [
+        "29.07",
+        "30.07",
+        "31.07",
+        "01.08",
+        "02.08",
+        "03.08",
+        "04.08",
+    ]
+    assert [p["value"] for p in report["trend"]] == [None, None, None, 60, None, 90, 70]
+    assert "всего выбранного периода" in report["methodology"]
+
+
+async def test_a_range_without_daily_values_is_read_by_its_contest_weeks(
+    client, session, operator, supervisor
+):
+    for day, value in ((date(2026, 8, 3), 80), (date(2026, 8, 10), 88)):
+        week = await weekly.get_or_create_week(session, day)
+        session.add(
+            OperatorWeekMetric(
+                week_id=week.id, user_id=operator.id, metric_code="quality", value=value
+            )
+        )
+    await session.commit()
+    headers = auth(await login(client, supervisor.login))
+    path = (
+        "/api/v1/analytics/summary?grain=range"
+        "&date_from=2026-08-10&date_to=2026-08-16&metric_code=quality"
+    )
+    report = (await client.get(path, headers=headers)).json()
+    assert (report["custom_range"], report["grain"]) == (True, "week")
+    assert report["week"]["label"] == "2026-W33"
+    quality = next(m for m in report["metrics"] if m["code"] == "quality")
+    assert (quality["value"], quality["previous"], quality["target"]) == (88, 80, 100)
+    assert len(report["trend"]) == 8 and report["context_points"] == 7
+    assert [p["value"] for p in report["trend"]][-2:] == [80, 88]
+    assert report["period_label"] == "10.08.2026–16.08.2026"
+
+    # Without dates the range is the latest contest week.
+    default = (await client.get("/api/v1/analytics/summary?grain=range", headers=headers)).json()
+    assert (default["period_from"], default["period_to"]) == ("2026-08-10", "2026-08-16")
+
+
+async def test_whole_contest_weeks_keep_weekly_values_when_days_are_also_loaded(
+    client, session, operator, supervisor
+):
+    for day, hours in ((date(2026, 8, 3), 36), (date(2026, 8, 10), 40)):
+        week = await weekly.get_or_create_week(session, day)
+        session.add(
+            OperatorWeekMetric(
+                week_id=week.id, user_id=operator.id, metric_code="hours_worked", value=hours
+            )
+        )
+    await session.commit()
+    headers = auth(await login(client, supervisor.login))
+    values = [
+        {"user_id": operator.id, "day": f"2026-08-{d}", "metric_code": "hours_worked", "value": 8}
+        for d in range(10, 15)
+    ]
+    assert (
+        await client.post("/api/v1/admin/day-metrics", json={"values": values}, headers=headers)
+    ).status_code == 200
+
+    # Monday to Sunday: the weekly total is judged against the weekly target.
+    path = (
+        "/api/v1/analytics/summary?grain=range"
+        "&date_from=2026-08-10&date_to=2026-08-16&metric_code=hours_worked"
+    )
+    report = (await client.get(path, headers=headers)).json()
+    assert report["grain"] == "week"
+    hours = next(m for m in report["metrics"] if m["code"] == "hours_worked")
+    assert (hours["value"], hours["previous"], hours["target"]) == (40, 36, 40)
+    assert report["operators"][0]["target_met"] is True
+
+    # Dates inside the week are read by their days against a day's share of the target.
+    path = (
+        "/api/v1/analytics/summary?grain=range"
+        "&date_from=2026-08-11&date_to=2026-08-14&metric_code=hours_worked"
+    )
+    report = (await client.get(path, headers=headers)).json()
+    assert report["grain"] == "day"
+    hours = next(m for m in report["metrics"] if m["code"] == "hours_worked")
+    assert (hours["value"], hours["target"]) == (8, 8)
+
+
+async def test_a_long_range_is_averaged_by_month(client, session, operator, supervisor):
+    for day, value in ((date(2026, 7, 6), 60), (date(2026, 7, 13), 80)):
+        week = await weekly.get_or_create_week(session, day)
+        session.add(
+            OperatorWeekMetric(
+                week_id=week.id, user_id=operator.id, metric_code="quality", value=value
+            )
+        )
+    await session.commit()
+    headers = auth(await login(client, supervisor.login))
+    values = [
+        {"user_id": operator.id, "day": f"2026-08-{d:02d}", "metric_code": "quality", "value": v}
+        for d, v in ((3, 90), (4, 100))
+    ]
+    assert (
+        await client.post("/api/v1/admin/day-metrics", json={"values": values}, headers=headers)
+    ).status_code == 200
+    path = (
+        "/api/v1/analytics/summary?grain=range"
+        "&date_from=2026-02-01&date_to=2026-08-31&metric_code=quality"
+    )
+    report = (await client.get(path, headers=headers)).json()
+    assert report["grain"] == "month"
+    assert report["trend"][0]["label"] == "фев 2026"
+    assert [p["value"] for p in report["trend"]][-2:] == [70, 95]
+    quality = next(m for m in report["metrics"] if m["code"] == "quality")
+    assert (quality["value"], quality["previous"]) == (82.5, None)
+
+
+async def test_a_chosen_range_needs_both_valid_dates(client, session, operator, supervisor):
+    headers = auth(await login(client, supervisor.login))
+    for query in (
+        "date_from=2026-08-01",
+        "date_to=2026-08-01",
+        "date_from=2026-08-05&date_to=2026-08-01",
+        "date_from=2024-01-01&date_to=2026-08-31",
+        "date_from=0001-01-01&date_to=0001-01-02",
+    ):
+        response = await client.get(
+            f"/api/v1/analytics/summary?grain=range&{query}", headers=headers
+        )
+        assert response.status_code == 400, (query, response.text)

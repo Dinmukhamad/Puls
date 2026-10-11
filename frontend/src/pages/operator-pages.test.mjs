@@ -160,8 +160,48 @@ test("personal wallet ignores obsolete URL filters while the team wallet keeps t
   assert.match(html, /Заработано за всё время/);
   assert.doesNotMatch(html, /не число|NaN/);
   assert.match(html, /Заработано за всё время<\/span><span class="kpi__value">10<\/span>/);
+  assert.doesNotMatch(html, /История операций|Операций не найдено|Операция №/);
   administrative = true;
   html = renderToStaticMarkup(React.createElement(WalletPage, { administrative }));
+  assert.match(html, /История операций/);
   assert.deepEqual(captured, { page: 2, kind: "purchase", date_from: "2026-01-01", date_to: "2026-02-01", user_id: 37 });
   assert.match(html, /Фильтры/);
+});
+
+test("the weekly calculation reads as two sums and keeps a zero penalty neutral", () => {
+  const html = renderMetrics([metric()], { base_points: 23.5, penalty_points: 0, final_points: 23.5, coins_from_points: 4, coins_rank_bonus: 2, coins_total: 6 });
+  const formula = html.slice(html.indexOf('class="week-calculation"'));
+  assert.match(formula, /Как получен итог/);
+  assert.match(formula, /Баллы за показатели<\/dt><dd>23,5<\/dd>/);
+  assert.match(formula, /Прогноз баллов<\/dt><dd>23,5<\/dd>/);
+  assert.match(formula, /Бонус за место<\/dt><dd>2<\/dd>/);
+  assert.match(formula, /Всего по прогнозу<\/dt><dd>6<span class="week-formula__unit"> коинов<\/span><\/dd>/);
+  assert.equal((formula.match(/class="week-formula__sign" aria-hidden="true"/g) ?? []).length, 6);
+  assert.doesNotMatch(formula, /week-formula__term--penalty/);
+  const penalized = renderMetrics([metric()], { base_points: 23.5, penalty_points: 7, final_points: 16.5 });
+  assert.match(penalized, /week-formula__term--penalty/);
+});
+
+const badge = (code, patch = {}) => ({ code, title: `Достижение ${code}`, description: null, icon: null, unlocked: false, awarded_at: null, progress_current: 0, progress_target: 10, progress_percent: 0, hint: "", coins_reward: 0, coins_awarded: 0, category: "work", action_url: null, ...patch });
+
+test("the cabinet lists the three achievements closest to completion and folds the rest", async () => {
+  const badges = [badge("a", { progress_percent: 10 }), badge("b", { unlocked: true }), badge("c", { progress_percent: 80 }), badge("d", { progress_target: 0 }),
+    badge("e", { progress_percent: 45 }), badge("f", { progress_percent: 45 }), badge("g", { progress_percent: 5 })];
+  const { CabinetPage, nearestBadges } = await component("./CabinetPage.tsx", {
+    "@tanstack/react-query": { useQuery: ({ queryKey }) => ({ data: {
+      dashboard: { full_name: "Оператор", balance: { balance: 10, available: 10, rank: null, rank_delta: null }, week: week() },
+      "coin-progress": { total: 0, current: null, next: null, progress: 0 },
+      badges,
+    }[queryKey[0]] }) },
+  });
+  assert.deepEqual(nearestBadges(badges).map((item) => item.code), ["c", "e", "f"]);
+  assert.deepEqual(nearestBadges([badge("x", { progress_target: 0 }), badge("y", { unlocked: true })]).map((item) => item.code), ["x"]);
+  assert.deepEqual(nearestBadges([badge("y", { unlocked: true })]), []);
+  const html = renderToStaticMarkup(React.createElement(CabinetPage));
+  const card = html.slice(html.indexOf("Мои достижения"));
+  assert.equal((card.match(/class="badge-card"/g) ?? []).length, 3);
+  assert.ok(card.indexOf("Достижение c") < card.indexOf("Достижение e") && card.indexOf("Достижение e") < card.indexOf("Достижение f"));
+  assert.doesNotMatch(card, /Достижение a|Достижение b|Достижение d|Достижение g/);
+  assert.match(card, /Получено 1 из 7/);
+  assert.match(card, /aria-expanded="false"[^>]*>Все достижения · 7</);
 });

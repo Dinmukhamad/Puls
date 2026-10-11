@@ -39,6 +39,13 @@ test("a full month preset uses calendar boundaries and includes leap days", () =
   assert.deepEqual(presetDateRange("this-month", "9999-12-15"), range("9999-12-01", "9999-12-31"));
 });
 
+test("week presets cover whole contest weeks from Monday to Sunday", () => {
+  assert.deepEqual(presetDateRange("this-week", "2026-10-11"), range("2026-10-05", "2026-10-11"));
+  assert.deepEqual(presetDateRange("this-week", "2026-10-05"), range("2026-10-05", "2026-10-11"));
+  assert.deepEqual(presetDateRange("last-week", "2026-10-07"), range("2026-09-28", "2026-10-04"));
+  assert.deepEqual(presetDateRange("last-week", "2026-01-01"), range("2025-12-22", "2025-12-28"));
+});
+
 test("3 and 10 day presets count back inclusively rather than snapping to a week", () => {
   assert.deepEqual(presetDateRange("today", "2026-10-10"), range("2026-10-10"));
   assert.deepEqual(presetDateRange("three-days", "2026-10-10"), range("2026-10-08", "2026-10-10"));

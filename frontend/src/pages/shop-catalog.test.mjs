@@ -19,7 +19,7 @@ const source = readFileSync(new URL("./ShopPage.tsx", import.meta.url), "utf8");
 // Берём только чистые функции, лежащие до компонента: он тянет React.
 const head = source.slice(0, source.indexOf("export function ShopPage"));
 const built = await transform(head.replace(/^import[\s\S]*?;$/gm, ""), { loader: "tsx", format: "esm" });
-const { shopGroup, filterShop } = await import(
+const { shopGroup, filterShop, SHOP_SORTS } = await import(
   `data:text/javascript;base64,${Buffer.from(built.code).toString("base64")}`
 );
 
@@ -31,7 +31,7 @@ const item = (over) => ({
   ...over,
 });
 
-const BASE = { search: "", sort: "smart", onlyReady: false };
+const BASE = { search: "", sort: "cheap", onlyReady: false };
 const titles = (rows) => rows.map((r) => r.title);
 
 /* ── Группировка ───────────────────────────────────────────── */
@@ -82,26 +82,22 @@ test("товар без описания не роняет поиск", () => {
 
 /* ── Порядок ───────────────────────────────────────────────── */
 
-test("по умолчанию сверху то, что можно взять прямо сейчас", () => {
-  const rows = filterShop(CATALOG, BASE);
-  assert.deepEqual(titles(rows).slice(0, 2), ["Статус «Звезда недели»", "Сертификат на кофе"]);
-  // Внутри группы — от дешёвого к дорогому: 30 раньше 120.
-  assert.deepEqual(rows.slice(0, 2).map((r) => r.price), [30, 120]);
+test("по умолчанию — от дешёвого к дорогому, при равной цене — порядок с сервера", () => {
+  // Группы «можно купить» и «копим» раскладывает витрина, а не сортировка:
+  // повторять их пунктами «сначала доступные» и «ближе всего» не нужно.
+  assert.deepEqual(filterShop(CATALOG, BASE).map((r) => r.price), [30, 80, 120, 180, 200]);
+  const twins = [item({ id: 7, title: "Второй", price: 50, sort_order: 2 }), item({ id: 8, title: "Первый", price: 50, sort_order: 1 })];
+  assert.deepEqual(titles(filterShop(twins, BASE)), ["Первый", "Второй"]);
 });
 
-test("«ближе всего» считает, сколько осталось добрать", () => {
-  const rows = filterShop(CATALOG, { ...BASE, sort: "closest" });
-  // Доступное считается нулём, иначе оно провалилось бы в конец списка.
-  assert.ok(rows[0].can_buy, "сверху должно быть то, что уже по карману");
-  const saving = rows.filter((r) => r.missing_coins > 0).map((r) => r.missing_coins);
-  assert.deepEqual(saving, [...saving].sort((a, b) => a - b));
+test("«сначала дорогие» разворачивает порядок по цене", () => {
+  assert.deepEqual(filterShop(CATALOG, { ...BASE, sort: "expensive" }).map((r) => r.price), [200, 180, 120, 80, 30]);
 });
 
-test("сортировка по цене не перемешивает доступное с недоступным", () => {
-  // Группы остаются: иначе «сначала дешёвые» снова смешает то, что можно
-  // купить, с тем, на что ещё копить, и список станет нечитаемым.
-  const cheap = filterShop(CATALOG, { ...BASE, sort: "cheap" });
-  assert.deepEqual(cheap.map((r) => r.price), [30, 80, 120, 180, 200]);
+test("порядок выбирается списком в стиле сайта, и в нём нет пунктов-повторов", () => {
+  assert.doesNotMatch(source, /<select|<option/);
+  assert.match(source, /<Select aria-label="Порядок бонусов" value=\{sort\} options=\{SHOP_SORTS\}/);
+  assert.deepEqual(SHOP_SORTS.map((option) => option.label), ["Сначала дешёвые", "Сначала дорогие"]);
 });
 
 test("фильтр «только доступные» убирает всё остальное", () => {

@@ -44,7 +44,7 @@ export function QrScanner({ onRead }: { onRead: (payload: string) => void }) {
     void start();
     return () => { cancelled = true; window.clearTimeout(timer); release(); };
   }, [attempt, visible]);
-  return <div className="qr-camera"><video ref={video} autoPlay playsInline muted aria-label="Сканер QR-кода" /><div className="qr-camera-frame" aria-hidden="true" />
-    {failure ? <div className="qr-camera-message" role="alert"><p>{failure}</p><Button onClick={() => setAttempt(n => n + 1)}>Повторить</Button></div> : <p className="qr-camera-hint" role="status">{ready ? "Наведите камеру на QR-код оператора" : "Включаем камеру…"}</p>}
+  return <div className="qr-camera"><video ref={video} autoPlay playsInline muted aria-label="Сканер QR-кода" />{!failure && <div className="qr-camera-frame" aria-hidden="true" />}
+    {failure ? <div className="qr-camera-message" role="alert"><span className="qr-camera-message__icon" aria-hidden="true"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3l18 18" /><path d="M9.5 5H15l1.5 2H19a2 2 0 0 1 2 2v8.5M17.7 19H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h2" /><path d="M9.9 10.6a3 3 0 0 0 3.9 4.1" /></svg></span><p>{failure}</p><Button className="qr-camera-retry" onClick={() => setAttempt(n => n + 1)}>Повторить</Button></div> : <p className="qr-camera-hint" role="status">{ready ? "Наведите камеру на QR-код оператора" : "Включаем камеру…"}</p>}
   </div>;
 }

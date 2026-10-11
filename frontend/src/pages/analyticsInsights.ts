@@ -24,12 +24,15 @@ const EXPLANATIONS: Record<string, string> = {
 export const finite = (value: number | null | undefined): value is number => typeof value === 'number' && Number.isFinite(value);
 export const shortNumber = (value: number | null | undefined) => finite(value) ? new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 }).format(value) : '—';
 export const metricValue = (value: number | null | undefined, metric: Pick<MetricSummary, 'unit'>) => finite(value) ? `${shortNumber(value)}${metric.unit ? ` ${metric.unit}` : ''}` : 'Нет данных';
-export function periodCaption(report: Pick<AnalyticsOut, 'grain' | 'period_from' | 'period_to' | 'period_label'>) {
+export function periodCaption(report: Pick<AnalyticsOut, 'grain' | 'period_from' | 'period_to' | 'period_label' | 'custom_range'>) {
   if (!report.period_from || !report.period_to) return report.period_label ?? 'Период не выбран';
   const start = new Date(`${report.period_from}T12:00:00`), end = new Date(`${report.period_to}T12:00:00`);
   const format = (date: Date) => date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' });
+  const span = () => `${start.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', ...(start.getFullYear() !== end.getFullYear() ? { year: 'numeric' } : {}) })} — ${format(end)}`;
+  // A chosen range is named by its own dates, whatever step its chart uses.
+  if (report.custom_range) return report.period_from === report.period_to ? format(start) : span();
   return report.grain === 'month' ? start.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })
-    : report.grain === 'day' ? format(start) : `${start.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })} — ${format(end)}`;
+    : report.grain === 'day' ? format(start) : span();
 }
 export const description = (metric: MetricSummary) => EXPLANATIONS[metric.code] ?? metric.description ?? (metric.kind === 'anti' ? 'Нежелательные события. Чем меньше, тем лучше.' : 'Фактический результат относительно настроенной цели.');
 

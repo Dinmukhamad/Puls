@@ -64,6 +64,10 @@ export interface AnalyticsOut {
   week: WeekOut | null;
   /** day, week or month: what the selected period and each trend point mean. */
   grain: AnalyticsGrain;
+  /** The cards cover the whole chosen date range, not only its last day, week or month. */
+  custom_range?: boolean;
+  /** Trend points before a short chosen range, drawn for context. */
+  context_points?: number;
   period_label: string | null;
   period_from: string | null;
   period_to: string | null;
@@ -85,7 +89,8 @@ export type AnalyticsGrain = "day" | "week" | "month";
 
 export interface AnalyticsFilters {
   week_id?: number;
-  grain?: AnalyticsGrain;
+  /** "range" reads the whole date_from…date_to; without dates — the latest contest week. */
+  grain?: AnalyticsGrain | "range";
   date_from?: string;
   date_to?: string;
   group_id?: number;

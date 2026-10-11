@@ -73,6 +73,10 @@ class AnalyticsOut(BaseModel):
     week: WeekOut | None
     #: day, week or month: what one point of the trend and the selected period mean.
     grain: str = "week"
+    #: The cards cover the whole chosen date range rather than its last period.
+    custom_range: bool = False
+    #: Trend points before a short range, shown for context (range only).
+    context_points: int = 0
     period_label: str | None = None
     period_from: date | None = None
     period_to: date | None = None

@@ -73,3 +73,11 @@ test("events containing only technical changes retain a clear completion message
   assert.match(html, /Изменения сохранены/);
   assert.doesNotMatch(html, /9412|9413|supervisor_id/);
 });
+
+test("audit filters use the site's list and period calendar instead of system controls", async () => {
+  const { readFileSync } = await import("node:fs");
+  const source = readFileSync(new URL("./AuditPage.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /<select|<option|type="date"/);
+  assert.match(source, /<Select aria-label="Действие"/);
+  assert.match(source, /<DateRangePicker ariaLabel="Период событий"/);
+});
