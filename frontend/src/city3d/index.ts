@@ -41,12 +41,6 @@ import "./city3d.css";
 
 /** Static shadows are redrawn only once the camera has rested this long: culling changes casters while it moves. */
 const SHADOW_REST_MS = 250;
-/**
- * With the camera still and the map untouched this long the city rests at IDLE_FPS: traffic, people and water
- * go on moving, at half the work. While models load and shaders compile it draws LOADING_FPS, leaving the CPU
- * to them, unless the map is being moved. A touch, a drag or a flight brings the full rate back at once.
- */
-const IDLE_AFTER_MS = 2000, IDLE_FPS = 30, LOADING_FPS = 10;
 const SHADER_WARMUP_MS = 4000;
 const LOD_FILES = ["city/v1/city-models.glb", "city/v1/vehicles.glb"].map(path => `${import.meta.env.BASE_URL}${path}`);
 
@@ -159,18 +153,8 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
     const { renderer, backend } = handle;
     host.dataset.backend = backend === "webgpu" ? "WebGPU" : "WebGL2";
     const scene = new THREE.Scene(), camera = createCamera(world.radius);
-    let loading = true, shadowWanted = false, lastMove = 0, lastInput = 0, resting = false;
-    // Frames drawn at a resting or loading pace say nothing of the device: quality and telemetry skip them.
-    const quality = own(createQuality({ backend, mobile, gpu: handle.gpu, busy: () => loading || resting }));
-    const wake = () => { lastInput = performance.now(); };
-    // The canvas is new on every start, so its listeners go with it.
-    for (const type of ["pointerdown", "pointermove", "wheel"] as const) canvas.addEventListener(type, wake, { passive: true });
-    function frameRate(now: number) {
-      const cap = quality.settings.fps, still = !journey && now - Math.max(lastMove, lastInput) > IDLE_AFTER_MS;
-      const rate = !still ? cap : loading ? LOADING_FPS : Math.min(cap, IDLE_FPS);
-      resting = rate < cap;
-      return rate;
-    }
+    let loading = true, shadowWanted = false, lastMove = 0;
+    const quality = own(createQuality({ backend, mobile, gpu: handle.gpu, busy: () => loading }));
 
     const frameCallbacks = new Set<(dt: number, now: number) => void>(), moveCallbacks = new Set<() => void>();
     let sun: THREE.DirectionalLight | null = null;
@@ -220,11 +204,11 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
 
     let ready = false;
     const loop = own(createLoop({
-      host, active, fps: () => frameRate(performance.now()),
+      host, active, fps: () => quality.settings.fps,
       onGap: (gap, now) => quality.frame(gap, now),
       onError: () => startupFailed(run),
       render(dt, now) {
-        stats.beginFrame(!resting);
+        stats.beginFrame();
         if (journey && parts?.departments) {
           // Keep the trip short on low-FPS PCs, but don't jump after a hidden-tab pause.
           journey.elapsed += journey.last === undefined ? dt : Math.min(.25, Math.max(0, (now - journey.last) / 1000));

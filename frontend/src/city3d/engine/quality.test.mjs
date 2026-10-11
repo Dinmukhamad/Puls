@@ -15,12 +15,8 @@ const desktop = { backend: 'webgpu', mobile: false, ios: false, cores: 8, width:
 const android = { ...desktop, mobile: true, width: 393, height: 873, dpr: 2.75 };
 const iphone = { ...desktop, backend: 'webgl2', mobile: true, ios: true, cores: 6, width: 390, height: 844, dpr: 3, gpu: 'Apple GPU' };
 
-/**
- * GPU cost of each setting relative to the full "high" frame; resolution scales the pixel-bound part. The
- * glow is drawn only at night, so by day, as here, giving it up saves nothing.
- */
-const effects = (s) => (s.ao ? 1 : .87) * (s.antialias === 'smaa' ? 1 : .965) *
-  (s.lodDistances[0] < core.settingsFor(s.tier).lodDistances[0] ? .95 : 1) * (s.crowd >= 1 ? 1 : .96);
+/** GPU cost of each setting relative to the full "high" frame; resolution scales the pixel-bound part. */
+const effects = (s) => (s.ao ? 1 : .85) * { planar: 1.15, ssr: 1, sky: .9 }[s.waterReflections] * { 2048: 1, 1024: .93, 0: .85 }[s.dynamicShadowSize] * (s.crowd >= 1 ? 1 : .95);
 
 /**
  * Frame gaps from a model of the device, like the lead's adapt-sim: GPU time scales with the pixel count
@@ -37,7 +33,7 @@ function simulate({ base, gpu, fixed = 3, vsync = 1000 / 60, seconds = 600, busy
     const s = adapter.settings;
     const work = (fixed + (gpu - fixed) * s.resolution ** 2 * effects(s) / effects(base)) * (1 + noise());
     let next = now + Math.max(1, Math.ceil(work / vsync - 1e-9)) * vsync;
-    while (!shouldDraw(next, now, s.fps, vsync)) next += vsync;
+    while (!shouldDraw(next, now, s.fps)) next += vsync;
     if (hitchAt.length && next >= hitchAt[0]) next += hitchAt.shift();
     const gap = next - now;
     now = next;
@@ -92,7 +88,7 @@ test('a GPU-bound desktop gives up effects in table order and keeps its pixels',
   const run = simulate({ base: high, gpu: 40 });
   const first = firstConcessions(run.trace);
   assert.deepEqual(first, tableOrder(first), `order: ${first}`);
-  assert.deepEqual(first.slice(0, 2), ['ao', 'aa:fxaa']);
+  assert.deepEqual(first.slice(0, 2), ['ao', 'water:sky']);
   assert.ok(run.concessions.includes('fps:30') && run.concessions.includes('ao'), JSON.stringify(run.concessions));
   // 30 frames a second is enough for this GPU once the effects are off, so resolution stays native.
   assert.equal(run.lowest, 1);
@@ -107,9 +103,9 @@ test('a 120 Hz screen with a busy GPU settles without blinking', () => {
   assertSteady(run, '120 Hz GPU 30 ms');
 });
 
-test('a GPU-bound phone concedes the glow, detail and crowd, then pixels, never below 80 %', () => {
+test('a GPU-bound phone concedes shadows, crowd, then pixels, never below 80 %', () => {
   const run = simulate({ base: medium, gpu: 60 });
-  assert.deepEqual(firstConcessions(run.trace), ['bloom', 'lod:near', 'crowd:0.5', 'resolution:0.9', 'resolution:0.8']);
+  assert.deepEqual(firstConcessions(run.trace), ['shadows:0', 'crowd:0.5', 'resolution:0.9', 'resolution:0.8']);
   assert.equal(run.settings.fps, 30);
   assert.equal(run.lowest, .8);
   assertSteady(run, 'phone GPU-bound');
@@ -139,7 +135,7 @@ test('pixels are the last resort in every scenario: nothing earlier comes back w
     const run = simulate(options);
     // Steps before 30 fps that change this tier at all (medium has no AO to give up, for instance).
     const before30 = core.STEPS.slice(0, core.STEPS.findIndex(s => s.id === 'fps:30')).filter(step => { const s = structuredClone(options.base); step.apply(s); return JSON.stringify(s) !== JSON.stringify(options.base); });
-    const possible = before30.map(step => step.id);
+    const possible = before30.filter(step => step.id !== 'shadows:1024').map(step => step.id);
     for (const [second, list] of run.trace) {
       if (!list.includes('resolution')) continue;
       for (const id of possible) assert.ok(list.split(' ').includes(id), `${name}: ${id} came back at ${second} s while resolution was lowered: ${list}`);
@@ -217,7 +213,7 @@ test('a manual choice is remembered, stops adaptation and survives broken storag
   quality.setManual(null);
   assert.equal(store.has(QUALITY_KEY), false); assert.equal(quality.settings.tier, 'high');
   for (let now = 0; now < 5000; now += 50) quality.frame(50, now);
-  assert.deepEqual(quality.concessions, ['ao', 'aa:fxaa', 'bloom', 'lod:near', 'crowd:0.5']);
+  assert.deepEqual(quality.concessions, ['ao', 'water:sky', 'shadows:1024', 'shadows:0', 'crowd:0.5']);
   const broken = { getItem() { throw new Error('denied'); }, setItem() { throw new Error('denied'); }, removeItem() { throw new Error('denied'); } };
   const fallback = createQuality({ ...options, storage: broken });
   assert.equal(fallback.manual, null);
