@@ -11,8 +11,10 @@ export interface QualitySettings {
   dynamicShadowSize: 0 | 1024 | 2048;
   /** Static shadow map size (drawn once, TZ §6.4, until baked lightmaps arrive in stage 3). */
   staticShadowSize: 1024 | 2048 | 4096;
-  /** Post effects. */
+  /** Post effects. Bloom is drawn only at night, when lamps and windows glow (render/post.ts). */
   ao: boolean; bloom: boolean; tiltShift: boolean; waterReflections: "planar" | "ssr" | "sky";
+  /** Antialiasing where the screen needs it: three-pass SMAA on the strong tiers, one-pass FXAA below. */
+  antialias: "smaa" | "fxaa";
   /** Distances (world units) where LOD levels switch: LOD0 → LOD1 → LOD2 → hidden (impostor in stage 3). */
   lodDistances: [number, number, number];
   /** Traffic and pedestrians density share, 0…1. */

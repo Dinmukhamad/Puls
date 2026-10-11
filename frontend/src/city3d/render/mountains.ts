@@ -101,7 +101,8 @@ export function createMountains(ctx: CityContext, options: { end?: number } = {}
   // faces over the cutting once they are narrower than a pixel far away.
   const material = new THREE.MeshStandardNodeMaterial({ vertexColors: true, roughness: .95, metalness: 0 });
   const mesh = new THREE.Mesh(geometry, material);
-  mesh.name = "city-mountains"; mesh.receiveShadow = true; mesh.matrixAutoUpdate = false;
+  // The ranges lie past the shadow map, where shading for shadows would only cost: they take none.
+  mesh.name = "city-mountains"; mesh.receiveShadow = false; mesh.matrixAutoUpdate = false;
   ctx.scene.add(mesh);
   return { mesh, dispose() { ctx.scene.remove(mesh); geometry.dispose(); material.dispose(); } };
 }

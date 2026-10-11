@@ -65,6 +65,16 @@ test('the default loop draws every vsync, clamps real stalls and supports a zero
   assert.equal(b.queue.size, 1);
 });
 
+// 60 frames a second is a real cap: every vsync of a 60 or 75 Hz screen, about 60 on a 120 or 144 Hz one.
+for (const [hz, expected] of [[60, 60], [75, 75], [120, 60], [144, 72]]) {
+  test(`a 60 fps cap on a ${hz} Hz screen draws ${expected} frames a second`, t => {
+    const b = browser(t), { rendered } = b.create({ fps: () => 60 });
+    for (let i = 0; i <= hz * 2; i++) b.advance(i * 1000 / hz);
+    // The second second: the screen's vsync interval is learnt within the first few frames.
+    const late = rendered.filter(frame => frame.now > 1000).length;
+    assert.ok(Math.abs(late - expected) <= 1, `${hz} Hz: ${late} frames in a second`);
+  });
+}
 test('an initially inactive city cannot wake from visibility or intersection events', t => {
   const b = browser(t), { loop, rendered } = b.create({ active: false });
   assert.equal(loop.running, false);

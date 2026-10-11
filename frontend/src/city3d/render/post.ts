@@ -1,11 +1,12 @@
 /**
  * Post effects (TZ §6.6) as one THREE.PostProcessing pipeline of TSL nodes: the scene pass, ambient
  * occlusion (GTAO at half resolution, quality `ao`), a glow on lamps and windows (quality `bloom`) and
- * antialiasing, since the renderer draws without MSAA: SMAA, FXAA on "low", none on screens of twice the
- * density or more, where edges are already fine and a full-screen pass costs the most. With nothing on,
- * render() is a plain renderer.render(): no extra render target, no extra pass. At night (TZ §6.7) the
- * glow grows stronger and takes dimmer lights with ctx.night.level; tiers without bloom keep it off, and
- * the lights read by their own emissive colours. Tilt-shift, grading and TRAA come with the content of stage 3.
+ * antialiasing, since the renderer draws without MSAA: quality `antialias` (SMAA on the strong tiers, FXAA
+ * below), none on screens of twice the density or more, where edges are already fine and a full-screen pass
+ * costs the most. With nothing on, render() is a plain renderer.render(): no extra render target, no extra
+ * pass. The glow is built only once the night falls (TZ §6.7): by day it barely showed and its passes cost
+ * every frame. At night it grows with ctx.night.level; tiers without bloom keep it off, and the lights read by
+ * their own emissive colours. Tilt-shift, grading and TRAA come with the content of stage 3.
  */
 import * as THREE from "three/webgpu";
 import { mix, pass, renderOutput, vec4, type ShaderNodeObject } from "three/tsl";
@@ -35,17 +36,19 @@ export interface Post {
 
 interface Pipeline { post: THREE.PostProcessing; nodes: THREE.Node[]; targets: THREE.RenderTarget[]; key: string; glow: ReturnType<typeof bloom> | null }
 
-/** Bloom strength and threshold by day and at full night: at night windows, lamps and headlights glow clearly. */
+/** Bloom strength and threshold as the night falls and at full night: windows, lamps and headlights glow clearly. */
 export const BLOOM_DAY = { strength: .32, threshold: .92 }, BLOOM_NIGHT = { strength: .9, threshold: .6 };
 
 export function createPost(ctx: CityContext, options: PostOptions = {}): Post {
   const { renderer, scene, camera } = ctx;
   let pipeline: Pipeline | null = null, key = "";
 
-  const antialias = (): Antialias => options.antialias ?? (renderer.getPixelRatio() >= 2 ? "none" : ctx.quality.tier === "low" ? "fxaa" : "smaa");
+  const antialias = (): Antialias => options.antialias ?? (renderer.getPixelRatio() >= 2 ? "none" : ctx.quality.antialias);
+  /** The glow is wanted while the night level is above zero, on tiers that have it. */
+  const glowWanted = () => ctx.quality.bloom && (ctx.night.level.value as number) > 0;
   /** Rebuilds the pipeline when the set of effects changed. */
   function build() {
-    const q = ctx.quality, next = [q.ao && "ao", q.bloom && "bloom", antialias()].filter(e => e && e !== "none").join("+");
+    const q = ctx.quality, glowing = glowWanted(), next = [q.ao && "ao", glowing && "bloom", antialias()].filter(e => e && e !== "none").join("+");
     if (next === key && (pipeline || !next)) return;
     teardown(); key = next;
     if (!next) return;
@@ -66,7 +69,7 @@ export function createPost(ctx: CityContext, options: PostOptions = {}): Post {
       const texel = scenePass.getTextureNode("output");
       color = vec4(texel.rgb.mul(mix(1, occlusion.getTextureNode().r, .85)), texel.a);
     }
-    if (q.bloom) {
+    if (glowing) {
       // Glow is emitted light: extract it before occlusion dims the scene.
       glow = bloom(scenePass.getTextureNode("output"), BLOOM_DAY.strength, .55, BLOOM_DAY.threshold); nodes.push(glow);
       color = color.add(glow);
@@ -107,7 +110,11 @@ export function createPost(ctx: CityContext, options: PostOptions = {}): Post {
   const offQuality = ctx.onQuality(build);
 
   return {
-    render() { if (pipeline) { nightBloom(); pipeline.post.render(); } else renderer.render(scene, camera); },
+    render() {
+      // Nightfall adds the glow's passes and daybreak removes them; nothing changes in between.
+      if (glowWanted() !== !!pipeline?.glow) build();
+      if (pipeline) { nightBloom(); pipeline.post.render(); } else renderer.render(scene, camera);
+    },
     setSize() { build(); },
     get effects() { return key; },
     dispose() { offQuality(); teardown(); key = ""; },

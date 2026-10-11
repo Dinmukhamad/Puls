@@ -78,7 +78,12 @@ const FURNITURE: FurnitureKind[] = ["bench", "slide", "swings", "climber", "sand
 const FALLBACK: Record<string, [string, string]> = { s: ["#eadccb", "#b86b52"], c: ["#cfd6de", "#8e99a6"], i: ["#cdc8bd", "#8b8f95"], car: ["#d9cf6a", "#5b6068"] };
 
 /** Generated kits include LOD0: prefer them over downloading and decoding the source kit again. */
-export async function loadCatalogueModels(lodUrls: string[] = [], options: ModelLoadOptions = {}) {
+/**
+ * `kits: false` leaves out the building kit (houses, offices, industry): only the five-island map places
+ * those, and the city spares its 1.1 MB download and decoding. A placement that asks for one anyway becomes
+ * a procedural block.
+ */
+export async function loadCatalogueModels(lodUrls: string[] = [], options: ModelLoadOptions & { kits?: boolean } = {}) {
   const models = new Map<string, Model>(), replaced = new Map<string, Model>();
   const preferredModels = lodUrls.find(url => /(?:^|\/)city-models\.glb(?:[?#].*)?$/.test(url));
   const preferredVehicles = lodUrls.find(url => /(?:^|\/)vehicles\.glb(?:[?#].*)?$/.test(url));
@@ -87,7 +92,8 @@ export async function loadCatalogueModels(lodUrls: string[] = [], options: Model
   if (preferredVehicles && preferredVehicles !== vehiclesUrl) fallbacks.set(preferredVehicles, vehiclesUrl);
   const deadline = performance.now() + (options.timeoutMs ?? MODEL_LOAD_TIMEOUT_MS);
   const loadOptions = () => ({ ...options, timeoutMs: Math.max(1, deadline - performance.now()) });
-  const urls = [...new Set([preferredModels ?? modelsUrl, preferredVehicles ?? vehiclesUrl, familyHousesUrl, highRiseOfficesUrl, ...lodUrls])];
+  const kits = options.kits !== false;
+  const urls = [...new Set([...(kits ? [preferredModels ?? modelsUrl] : []), preferredVehicles ?? vehiclesUrl, familyHousesUrl, highRiseOfficesUrl, ...lodUrls.filter(url => kits || url !== preferredModels)])];
   const files = await Promise.allSettled(urls.map(async url => {
     try { return await loadModels(url, loadOptions()); }
     catch (error) {

@@ -125,6 +125,20 @@ test('generated full kits load once with their base models and named LODs; sourc
   disposeModels(models);
 });
 
+test('a world without kit buildings never downloads the building kit, neither generated nor source', async t => {
+  const f = fixture(t);
+  f.state.download = () => Promise.resolve({ ok: true, arrayBuffer: async () => new ArrayBuffer(24) });
+  // Fresh addresses: files fetched by earlier tests are served from the byte cache.
+  const models = await loadCatalogueModels(['/kitless/city-models.glb', '/kitless/vehicles.glb'], { kits: false });
+  const urls = f.downloads.map(download => download.url);
+  assert.ok(urls.includes('/kitless/vehicles.glb'), urls.join(', '));
+  assert.equal(urls.some(url => /city-models\.glb$/.test(url)), false, urls.join(', '));
+  disposeModels(models);
+  const withKits = await loadCatalogueModels(['/kits/city-models.glb', '/kits/vehicles.glb']);
+  assert.ok(f.downloads.some(download => download.url === '/kits/city-models.glb'), 'other worlds still load the kit');
+  disposeModels(withKits);
+});
+
 test('a missing generated kit falls back to the source within the same fifteen-second asset budget', async t => {
   const f = fixture(t);
   f.state.download = url => {
