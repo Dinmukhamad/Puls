@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
 
-const compiled = await build({ stdin: { contents: 'export * from "./sky.ts"; export * from "./water.ts"; export * from "./night.ts"; export * from "../world/generate.ts"; export * from "../world/worldSpec.ts"; export * as THREE from "three/webgpu";', resolveDir: fileURLToPath(new URL('.', import.meta.url)) }, bundle: true, platform: 'node', format: 'esm', write: false, logLevel: 'error' });
+const compiled = await build({ stdin: { contents: 'export * from "./sky.ts"; export { RELIEF_END } from "../world/relief.ts"; export * from "./water.ts"; export * from "./night.ts"; export * from "../world/generate.ts"; export * from "../world/worldSpec.ts"; export * as THREE from "three/webgpu";', resolveDir: fileURLToPath(new URL('.', import.meta.url)) }, bundle: true, platform: 'node', format: 'esm', write: false, logLevel: 'error' });
 const city = await import(`data:text/javascript;base64,${Buffer.from(compiled.outputFiles[0].text).toString('base64')}`);
 function context() {
   const callbacks = new Set();
@@ -50,6 +50,14 @@ test('water covers the expanded lagoon/canal and changing night keeps one geomet
   let geometryFreed = false, materialFreed = false;
   geometry.addEventListener('dispose', () => { geometryFreed = true; }); material.addEventListener('dispose', () => { materialFreed = true; });
   water.dispose(); assert.ok(geometryFreed && materialFreed); assert.equal(ctx.listeners, 0); assert.equal(ctx.scene.children.length, 0);
+});
+
+test('the haze stays off the city and only lightly veils the far ridges', () => {
+  const ctx = context(), sky = city.createSky(ctx), fog = ctx.scene.fog, r = ctx.world.radius;
+  assert.ok(fog.near > r * 1.4, `the city and its hills stay clear: haze from ${fog.near.toFixed(0)}, radius ${r}`);
+  const veil = (city.RELIEF_END * r - fog.near) / (fog.far - fog.near);
+  assert.ok(veil < .4, `the ridges at the relief's end keep their colours: ${veil.toFixed(2)} of the haze`);
+  sky.dispose();
 });
 
 test('the shadow map covers what the view shows and the fog moves out with the camera', () => {

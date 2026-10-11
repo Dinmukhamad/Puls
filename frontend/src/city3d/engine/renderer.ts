@@ -142,8 +142,8 @@ export async function createRenderer(canvas: HTMLCanvasElement, { forceWebGL = f
   const backend: Backend = internals.isWebGPUBackend ? "webgpu" : "webgl2";
 
   renderer.outputColorSpace = THREE.SRGBColorSpace;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1;
+  renderer.toneMapping = THREE.NeutralToneMapping;
+  renderer.toneMappingExposure = 1.1;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.setPixelRatio(pixelRatio(mobile));

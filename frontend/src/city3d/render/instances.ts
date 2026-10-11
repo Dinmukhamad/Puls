@@ -102,7 +102,7 @@ export function createInstancePools(ctx: CityContext, catalogue: Catalogue, plac
   ctx.scene.add(group);
 
   const camera = ctx.camera, frustum = new THREE.Frustum(), projection = new THREE.Matrix4(), planes = new Float32Array(24);
-  // LOD2 proxies are 12-triangle boxes: they stay until the fog swallows them (sky.ts: fog ends at 2.2 × radius),
+  // LOD2 proxies are 12-triangle boxes: they stay out to the last placements (FOG_END radii, past the hills),
   // so the map never shows empty ground; the quality's last distance only limits LOD1.
   const fogFar = ctx.world.radius * FOG_END;
   const distancesFor = (d: readonly number[]) => [d[0], d[1], Math.max(d[2], fogFar)] as [number, number, number];
