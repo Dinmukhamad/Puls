@@ -1,9 +1,18 @@
 import { Component, useEffect, useState, type ReactNode } from "react";
 import { Button, Skeleton } from "../../components/ui";
 import { createCityRouteLoader } from "./cityRouteLoader";
+import { catalogueFiles, lodFiles, prefetchModels } from "../../city3d/assets/modelFiles";
 
+/**
+ * The engine and the city's models download while the page and its data load, not after them (the map starts
+ * the engine only once its data has come). Only the five-island map (?world=v1) places the building kit.
+ */
+function prefetchCity() {
+  void import("../../city3d").catch(() => undefined);
+  prefetchModels(catalogueFiles(lodFiles(), new URLSearchParams(window.location.search).get("world") === "v1").urls);
+}
 // Keep the city and Three.js out of the initial application bundle.
-const cityPageLoader = createCityRouteLoader(() => import("./CityPage").then(module => module.CityPage));
+const cityPageLoader = createCityRouteLoader(() => { prefetchCity(); return import("./CityPage").then(module => module.CityPage); });
 
 function CityRouteError({ reason, onRetry }: { reason: "timeout" | "failed" | "render"; onRetry: () => void }) {
   const message = reason === "timeout"

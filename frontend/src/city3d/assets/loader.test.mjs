@@ -4,7 +4,7 @@ import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
 
 const built = await build({
-  stdin: { contents: 'export * from "./loader.ts"; export { loadCatalogueModels } from "./catalogue.ts"; export * as THREE from "three/webgpu";', resolveDir: fileURLToPath(new URL('.', import.meta.url)) },
+  stdin: { contents: 'export * from "./loader.ts"; export { loadCatalogueModels } from "./catalogue.ts"; export { prefetchModels } from "./modelFiles.ts"; export * as THREE from "three/webgpu";', resolveDir: fileURLToPath(new URL('.', import.meta.url)) },
   bundle: true, platform: 'node', format: 'esm', write: false, logLevel: 'error',
   plugins: [{ name: 'controlled-gltf-decoding', setup(plugin) {
     plugin.onResolve({ filter: /\?url$/ }, args => ({ path: args.path, namespace: 'model-url' }));
@@ -18,7 +18,7 @@ const built = await build({
       }`, loader: 'js' }));
   } }],
 });
-const { loadModels, loadCharacter, loadCatalogueModels, disposeModels, MODEL_LOAD_TIMEOUT_MS, THREE } = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
+const { loadModels, loadCharacter, loadCatalogueModels, prefetchModels, disposeModels, MODEL_LOAD_TIMEOUT_MS, THREE } = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
 const flush = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
 function deferred() { let resolve; const promise = new Promise(done => { resolve = done; }); return { promise, resolve }; }
 
@@ -35,7 +35,7 @@ function fixture(t) {
   Object.assign(globalThis, {
     __cityModels: state,
     performance: { now: () => state.now },
-    fetch(url, options) { downloads.push({ url, signal: options.signal }); return state.download(url, options); },
+    fetch(url, options) { downloads.push({ url, signal: options?.signal }); return state.download(url, options); },
     setTimeout(callback, delay) { const id = ++timerId; timers.set(id, { callback, delay }); return id; },
     clearTimeout(id) { timers.delete(id); },
   });
@@ -96,6 +96,24 @@ test('completed file bytes are reused while every scene gets independent owned g
   assert.equal(first.get('house').bounds.min.x, 2.5, 'model transforms are still baked into geometry');
   assert.deepEqual(kits.map(kit => kit.counts), [{ geometry: 1, material: 0, texture: 0 }, { geometry: 1, material: 0, texture: 0 }], 'unused source geometry is freed, source materials belong to the catalogue');
   assert.equal(f.timers.size, 0);
+});
+
+test('a download the city page started is taken over by the loader, and a failed one is tried again', async t => {
+  const f = fixture(t), early = deferred();
+  f.state.download = () => early.promise.then(() => ({ ok: true, arrayBuffer: async () => new ArrayBuffer(24) }));
+  prefetchModels(['/early/kit.glb']);
+  const pending = loadModels('/early/kit.glb'); await flush();
+  assert.equal(f.downloads.length, 1, 'the loader waits for the started download');
+  early.resolve();
+  const models = await pending;
+  assert.ok(models.has('house')); assert.equal(f.downloads.length, 1);
+  disposeModels(models);
+  f.state.download = async () => ({ ok: false, status: 503 });
+  prefetchModels(['/early/failed.glb']); await flush();
+  f.state.download = async () => ({ ok: true, arrayBuffer: async () => new ArrayBuffer(24) });
+  const retried = await loadModels('/early/failed.glb');
+  assert.equal(f.downloads.filter(download => download.url === '/early/failed.glb').length, 2);
+  disposeModels(retried);
 });
 
 test('HTTP errors and already cancelled loads do not start decoding or leave a deadline timer', async t => {

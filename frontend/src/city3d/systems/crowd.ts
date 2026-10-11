@@ -1,8 +1,9 @@
-/** A bounded, instanced walking population for the city. */
+/** A bounded, instanced walking population for the city: every body part is one copy mesh (render/copies.ts). */
 import * as THREE from 'three/webgpu';
 import { saturate, uv } from 'three/tsl';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { CityContext } from '../engine/context';
+import { COPY_STRIDE, copyMatrices, copyMesh, copyTints } from '../render/copies';
 import { insideParking, segmentDistance } from '../world/generate';
 import type { Point, Route, WorldData } from '../world/types';
 import { districtFacing } from '../engine/camera';
@@ -177,6 +178,8 @@ function islandPaving(routes: CrowdRoute[]) {
 }
 
 export interface Crowd { setEnabled(enabled: boolean): void; dispose(): void }
+/** One body part of every walker: its copy mesh with the copies' matrices and colours. */
+interface Batch { mesh: ReturnType<typeof copyMesh>; matrices: THREE.InstancedInterleavedBuffer; tints: THREE.InstancedBufferAttribute }
 
 export function createCrowd(ctx: CityContext): Crowd {
   const routes = createCrowdRoutes(ctx.world);
@@ -200,16 +203,19 @@ export function createCrowd(ctx: CityContext): Crowd {
   const count = people.length;
   const group = new THREE.Group(); group.name = 'city-crowd'; ctx.scene.add(group);
   group.userData.population = count;
-  const geometries = new Set<THREE.BufferGeometry>(), materials = new Set<THREE.Material>(), batches: THREE.InstancedMesh[] = [];
+  const geometries = new Set<THREE.BufferGeometry>(), materials = new Set<THREE.Material>(), batches: Batch[] = [];
   const root = new THREE.Object3D(), local = new THREE.Object3D(), matrix = new THREE.Matrix4(), color = new THREE.Color();
   let disposed = false, enabled = !ctx.reducedMotion, dirty = true, clock = 0, density = ctx.quality.crowd;
-  function batch(name: string, geometry: THREE.BufferGeometry, material: THREE.Material, instances: number) {
-    const mesh = new THREE.InstancedMesh(geometry, material, instances);
-    mesh.name = name; mesh.castShadow = false; mesh.receiveShadow = true; mesh.frustumCulled = false;
-    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); group.add(mesh);
-    geometries.add(geometry); materials.add(material); batches.push(mesh);
-    return mesh;
+  function batch(name: string, geometry: THREE.BufferGeometry, material: THREE.Material, instances: number): Batch {
+    const matrices = copyMatrices(instances).setUsage(THREE.DynamicDrawUsage), tints = copyTints(instances);
+    const mesh = copyMesh(geometry, material, matrices, tints);
+    mesh.name = name; mesh.castShadow = false; mesh.receiveShadow = true; group.add(mesh);
+    geometries.add(geometry); materials.add(material);
+    const part = { mesh, matrices, tints }; batches.push(part);
+    return part;
   }
+  const setMatrixAt = (part: Batch, index: number, value: THREE.Matrix4) => value.toArray(part.matrices.array as Float32Array, index * COPY_STRIDE);
+  const setColorAt = (part: Batch, index: number, value: THREE.Color) => value.toArray(part.tints.array as Float32Array, index * 3);
   const pavingGeometry = islandPaving(routes), pavingMaterial = new THREE.MeshStandardNodeMaterial({ color: '#dfd5c0', roughness: .92 });
   const paving = new THREE.Mesh(pavingGeometry, pavingMaterial); paving.name = 'city-crowd-pavement'; paving.receiveShadow = true; group.add(paving);
   geometries.add(pavingGeometry); materials.add(pavingMaterial);
@@ -284,25 +290,25 @@ export function createCrowd(ctx: CityContext): Crowd {
     const shirt = shirts[index % shirts.length];
     const skin = skinTones[(index * 5) % skinTones.length];
     const trouser = trouserColors[index % trouserColors.length];
-    torso.setColorAt(index, color.set(shirt));
-    heads.setColorAt(index, color.set(skin));
-    waists.setColorAt(index, color.set(trouser));
+    setColorAt(torso, index, color.set(shirt));
+    setColorAt(heads, index, color.set(skin));
+    setColorAt(waists, index, color.set(trouser));
     for (let side = 0; side < 2; side++) {
-      upperArms.setColorAt(index * 2 + side, color.set(shirt));
-      forearms.setColorAt(index * 2 + side, color.set(skin));
-      hands.setColorAt(index * 2 + side, color.set(skin));
-      legs.setColorAt(index * 4 + side * 2, color.set(trouser));
-      legs.setColorAt(index * 4 + side * 2 + 1, color.set(trouser));
+      setColorAt(upperArms, index * 2 + side, color.set(shirt));
+      setColorAt(forearms, index * 2 + side, color.set(skin));
+      setColorAt(hands, index * 2 + side, color.set(skin));
+      setColorAt(legs, index * 4 + side * 2, color.set(trouser));
+      setColorAt(legs, index * 4 + side * 2 + 1, color.set(trouser));
     }
   }
 
-  function place(mesh: THREE.InstancedMesh, index: number, x: number, y: number, z: number, pitch = 0, lengthScale = 1) {
+  function place(part: Batch, index: number, x: number, y: number, z: number, pitch = 0, lengthScale = 1) {
     local.position.set(x, y, z);
     local.rotation.set(pitch, 0, 0);
     local.scale.set(1, lengthScale, 1);
     local.updateMatrix();
     matrix.multiplyMatrices(root.matrix, local.matrix);
-    mesh.setMatrixAt(index, matrix);
+    setMatrixAt(part, index, matrix);
   }
 
   // Moving people never enter the static sun map: a soft contact shadow is
@@ -310,22 +316,22 @@ export function createCrowd(ctx: CityContext): Crowd {
   const blobMaterial = new THREE.MeshBasicNodeMaterial({ color: '#273e35', transparent: true, depthWrite: false });
   blobMaterial.opacityNode = saturate(uv().sub(.5).length().mul(2).oneMinus()).mul(.25);
   const shadows = batch('city-crowd-contact-shadows', new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), blobMaterial, count);
-  shadows.receiveShadow = false;
+  shadows.mesh.receiveShadow = false;
   const packed = new Int32Array(count).fill(-1), frustum = new THREE.Frustum(), viewProjection = new THREE.Matrix4();
   const center = new THREE.Vector3(), sphere = new THREE.Sphere(center, 1.2);
   let recoloured = false;
   function tint(actor: number, slot: number) {
     if (packed[slot] === actor) return;
     packed[slot] = actor; recoloured = true;
-    torso.setColorAt(slot, color.set(shirts[actor % shirts.length]));
-    heads.setColorAt(slot, color.set(skinTones[(actor * 5) % skinTones.length]));
-    waists.setColorAt(slot, color.set(trouserColors[actor % trouserColors.length]));
+    setColorAt(torso, slot, color.set(shirts[actor % shirts.length]));
+    setColorAt(heads, slot, color.set(skinTones[(actor * 5) % skinTones.length]));
+    setColorAt(waists, slot, color.set(trouserColors[actor % trouserColors.length]));
     for (let side = 0; side < 2; side++) {
-      upperArms.setColorAt(slot * 2 + side, color.set(shirts[actor % shirts.length]));
-      forearms.setColorAt(slot * 2 + side, color.set(skinTones[(actor * 5) % skinTones.length]));
-      hands.setColorAt(slot * 2 + side, color.set(skinTones[(actor * 5) % skinTones.length]));
-      legs.setColorAt(slot * 4 + side * 2, color.set(trouserColors[actor % trouserColors.length]));
-      legs.setColorAt(slot * 4 + side * 2 + 1, color.set(trouserColors[actor % trouserColors.length]));
+      setColorAt(upperArms, slot * 2 + side, color.set(shirts[actor % shirts.length]));
+      setColorAt(forearms, slot * 2 + side, color.set(skinTones[(actor * 5) % skinTones.length]));
+      setColorAt(hands, slot * 2 + side, color.set(skinTones[(actor * 5) % skinTones.length]));
+      setColorAt(legs, slot * 4 + side * 2, color.set(trouserColors[actor % trouserColors.length]));
+      setColorAt(legs, slot * 4 + side * 2 + 1, color.set(trouserColors[actor % trouserColors.length]));
     }
   }
 
@@ -348,7 +354,7 @@ export function createCrowd(ctx: CityContext): Crowd {
       root.scale.setScalar(height);
       root.position.set(point.x, GROUND_Y + Math.abs(Math.sin(phase)) * .009, point.z);
       root.rotation.set(0, point.heading, 0); root.updateMatrix();
-      for (const body of staticBodies) body.setMatrixAt(slot, root.matrix);
+      for (const body of staticBodies) setMatrixAt(body, slot, root.matrix);
 
       for (let side = 0; side < 2; side++) {
         const sign = side ? 1 : -1;
@@ -372,16 +378,16 @@ export function createCrowd(ctx: CityContext): Crowd {
         place(forearms, slot * 2 + side, shoulderX, elbowY - Math.cos(elbowAngle) * forearmLength / 2, elbowZ - Math.sin(elbowAngle) * forearmLength / 2, elbowAngle, forearmLength / .26);
         place(hands, slot * 2 + side, shoulderX, elbowY - Math.cos(elbowAngle) * (forearmLength + .013), elbowZ - Math.sin(elbowAngle) * (forearmLength + .013));
       }
-      matrix.makeScale(.46, 1, .46).setPosition(point.x, .231, point.z); shadows.setMatrixAt(slot, matrix);
+      matrix.makeScale(.46, 1, .46).setPosition(point.x, .231, point.z); setMatrixAt(shadows, slot, matrix);
       slot++;
     }
-    for (const body of staticBodies) body.count = slot;
-    for (const limbs of [upperArms, forearms, hands, shoes]) limbs.count = slot * 2;
-    legs.count = slot * 4; shadows.count = slot;
-    for (const mesh of batches) {
-      mesh.instanceMatrix.needsUpdate = true;
+    for (const body of staticBodies) body.mesh.geometry.instanceCount = slot;
+    for (const limbs of [upperArms, forearms, hands, shoes]) limbs.mesh.geometry.instanceCount = slot * 2;
+    legs.mesh.geometry.instanceCount = slot * 4; shadows.mesh.geometry.instanceCount = slot;
+    for (const part of batches) {
+      part.matrices.needsUpdate = true;
       // Colours go up only when a slot changed hands: on most frames every walker keeps its slot.
-      if (mesh.instanceColor && recoloured) mesh.instanceColor.needsUpdate = true;
+      if (recoloured) part.tints.needsUpdate = true;
     }
     recoloured = false;
   }
@@ -398,7 +404,8 @@ export function createCrowd(ctx: CityContext): Crowd {
     dispose() {
       if (disposed) return;
       disposed = true; offFrame(); offCamera(); offQuality(); group.removeFromParent();
-      batches.forEach(mesh => mesh.dispose()); geometries.forEach(geometry => geometry.dispose()); materials.forEach(material => material.dispose()); group.clear();
+      // Each copy mesh is the only user of its body part's shape: freeing it frees the shape's buffers too.
+      batches.forEach(part => part.mesh.geometry.dispose()); geometries.forEach(geometry => geometry.dispose()); materials.forEach(material => material.dispose()); group.clear();
     },
   };
 }
