@@ -34,9 +34,10 @@ class SettingsInput(BaseModel):
             if mission.prerequisite == "scenario_business_park":
                 raise ValueError("Общие миссии не могут зависеть от сценария только для ТП")
             if key in TARGET_LIMITS and mission.target > TARGET_LIMITS[key]:
+                unit = "упражнения" if key.startswith("oktell_") else "звонков"
                 raise ValueError(
                     f"В миссии «{mission.title}» можно решить не больше "
-                    f"{TARGET_LIMITS[key]} звонков"
+                    f"{TARGET_LIMITS[key]} {unit}"
                 )
             if key == "welcome" and (mission.coins or mission.prerequisite):
                 raise ValueError("Знакомство не выдаёт коины и не требует других миссий")

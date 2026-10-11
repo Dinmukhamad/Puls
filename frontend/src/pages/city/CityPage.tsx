@@ -294,10 +294,12 @@ export function CityPage() {
         {!data.inspecting && !opensTool && selected.id === "driver" && <button className="city-secondary city-extra" onClick={() => setDriverLaunch(true)}>Открыть автопарк →</button>}
         {!data.inspecting && !opensTool && selected.id === "crm" && <Link className="city-secondary city-extra" to="/training/work-sites">Открыть CRM · рабочие сайты →</Link>}
         {!data.inspecting && !opensTool && selected.id === "dispatch" && <Link className="city-secondary city-extra" to="/training/work-sites?site=dispatch">Открыть Диспетчерскую · рабочие сайты →</Link>}
+        {!data.inspecting && !opensTool && selected.id === "oktell" && <Link className="city-secondary city-extra" to="/training/work-sites?site=oktell">Открыть Oktell · рабочие сайты →</Link>}
+
         {selected.id === "scenarios" && <p className="city-copy city-extra">Учебные разговоры с водителем и практика в CRM и Диспетчерской. Все действия выполняются в тренажёре. Коины — за первое успешное прохождение.</p>}
         {selected.soon ? <>
           <h2>Новый район. Новые возможности.</h2>
-          <p className="city-copy city-extra">Миссии появятся после добавления Oktell и подготовки учебных сценариев.</p>
+          <p className="city-copy city-extra">Здесь появятся новые учебные инструменты и миссии.</p>
           <div className="city-guide city-extra"><PulsarFace /><p>А пока продолжим развивать автопарк, CRM-центр и Диспетчерскую. Твой прогресс сохранится.</p></div>
         </> : mission && <>
           <nav className="city-mission-path city-extra" aria-label={`Миссии: ${selected.name}`}>{missions.map((m,i) => <button key={m.key} type="button" onClick={() => selectMission(m.key)} aria-label={`${i+1}. ${m.title}. ${MISSION_STATES[m.state]}`} aria-pressed={mission.key===m.key} data-state={m.state}>{m.state === "completed" ? "✓" : i+1}</button>)}</nav>
@@ -318,7 +320,7 @@ export function CityPage() {
         {selected.soon ? <button className="city-action" disabled>Район строится</button> : mission && <>
           {claim.isError && <p className="city-error" role="alert">{claim.error.message}</p>}
           {selected.id === "scenarios" ? actionable && !data.inspecting ? <Link className="city-action" to={mission.path}>{mission.state === "completed" ? "Повторить для практики →" : "Пройти сценарий →"}</Link> : <button className="city-action" disabled>{mission.state === "unavailable" ? "Сценарий на паузе" : "Просмотр прогресса"}</button> : mission.state === "ready" && data.can_claim ? <button className="city-action" disabled={claim.isPending} onClick={() => claim.mutate(mission.key)}>{claim.isPending ? "Проверяем результат…" : mission.key === "welcome" ? "Начать свой путь →" : "Завершить и получить награду →"}</button> : actionable && mission.key !== "welcome" && !data.inspecting ? selected.id === "driver" ? <button className="city-action" onClick={() => setDriverLaunch(true)}>{mission.state === "completed" ? "Вернуться к практике →" : "Перейти к заданию →"}</button> : <Link className="city-action" to={mission.path}>{mission.state === "completed" ? "Вернуться к практике →" : "Перейти к заданию →"}</Link> : <button className="city-action" disabled>{mission.state === "unavailable" ? "Миссия на паузе" : data.inspecting ? "Просмотр прогресса" : data.preview ? "Предпросмотр без наград" : mission.state === "completed" ? "Миссия пройдена" : "Завершите предыдущую миссию"}</button>}
-          <p className="city-fine city-extra">{selected.id === "scenarios" ? "Коины начисляются автоматически после первого успешного прохождения. Повторная тренировка — без повторной награды." : selected.id === "crm" || selected.id === "dispatch" ? "Рабочие сайты открываются оператору через QR." : "Завершённые ранее действия тоже учитываются."}</p>
+          <p className="city-fine city-extra">{selected.id === "scenarios" ? "Коины начисляются автоматически после первого успешного прохождения. Повторная тренировка — без повторной награды." : ["crm", "dispatch", "oktell"].includes(selected.id) ? "Рабочие сайты открываются оператору через QR." : "Завершённые ранее действия тоже учитываются."}</p>
         </>}
       </div>
     </aside></CityPeekPanel>

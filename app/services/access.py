@@ -205,7 +205,7 @@ def request_sections(path: str, method: str, role: Role | None = None) -> tuple[
     if path.startswith(("/admin/learning", "/admin/learning-results")):
         return ("learning_admin",)
     # Work Sites: operators practise, staff look in through learning management.
-    if path.startswith(("/learning/crm", "/learning/dispatch")):
+    if path.startswith(("/learning/crm", "/learning/dispatch", "/learning/oktell")):
         return ("training",) if role == Role.OPERATOR else ("learning_admin",)
     if path.startswith("/learning"):
         return ("training",)

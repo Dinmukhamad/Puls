@@ -11,8 +11,8 @@ import { isOfficeBuilding } from "../../city3d/world/officeBuildings";
 import { estateRows, plotEconomyName, readyBuildingLabel } from "./plotCatalogue";
 import "./city.css";
 
-/** Dispatch missions count the calls of their group; a trainer cannot ask for more (app/services/city.py TARGET_LIMITS). */
-const DISPATCH_TARGETS: Record<string, number> = { dispatch_driver: 2, dispatch_car: 1, dispatch_inventory: 1, dispatch_support: 1, dispatch_limit: 3 };
+/** Fixed exercises and dispatch calls cannot exceed the server's curriculum. */
+const DISPATCH_TARGETS: Record<string, number> = { dispatch_driver: 2, dispatch_car: 1, dispatch_inventory: 1, dispatch_support: 1, dispatch_limit: 3, oktell_ready: 1, oktell_call: 1, oktell_message: 1, oktell_shift: 1 };
 type CityAdminTab = "participants" | "groups" | "economy" | "situations" | "settings" | "world" | "estates";
 const CITY_ADMIN_TABS: CityAdminTab[] = ["participants", "groups", "economy", "situations", "settings", "world", "estates"];
 
@@ -167,7 +167,7 @@ function MissionEditor({initial,canEdit}:{initial:CitySettings;canEdit:boolean})
   const scenario=selected.startsWith('scenario_');
   function change(patch:Partial<typeof mission>){setSaved(false);setDraft(d=>({...d,missions:{...d.missions,[selected]:{...d.missions[selected],...patch}}}));}
   return <form className="city-admin-edit" onSubmit={e=>{e.preventDefault();if(canEdit)mutation.mutate(draft);}}>
-    <p className="city-admin-warning">Уже полученные награды и опыт сохраняются. Новые условия применяются к непройденным миссиям. Цели проверяются по данным CRM, Driver Simulator и учебной Диспетчерской: в миссиях Диспетчерской цель — число решённых звонков. Сценарии доступны только техподдержке; их результат проверяет тренажёр диалога и практики.</p>
+    <p className="city-admin-warning">Уже полученные награды и опыт сохраняются. Новые условия применяются к непройденным миссиям. Цели проверяются по данным CRM, Driver Simulator, учебной Диспетчерской и Oktell: в Диспетчерской цель — число решённых звонков, в Oktell — выполненное упражнение. Сценарии доступны только техподдержке; их результат проверяет тренажёр диалога и практики.</p>
     <label className="field"><span className="field__label">Миссия</span><select className="input" value={selected} onChange={e=>setSelected(e.target.value)}>{Object.entries(draft.missions).map(([key,m])=><option key={key} value={key}>{m.title}</option>)}</select></label>
     <fieldset disabled={!canEdit||mutation.isPending} style={{border:0,padding:0,margin:0,display:'grid',gap:16}}>
       <label className="field"><span className="field__label">Название</span><input className="input" value={mission.title} minLength={3} maxLength={140} required onChange={e=>change({title:e.target.value})}/></label>
