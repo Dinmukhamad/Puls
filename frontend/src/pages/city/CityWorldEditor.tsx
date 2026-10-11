@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError } from "../../api/client";
 import { cityWorld, type DepartmentId, type WorldEditorData, type WorldSaveSettings } from "../../api/cityWorld";
@@ -7,6 +7,9 @@ import { districtNumber, preparedLand } from "../../city3d/world/estateGrid";
 import { plural } from "../../utils/format";
 import { FormFooter, FormStatus, Switch } from "./CityAdminControls";
 import { canEditWorldCity, changeWorldCity, hasRevokedWorldChanges, refreshWorldDraft, supervisorAssignment, WORLD_QUERY_KEYS, worldDraftState } from "./worldEditor";
+
+/** A city's districts share one row; a longer list splits into two even rows. */
+const districtColumns = (count: number) => count <= 4 ? Math.max(1, count) : Math.ceil(count / 2);
 
 export function CityWorldEditor({ isHead = false }: { isHead?: boolean }) {
   const query = useQuery({ queryKey: ["city-world-settings"], queryFn: cityWorld.settings, refetchInterval: 30000 });
@@ -96,7 +99,7 @@ export function WorldSettingsEditor({ data, isHead = false }: { data: WorldEdito
               {data.can_manage_heads ? <label className="field"><span className="field__label">Руководитель города</span><Select aria-label="Руководитель города" value={city.head_id ?? ""} options={headOptions} onChange={value => edit(city.id, item => { item.head_id = value ? Number(value) : null; }, true)} /><span className="field__note">Назначать и менять руководителя может только администратор.</span></label>
                 : <div className="field"><span className="field__label">Руководитель</span><span className="city-world-editor__owner">{head?.name ?? (city.head_id === null ? "Не назначен" : "Недоступен")}</span>{city.head_id === null && <span className="field__note">Город должен закрепить администратор.</span>}</div>}
             </div>
-            <div className="city-world-editor__districts">{city.districts.map((district, index) => {
+            <div className="city-world-editor__districts" style={{ "--districts": districtColumns(city.districts.length) } as CSSProperties}>{city.districts.map((district, index) => {
               const supervisor = data.supervisors.find(person => person.id === district.supervisor_id);
               const prepared = preparedLand(districtNumber(district.id));
               const supervisorOptions = [

@@ -101,6 +101,9 @@ test("cities and districts are cards with the site's selects and switches", () =
   assert.match(html, /role="combobox"[^>]*aria-label="Супервайзер района"/);
   assert.match(html, /class="city-admin-switch"><input type="checkbox" role="switch" checked=""\/>/);
   assert.match(html, /<span class="badge badge--neutral">Свободен<\/span>/);
+  // The districts of a city share one row: as many columns as districts.
+  assert.match(html, /<div class="city-world-editor__districts" style="--districts:2">/);
+  assert.match(html, /<div class="city-world-editor__districts" style="--districts:1">/);
   assert.doesNotMatch(html, /<select class="input"|city-group-card|city-admin-warning|class="row city-world-editor__construction"/);
 });
 
@@ -121,10 +124,11 @@ test("operators get a search, a legend and a mission scale in rows of one list",
   assert.match(html, /<a href="\/training\/city\?operator=7" class="btn btn--secondary btn--s">Открыть путь<\/a>/);
 });
 
-test("group cities show quarters with their stage under the name and members in a table or a phone list", () => {
+test("group cities show quarters with their stage above the name and members in a table or a phone list", () => {
   const html = page("groups");
-  assert.match(html, /<li><strong class="city-admin-quarters__name">Квартал «Центральный»<\/strong><div class="progress/);
-  assert.match(html, /<div class="city-admin-quarters__foot"><span class="city-admin-quarters__count">40 \/ 150 очков<\/span><span class="badge badge--accent">Фундамент<\/span><\/div>/);
+  assert.match(html, /<div class="card__body city-admin-quarters-body"><ol class="city-admin-quarters">/);
+  assert.match(html, /<li><span class="badge badge--neutral">Запланирован<\/span><strong class="city-admin-quarters__name">Квартал «Центральный»<\/strong><div class="progress/);
+  assert.match(html, /<li><span class="badge badge--accent">Фундамент<\/span><strong class="city-admin-quarters__name">Квартал «Набережный»<\/strong><div [^>]*><div [^>]*><\/div><\/div><span class="city-admin-quarters__count">40 \/ 150 очков<\/span><\/li>/);
   assert.match(html, /<div class="table-wrap table-wrap--responsive city-admin-table"><table class="table"><thead><tr><th>Оператор<\/th>/);
   assert.match(html, /<div class="card__body city-admin-members"><h3 class="city-admin-subtitle">Операторы группы<\/h3><ul class="card-list">/);
   assert.match(html, /<strong class="nowrap">25 очков<\/strong>/);

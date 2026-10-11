@@ -80,10 +80,11 @@ function Groups() {
       <dl className="city-admin-points">{kinds.map(k=><div key={k}><dt>{POINT_KINDS[k]}</dt><dd>{query.data.points[k]} {plural(query.data.points[k],'очко','очка','очков')}</dd></div>)}</dl></div>
     {!query.data.items.length&&<EmptyState title="Нет групп" hint="За вами пока не закреплена ни одна группа."/>}
     {query.data.items.map(g=><Card key={g.id} title={g.name} subtitle={`${g.total} ${plural(g.total,'очко','очка','очков')} · ${g.members.length} ${plural(g.members.length,'оператор','оператора','операторов')}`} padded={false}>
-      <div className="card__body"><ol className="city-admin-quarters">{g.projects.map(p=><li key={p.key}>
+      <div className="card__body city-admin-quarters-body"><ol className="city-admin-quarters">{g.projects.map(p=><li key={p.key}>
+        <Badge tone={STAGE_TONE[p.stage]}>{SITE_STAGES[p.stage]}</Badge>
         <strong className="city-admin-quarters__name">{p.name}</strong>
         <Progress value={p.cost>0?p.points/p.cost:0} size="s" label={`${p.name}: ${p.points} из ${p.cost} очков`}/>
-        <div className="city-admin-quarters__foot"><span className="city-admin-quarters__count">{p.points} / {p.cost} очков</span><Badge tone={STAGE_TONE[p.stage]}>{SITE_STAGES[p.stage]}</Badge></div>
+        <span className="city-admin-quarters__count">{p.points} / {p.cost} очков</span>
       </li>)}</ol></div>
       {g.members.length>0&&<><div className="table-wrap table-wrap--responsive city-admin-table"><table className="table">
         <thead><tr><th>Оператор</th>{kinds.map(k=><th className="num" key={k}>{POINT_KINDS[k]}</th>)}<th className="num">Очки</th></tr></thead>

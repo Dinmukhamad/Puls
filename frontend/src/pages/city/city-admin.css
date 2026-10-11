@@ -83,12 +83,21 @@
 .city-admin-points > div { display: inline-flex; align-items: baseline; gap: var(--sp-2); padding: var(--sp-1) var(--sp-3); border: 1px solid var(--separator); border-radius: var(--radius-pill); background: var(--surface-primary); }
 .city-admin-points dt { color: var(--text-secondary); }
 .city-admin-points dd { margin: 0; color: var(--text-primary); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.city-admin-quarters { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--sp-3); margin: 0; padding: 0; list-style: none; }
-.city-admin-quarters li { display: grid; align-content: start; gap: var(--sp-3); min-width: 0; padding: var(--sp-4); border-radius: var(--radius-m); background: var(--surface-secondary); }
+/* The six quarters of a group: one row on a wide card, then three, two and one per row — never a lone tile. */
+.city-admin-quarters-body { container-type: inline-size; }
+.city-admin-quarters { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: var(--sp-3); margin: 0; padding: 0; list-style: none; }
+@container (max-width: 1239px) { .city-admin-quarters { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@container (max-width: 639px) { .city-admin-quarters { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@container (max-width: 419px) { .city-admin-quarters { grid-template-columns: minmax(0, 1fr); } }
+/* Stage, name, progress and points each on their own line, so narrow tiles keep one shape. */
+.city-admin-quarters li { display: grid; align-content: start; gap: var(--sp-2); min-width: 0; padding: var(--sp-4); border-radius: var(--radius-m); background: var(--surface-secondary); }
 .city-admin-quarters__name { min-width: 0; color: var(--text-primary); font-size: var(--text-secondary-size); font-weight: 600; overflow-wrap: break-word; }
-.city-admin-quarters__foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-2); }
+.city-admin-quarters li > .badge { justify-self: start; }
+.city-admin-quarters li > .progress { margin-top: var(--sp-1); }
 .city-admin-quarters__count { color: var(--text-secondary); font-size: var(--text-caption); font-variant-numeric: tabular-nums; }
 .city-admin-table { border-top: 1px solid var(--separator); }
+/* Every column after the name is centred under its heading. */
+.city-admin-table .table :is(th, td):not(:first-child) { text-align: center; }
 /* The members' list replaces the table on a phone only. */
 @media (min-width: 768px) { .city-admin-members { display: none; } }
 .city-admin-table .table td strong { font-weight: 600; }
@@ -117,12 +126,16 @@
 .city-world-editor__controls { display: grid; gap: var(--sp-5); min-width: 0; margin: 0; padding: 0; border: 0; }
 .city-world-editor__basics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: var(--sp-4); }
 .city-world-editor__owner { display: flex; align-items: center; min-height: 44px; padding: 0 var(--sp-4); border: 1px dashed var(--border-strong); border-radius: var(--radius-m); color: var(--text-primary); font-weight: 550; overflow-wrap: anywhere; }
-.city-world-editor__districts { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--sp-4); }
-.city-world-editor__district { display: grid; align-content: start; gap: var(--sp-4); min-width: 0; padding: var(--sp-4); border: 1px solid var(--separator); border-radius: var(--radius-l); background: var(--surface-primary); }
+/* The districts of a city share the whole row (--districts is set from their number); a narrow card stacks them. */
+.city-world-editor__city > .card__body { container-type: inline-size; }
+.city-world-editor__districts { display: grid; grid-template-columns: repeat(var(--districts, 3), minmax(0, 1fr)); gap: var(--sp-4); }
+@container (max-width: 719px) { .city-world-editor__districts { grid-template-columns: minmax(0, 1fr); } }
+.city-world-editor__district { display: flex; flex-direction: column; gap: var(--sp-4); min-width: 0; padding: var(--sp-4); border: 1px solid var(--separator); border-radius: var(--radius-l); background: var(--surface-primary); }
 /* As tall as a badge, so a district without one keeps its fields level with its neighbours. */
 .city-world-editor__district-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); min-width: 0; min-height: 26px; }
 .city-world-editor__district h3 { margin: 0; color: var(--text-primary); font-size: var(--text-body); font-weight: 650; }
-.city-world-editor__team { display: grid; gap: var(--sp-2); padding: var(--sp-3); border-radius: var(--radius-s); background: var(--surface-secondary); color: var(--text-secondary); font-size: var(--text-caption); line-height: 1.5; overflow-wrap: anywhere; }
+/* The team panel takes a tile's spare height, so the switches of one row stay on one line. */
+.city-world-editor__team { flex: 1 1 auto; display: grid; align-content: start; gap: var(--sp-2); padding: var(--sp-3); border-radius: var(--radius-s); background: var(--surface-secondary); color: var(--text-secondary); font-size: var(--text-caption); line-height: 1.5; overflow-wrap: anywhere; }
 .city-world-editor__team p { margin: 0; }
 .city-world-editor__team strong { color: var(--text-primary); font-variant-numeric: tabular-nums; }
 .city-world-editor__team .btn { justify-self: start; }
@@ -149,7 +162,6 @@
   .city-admin-footer__status { flex-basis: 100%; }
   .city-admin-footer__actions { width: 100%; margin-left: 0; }
   .city-admin-footer__actions > .btn { flex: 1 1 auto; white-space: normal; }
-  .city-world-editor__districts { grid-template-columns: minmax(0, 1fr); }
 }
 
 @media (prefers-reduced-motion: reduce) {
