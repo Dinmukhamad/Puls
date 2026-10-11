@@ -68,7 +68,7 @@ class CityEconomy(Base):
 
 
 class CitySituations(Base):
-    """The daily situations' own set, as trainers edit it (passed tests' questions go first)."""
+    """The daily situations' own set, as trainers edit it; answered ones are not dealt again."""
 
     __tablename__ = "city_situations"
     __table_args__ = (CheckConstraint("id = 1", name="singleton"),)

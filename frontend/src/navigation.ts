@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import type { Role } from "./api/types";
 import type { AccessMap, SectionCode } from "./api/access";
-import { CoinIcon, HomeIcon, InboxIcon, QrIcon, SparkIcon, StoreIcon, TrophyIcon, UserIcon, UsersIcon, WheelIcon } from "./components/icons";
+import { CoinIcon, GiftIcon, HomeIcon, InboxIcon, QrIcon, SparkIcon, StoreIcon, TrophyIcon, UserIcon, UsersIcon } from "./components/icons";
 
 export interface SectionTab { to: string; label: string }
 export interface NavItem {
@@ -45,7 +45,7 @@ const motivation = (supervisor = false) => section("motivation", "Мотивац
   ...(supervisor ? [tab("/rating", "Рейтинг")] : []),
   tab("/admin/levels", "Уровни"), tab("/admin/settings?tab=badges", "Достижения"),
   tab("/admin/store", "Товары магазина"), tab("/admin/requests", "Заказы и выдача"),
-  tab("/admin/games?tab=wheel", "Колесо WOW"), tab("/admin/games?tab=raffles", "Розыгрыши"),
+  tab("/admin/games?tab=wheel", "Лента удачи"), tab("/admin/games?tab=raffles", "Розыгрыши"),
 ], ["/admin/levels", "/admin/store", "/admin/requests", "/admin/games", "/shop", "/games", ...(supervisor ? ["/rating"] : [])]);
 const coinHistory = section("coin_history", "История коинов", CoinIcon, [tab("/admin/wallet", "История коинов")]);
 const staffHome = section("home", "Главная", HomeIcon, [tab("/admin/summary", "Сводка"), ...personal]);
@@ -66,11 +66,11 @@ export const ROLE_NAVIGATION: Record<Role, readonly NavItem[]> = {
     section("home", "Главная", HomeIcon, personal.filter((item) => item.to !== "/progress")),
     section("results", "Результаты", TrophyIcon, [tab("/rating?tab=board", "Рейтинг"), tab("/progress", "Мой прогресс")]),
     section("training", "Обучение", SparkIcon, learningTabs),
-    // Колесо вынесено отдельным пунктом: это ежедневное действие на минуту,
-    // и третьей вкладкой внутри «Наград» его каждый раз приходилось искать.
+    // Лента удачи вынесена отдельным пунктом «Удача»: это ежедневное действие
+    // на минуту, и третьей вкладкой внутри «Наград» его каждый раз приходилось искать.
     // Право доступа прежнее — routeSection сопоставляет /games с разделом
     // rewards, так что отдельный пункт ничего не открывает сверх былого.
-    section("wheel", "Колесо", WheelIcon, [tab("/games?tab=wheel", "Колесо WOW")], ["/games"]),
+    section("wheel", "Удача", GiftIcon, [tab("/games?tab=wheel", "Лента удачи")], ["/games"]),
     section("rewards", "Награды", StoreIcon, [tab("/shop", "Магазин"), tab("/games?tab=raffles", "Розыгрыши")]),
     ACCOUNT_SECTION,
   ],
@@ -135,7 +135,7 @@ export function visibleNavigation(role: Role, allowed: AccessMap = defaultAccess
     team(), analytics(), performance(), staffLearning, motivation(),
     section("personal_training", "Моё обучение", SparkIcon, learningTabs),
     section("results", "Результаты", TrophyIcon, [tab("/rating?tab=board", "Рейтинг")]),
-    section("rewards", "Награды", StoreIcon, [tab("/shop", "Магазин"), tab("/games?tab=wheel", "Колесо WOW"), tab("/games?tab=raffles", "Розыгрыши")]),
+    section("rewards", "Награды", StoreIcon, [tab("/shop", "Магазин"), tab("/games?tab=wheel", "Лента удачи"), tab("/games?tab=raffles", "Розыгрыши")]),
     section("reports", "Отчёты", InboxIcon, [tab("/reports", "Отчёты и экспорт")]),
     section("system", "Система", InboxIcon, [tab("/admin/access", "Доступ к разделам"), tab("/admin/sessions", "Сессии и устройства"), tab("/admin/audit", "Журнал аудита")]),
   ];
@@ -174,10 +174,10 @@ export function currentSection(role: Role, pathname: string, search = "", allowe
     const driver = pathname === "/admin/learning" || pathname.startsWith("/simulator") || (pathname === "/training/city" && new URLSearchParams(search).get("district") === "driver");
     return sections.find(item => item.id === (driver ? "driver" : "training"));
   }
-  // «Колесо» и «Розыгрыши» живут на одном пути /games и различаются только
+  // «Лента удачи» и «Розыгрыши» живут на одном пути /games и различаются только
   // вкладкой. Разделы сопоставляются по пути, поэтому без этой развилки
-  // открытие розыгрышей подсвечивало бы в меню «Колесо WOW». У ролей, где
-  // отдельного пункта колеса нет, ветка молча пропускается.
+  // открытие розыгрышей подсвечивало бы в меню «Удачу». У ролей, где
+  // отдельного пункта ленты нет, ветка молча пропускается.
   if (pathname === "/games") {
     const wanted = new URLSearchParams(search).get("tab") === "raffles" ? "rewards" : "wheel";
     const found = sections.find((item) => item.id === wanted);

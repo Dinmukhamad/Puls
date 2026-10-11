@@ -112,7 +112,7 @@ async def spin(session: SessionDep, user: CurrentUser, payload: SpinInput):
         return spin_data(previous)
     config = await session.get(WheelConfig, 1)
     if config is None or not config.enabled:
-        raise ConflictError("Колесо сейчас недоступно")
+        raise ConflictError("Лента удачи сейчас недоступна")
     today = datetime.now(UTC).date()
     used = (
         await session.scalar(
@@ -142,11 +142,11 @@ async def spin(session: SessionDep, user: CurrentUser, payload: SpinInput):
     )
     session.add(item)
     await session.flush()
-    await reward(session, user.id, segment["coins"], key, f"Колесо WOW: {segment['title']}")
+    await reward(session, user.id, segment["coins"], key, f"Лента удачи: {segment['title']}")
     session.add(
         Notification(
             user_id=user.id,
-            title="Результат Колеса WOW",
+            title="Результат ленты удачи",
             body=segment["title"],
             kind="games",
             link="/games?tab=wheel",

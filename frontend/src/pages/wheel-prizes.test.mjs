@@ -1,5 +1,5 @@
 /**
- * Призы колеса WOW.
+ * Призы ленты удачи.
  *
  * Список «Что может выпасть» открывается по значку и показывает призы
  * стикерами. Стикер зависит только от награды: самый крупный приз всегда
@@ -40,7 +40,7 @@ test("chances follow the weights and never divide by zero", () => {
   assert.deepEqual(prizeChances([]), []);
 });
 
-test("the wheel shows its prizes behind a sticker button instead of a list and a draw history", async () => {
+test("the prize strip is a site card and shows its prizes behind a sticker button", async () => {
   const require = createRequire(import.meta.url);
   const page = await build({ entryPoints: [fileURLToPath(new URL("./GamesPage.tsx", import.meta.url))], bundle: true, platform: "node", format: "cjs", packages: "external", jsx: "automatic", loader: { ".css": "empty" }, write: false, define: { "import.meta.env": "{}" },
     plugins: [{ name: "test-auth", setup(plugin) { plugin.onResolve({ filter: /\/AuthContext$/ }, () => ({ path: "test:auth", external: true })); } }] });
@@ -57,7 +57,22 @@ test("the wheel shows its prizes behind a sticker button instead of a list and a
   const html = renderToStaticMarkup(React.createElement(GamesPage));
   assert.match(html, /class="wheel-prizes-button" aria-haspopup="dialog"/);
   assert.doesNotMatch(html, /История розыгрышей|Вероятности указаны|wheel-legend/);
+  // Лента удачи — обычная карточка сайта: название в шапке, рядом звук и призы.
+  // Лента собрана из разметки, а не нарисована на холсте, поэтому берёт шрифты,
+  // цвета и тёмную тему из общих стилей.
+  assert.match(html, /<h2 class="card__title">Лента удачи<\/h2>/);
+  assert.doesNotMatch(html, /Колес|КОЛЕСО|<canvas/);
+  assert.match(html, /aria-label="Выключить звук" title="Выключить звук" aria-pressed="false"/);
+  assert.match(html, /class="prize-strip__tile is-current"[^>]*><span class="prize-strip__sticker"[^>]*>🍀<\/span><span class="prize-strip__title">В этот раз без награды<\/span><span class="prize-strip__reward prize-strip__reward--none">без награды<\/span>/);
+  assert.match(html, /💎<\/span><span class="prize-strip__title">1000 коинов<\/span><span class="prize-strip__reward">\+1\s000 коинов<\/span>/);
+  assert.match(html, /<div class="prize-strip__window"><\/div>/);
+  assert.match(html, />Крутить<\/button><p class="wheel-card__note">Бесплатно · осталось 1 из 1 · попытки обновляются в 00:00 UTC<\/p>/);
   assert.deepEqual(queries, ["wheel"]);
+  // Выключенная лента не обещает попыток, которые нельзя потратить.
+  config.enabled = false;
+  const off = renderToStaticMarkup(React.createElement(GamesPage));
+  assert.match(off, />Скоро вернёмся<\/button><p class="wheel-card__note">Сейчас лента удачи выключена\. Попытки появятся, когда её снова включат\.<\/p>/);
+  assert.doesNotMatch(off, /осталось/);
   const prizes = renderToStaticMarkup(React.createElement(PrizeStickers, { segments: wheel }));
   assert.equal((prizes.match(/class="prize-sticker-card"/g) ?? []).length, 5);
   assert.match(prizes, /💎<\/span><strong class="prize-sticker-card__title">1000 коинов<\/strong><span class="prize-sticker-card__reward">\+1\s000 коинов<\/span><span class="prize-sticker-card__chance">Шанс 50%<\/span>/);

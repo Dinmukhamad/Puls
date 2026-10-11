@@ -26,11 +26,16 @@ DISTRICTS = [
     {"id": "crm", "name": "CRM-центр", "subtitle": "На стороне водителя", "soon": False},
     {"id": "dispatch", "name": "Диспетчерская", "subtitle": "Кабинет таксопарка", "soon": False},
     {"id": "scenarios", "name": "Сценарии ТП", "subtitle": "Диалог и практика", "soon": False},
-    {"id": "oktell", "name": "Oktell", "subtitle": "Будущий район", "soon": True},
+    {"id": "oktell", "name": "Oktell", "subtitle": "Телефония и сообщения", "soon": False},
 ]
 # Conditions and destinations are server-owned. Editors can tune the curriculum,
 # but cannot inject arbitrary URLs or client-side completion rules.
 DISPATCH = "/training/work-sites?site=dispatch"
+# Keep legacy award keys identifiable while the Oktell curriculum is deferred. They are
+# excluded from all effective settings, prerequisites and claims; persisted awards stay intact.
+DEFERRED_OKTELL_MISSIONS = frozenset(
+    ("oktell_ready", "oktell_call", "oktell_message", "oktell_shift")
+)
 TEMPLATES = {
     "welcome": ("academy", "welcome", "/training/city", "Знакомство с городом"),
     "driver_profile": ("driver", "profile", "/simulator", "Учебный профиль водителя готов"),
@@ -66,7 +71,7 @@ BUILDINGS = {
     for key, name, text, icon, price in [
         ("garden", "Сквер", "Газон, деревья и лавочки для прогулок.", "🌳", 40),
         ("gazebo", "Беседка в саду", "Беседка среди кустов и клумб.", "🌷", 50),
-        ("playground", "Детская площадка", "Горка, качели и песочница.", "🛝", 60),
+        ("playground", "Детская площадка", "Горка, качели и песочница.", "🎠", 60),
         ("sports", "Спортплощадка", "Баскетбольный корт с двумя кольцами.", "🏀", 70),
         ("fountain", "Площадь с фонтаном", "Мощёная площадь, фонтан и скамейки.", "⛲", 90),
         ("cottage", "Коттедж", "Дом с садом и дорожкой к улице.", "🏡", 120),
@@ -243,9 +248,16 @@ async def settings(session):
     row = await session.get(CitySettings, 1)
     # Missions added after a trainer saved the curriculum start with their defaults.
     missions = {**default_missions(), **(row.missions if row else {})}
+    missions = deepcopy({key: missions[key] for key in TEMPLATES})
+    # A previous editor could make an unrelated mission depend on an Oktell exercise.
+    # Removing the deferred prerequisite keeps the surviving route usable without touching
+    # the saved curriculum or any historic reward snapshot.
+    for mission in missions.values():
+        if mission["prerequisite"] in DEFERRED_OKTELL_MISSIONS:
+            mission["prerequisite"] = None
     return {
         "revision": row.revision if row else 0,
-        "missions": deepcopy({key: missions[key] for key in TEMPLATES}),
+        "missions": missions,
     }
 
 
@@ -474,7 +486,19 @@ async def dashboard(session, user, *, inspecting=False):
         "preview": not operator,
         "inspecting": inspecting,
         "can_claim": operator and not inspecting,
-        "districts": [d for d in DISTRICTS if scenarios_visible or d["id"] != "scenarios"],
+        "districts": [
+            {
+                **district,
+                # Deferred teaching is absent from the curriculum, but its earned building
+                # stages remain visible. Only persisted awards count, never workspace events.
+                **(
+                    {"completed_missions": len(DEFERRED_OKTELL_MISSIONS.intersection(awards))}
+                    if district["id"] == "oktell" else {}
+                ),
+            }
+            for district in DISTRICTS
+            if scenarios_visible or district["id"] != "scenarios"
+        ],
         "missions": rows,
         "xp": xp,
         "level": xp // 300 + 1,

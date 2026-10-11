@@ -18,7 +18,7 @@ import { transform } from "esbuild";
 
 const source = readFileSync(new URL("./spinPhysics.ts", import.meta.url), "utf8");
 const built = await transform(source, { loader: "ts", format: "esm" });
-const { spinProgress, fitCanvas, stripTarget, prizeUnderMark } = await import(
+const { spinProgress, stripTarget, prizeUnderMark } = await import(
   `data:text/javascript;base64,${Buffer.from(built.code).toString("base64")}`
 );
 
@@ -110,31 +110,4 @@ test("набор из двух призов — тоже рабочий случ
   // Минимум, который допускает сервер: два сектора.
   const offset = stripTarget(0, 1, 2, PITCH);
   assert.equal(prizeUnderMark(offset, 2, PITCH), 1);
-});
-
-/* ── Размер холста ─────────────────────────────────────────── */
-
-test("буфер холста повторяет его размер на экране", () => {
-  // Ровно та ошибка, что была на круге: размер буфера по умолчанию 300x150,
-  // проверка шла по одной ширине, она совпадала с нужной — и высота
-  // оставалась 150. Картинка рисовалась обрезанной, при этом типы, сборка
-  // и тесты были зелёными.
-  const canvas = { width: 300, height: 150, clientWidth: 300, clientHeight: 168 };
-  assert.equal(fitCanvas(canvas, 1), true);
-  assert.equal(canvas.width, 300);
-  assert.equal(canvas.height, 168);
-});
-
-test("плотность пикселей увеличивает буфер", () => {
-  const canvas = { width: 0, height: 0, clientWidth: 600, clientHeight: 168 };
-  fitCanvas(canvas, 2);
-  assert.equal(canvas.width, 1200);
-  assert.equal(canvas.height, 336);
-});
-
-test("повторный вызов ничего не трогает", () => {
-  // Присваивание размера очищает холст, поэтому лишнее — это мигание
-  // на каждом кадре.
-  const canvas = { width: 600, height: 168, clientWidth: 600, clientHeight: 168 };
-  assert.equal(fitCanvas(canvas, 1), false);
 });

@@ -47,10 +47,10 @@ test("trainer navigation stays within learning even with explicit grants", () =>
 });
 
 test("roles expose task-specific defaults with an account entry", () => {
-  // «Колесо WOW» стоит отдельным пунктом, а не третьей вкладкой внутри
+  // «Удача» (лента удачи) стоит отдельным пунктом, а не третьей вкладкой внутри
   // «Наград»: это ежедневное действие на минуту, и прятать его вглубь
   // значит каждый раз заставлять оператора вспоминать, где оно.
-  assert.deepEqual(nav.visibleNavigation("operator").map((item) => item.label), ["Главная", "Результаты", "Обучение", "Колесо", "Награды", "Профиль"]);
+  assert.deepEqual(nav.visibleNavigation("operator").map((item) => item.label), ["Главная", "Результаты", "Обучение", "Удача", "Награды", "Профиль"]);
   assert.deepEqual(nav.visibleNavigation("supervisor").map((item) => item.label), ["Главная", "Команда", "Аналитика", "Обучение", "История коинов", "Мотивация", "QR-доступ", "Профиль"]);
   assert.deepEqual(nav.visibleNavigation("head").map((item) => item.label), ["Главная", "Команда", "Аналитика", "Показатели", "Обучение", "История коинов", "Мотивация", "Отчёты", "QR-доступ", "Профиль"]);
   assert.deepEqual(nav.visibleNavigation("admin").map((item) => item.label), ["Главная", "Команда", "Показатели", "Аналитика", "Обучение", "История коинов", "Мотивация", "Система", "QR-доступ", "Профиль"]);
@@ -175,15 +175,15 @@ test("deep links and query filters retain the proper section", () => {
   assert.equal(nav.currentTab(learning, "/admin/learning-analytics", "?dashboard=operators").label, "Аналитика симулятора");
 });
 
-test("mobile bar keeps the wheel in reach and bounds larger role menus", () => {
+test("mobile bar keeps the prize strip in reach and bounds larger role menus", () => {
   // Разделов у оператора стало шесть, и панель перешла в режим «четыре плюс
-  // меню». Это осознанный размен: колесо остаётся на виду, а в скрытое меню
+  // меню». Это осознанный размен: лента удачи остаётся на виду, а в скрытое меню
   // уходят «Награды» и «Профиль». Проверка стережёт именно это — что
   // вынесенный пункт не оказался спрятан тем же движением, которым его
   // доставали из глубины.
   const operator = nav.mobileNavigation(nav.visibleNavigation("operator"));
   assert.equal(operator.primary.length, 4);
-  assert.ok(operator.primary.some((item) => item.id === "wheel"), "колесо ушло в скрытое меню");
+  assert.ok(operator.primary.some((item) => item.id === "wheel"), "лента удачи ушла в скрытое меню");
   assert.deepEqual([...operator.primary, ...operator.overflow], nav.visibleNavigation("operator"));
   for (const role of ["supervisor", "head", "admin"]) {
     const menu = nav.mobileNavigation(nav.visibleNavigation(role));

@@ -48,6 +48,7 @@ from app.models.enums import (
 )
 from app.models.games import Raffle, RaffleEntry, WheelConfig, WheelSpin
 from app.models.learning import LearningAttempt, LearningAward, LearningContent
+from app.models.oktell import OktellEvent
 from app.models.progress import Notification, ProgressLevel
 from app.models.scenario import ScenarioAttempt
 from app.models.session import LoginSession
@@ -108,6 +109,7 @@ __all__ = [
     "NominationDefinition",
     "NominationWinner",
     "Notification",
+    "OktellEvent",
     "OperatorDayMetric",
     "OperatorWeekMetric",
     "OperatorWeekResult",

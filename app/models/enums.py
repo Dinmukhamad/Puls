@@ -48,7 +48,7 @@ class TxType(StrEnum):
     PURCHASE_REFUND = "purchase_refund"  # возврат по отменённой покупке
     CORRECTION = "correction"  # техническая корректировка
     LEARNING_REWARD = "learning_reward"  # награда за обучение
-    GAME_REWARD = "game_reward"  # награда колеса или розыгрыша
+    GAME_REWARD = "game_reward"  # награда ленты удачи или розыгрыша
     ACHIEVEMENT_REWARD = "achievement_reward"
     CITY_BUILD = "city_build"  # постройка на участке «Моего города»
     CITY_CONTRIBUTION = "city_contribution"  # добровольный взнос в общий проект района

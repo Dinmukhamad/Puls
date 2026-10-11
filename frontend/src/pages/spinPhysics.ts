@@ -1,5 +1,5 @@
 /**
- * Общая механика розыгрыша: профиль скорости и подгонка холста.
+ * Механика ленты удачи: профиль скорости и точка остановки.
  *
  * Вынесено из компонента отдельным модулем, потому что это единственные
  * места, где легко ошибиться незаметно — и единственные, которые можно
@@ -29,27 +29,6 @@ export function spinProgress(t: number): number {
   if (t <= ACCEL) return (t * t) / (2 * ACCEL) / SPAN;
   const tail = (1 - t) / (1 - ACCEL);
   return (ACCEL / 2 + ((1 - ACCEL) / 3) * (1 - tail ** 3)) / SPAN;
-}
-
-/**
- * Подгоняет буфер холста под размер на экране с учётом плотности пикселей.
- *
- * Стороны проверяются по отдельности намеренно. Сначала здесь стояло одно
- * условие по ширине — и оно промахивалось ровно в самом частом случае: у
- * холста размер буфера по умолчанию 300x150, ширина совпадала с нужной,
- * присваивание не выполнялось, и высота оставалась 150. Картинка рисовалась
- * обрезанной, при этом и типы, и сборка, и тесты были зелёными.
- */
-export function fitCanvas(
-  canvas: { width: number; height: number; clientWidth: number; clientHeight: number },
-  ratio: number,
-): boolean {
-  const w = Math.round(canvas.clientWidth * ratio);
-  const h = Math.round(canvas.clientHeight * ratio);
-  let changed = false;
-  if (canvas.width !== w) { canvas.width = w; changed = true; }
-  if (canvas.height !== h) { canvas.height = h; changed = true; }
-  return changed;
 }
 
 /**

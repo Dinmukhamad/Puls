@@ -1,0 +1,252 @@
+/* Geometry and colors follow the seven desktop Oktell screens in the supplied document. */
+.oktell { --oktell-sidebar:140px; position:relative; container-type:inline-size; display:grid; grid-template-columns:var(--oktell-sidebar) minmax(0,1fr); width:100%; height:100%; flex:1; min-width:0; min-height:0; overflow:hidden; background:#ebedf0; color:#37454f; font:13px/1.4 Arial,sans-serif; text-align:left; }
+.oktell * { box-sizing:border-box; }
+.oktell :is(h1,h2,h3,p) { margin:0; color:inherit; }
+.oktell :is(button,input,textarea) { font:inherit; }
+.oktell button { cursor:pointer; }
+.oktell button:disabled { opacity:.48; cursor:default; }
+.oktell :is(button,input,textarea):focus-visible { outline:2px solid #4b92c1; outline-offset:2px; }
+.oktell input:not([type=checkbox]), .oktell textarea { display:block; width:100%; min-width:0; min-height:25px; padding:4px 7px; border:1px solid #c3c6c8; border-radius:3px; background:#fff; color:#264566; box-shadow:none; }
+.oktell input::placeholder, .oktell textarea::placeholder { color:#929da7; }
+.oktell textarea { resize:vertical; }
+.oktell .oktell-btn { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:30px; margin:0; padding:5px 12px; border:1px solid #bec1c3; border-radius:3px; background:linear-gradient(#fafafa,#e5e5e5); color:#243b54; font-size:12px; line-height:1.4; white-space:normal; box-shadow:none; }
+.oktell .oktell-btn:hover:not(:disabled) { background:#dde3e7; border-color:#a5afb5; }
+.oktell .oktell-btn--green { background:linear-gradient(#a7c35b,#85a936); border-color:#86a638; color:white; text-shadow:0 1px #587227; }
+.oktell .oktell-btn--green:hover:not(:disabled) { background:#7a9d34; }
+.oktell .oktell-btn--red { background:#b24b45; border-color:#98423c; color:#fff; }
+.oktell .oktell-icon-btn { display:inline-flex; align-items:center; justify-content:center; width:28px; height:30px; padding:3px; background:none; border:0; border-radius:0; color:#b4babf; }
+.oktell-sidebar { position:relative; z-index:40; display:flex; flex-direction:column; min-width:0; min-height:0; background:#272d32; color:#a1a8ac; box-shadow:3px 0 8px #0003; }
+.oktell-sidebar-logo { display:flex; align-items:center; gap:9px; height:80px; flex:none; padding:0 17px; color:#596166; font-size:15px; }
+.oktell-sidebar-logo i, .oktell-tiny-logo { display:block; width:20px; height:20px; background:linear-gradient(131deg,#798084 0 42%,#adb3b5 43% 54%,#485055 55%); }
+.oktell-nav-items { display:flex; flex-direction:column; }
+.oktell-nav-items button { display:flex; align-items:center; gap:11px; width:100%; min-height:39px; padding:8px 16px; border:0; border-radius:0; background:none; color:#a4adb2; text-align:left; font-size:11px; }
+.oktell-nav-items button svg { width:21px; height:21px; flex:none; }
+.oktell-nav-items button.is-active { color:#e3f1f8; background:#4f575c; }
+.oktell-nav-items button.is-active svg { color:#c6e6f8; filter:drop-shadow(0 0 4px #8dccf9); }
+.oktell-nav-items button:hover { background:#444d54; color:#fff; }
+.oktell-status-cells { display:grid; grid-template-columns:1fr 1fr; height:55px; margin-top:auto; flex:none; border-top:1px solid #41494d; }
+.oktell-avatar-cell { display:grid; place-items:center; background:#49504f; }
+.oktell-avatar-cell>span { display:grid; place-items:center; width:32px; height:32px; background:#8ada62; color:white; font-size:13px; font-weight:bold; }
+.oktell-status-cell { display:flex; align-items:center; justify-content:center; gap:9px; padding:0; border:0; border-radius:0; background:#89a544; color:#e6efc6; }
+.oktell-status-cell>span { font-size:29px; font-weight:bold; }
+.oktell-status-cell.is-paused { background:#b69b14; }
+.oktell-status-cell small { color:#d5d6b3; font-size:13px; }
+.oktell-workarea { min-width:0; min-height:0; height:100%; overflow:hidden; }
+.oktell-section-head { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; height:80px; padding:20px 10px 14px; border-bottom:2px solid #949899; flex:none; }
+.oktell-section-head h1 { color:#71777a; font-size:28px; font-weight:normal; line-height:1.15; letter-spacing:-.6px; overflow-wrap:anywhere; }
+.oktell-section-head>div { display:flex; align-items:center; gap:6px; }
+.oktell-cabinet { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); height:100%; min-height:0; }
+.oktell-stats { padding:0 20px 20px; background:#ebedf0; min-width:0; min-height:0; overflow:auto; }
+.oktell-native-tasks { padding:0 20px 20px; background:#fff; min-width:0; min-height:0; overflow:auto; }
+.oktell-stat-row { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); min-height:100px; margin-top:10px; background:#dddfe0; box-shadow:inset 0 7px 8px -8px #0005; }
+.oktell-stat-row.is-paused { background:#ebe6cd; }
+.oktell-stat-row>div { display:flex; flex-direction:column; justify-content:center; align-items:center; gap:7px; min-width:0; padding:12px; text-align:center; }
+.oktell-stat-row span { color:#8b959d; font-size:14px; }
+.oktell-stat-row strong { color:#40515e; font-size:28px; font-weight:normal; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+.oktell-stat-row.is-paused strong { font-size:24px; }
+.oktell-empty-text { padding:12px 10px; color:#87939e!important; font-size:12px; }
+.oktell-messages { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); height:100%; min-height:0; }
+.oktell-dialogs { padding:0 20px; background:#ebedf0; min-width:0; min-height:0; overflow:auto; }
+.oktell-dialog-search { margin:12px 0; }
+.oktell-dialog-list>button { display:flex; align-items:center; gap:12px; width:100%; padding:15px 10px; border:0; border-bottom:1px solid #d7dbde; background:none; border-radius:0; color:#294967; text-align:left; }
+.oktell-dialog-list>button.is-selected { background:#d8e1e7; }
+.oktell-dialog-list svg { flex:none; color:#9da7ad; }
+.oktell-dialog-list>button>span { min-width:0; overflow-wrap:anywhere; }
+.oktell-dialog-list small { display:block; max-width:100%; margin-top:5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#8a969f; }
+.oktell-conversation { display:flex; flex-direction:column; background:white; min-width:0; min-height:0; }
+.oktell-conversation>.oktell-section-head { margin:0 20px; }
+.oktell-conversation .oktell-section-head h1 { font-size:27px; }
+.oktell-message-modes { flex-wrap:wrap; }
+.oktell-message-modes .oktell-btn { font-size:12px; }
+.oktell-conversation-content { min-height:0; flex:1; overflow:auto; }
+.oktell-recipient-search { display:flex; align-items:center; gap:12px; margin:0 20px; padding:8px 10px; background:#f2f3f5; }
+.oktell-recipient-search svg { flex:none; width:16px; height:16px; color:#afb5bc; }
+.oktell-recipient-list { padding:0 20px; }
+.oktell-recipient-list>button { display:flex; align-items:center; gap:13px; width:100%; min-height:43px; padding:7px 10px; background:none; border:0; border-radius:0; color:#264362; text-align:left; }
+.oktell-recipient-list>button:hover { background:#f0f3f5; }
+.oktell-recipient-list svg { width:24px; height:24px; padding:3px; background:#e1e4e6; color:#b8c0c5; flex:none; }
+.oktell-recipient-list>button>span { overflow-wrap:anywhere; }
+.oktell-recipient-list em { font-style:normal; color:#315071; font-size:12px; }
+.oktell-message-history { padding:20px 30px; }
+.oktell-message-history article { padding:15px 0; border-bottom:1px solid #e7ebed; }
+.oktell-message-history header { display:flex; align-items:center; flex-wrap:wrap; gap:10px; color:#294a69; font-weight:bold; }
+.oktell-message-history time { color:#8b989f; font-weight:normal; font-size:11px; }
+.oktell-message-history p { margin-top:8px; white-space:pre-wrap; overflow-wrap:anywhere; }
+.oktell-compose { display:flex; align-items:start; gap:12px; min-height:168px; padding:12px 20px 18px 30px; background:#f6f3df; flex:none; }
+.oktell-compose>svg { flex:none; width:23px; height:23px; padding:3px; margin-top:2px; background:#e4e7e8; color:#bfc6ca; }
+.oktell-compose>div { min-width:0; flex:1; }
+.oktell .oktell-compose textarea { height:90px; min-height:90px; resize:none; border-color:#b2c7d3; box-shadow:0 0 6px #90aeb74d; }
+.oktell-compose-actions { display:flex; align-items:center; gap:10px; margin-top:13px; }
+.oktell-compose-actions>span { font-size:11px; color:#213c54; }
+.oktell .oktell-attach { margin-left:auto; border:0; background:none; color:#284764; text-decoration:underline; padding:5px 0; font-size:12px; }
+.oktell-journal { display:grid; grid-template-columns:280px minmax(0,1fr); height:100%; min-height:0; }
+.oktell-journal-sidebar { display:flex; flex-direction:column; padding:0 20px 16px; background:#ebedf0; min-height:0; overflow:auto; }
+.oktell-journal-sidebar nav { display:flex; flex-direction:column; }
+.oktell-journal-sidebar nav>button { display:flex; align-items:center; gap:14px; min-height:35px; padding:7px 10px; border:0; border-bottom:1px solid #e2e5e7; background:none; border-radius:0; color:#294667; text-align:left; font-size:12px; }
+.oktell-journal-sidebar nav>button.is-active { background:#e2e4e6; color:#3e4f5c; font-weight:bold; }
+.oktell-journal-sidebar nav>button>span { width:14px; color:#989ea3; font-size:16px; text-align:center; flex:none; }
+.oktell-journal-sidebar nav>button>span svg { display:block; width:16px; height:16px; }
+.oktell-calendar { margin-top:auto; padding-top:30px; font-size:12px; }
+.oktell-calendar>header { display:flex; align-items:center; justify-content:center; gap:10px; padding-bottom:10px; border-bottom:2px solid #a5a9ac; }
+.oktell-calendar>header strong { font-family:Georgia,serif; font-size:14px; text-align:center; }
+.oktell-calendar>header button { padding:3px; border:0; background:none; color:#747e85; font-size:12px; }
+.oktell-calendar-grid { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); margin-top:4px; gap:1px; }
+.oktell-calendar-grid>strong { padding:5px 0; color:#4a5762; text-align:center; font-family:Georgia,serif; }
+.oktell-calendar-grid>button { height:25px; padding:2px; border:0; border-radius:0; background:none; color:#1c709e; font-size:12px; }
+.oktell-calendar-grid>button.is-other-month { color:#b8c4cc; }
+.oktell-calendar-grid>button.is-selected { background:#1c799f; color:white; }
+.oktell-calendar-grid>button:hover { background:#d2e1e9; }
+.oktell .oktell-calendar-reset { padding:8px 0; border:0; background:none; color:#497a98; font-size:11px; text-decoration:underline; }
+.oktell-journal-content { padding:0 20px 20px; background:#fff; min-height:0; min-width:0; overflow:auto; }
+.oktell-journal-search { display:flex; gap:20px; align-items:center; padding:10px; background:#e5e7e8; }
+.oktell-journal-search>svg { width:16px; height:16px; flex:none; color:#969fa6; }
+.oktell-journal-search input { flex:1; min-width:0; }
+.oktell-call-list>section { padding-bottom:45px; }
+.oktell-call-list h2 { padding:8px 10px; background:#fcf9e1; box-shadow:inset 0 3px 5px -5px #4448; color:#394d60; font: bold 14px/1.4 Georgia,serif; }
+.oktell-call-row { display:flex; align-items:center; gap:12px; width:100%; min-height:35px; padding:8px 10px; border:0; border-radius:0; background:#fff; text-align:left; color:#274866; }
+.oktell-call-list article:nth-child(odd) .oktell-call-row { background:#fafbfc; }
+.oktell-call-row:hover { background:#f1f4f7!important; }
+.oktell-call-row>time { font-size:11px; color:#8d9caa; flex:none; }
+.oktell-direction { font-size:20px; color:#81ad53; flex:none; line-height:1; }
+.oktell-call-number { text-decoration:underline; font-size:13px; min-width:0; overflow-wrap:anywhere; }
+.oktell-call-number small { display:inline; padding-left:12px; color:#87959f; font-size:11px; text-decoration:none; }
+.oktell-call-duration { color:#8a98a5; font-size:12px; margin-left:auto; flex:none; }
+.oktell-call-note { display:flex; flex-direction:column; align-items:start; gap:12px; padding:15px 20px; background:#f0f3f5; }
+.oktell-call-note label { display:block; width:100%; color:#657889; font-size:12px; }
+.oktell-call-note input, .oktell-call-note textarea { margin-top:5px; }
+.oktell-call-note textarea { min-height:70px; }
+.oktell-shade { position:absolute; z-index:20; inset:0 0 0 var(--oktell-sidebar); width:auto; height:auto; padding:0; margin:0; border:0; border-radius:0; background:#0008; cursor:default!important; }
+.oktell-phone-popup { position:absolute; z-index:30; left:var(--oktell-sidebar); top:0; bottom:0; display:flex; flex-direction:column; width:300px; max-width:calc(100% - var(--oktell-sidebar)); min-height:0; background:#f3f4f7; box-shadow:4px 0 10px #0003; }
+.oktell-phone-popup>header { display:flex; align-items:center; justify-content:space-between; height:20px; background:#e6e8eb; flex:none; border-bottom:1px solid #bfc5c8; }
+.oktell-phone-popup>header>span { width:13px; height:13px; margin-left:10px; }
+.oktell-phone-popup>header>div { display:flex; }
+.oktell-phone-popup>header button { display:grid; place-items:center; width:21px; height:20px; padding:2px; border:0; border-left:1px solid #b9beb3; background:#e9edd2; color:#697779; border-radius:0; }
+.oktell-phone-popup>header button svg { width:13px; height:13px; }
+.oktell-phone-search { display:flex; align-items:center; gap:9px; min-height:58px; padding:15px 10px; background:#d9dce0; box-shadow:0 3px 4px #0002; flex:none; }
+.oktell-phone-search>svg { width:17px; height:17px; color:#afb6bc; flex:none; }
+.oktell .oktell-phone-search input:not([type=checkbox]) { height:25px; min-height:25px; padding:3px 5px; border-radius:2px; border-color:#aaaeb2; font-size:12px; }
+.oktell-phone-search>button { border:0; background:none; color:#949ba1; padding:0; font-size:23px; }
+.oktell-phone-content { flex:1; min-height:0; overflow:auto; }
+.oktell-phone-content h2 { padding:5px 10px; background:#eeebd0; font-size:11px; font-weight:normal; color:#8e969d; }
+.oktell-phone-person { display:flex; align-items:center; gap:10px; width:100%; min-height:34px; padding:7px 10px; border:0; border-radius:0; background:none; color:#486482; text-align:left; font-size:12px; }
+.oktell-phone-person small { flex:none; width:9px; color:#a0abb4; font-size:10px; }
+.oktell-phone-person>span { min-width:0; overflow-wrap:anywhere; }
+.oktell-phone-person strong { font-size:13px; }
+.oktell-phone-person em { color:#8a99a8; font-size:12px; font-style:normal; }
+.oktell-phone-person i { display:inline-block; width:5px; height:5px; margin-left:4px; border-radius:50%; background:#d4b040; vertical-align:middle; }
+.oktell-phone-person.is-busy { color:#ec390b; }
+.oktell-phone-person.is-offline { color:#a0a7ad; }
+.oktell-phone-person.is-offline i { background:#bbc1c6; }
+.oktell-phone-person.is-selected, .oktell-phone-person:hover { background:#e3e8ed; }
+.oktell-phone-call { display:flex; align-items:center; flex-direction:column; gap:7px; padding:15px; background:#e4e8ea; border-top:1px solid #bbc4ca; flex:none; text-align:center; }
+.oktell-phone-call strong { font-size:16px; font-weight:normal; }
+.oktell-phone-call>span { color:#738796; }
+.oktell-phone-call small { font-size:11px; color:#6f7f8a; }
+.oktell-phone-call time { font-size:23px; font-variant-numeric:tabular-nums; }
+.oktell-status-popup { position:absolute; z-index:35; bottom:0; left:var(--oktell-sidebar); width:320px; max-width:calc(100% - var(--oktell-sidebar)); max-height:100%; overflow:auto; background:#ebedf0; box-shadow:4px 0 10px #0003; }
+.oktell-status-popup>section { padding:10px 15px 4px; }
+.oktell-status-popup h2 { padding:5px 0; color:#74808a; font-size:11px; font-weight:normal; }
+.oktell .oktell-menu-row { display:flex; align-items:center; gap:9px; width:100%; min-height:34px; padding:6px 0; border:0; border-radius:0; background:none; color:#454e55; font-size:14px; text-align:left; }
+.oktell-menu-row.is-current { font-weight:bold; }
+.oktell-menu-row svg { width:15px; height:15px; color:#9ab08c; flex:none; }
+.oktell-menu-row:hover:not(:disabled) { color:#23394b; }
+.oktell-menu-symbol { width:15px; color:#a8aeb6; font-size:19px; line-height:1; flex:none; }
+.oktell-menu-symbol.is-green { color:#a5bd91; }
+.oktell-menu-symbol.is-yellow { color:#c4ac71; }
+.oktell-forward-row { display:flex; align-items:center; gap:6px; }
+.oktell-forward-row .oktell-menu-row { width:auto; flex:none; }
+.oktell .oktell-forward-row input:not([type=checkbox]) { flex:1; min-width:0; max-width:137px; padding:4px 5px; height:25px; min-height:25px; font-size:12px; background:#f4f5f6; }
+.oktell-status-popup>footer { display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:14px 15px 16px; margin-top:28px; border-top:1px solid #c5cacf; background:linear-gradient(#e0e3e6,#d3d8de); }
+.oktell-status-popup>footer label { display:flex; align-items:start; gap:8px; font-size:14px; color:#515d65; }
+.oktell-status-popup>footer label:last-child { padding-left:8px; border-left:1px solid #c4c8cc; }
+.oktell-status-popup input[type=checkbox], .oktell input[type=checkbox] { appearance:auto; width:14px; height:14px; margin:3px 0 0; flex:none; accent-color:#0b83f6; }
+.oktell-status-popup small { display:block; margin-top:4px; color:#7e8a94; font-size:10px; line-height:1.45; }
+.oktell .oktell-popup-close { position:absolute; top:4px; right:6px; width:20px; height:20px; padding:0; border:0; background:none; color:#929da5; font-size:18px; }
+.oktell-version { position:absolute; z-index:5; right:10px; bottom:10px; padding:3px 11px; border:1px solid #e1e4e6; border-radius:12px; background:#fff; color:#858a8e; font-size:10px; box-shadow:0 2px 4px #0001; pointer-events:none; }
+.oktell-global-alerts { position:absolute; z-index:15; top:10px; right:12px; width:min(460px,calc(100% - var(--oktell-sidebar) - 24px)); }
+.oktell-global-alerts:empty { display:none; }
+.oktell-error { display:flex; flex-direction:column; align-items:start; gap:8px; margin:8px; padding:10px; border:1px solid #d59b95; background:#fff0ed; color:#9e443b; font-size:12px; overflow-wrap:anywhere; }
+.oktell-saving { padding:8px 10px; color:#697b89; font-size:11px; }
+.oktell-toast { position:absolute; z-index:60; bottom:10px; right:28px; width:300px; max-width:calc(100% - 40px); padding:12px 25px 12px 10px; border:1px solid #9dbbd7; background:#d2e4fa; color:#2b435b; font-size:11px; }
+.oktell-toast>strong { display:block; margin-bottom:5px; font-size:12px; }
+.oktell-toast>button { position:absolute; top:4px; right:5px; padding:0; border:0; background:none; color:#7390a8; font-size:15px; }
+.oktell-login-canvas { position:relative; grid-column:1 / -1; height:100%; min-height:0; overflow:auto; background:linear-gradient(#eceff2,#d8dee2); }
+.oktell-login { width:350px; max-width:calc(100% - 40px); margin-left:13.5%; padding-top:clamp(55px,12vh,125px); padding-bottom:130px; }
+.oktell-wordmark { display:flex; align-items:center; gap:7px; height:44px; color:#6e777d; font-size:54px; line-height:1; font-weight:bold; letter-spacing:-4px; }
+.oktell-wordmark b { color:#d32e2c; }
+.oktell-wordmark i { display:block; width:40px; height:40px; flex:none; background:linear-gradient(133deg,#788287 0 43%,#f0f2f4 44% 55%,#cc2a27 56%); }
+.oktell-login form { display:flex; flex-direction:column; gap:20px; margin-top:36px; }
+.oktell-login label { display:block; color:#939fa8; font-size:16px; }
+.oktell .oktell-login input:not([type=checkbox]) { height:56px; min-height:56px; margin-top:5px; padding:15px 6px; background:#e7efff; border-color:#cfd5db; font-size:13px; }
+.oktell .oktell-login input.has-error { border-color:#ff514d; }
+.oktell-login-actions { display:flex; align-items:center; gap:25px; margin-top:24px; }
+.oktell .oktell-login-actions>.oktell-btn { min-height:56px; padding:9px 20px; font-size:26px; color:#23394a; }
+.oktell-login .oktell-remember { display:flex; align-items:center; gap:4px; color:#274663; font-size:12px; white-space:nowrap; }
+.oktell .oktell-demo-entry { display:block; padding:0; margin-top:18px; border:0; background:none; color:#7a8a96; font-size:11px; text-decoration:underline; text-underline-offset:2px; }
+.oktell-forgot { position:absolute; left:13.5%; bottom:10%; max-width:75%; color:#82919e!important; font-size:12px; }
+.oktell-loading { display:flex; align-items:center; justify-content:center; flex-direction:column; gap:16px; padding:25px; }
+@container (max-width:1100px) {
+  .oktell-journal { grid-template-columns:230px minmax(0,1fr); }
+  .oktell-conversation>.oktell-section-head { height:auto; min-height:80px; padding-top:15px; padding-bottom:15px; }
+  .oktell-message-modes .oktell-btn { padding:5px 8px; }
+  .oktell-call-number small { display:block; padding:3px 0 0; }
+  .oktell-stat-row .oktell-btn { padding:5px 8px; }
+}
+@container (max-width:750px) {
+  .oktell-messages { display:flex; flex-direction:column; overflow:auto; }
+  .oktell-dialogs { min-height:100px; max-height:190px; flex:none; padding:0 12px; }
+  .oktell-dialogs .oktell-section-head { height:65px; }
+  .oktell-conversation { min-height:440px; flex:1; }
+  .oktell-conversation>.oktell-section-head { margin:0 12px; }
+  .oktell-conversation-content { min-height:160px; }
+  .oktell-recipient-search { margin:0 12px; }
+  .oktell-recipient-list { padding:0 12px; }
+  .oktell-compose { padding:12px 12px 18px; gap:8px; }
+  .oktell-compose-actions { gap:7px; flex-wrap:wrap; }
+  .oktell-compose-actions>span { font-size:10px; }
+  .oktell-journal { display:flex; flex-direction:column; overflow:auto; }
+  .oktell-journal-sidebar { flex:none; padding:0 12px 12px; min-height:260px; }
+  .oktell-journal-sidebar .oktell-section-head { height:65px; }
+  .oktell-journal-sidebar nav { display:grid; grid-template-columns:1fr 1fr; }
+  .oktell-calendar { padding-top:18px; width:230px; max-width:100%; align-self:center; }
+  .oktell-journal-content { min-height:300px; overflow:visible; padding:0 12px 20px; }
+  .oktell-journal-search { gap:8px; flex-wrap:wrap; }
+  .oktell-journal-search input { min-width:120px; }
+}
+@container (max-width:600px) {
+  .oktell-cabinet { display:block; overflow:auto; }
+  .oktell-stats { padding:0 12px 14px; overflow:visible; }
+  .oktell-native-tasks { min-height:200px; padding:0 12px 20px; overflow:visible; }
+  .oktell-section-head { height:65px; padding:15px 0 12px; }
+  .oktell-section-head h1 { font-size:24px; }
+  .oktell-stat-row { min-height:85px; }
+  .oktell-stat-row>div { padding:10px 7px; }
+  .oktell-stat-row span { font-size:12px; }
+  .oktell-stat-row strong { font-size:24px; }
+  .oktell-stat-row.is-paused strong { font-size:18px; }
+}
+@media (max-width:700px) {
+  .oktell { --oktell-sidebar:60px; }
+  .oktell-sidebar-logo { justify-content:center; height:60px; padding:0; }
+  .oktell-sidebar-logo>span { display:none; }
+  .oktell-nav-items button { justify-content:center; height:44px; padding:8px; }
+  .oktell-nav-items button>span { display:none; }
+  .oktell-status-cells { height:88px; grid-template-columns:1fr; grid-template-rows:44px 44px; }
+  .oktell-avatar-cell>span { width:28px; height:28px; }
+  .oktell-status-cell>span { font-size:24px; }
+  .oktell-status-cell small { font-size:12px; }
+  .oktell-forward-row { gap:5px; }
+  .oktell-forward-row .oktell-menu-row { font-size:12px; gap:5px; }
+  .oktell-status-popup>section { padding:8px 10px 2px; }
+  .oktell-status-popup>footer { gap:5px; padding:12px 9px; margin-top:14px; }
+  .oktell-status-popup>footer label { gap:4px; font-size:12px; }
+  .oktell-status-popup>footer label:last-child { padding-left:5px; }
+  .oktell-status-popup small { font-size:9px; }
+  .oktell .oktell-menu-row { min-height:36px; }
+  .oktell-login { margin-left:20px; width:350px; max-width:calc(100% - 40px); padding-top:65px; padding-bottom:50px; }
+  .oktell-login-actions { gap:15px; flex-wrap:wrap; }
+  .oktell-forgot { position:static; margin:20px; max-width:none; padding-bottom:25px; }
+  .oktell-global-alerts { width:calc(100% - var(--oktell-sidebar) - 15px); right:8px; }
+  .oktell-version { right:6px; bottom:5px; font-size:9px; padding:2px 7px; }
+  .oktell-toast { right:10px; }
+}

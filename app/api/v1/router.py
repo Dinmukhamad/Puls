@@ -22,6 +22,7 @@ from app.api.v1 import (
     driver,
     games,
     learning,
+    oktell,
     progress,
     rating,
     scenarios,
@@ -41,6 +42,7 @@ api_router.include_router(city_sandbox.router)
 api_router.include_router(work_sites_access.router)
 api_router.include_router(crm.router)
 api_router.include_router(dispatch.router)
+api_router.include_router(oktell.router)
 api_router.include_router(access.router)
 api_router.include_router(auth.router)
 api_router.include_router(telegram.router)

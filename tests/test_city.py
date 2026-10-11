@@ -672,6 +672,95 @@ async def test_deal_places_speakers_by_their_spot_and_shuffles_options():
     assert len(places) == 3
 
 
+async def test_deal_leaves_empty_slots_when_the_bank_runs_short():
+    from datetime import date
+
+    from app.services.city_quests import bank_questions, deal
+
+    day = date(2026, 10, 1)
+    caller = next(q for q in bank_questions() if q["speaker"] == "Клиент")
+    other = {**caller, "ref": "own-other", "speaker": "Диспетчер"}
+    # A caller keeps the CRM centre's spot; another speaker takes the first free one.
+    assert [q and q["ref"] for q in deal(1, day, [caller])] == [None, caller["ref"], None]
+    assert [q and q["ref"] for q in deal(1, day, [other, caller])] == [
+        "own-other",
+        caller["ref"],
+        None,
+    ]
+    assert deal(1, day, []) == [None, None, None]
+
+
+async def test_answered_situations_never_come_back(client, session, operator, monkeypatch):
+    from datetime import date
+
+    from app.services import city_quests
+
+    clock = {"day": date(2026, 10, 1)}
+    monkeypatch.setattr(city_quests, "today", lambda: clock["day"])
+    trainer = await make_user(session, login="trainer-repeat", role=Role.TRAINER)
+    coach, me = auth(await login(client, trainer.login)), auth(await login(client, operator.login))
+    current = (await client.get(ADMIN + "/situations", headers=coach)).json()
+    own = [
+        {
+            "id": f"own-{i}",
+            "speaker": "Водитель" if i % 2 else "Клиент",
+            "text": f"Своя ситуация номер {i}",
+            "options": ["Верно", "Неверно"],
+            "correct": 0,
+            "explanation": "",
+            "enabled": True,
+        }
+        for i in range(4)
+    ]
+    items = [{**item, "enabled": False} for item in current["items"]] + own
+    saved = await client.put(
+        ADMIN + "/situations", headers=coach, json={"revision": 0, "items": items}
+    )
+    assert saved.status_code == 200
+
+    async def deal_today():
+        quests = (await client.get(BASE, headers=me)).json()["quests"]
+        rows = [r for r in await quest_rows(session, operator.id) if r.day == clock["day"]]
+        assert len(quests["items"]) == len(rows)
+        return {row.slot: row.snapshot for row in rows}
+
+    async def reply(slot, snapshot, right=True):
+        choice = snapshot["correct"] if right else 1 - snapshot["correct"]
+        response = await client.post(
+            f"{BASE}/quests/{slot}/answer", headers=me, json={"answer": choice}
+        )
+        assert response.status_code == 200
+
+    # Day one: three of four; one answered right, one wrong, one left open.
+    first = await deal_today()
+    assert len(first) == 3
+    slots = sorted(first)
+    await reply(slots[0], first[slots[0]])
+    await reply(slots[1], first[slots[1]], right=False)
+    answered = {first[slots[0]]["ref"], first[slots[1]]["ref"]}
+    # Day two: answered ones never return, a right or a wrong answer alike; two are left.
+    clock["day"] = date(2026, 10, 2)
+    second = await deal_today()
+    assert len(second) == 2
+    assert {q["ref"] for q in second.values()} == {f"own-{i}" for i in range(4)} - answered
+    for slot, snapshot in second.items():
+        await reply(slot, snapshot)
+    # Day three: every enabled situation is answered, so there is nothing to deal.
+    clock["day"] = date(2026, 10, 3)
+    assert await deal_today() == {}
+    stats = (await client.get(ADMIN + "/situations", headers=coach)).json()
+    assert stats["answered"] == {f"own-{i}": 1 for i in range(4)}
+    assert stats["exhausted"] == 1
+    # A new situation reaches the operator on the same day.
+    added = {**own[0], "id": "own-new", "text": "Совсем новая ситуация"}
+    body = {"revision": 1, "items": [*items, added]}
+    assert (await client.put(ADMIN + "/situations", headers=coach, json=body)).status_code == 200
+    third = await deal_today()
+    assert [q["ref"] for q in third.values()] == ["own-new"]
+    stats = (await client.get(ADMIN + "/situations", headers=coach)).json()
+    assert stats["exhausted"] == 0
+
+
 async def economy_body(client, headers, **changes):
     current = (await client.get(ADMIN + "/economy", headers=headers)).json()
     current.pop("catalogue"), current.pop("can_edit")

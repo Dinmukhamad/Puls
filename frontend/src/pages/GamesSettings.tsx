@@ -21,7 +21,7 @@ function WheelEditor({initial}:{initial:WheelConfig}) {
     setValue((state)=>({...state,segments:state.segments.map((row,i)=>i===index?{...row,[field]:next}:row)}));
 
   return <form className="stack" onSubmit={(e)=>{e.preventDefault();if(editable&&!save.isPending)save.mutate();}}>
-    <Card title="Правила розыгрыша" subtitle="Участие бесплатное. Результат и начисление определяет сервер.">
+    <Card title="Правила ленты удачи" subtitle="Участие бесплатное. Результат и начисление определяет сервер.">
       <fieldset className="learning-fieldset stack" disabled={!editable||save.isPending}>
         <label className="learning-check"><input type="checkbox" checked={value.enabled} onChange={(e)=>setValue({...value,enabled:e.target.checked})}/>Доступно сотрудникам</label>
         <label className="field"><span className="field__label">Попыток на человека в день</span><input className="input" type="number" min={1} max={10} required value={value.daily_spins} onChange={(e)=>setValue({...value,daily_spins:Number(e.target.value)})}/></label>

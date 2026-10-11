@@ -1,0 +1,204 @@
+/*
+ * «Управление городом» (/admin/learning/city): staff settings of the city game.
+ * Built from the site's own pieces (page head, segmented control, cards, fields,
+ * tables, KPI); this file only lays them out and adds the switch and the mission scale.
+ */
+.city-admin { min-width: 0; }
+/* Dialogs open outside the page (in <body>), so their forms get the same rule. */
+:is(.city-admin, .city-admin-dialog) .field { min-width: 0; margin-bottom: 0; }
+
+/* Seven sections in one row: it scrolls on a narrow screen instead of wrapping into a ragged block. */
+.city-admin-tabs { min-width: 0; max-width: 100%; }
+.city-admin-tabs .segmented { overflow-x: auto; scrollbar-width: thin; }
+.city-admin-tabs .segmented__item { flex: 1 0 auto; }
+@media (hover: none) {
+  .city-admin-tabs .segmented { scrollbar-width: none; }
+  .city-admin-tabs .segmented::-webkit-scrollbar { display: none; }
+}
+
+.city-admin-muted { color: var(--text-secondary); font-weight: 400; }
+.city-admin-refreshing { opacity: .6; transition: opacity var(--motion-fast) var(--ease-standard); }
+
+/* Notes: the explanation above a section, the warnings of the district editor. */
+.city-admin-note { display: grid; gap: var(--sp-3); }
+.city-admin-note p { margin: 0; }
+.city-admin-alert { margin: 0; border-color: color-mix(in srgb, var(--status-warning) 55%, transparent); background: var(--status-warning-tint); color: var(--text-primary); }
+.city-admin-card-note { max-width: 78ch; margin: 0 0 var(--sp-4); color: var(--text-secondary); font-size: var(--text-caption); line-height: 1.55; }
+
+/* Forms: fieldsets lose the browser frame; fields line up on their inputs, not on their labels. */
+.city-admin-fieldset { display: grid; gap: var(--sp-5); min-width: 0; margin: 0; padding: 0; border: 0; }
+.city-admin-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); align-items: end; gap: var(--sp-4); }
+.city-admin-grid--three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.city-admin-grid .field__label > span[aria-hidden] { font-size: 1.1em; }
+.city-admin-field-narrow { max-width: 520px; }
+.city-admin-dialog__group + .city-admin-dialog__group { padding-top: var(--sp-4); border-top: 1px solid var(--separator); }
+.city-admin-subtitle { margin: 0 0 var(--sp-3); color: var(--text-primary); font-size: var(--text-secondary-size); font-weight: 600; }
+
+/* A form's last row: the result of the save on the left, the buttons on the right. */
+/* Glass and shadow come from the card list in styles/app.css. */
+.city-admin-footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--sp-3) var(--sp-5); padding: var(--sp-4) var(--sp-5); border: 1px solid var(--separator); border-radius: var(--radius-xl); background: var(--surface-primary); }
+.city-admin-footer__status { flex: 1 1 260px; min-width: 0; }
+.city-admin-footer__status:empty { display: none; }
+.city-admin-footer__actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--sp-2); margin-left: auto; }
+.city-admin-status { margin: 0; color: var(--text-secondary); font-size: var(--text-secondary-size); line-height: 1.5; overflow-wrap: anywhere; }
+.city-admin-status--ok { color: var(--status-success-text); font-weight: 550; }
+.city-admin-status--error { color: var(--status-danger-text); }
+
+/* The site's switch (as in «Доступы»): the track turns accent when on. */
+.city-admin-switch { position: relative; display: flex; align-items: center; gap: var(--sp-3); width: fit-content; max-width: 100%; min-height: 44px; cursor: pointer; }
+.city-admin-switch input { position: absolute; width: 1px; height: 1px; margin: 0; opacity: 0; }
+.city-admin-switch__track { flex: none; width: 46px; height: 28px; padding: 3px; border-radius: var(--radius-pill); background: color-mix(in srgb, var(--text-primary) 22%, transparent); transition: background var(--motion-fast) var(--ease-standard); }
+.city-admin-switch__track > span { display: block; width: 22px; height: 22px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .2); transition: transform var(--motion-fast) var(--ease-standard); }
+.city-admin-switch input:checked + .city-admin-switch__track { background: var(--accent-primary); }
+.city-admin-switch input:checked + .city-admin-switch__track > span { transform: translateX(18px); background: var(--accent-on); }
+.city-admin-switch input:focus-visible + .city-admin-switch__track { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+.city-admin-switch:has(input:disabled) { cursor: not-allowed; opacity: .55; }
+.city-admin-switch__text { display: grid; gap: 2px; min-width: 0; color: var(--text-primary); font-size: var(--text-secondary-size); font-weight: 550; line-height: 1.4; }
+.city-admin-switch__text small { color: var(--text-secondary); font-size: var(--text-caption); font-weight: 400; }
+
+/* «Прогресс операторов»: search, the legend of the mission scale and one row per operator. */
+.city-admin-search { display: grid; grid-template-columns: minmax(220px, 380px) minmax(0, 1fr); align-items: end; gap: var(--sp-4) var(--sp-6); }
+.city-admin-search .city-admin-legend { justify-content: flex-end; min-height: 44px; }
+.city-admin-legend { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-5); margin: 0; padding: 0; list-style: none; color: var(--text-secondary); font-size: var(--text-caption); }
+.city-admin-legend li { display: inline-flex; align-items: center; gap: var(--sp-2); }
+.city-admin-legend span { flex: none; width: 20px; height: 8px; border-radius: var(--radius-pill); }
+.city-admin-route { display: flex; gap: 3px; min-width: 0; }
+.city-admin-route span { flex: 1 1 0; min-width: 4px; height: 8px; border-radius: var(--radius-pill); }
+:is(.city-admin-legend, .city-admin-route) span { background: color-mix(in srgb, var(--text-primary) 14%, transparent); }
+:is(.city-admin-legend, .city-admin-route) span[data-state="completed"] { background: var(--accent-primary); }
+:is(.city-admin-legend, .city-admin-route) span[data-state="ready"] { background: var(--status-success); }
+.city-admin-people { margin: 0; padding: 0; list-style: none; }
+.city-admin-person { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr) auto; align-items: center; gap: var(--sp-3) var(--sp-6); padding: var(--sp-4) var(--sp-6); border-top: 1px solid var(--separator); }
+.city-admin-person__who { display: grid; gap: 2px; min-width: 0; }
+.city-admin-person__who strong { color: var(--text-primary); font-size: var(--text-body); font-weight: 600; overflow-wrap: anywhere; }
+.city-admin-person__who span { color: var(--text-secondary); font-size: var(--text-caption); overflow-wrap: anywhere; }
+.city-admin-person__progress { display: grid; gap: var(--sp-2); min-width: 0; color: var(--text-secondary); font-size: var(--text-caption); }
+.city-admin-person__progress b { color: var(--text-primary); font-weight: 600; font-variant-numeric: tabular-nums; }
+.city-admin-pagination { padding: var(--sp-4) var(--sp-6); border-top: 1px solid var(--separator); }
+.city-admin-pagination:empty { display: none; }
+
+/* «Города групп»: points per action, the quarters of a group and its members. */
+.city-admin-points { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin: 0; }
+.city-admin-points > div { display: inline-flex; align-items: baseline; gap: var(--sp-2); padding: var(--sp-1) var(--sp-3); border: 1px solid var(--separator); border-radius: var(--radius-pill); background: var(--surface-primary); }
+.city-admin-points dt { color: var(--text-secondary); }
+.city-admin-points dd { margin: 0; color: var(--text-primary); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* The six quarters of a group: one row on a wide card, then three, two and one per row — never a lone tile. */
+.city-admin-quarters-body { container-type: inline-size; }
+.city-admin-quarters { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: var(--sp-3); margin: 0; padding: 0; list-style: none; }
+@container (max-width: 1239px) { .city-admin-quarters { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@container (max-width: 639px) { .city-admin-quarters { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@container (max-width: 419px) { .city-admin-quarters { grid-template-columns: minmax(0, 1fr); } }
+/* Stage, name, progress and points each on their own line, so narrow tiles keep one shape. */
+.city-admin-quarters li { display: grid; align-content: start; gap: var(--sp-2); min-width: 0; padding: var(--sp-4); border-radius: var(--radius-m); background: var(--surface-secondary); }
+.city-admin-quarters__name { min-width: 0; color: var(--text-primary); font-size: var(--text-secondary-size); font-weight: 600; overflow-wrap: break-word; }
+.city-admin-quarters li > .badge { justify-self: start; }
+.city-admin-quarters li > .progress { margin-top: var(--sp-1); }
+.city-admin-quarters__count { color: var(--text-secondary); font-size: var(--text-caption); font-variant-numeric: tabular-nums; }
+.city-admin-table { border-top: 1px solid var(--separator); }
+/* Every column after the name is centred under its heading. */
+.city-admin-table .table :is(th, td):not(:first-child) { text-align: center; }
+/* The members' list replaces the table on a phone only. */
+@media (min-width: 768px) { .city-admin-members { display: none; } }
+.city-admin-table .table td strong { font-weight: 600; }
+
+/* «Стройка районов»: the phone list keeps the table's numbers right-aligned. */
+.list-card__metrics.city-admin-metrics { grid-template-columns: minmax(0, 1fr); margin: 0; }
+.city-admin-metrics dt { color: var(--text-tertiary); }
+.city-admin-metrics dd { margin: 0; font-weight: 550; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+
+/* «Ситуации дня»: one row per situation; it is created and edited in a dialog with the answers. */
+.city-admin-situations { margin: 0; padding: 0; list-style: none; }
+.city-admin-situations > li { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; align-items: center; gap: var(--sp-3) var(--sp-4); padding: var(--sp-4) var(--sp-6); border-top: 1px solid var(--separator); }
+.city-admin-situations__icon { display: grid; place-items: center; width: 40px; height: 40px; border-radius: var(--radius-s); background: var(--surface-secondary); font-size: 20px; }
+.city-admin-situations__body { display: grid; gap: 2px; min-width: 0; }
+.city-admin-situations__title { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); min-width: 0; }
+.city-admin-situations__title strong { color: var(--text-primary); font-size: var(--text-secondary-size); font-weight: 600; }
+.city-admin-situations__text { display: -webkit-box; margin: 0; overflow: hidden; color: var(--text-primary); font-size: var(--text-secondary-size); line-height: 1.45; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+.city-admin-situations__facts { color: var(--text-secondary); font-size: var(--text-caption); }
+.city-admin-situations__actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--sp-2) var(--sp-3); }
+.city-admin-situations > li.is-off :is(.city-admin-situations__icon, .city-admin-situations__body) { opacity: .6; }
+.city-admin-options { display: grid; gap: var(--sp-2); min-width: 0; margin: 0; padding: 0; border: 0; }
+.city-admin-options > legend { margin-bottom: var(--sp-2); padding: 0; }
+.city-admin-option { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; align-items: center; gap: var(--sp-2); }
+.city-admin-option input[type="radio"] { justify-self: center; width: 20px; height: 20px; margin: 0; accent-color: var(--accent-primary); cursor: pointer; }
+.city-admin-option.is-correct .input { border-color: color-mix(in srgb, var(--status-success) 70%, transparent); background: color-mix(in srgb, var(--status-success) 8%, var(--surface-secondary)); }
+.city-admin-options__add { padding-left: calc(44px + var(--sp-2)); }
+
+/*
+ * «Экономика игры»: each section's values in one row of cells that fills the card, label over
+ * number, both centred. A row too long for its card scrolls; a narrow card lists label and value.
+ */
+.city-admin-strips { display: grid; gap: var(--sp-4); }
+/* «Изменить» keeps the top right corner; a long title wraps beside it. */
+.city-admin-economy-card > .card__head { flex-wrap: nowrap; align-items: flex-start; }
+.city-admin-economy-card > .card__head > .card__titles { flex: 1 1 auto; }
+.city-admin-economy-card > .card__head > .card__action { flex: none; }
+.city-admin-strips > section { min-width: 0; container-type: inline-size; }
+.city-admin-strip { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(96px, 1fr); margin: 0; overflow-x: auto; border: 1px solid var(--separator); border-radius: var(--radius-m); background: var(--surface-secondary); scrollbar-width: thin; }
+.city-admin-strip > div { display: grid; grid-template-rows: 1fr auto; justify-items: center; align-items: start; gap: var(--sp-1); min-width: 0; padding: var(--sp-3) var(--sp-2); text-align: center; }
+.city-admin-strip > div + div { border-left: 1px solid var(--separator); }
+.city-admin-strip dt { color: var(--text-secondary); font-size: var(--text-caption); line-height: 1.35; overflow-wrap: break-word; }
+/* A building's icon sits over its name, so a name that wraps never leaves the icon alone. */
+.city-admin-strip dt > span[aria-hidden] { display: block; margin-bottom: 2px; font-size: 18px; line-height: 1.2; }
+.city-admin-strip dd { margin: 0; color: var(--text-primary); font-size: var(--text-card-title); font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; }
+@container (max-width: 559px) {
+  .city-admin-strip { grid-auto-flow: row; grid-auto-columns: auto; overflow: visible; }
+  .city-admin-strip > div { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-3); padding: var(--sp-2) var(--sp-3); text-align: left; }
+  .city-admin-strip > div + div { border-left: 0; border-top: 1px solid var(--separator); }
+  .city-admin-strip dd { font-size: var(--text-body); }
+  .city-admin-strip dt > span[aria-hidden] { display: inline; margin: 0 4px 0 0; font-size: inherit; }
+}
+
+/* «Экономика игры»: the quarters of a group in the dialog, in the order they are built. */
+.city-admin-quarter-list { display: grid; gap: var(--sp-3); margin: 0; padding: 0; list-style: none; }
+.city-admin-quarter-list li { display: grid; grid-template-columns: 32px minmax(0, 1fr) minmax(150px, 220px); align-items: end; gap: var(--sp-3) var(--sp-4); }
+.city-admin-quarter-list__number { display: grid; place-items: center; width: 32px; height: 32px; margin-bottom: 6px; border-radius: 50%; background: var(--surface-tertiary); color: var(--text-secondary); font-size: var(--text-caption); font-weight: 650; font-variant-numeric: tabular-nums; }
+
+/* «Города и районы»: a card per city, a tile per district. */
+.city-world-editor__controls { display: grid; gap: var(--sp-5); min-width: 0; margin: 0; padding: 0; border: 0; }
+.city-world-editor__basics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: var(--sp-4); }
+.city-world-editor__owner { display: flex; align-items: center; min-height: 44px; padding: 0 var(--sp-4); border: 1px dashed var(--border-strong); border-radius: var(--radius-m); color: var(--text-primary); font-weight: 550; overflow-wrap: anywhere; }
+/* The districts of a city share the whole row (--districts is set from their number); a narrow card stacks them. */
+.city-world-editor__city > .card__body { container-type: inline-size; }
+.city-world-editor__districts { display: grid; grid-template-columns: repeat(var(--districts, 3), minmax(0, 1fr)); gap: var(--sp-4); }
+@container (max-width: 719px) { .city-world-editor__districts { grid-template-columns: minmax(0, 1fr); } }
+.city-world-editor__district { display: flex; flex-direction: column; gap: var(--sp-4); min-width: 0; padding: var(--sp-4); border: 1px solid var(--separator); border-radius: var(--radius-l); background: var(--surface-primary); }
+/* As tall as a badge, so a district without one keeps its fields level with its neighbours. */
+.city-world-editor__district-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); min-width: 0; min-height: 26px; }
+.city-world-editor__district h3 { margin: 0; color: var(--text-primary); font-size: var(--text-body); font-weight: 650; }
+/* The team panel takes a tile's spare height, so the switches of one row stay on one line. */
+.city-world-editor__team { flex: 1 1 auto; display: grid; align-content: start; gap: var(--sp-2); padding: var(--sp-3); border-radius: var(--radius-s); background: var(--surface-secondary); color: var(--text-secondary); font-size: var(--text-caption); line-height: 1.5; overflow-wrap: anywhere; }
+.city-world-editor__team p { margin: 0; }
+.city-world-editor__team strong { color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.city-world-editor__team .btn { justify-self: start; }
+.city-world-editor .city-admin-switch { margin-top: calc(var(--sp-1) * -1); }
+
+@media (max-width: 1023px) {
+  .city-admin-grid--three { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 767px) {
+  /* Numbers are short: two per row keep the economy at half the length on a phone. */
+  .city-admin-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-4) var(--sp-3); }
+  .city-admin-search, .city-admin-grid--three, .city-world-editor__basics { grid-template-columns: minmax(0, 1fr); }
+  .city-admin-search .city-admin-legend { justify-content: flex-start; min-height: 0; }
+  .city-admin-person { grid-template-columns: minmax(0, 1fr); padding: var(--sp-4); }
+  .city-admin-person > .btn { justify-self: stretch; }
+  .city-admin-pagination { padding: var(--sp-4); }
+  .city-admin-situations > li { grid-template-columns: 40px minmax(0, 1fr); padding: var(--sp-4); }
+  /* The switch on its own line, then the two buttons side by side. */
+  .city-admin-situations__actions { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-2); }
+  .city-admin-situations__actions > .city-admin-switch, .city-admin-situations__actions > .btn:only-child { grid-column: 1 / -1; }
+  .city-admin-option { grid-template-columns: 28px minmax(0, 1fr) 36px; gap: 6px; }
+  .city-admin-options__add { padding-left: 34px; }
+  .city-admin-quarter-list li { grid-template-columns: 32px minmax(0, 1fr); }
+  .city-admin-quarter-list li > .field:last-child { grid-column: 2; }
+  .city-admin-footer { padding: var(--sp-4); }
+  .city-admin-footer__status { flex-basis: 100%; }
+  .city-admin-footer__actions { width: 100%; margin-left: 0; }
+  .city-admin-footer__actions > .btn { flex: 1 1 auto; white-space: normal; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .city-admin-switch__track, .city-admin-switch__track > span, .city-admin-refreshing { transition: none; }
+}

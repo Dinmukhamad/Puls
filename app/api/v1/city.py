@@ -86,7 +86,8 @@ async def configure_economy(body: EconomyInput, session: SessionDep, user: HeadU
 @router.get("/admin/learning/city/situations")
 async def situations(session: SessionDep, user: LearningReader):
     data = await city_quests.situations(session)
-    return {**data, "can_edit": user.role in (Role.TRAINER, Role.HEAD, Role.ADMIN)}
+    stats = await city_quests.situation_stats(session, data["items"])
+    return {**data, **stats, "can_edit": user.role in (Role.TRAINER, Role.HEAD, Role.ADMIN)}
 
 
 @router.put("/admin/learning/city/situations")

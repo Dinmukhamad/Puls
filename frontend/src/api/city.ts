@@ -7,7 +7,7 @@ export type DistrictId = "academy" | "driver" | "crm" | "dispatch" | "oktell" | 
 export type MissionState = "available" | "in_progress" | "ready" | "locked" | "completed" | "unavailable";
 export interface MissionDefinition { title: string; description: string; pulsar: string; target: number; xp: number; coins: number; enabled: boolean; prerequisite: string | null }
 export interface CityMission extends MissionDefinition { key: string; district: DistrictId; objective: string; path: string; current: number; state: MissionState; claimed_at: string | null }
-export interface CityDistrict { id: DistrictId; name: string; subtitle: string; soon: boolean }
+export interface CityDistrict { id: DistrictId; name: string; subtitle: string; soon: boolean; readonly completed_missions?: number }
 export interface CityData { revision: number; user_id: number; full_name: string; gender?: "male" | "female" | null; guide_name?: string | null; preview: boolean; inspecting: boolean; can_claim: boolean; districts: CityDistrict[]; missions: CityMission[]; xp: number; level: number; level_progress: number; level_target: number; balance: number; available: number; plots: CityPlot[]; buildings: CityBuilding[]; can_build: boolean; plots_moved?: boolean; group: CityGroup | null; quests: CityQuests | null }
 export type BuildingKey = "garden" | "gazebo" | "playground" | "sports" | "fountain" | "cottage" | "house" | "tower";
 /** A plot of the operator's own district; `item` is what stands on it. */
@@ -31,7 +31,8 @@ export interface CityEconomy { revision: number; prices: Record<BuildingKey, num
   estate?: Record<string, number[]>; land?: number[]; district?: Record<string, number[]>; hq?: number[] }
 /** One daily situation of the editable set (app/services/city_quests.py). */
 export interface CitySituation { id: string; speaker: string; text: string; options: string[]; correct: number; explanation: string; enabled: boolean }
-export interface CitySituations { revision: number; items: CitySituation[]; can_edit?: boolean }
+/** The editor also learns how many operators answered each situation and how many have none left (`answered`, `exhausted`). */
+export interface CitySituations { revision: number; items: CitySituation[]; can_edit?: boolean; answered?: Record<string, number>; exhausted?: number }
 export interface CitySettings { revision: number; missions: Record<string, MissionDefinition> }
 export interface CityReward { already_claimed: boolean; title: string; xp: number; coins: number }
 export interface CityParticipant { user_id: number; full_name: string; login: string; completed: number; total: number; ready: number; xp: number; level: number; orders: number; appeals: number; missions: Pick<CityMission, "key" | "title" | "state" | "current" | "target">[] }
@@ -44,7 +45,7 @@ export const city = {
   economy: () => request<CityEconomy>("/api/v1/admin/learning/city/economy"),
   saveEconomy: ({ catalogue: _catalogue, can_edit: _canEdit, ...json }: CityEconomy) => request<CityEconomy>("/api/v1/admin/learning/city/economy", { method: "PUT", json }),
   situations: () => request<CitySituations>("/api/v1/admin/learning/city/situations"),
-  saveSituations: ({ can_edit: _canEdit, ...json }: CitySituations) => request<CitySituations>("/api/v1/admin/learning/city/situations", { method: "PUT", json }),
+  saveSituations: ({ revision, items }: Pick<CitySituations, "revision" | "items">) => request<CitySituations>("/api/v1/admin/learning/city/situations", { method: "PUT", json: { revision, items } }),
   groups: () => request<{ items: CityGroupOverview[]; points: Record<PointKind, number> }>("/api/v1/admin/learning/city/groups"),
   settings: () => request<CitySettings>("/api/v1/admin/learning/city/settings"),
   save: (json: CitySettings) => request<CitySettings>("/api/v1/admin/learning/city/settings", { method: "PUT", json }),

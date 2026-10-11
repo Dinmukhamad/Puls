@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
@@ -18,6 +18,7 @@ import { FLEET_TOUR, callTour } from "./dispatch/dispatchTours";
 import { fleetLink, parseRoute, routePath } from "./dispatch/fleetNav";
 import { preserveScenarioContext } from "../api/scenarios";
 import { ScenarioPracticePanel } from "./scenarios/ScenarioPracticePanel";
+import { OKTELL_QUERY, type OktellScreen } from "../api/oktell";
 import "./crm/coach.css";
 import { CrmDrivers, type DriverScreen } from "./crm/drivers/CrmDrivers";
 import { driverName, fromFleet, parkLabel, type TrainingDriver } from "./crm/drivers/driverData";
@@ -26,9 +27,13 @@ import { CrmSidebar, SECTION_TOURS, SECTION_VIEWS, SectionPage, useSections } fr
 import "./crm/work-sites.css";
 import "./crm/pulsar.css";
 
+const OktellSite = lazy(() => import("./oktell/OktellSite").then(module => ({ default: module.OktellSite })));
+
 export function WorkSitesPage() {
   const { user } = useAuth(), navigate = useNavigate();
   const [params, setParams] = useSearchParams(), client = useQueryClient();
+  const currentParams = useRef(params);
+  currentParams.current = params;
   const catalog = useQuery({ queryKey: ["crm-catalog"], queryFn: crm.catalog, refetchInterval: 30000 });
   const editor = ["trainer", "head", "admin"].includes(user?.role ?? "");
   const [dirty, setDirty] = useState(false), [copy, setCopy] = useState<CrmAppeal>(), [formKey, setFormKey] = useState(0), [notice, setNotice] = useState("");
@@ -42,8 +47,26 @@ export function WorkSitesPage() {
   const shell = useRef<HTMLDivElement>(null);
   const view = params.get("view") ?? "list", id = Number(params.get("appeal"));
   const scenarioAttemptId = params.get("scenarioAttempt") ?? undefined;
-  // Two browser tabs: CRM keeps its own address, the dispatch keeps `fleet` and `fpark` beside it.
-  const site = params.get("site") === "dispatch" ? "dispatch" : "crm";
+  // Each work site keeps its own address and unfinished forms while another tab is open.
+  const site = params.get("site") === "dispatch" ? "dispatch" : params.get("site") === "oktell" ? "oktell" : "crm";
+  useEffect(() => {
+    const tabs = shell.current?.querySelector<HTMLElement>(".work-browser-tabs");
+    const selected = tabs?.querySelector<HTMLElement>("[aria-current=page]");
+    if (!tabs || !selected) return;
+    const reveal = () => {
+      const rail = tabs.getBoundingClientRect(), tab = selected.getBoundingClientRect();
+      if (tab.left < rail.left || tab.right > rail.right) {
+        tabs.scrollLeft += tab.left - rail.left - (tabs.clientWidth - tab.width) / 2;
+      }
+    };
+    reveal();
+    const observer = new ResizeObserver(reveal);
+    observer.observe(tabs);
+    return () => observer.disconnect();
+  }, [site]);
+  const oktellScreen = (["cabinet", "phone", "messages", "journal"].includes(params.get("oscreen") ?? "") ? params.get("oscreen") : "cabinet") as OktellScreen;
+  const [oktellVisited, setOktellOpened] = useState(site === "oktell");
+  const oktellOpened = oktellVisited || site === "oktell";
   const fleetRoute = parseRoute(params.get("fleet")), fleetPark = params.get("fpark") ?? DEFAULT_PARK;
   const [fleetVisited, setFleetOpened] = useState(site === "dispatch");
   // Browser «Back» can return to the dispatch tab after a reload, so the address alone mounts it too.
@@ -71,7 +94,7 @@ export function WorkSitesPage() {
   function go(query: string, force = false) {
     if (!force && dirty && !window.confirm("В обращении есть несохранённые изменения. Покинуть форму?")) return;
     const next = preserveScenarioContext(new URLSearchParams(query), params);
-    for (const key of ["fleet", "fpark"]) { const value = params.get(key); if (value) next.set(key, value); }
+    for (const key of ["fleet", "fpark", "oscreen"]) { const value = params.get(key); if (value) next.set(key, value); }
     setDirty(false); setParams(next); setNotice(""); if (!query.includes("view=create")) setSelection([]);
   }
   function goFleet(path: string, park = fleetPark, record = true) {
@@ -87,12 +110,17 @@ export function WorkSitesPage() {
     goFleet(path, park, false);
   }
   // Switching tabs keeps both pages mounted, so an unsaved CRM form survives a look into the dispatch.
-  function openSite(target: "crm" | "dispatch") {
+  function openSite(target: "crm" | "dispatch" | "oktell") {
     if (target === site) return;
     const next = new URLSearchParams(params);
     // Back in the dispatch, the cabinet reloads: a CRM request may have solved a call meanwhile.
-    if (target === "dispatch") { next.set("site", "dispatch"); setFleetOpened(true); client.invalidateQueries({ queryKey: FLEET_QUERY }); } else next.delete("site");
+    if (target === "dispatch") { next.set("site", "dispatch"); setFleetOpened(true); client.invalidateQueries({ queryKey: FLEET_QUERY }); }
+    else if (target === "oktell") { next.set("site", "oktell"); setOktellOpened(true); client.invalidateQueries({ queryKey: OKTELL_QUERY }); }
+    else next.delete("site");
     setCoach(null); setParams(next);
+  }
+  function goOktell(screen: OktellScreen) {
+    const next = new URLSearchParams(currentParams.current); next.set("oscreen", screen); setParams(next);
   }
   function create(initial?: CrmAppeal) { if (dirty && !window.confirm("Открыть новую форму? Несохранённые изменения будут потеряны.")) return; setCopy(initial); setFormKey(k => k + 1); setForward(""); go("view=create", true); }
   // Pulsar walks each participant through a section once; the help button replays the tour.
@@ -130,12 +158,14 @@ export function WorkSitesPage() {
   const fleetDriverLink = fleetDriver && fleetLink(fleetDriver, fleetQuery.data?.parks.find(p => p.id === fleetDriver.park));
   const fleetAddress = fleetDriverLink ? fleetDriverLink.replace("https://", "") : `fleet.training / ${routePath(fleetRoute).replace(/\//g, " / ")} · ${fleetPark}`;
   return <div className={`work-sites${coach ? " is-coaching" : ""}`} data-site={site} ref={shell}>
-    <header className="work-sites-heading"><button onClick={exit}>{scenarioAttemptId ? "← К сценарию" : "← Мой город"}</button><h1>Рабочие сайты</h1><span className="work-sites-training">Учебная среда</span><button className="work-sites-guide-button" onClick={() => site === "dispatch" ? startFleetTour("fleet") : startCoach(helpTour)}>✦ {guide.text("Помощь Пульсара")}</button></header>
-    {scenarioAttemptId && <ScenarioPracticePanel attemptId={scenarioAttemptId} appealId={id || undefined} onFleet={attempt => { setFleetOpened(true); setCoach(null); goFleet(`driver/${attempt.driver.id}`, attempt.driver.park_id); }} onCreate={() => create()} />}
-    <div className="work-browser"><nav className="work-browser-tabs" aria-label="Рабочие сайты"><button className={site === "crm" ? "is-active" : ""} aria-current={site === "crm" ? "page" : undefined} onClick={() => openSite("crm")}> <span className="crm-favicon">i</span> CRM-система {site === "crm" && <span className="work-tab-dot" />}</button><button className={site === "dispatch" ? "is-active" : ""} aria-current={site === "dispatch" ? "page" : undefined} data-coach="site-dispatch" onClick={() => openSite("dispatch")}><span className="fleet-favicon" aria-hidden="true">✕</span> Диспетчерская {site === "dispatch" && <span className="work-tab-dot" />}</button><button disabled title="Новые рабочие сайты появятся позже">＋ Другие сайты</button></nav>
-    {site === "dispatch" ? <div className="work-browser-address"><button aria-label="Назад" disabled={!fleetHistory.back.length} onClick={() => fleetStep("back")}>←</button><button aria-label="Вперёд" disabled={!fleetHistory.forward.length} onClick={() => fleetStep("forward")}>→</button><button aria-label="Обновить Диспетчерскую" onClick={() => { client.invalidateQueries({ queryKey: FLEET_QUERY }); }}>⟳</button><div className="work-address-text"><span aria-hidden="true">▣</span><span data-coach="fleet-address">{fleetAddress}</span><small>Учебная копия</small></div>{fleetDriverLink && <button className={copied ? "is-done" : undefined} aria-label={copied ? "Ссылка скопирована" : "Скопировать ссылку на водителя"} title="Скопировать ссылку на водителя: по ID из неё водителя находят в CRM" onClick={() => { void navigator.clipboard?.writeText(fleetDriverLink).then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 2000); }, () => undefined); }}>{copied ? "✓" : "⧉"}</button>}<button aria-label="Развернуть окно" onClick={() => { const action = document.fullscreenElement ? document.exitFullscreen() : shell.current?.requestFullscreen(); action?.catch(() => undefined); }}>⛶</button></div>
+    <header className="work-sites-heading"><button onClick={exit}>{scenarioAttemptId ? "← К сценарию" : "← Мой город"}</button><h1>Рабочие сайты</h1><span className="work-sites-training">Учебная среда</span>{site !== "oktell" && <button className="work-sites-guide-button" onClick={() => site === "dispatch" ? startFleetTour("fleet") : startCoach(helpTour)}>✦ {guide.text("Помощь Пульсара")}</button>}</header>
+    {scenarioAttemptId && <div hidden={site === "oktell"}><ScenarioPracticePanel attemptId={scenarioAttemptId} appealId={id || undefined} onFleet={attempt => { setFleetOpened(true); setCoach(null); goFleet(`driver/${attempt.driver.id}`, attempt.driver.park_id); }} onCreate={() => create()} /></div>}
+    <div className="work-browser"><nav className="work-browser-tabs" aria-label="Рабочие сайты"><button className={site === "crm" ? "is-active" : ""} aria-current={site === "crm" ? "page" : undefined} onClick={() => openSite("crm")}> <span className="crm-favicon">i</span> CRM-система {site === "crm" && <span className="work-tab-dot" />}</button><button className={site === "dispatch" ? "is-active" : ""} aria-current={site === "dispatch" ? "page" : undefined} data-coach="site-dispatch" onClick={() => openSite("dispatch")}><span className="fleet-favicon" aria-hidden="true">✕</span> Диспетчерская {site === "dispatch" && <span className="work-tab-dot" />}</button><button className={site === "oktell" ? "is-active" : ""} aria-current={site === "oktell" ? "page" : undefined} onClick={() => openSite("oktell")}><span className="oktell-favicon" aria-hidden="true">🎧</span> Oktell {site === "oktell" && <span className="work-tab-dot" />}</button><button disabled title="Новые рабочие сайты появятся позже">＋ Другие сайты</button></nav>
+    {site === "oktell" ? <div className="work-browser-address"><button aria-label="К кабинету Oktell" disabled={oktellScreen === "cabinet"} onClick={() => goOktell("cabinet")}>←</button><button aria-label="Обновить Oktell" onClick={() => { client.invalidateQueries({ queryKey: OKTELL_QUERY }); }}>⟳</button><div className="work-address-text"><span aria-hidden="true">▣</span><span>oktell.training / {({ cabinet: "кабинет", phone: "телефон", messages: "сообщения", journal: "журнал" })[oktellScreen]}</span><small>Учебная копия</small></div><button aria-label="Развернуть окно" onClick={() => { const action = document.fullscreenElement ? document.exitFullscreen() : shell.current?.requestFullscreen(); action?.catch(() => undefined); }}>⛶</button></div>
+    : site === "dispatch" ? <div className="work-browser-address"><button aria-label="Назад" disabled={!fleetHistory.back.length} onClick={() => fleetStep("back")}>←</button><button aria-label="Вперёд" disabled={!fleetHistory.forward.length} onClick={() => fleetStep("forward")}>→</button><button aria-label="Обновить Диспетчерскую" onClick={() => { client.invalidateQueries({ queryKey: FLEET_QUERY }); }}>⟳</button><div className="work-address-text"><span aria-hidden="true">▣</span><span data-coach="fleet-address">{fleetAddress}</span><small>Учебная копия</small></div>{fleetDriverLink && <button className={copied ? "is-done" : undefined} aria-label={copied ? "Ссылка скопирована" : "Скопировать ссылку на водителя"} title="Скопировать ссылку на водителя: по ID из неё водителя находят в CRM" onClick={() => { void navigator.clipboard?.writeText(fleetDriverLink).then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 2000); }, () => undefined); }}>{copied ? "✓" : "⧉"}</button>}<button aria-label="Развернуть окно" onClick={() => { const action = document.fullscreenElement ? document.exitFullscreen() : shell.current?.requestFullscreen(); action?.catch(() => undefined); }}>⛶</button></div>
     : <div className="work-browser-address"><button aria-label="Назад к обращениям" disabled={view === "list" && !id} onClick={() => { if (dirty && !window.confirm("Покинуть форму без сохранения?")) return; setForward(params.toString()); go("", true); }}>←</button><button aria-label="Вперёд" disabled={!forward || view !== "list" || !!id} onClick={() => { go(forward); setForward(""); }}>→</button><button aria-label="Обновить данные CRM" onClick={() => { client.invalidateQueries({ queryKey: ["crm-catalog"] }); client.invalidateQueries({ queryKey: ["crm-appeals"] }); client.invalidateQueries({ queryKey: ["crm-appeal"] }); client.invalidateQueries({ queryKey: FLEET_QUERY }); setNotice("Данные обновляются. Введённые поля сохранены в форме."); }}>⟳</button><div className="work-address-text"><span aria-hidden="true">▣</span><span>{sectionView ? `crm.training / ${sectionView.address}${params.get("reg") ? ` / ${params.get("reg")}` : ""}` : view === "drivers" ? `crm.training / водители / учётные записи${currentDriver ? ` / ${currentDriver.id}${driverScreen && driverScreen !== "details" ? ` / ${driverScreen}` : ""}` : ""}` : `crm.training / обращения${view === "create" ? " / создать" : view === "categories" ? " / категории" : id ? ` / ${id}` : ""}`}</span><small>Учебная копия</small></div><button aria-label="Развернуть окно" onClick={() => { const action = document.fullscreenElement ? document.exitFullscreen() : shell.current?.requestFullscreen(); action?.catch(() => setNotice("Полноэкранный режим недоступен в этом браузере.")); }}>⛶</button></div>}
     {fleetOpened && <div className="fleet-app" hidden={site !== "dispatch"}><DispatchSite route={fleetRoute} parkId={fleetPark} go={goFleet} onResult={setFleetFeedback} /></div>}
+    {oktellOpened && <div className="oktell-app" hidden={site !== "oktell"}><Suspense fallback={<div className="crm-empty" role="status">Открываем Oktell…</div>}><OktellSite screen={oktellScreen} go={goOktell} active={site === "oktell"} /></Suspense></div>}
     <div className="crm-app" hidden={site !== "crm"}><header className="crm-header"><button className="crm-logo" onClick={() => go("")}>iTaxi</button><span>CRM-система</span><div className="crm-account"><span className="crm-avatar">{user?.full_name.split(" ").filter(Boolean).slice(0, 2).map(word => word[0]).join("")}</span><strong>{user?.full_name}</strong></div></header>
     <div className="crm-layout"><CrmSidebar view={view} open={target => target === "drivers" ? openDriver() : target === "list" ? go("") : go(`view=${target}`)} />
     <main className="crm-main"><div className="crm-breadcrumb"><button onClick={() => go("")}>Главная</button><span>/</span>{sectionView ? <><span>{sectionView.group}</span><span>/</span>{view === "registration-new" || params.get("reg") ? <><button onClick={() => go("view=registration")}>Регистрация водителей</button><span>/</span><span>{view === "registration-new" ? "Новый водитель" : `№${params.get("reg")}`}</span></> : <span>{sectionView.title}</span>}</> : view === "drivers" ? <><button onClick={() => openDriver()}>Учётные записи водителей</button>{currentDriver && <><span>/</span><button onClick={() => openDriver(currentDriver.id)}>{driverName(currentDriver)}</button>{driverScreen && driverScreen !== "details" && <><span>/</span><span>{driverScreenTitle[driverScreen]}</span></>}</>}</> : <><button onClick={() => go("")}>Обращения</button>{pageTitle !== "Обращения" && <><span>/</span><span>{pageTitle}</span></>}</>}{editor && view !== "drivers" && !sectionView && <button className="crm-manage-link" onClick={() => go("view=categories")}>Настроить категории</button>}</div>
@@ -145,7 +175,7 @@ export function WorkSitesPage() {
     : catalog.data && (view === "create" ? <CrmAppealForm key={`${formKey}:${scenarioAttemptId ?? ""}`} catalog={catalog.data} initial={copy} scenarioAttemptId={scenarioAttemptId} onDirty={setFormDirty} onCategoryChange={updateSelection} onRequestHelp={() => setHelpRequest(n => n + 1)} onSaved={(appeal, duplicate) => { client.invalidateQueries({ queryKey: ["crm-appeals"] }); client.invalidateQueries({ queryKey: FLEET_QUERY }); client.setQueryData(["crm-appeal", appeal.id], appeal); setDirty(false); if (duplicate) { setCopy(appeal); setFormKey(k => k + 1); } else go(`appeal=${appeal.id}`, true); setNotice(`Обращение #${appeal.id} сохранено и доступно всем участникам.${duplicate ? " Открыта копия; вложения нужно добавить заново." : ""}`); }} /> : view === "drivers" ? fleetQuery.data ? <CrmDrivers key={`${driverId ?? "list"}:${driverScreen ?? ""}`} drivers={drivers} save={saveFleet} rules={fleetQuery.data.rules.map(r => r.name)} tariffs={fleetQuery.data.catalog.tariffs} openFleet={openFleetDriver} open={openDriver} notify={setNotice} driverId={driverId} screen={driverScreen} onReset={async () => { try { await saveFleet(fleetApi.reset); setNotice("Учебные водители возвращены в исходное состояние — и в CRM, и в Диспетчерской."); } catch (e) { setNotice((e as Error).message); } }} /> : <FleetLoading query={fleetQuery} /> : view === "categories" && editor ? <CrmCategories nodes={catalog.data.categories} /> : id > 0 ? <CrmAppealDetail id={id} editor={editor} onDuplicate={create} /> : <CrmAppealList catalog={catalog.data} onOpen={appeal => go(`appeal=${appeal}`)} onCreate={() => create()} />)}
     <footer className="crm-bottom-note">Учебная CRM · Практика работы с обращениями</footer></main></div></div></div>
     {site === "crm" ? (!scenarioAttemptId || helpRequest > 0) && <PulsarGuide catalog={catalog.data} screen={pulsarScreen} categoryIds={selection} step={null} editor={instructionEditor} openRequest={helpRequest} onStart={() => startCoach(helpTour)} onClose={() => {}} onPrevious={() => {}} onNext={() => {}} />
-      : !scenarioAttemptId && <DispatchDock feedback={fleetFeedback} onFeedback={setFleetFeedback} onGo={(path, park) => goFleet(path, park)} onTour={tour => startFleetTour(tour)} onCrm={() => { setCoach(null); if (view === "create") openSite("crm"); else create(); }} />}
+      : site === "dispatch" && !scenarioAttemptId && <DispatchDock feedback={fleetFeedback} onFeedback={setFleetFeedback} onGo={(path, park) => goFleet(path, park)} onTour={tour => startFleetTour(tour)} onCrm={() => { setCoach(null); if (view === "create") openSite("crm"); else create(); }} />}
     {coach && <PulsarCoach key={coach.id} steps={coach.steps} onClose={endCoach} extra={step => step.slot === "courier-code" && coach.id.startsWith("call:") ? <CoachCourierCode callId={coach.id.slice(5)} feedback={fleetFeedback} onFeedback={setFleetFeedback} /> : null} />}
   </div>;
 }

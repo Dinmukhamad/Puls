@@ -1,16 +1,11 @@
-/* Общие элементы города: страница миссий для сотрудников, кнопки, шкалы, празднование награды. */
-.city-page,.city-immersive,.city-celebration{--city-accent:var(--btn-primary-bg);--city-on-accent:var(--btn-primary-fg);--city-soft:color-mix(in srgb,var(--text-primary) 7%,var(--surface-primary));--city-glass-soft:color-mix(in srgb,var(--surface-primary) 62%,transparent);color:var(--text-primary)}
-.city-page{display:grid;gap:22px;container-type:inline-size}
-.city-heading{display:flex;justify-content:space-between;gap:18px;align-items:center}.city-heading h1{font-size:32px;letter-spacing:-1.1px;line-height:1.2;margin:6px 0}.city-heading p{font-size:14px;color:var(--text-secondary);margin:0}
+/* Общие элементы города: кнопки, шкалы, празднование награды. */
+.city-immersive,.city-celebration{--city-accent:var(--btn-primary-bg);--city-on-accent:var(--btn-primary-fg);--city-soft:color-mix(in srgb,var(--text-primary) 7%,var(--surface-primary));--city-glass-soft:color-mix(in srgb,var(--surface-primary) 62%,transparent);color:var(--text-primary)}
 .city-eyebrow{font-size:10px;font-weight:750;letter-spacing:1.3px;text-transform:uppercase;color:var(--text-tertiary)}
 .city-secondary{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 var(--sp-5);border:1px solid var(--border-strong);border-radius:var(--radius-m);font:inherit;font-size:var(--text-body);font-weight:590;color:var(--text-primary);background:var(--surface-primary);text-decoration:none;cursor:pointer}
 .city-meter{height:6px;background:color-mix(in srgb,var(--text-primary) 10%,transparent);border-radius:8px;overflow:hidden}.city-meter>span{display:block;height:100%;background:var(--accent-primary);border-radius:8px;transition:width .3s}
 .city-action{display:flex;align-items:center;justify-content:center;text-align:center;width:100%;border:0;border-radius:14px;padding:13px 14px;min-height:48px;background:var(--city-accent);color:var(--city-on-accent);font:inherit;font-size:13px;font-weight:750;text-decoration:none;cursor:pointer;box-shadow:0 4px 0 color-mix(in srgb,var(--city-accent) 60%,#000)}.city-action:active{transform:translateY(2px);box-shadow:0 2px 0 color-mix(in srgb,var(--city-accent) 60%,#000)}.city-action:disabled{background:color-mix(in srgb,var(--text-primary) 9%,transparent);color:var(--text-secondary);box-shadow:none;cursor:default;transform:none}
 .city-rewards{display:flex;gap:10px;flex-wrap:wrap;border-top:1px solid var(--separator);border-bottom:1px solid var(--separator);padding:12px 0;font-size:11px;font-weight:700}.city-rewards>span:last-child{color:var(--text-secondary);font-weight:500}
 .city-celebration{text-align:center;display:grid;gap:20px;padding:25px 8px 15px}.city-celebration h2{font-size:27px;line-height:1.2;margin:0}.city-celebration p{margin:0;color:var(--text-secondary);font-size:14px;line-height:1.7}.city-medal{display:grid;place-items:center;width:100px;height:100px;margin:0 auto 12px;border-radius:30px;background:linear-gradient(145deg,#ffe7a5,#e5ad3b);color:#875b17;font-size:45px;box-shadow:0 7px 0 #aa7825;transform:rotate(-7deg)}.city-celebration .city-rewards{justify-content:center}
-.city-admin{display:grid;gap:20px}.city-admin-controls{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}.city-participants{display:grid;gap:10px}.city-person{display:grid;grid-template-columns:minmax(130px,1fr) 1.3fr auto;gap:16px;align-items:center;padding:17px;background:var(--surface-primary);border:1px solid var(--separator);border-radius:16px}.city-person h3{margin:0;font-size:14px}.city-person p{margin:4px 0 0;font-size:11px;color:var(--text-secondary)}.city-person-route{display:flex;gap:5px}.city-person-route span{height:9px;border-radius:5px;flex:1;background:var(--separator)}.city-person-route span[data-state=completed]{background:var(--accent-bright)}.city-person-route span[data-state=ready]{background:#50b69a}.city-person-progress small{display:block;font-size:11px;color:var(--text-secondary);margin-top:7px}.city-admin-edit{display:grid;gap:16px}.city-editor-fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.city-admin-tabs{display:flex;gap:8px;flex-wrap:wrap}.city-admin-tabs button[aria-pressed=true]{background:var(--city-accent);color:var(--city-on-accent)}.city-admin .field{min-width:0}.city-admin .field textarea{min-height:90px}.city-admin-warning{font-size:12px;color:var(--text-secondary);line-height:1.6}
-@media(max-width:800px){.city-heading{align-items:flex-start}.city-heading h1{font-size:29px}.city-person{grid-template-columns:1fr auto}.city-person-progress{grid-column:1/-1;grid-row:2}.city-editor-fields{grid-template-columns:1fr 1fr}}
-@media(max-width:500px){.city-heading{flex-wrap:wrap}.city-heading p{font-size:12px}.city-editor-fields{grid-template-columns:1fr}.city-person{padding:14px}}
 
 /*
  * «Мой город» во весь экран. Карта лежит под всем интерфейсом, панели — стекло поверх неё.
@@ -175,16 +170,6 @@
 .city-group__mine{display:grid;gap:8px;padding:12px;border-radius:14px;background:var(--city-glass-soft);border:1px solid var(--separator)}
 .city-group__mine ul{list-style:none;margin:0;padding:0;display:grid;gap:4px}.city-group__mine li{display:flex;justify-content:space-between;font-size:12.5px;color:var(--text-secondary)}
 .city-group__mine small{font-size:11px;color:var(--text-secondary)}
-.city-groups{display:grid;gap:16px}
-.city-group-card{display:grid;gap:12px;padding:16px;border-radius:18px;border:1px solid var(--separator);background:var(--surface-primary)}
-.city-group-card header{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}.city-group-card h3{margin:0;font-size:17px}.city-group-card header span{font-size:13px;color:var(--text-secondary)}
-.city-world-editor__city h2{font-size:20px;line-height:1.3;margin:0;overflow-wrap:anywhere}.city-world-editor__owner{font-size:13px;line-height:1.5;margin:0}.city-world-editor__controls{border:0;padding:0;margin:0;min-width:0;display:grid;gap:18px}.city-world-editor__districts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.city-world-editor__district{display:grid;align-content:start;gap:14px;min-width:0;padding:16px;border:1px solid var(--separator);border-radius:14px;background:var(--surface-secondary)}.city-world-editor__team{font-size:12px;line-height:1.6;color:var(--text-secondary);overflow-wrap:anywhere}.city-world-editor__team p{margin:0 0 6px}.city-world-editor__construction{align-items:flex-start;font-size:13px;line-height:1.5}.city-world-editor__construction input{flex-shrink:0;margin-top:3px}.city-world-editor__notice{padding:14px;border:1px solid var(--border-strong);border-radius:12px;background:var(--surface-secondary);font-size:13px;line-height:1.6;margin:0}.city-world-editor__actions{display:grid;gap:12px}.city-world-editor__actions .city-secondary{white-space:normal;text-align:center;padding-top:12px;padding-bottom:12px}.city-world-editor fieldset:disabled .input,.city-world-editor .input:disabled{opacity:.7}.city-world-editor .city-admin-warning{margin:0}
-@media(max-width:1000px){.city-world-editor__districts{grid-template-columns:1fr}}@media(max-width:500px){.city-world-editor__city{padding:14px}.city-world-editor__district{padding:12px}.city-world-editor__city h2{font-size:18px}}
-.city-group-card__projects{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px}
-.city-group-card__projects li{display:grid;gap:4px;font-size:13px}.city-group-card__projects small{color:var(--text-secondary);font-size:11.5px}
-.city-group-card__table{display:grid;overflow-x:auto;font-size:12.5px}
-.city-group-card__table>div{display:grid;grid-template-columns:minmax(150px,2fr) repeat(7,minmax(70px,1fr));gap:8px;padding:7px 0;border-bottom:1px solid var(--separator);align-items:center}
-.city-group-card__table>div:first-child{font-weight:650;color:var(--text-secondary);font-size:11.5px}
 /* A daily situation (sheet) and the HUD button with open ones. */
 .city-group-button[data-open]{border-color:#e0a800;background:color-mix(in srgb,#ffc21a 22%,var(--surface-primary))}
 .city-quest{display:grid;gap:14px}
@@ -199,14 +184,6 @@
 .city-quest__result{display:grid;gap:8px;padding:12px 14px;border-radius:14px;background:color-mix(in srgb,#d0533c 8%,var(--surface-primary))}
 .city-quest__result[data-correct]{background:color-mix(in srgb,#2f9e5b 12%,var(--surface-primary))}
 .city-quest__result p{margin:0;font-size:13px;line-height:1.5;color:var(--text-secondary)}.city-quest__result small{font-size:12px;color:var(--text-secondary)}
-/* The game's numbers (staff, «Экономика игры»). */
-.city-economy fieldset{border:0;padding:0;margin:0;display:grid;gap:14px}
-.city-economy h3{margin:8px 0 0;font-size:15px}
-.city-economy__grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;align-items:end}
-.city-economy__projects{display:grid;gap:10px}
-.city-situations__actions{display:flex;gap:8px;align-items:end}
-.city-situations__options{border:0;padding:0;margin:0;display:grid;gap:8px}
-.city-situations__option{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center}
 
 /* Выбор управления камерой: две карточки с мышью. Жёлтая кнопка — «двигать город», синяя — «вращать». */
 .city-controls-setup{display:grid;gap:14px;padding:18px 20px;border-radius:22px;animation:city-rise .45s cubic-bezier(.32,.72,0,1) both}

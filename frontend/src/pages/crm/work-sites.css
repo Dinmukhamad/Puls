@@ -10,7 +10,13 @@
 .work-sites-heading .work-sites-guide-button { margin-left:auto; color:#5365b0; }
 .work-sites-training { font-size:11px; color:#596a88; background:#e0e6f1; border:1px solid #d5ddea; border-radius:20px; padding:3px 10px; }
 .work-browser { margin:0 18px 18px; border:1px solid #ccd5e5; border-radius:12px; background:white; overflow:hidden; box-shadow:0 8px 32px #334b7010; }
-.work-browser-tabs { display:flex; align-items:end; gap:5px; background:#dfe6f2; padding:10px 12px 0; }
+/* Oktell uses the whole window; its panels scroll within the workspace. */
+.work-sites[data-site=oktell] { display:flex; flex-direction:column; height:100dvh; min-height:0; overflow:hidden; }
+.work-sites[data-site=oktell] .work-sites-heading { flex-shrink:0; }
+.work-sites[data-site=oktell] .work-browser { display:flex; flex-direction:column; flex:1; min-height:0; }
+.work-sites[data-site=oktell] :is(.work-browser-tabs,.work-browser-address) { flex-shrink:0; }
+.work-sites[data-site=oktell] .oktell-app { display:flex; flex:1; min-height:0; }
+.work-browser-tabs { display:flex; align-items:end; gap:5px; overflow-x:auto; background:#dfe6f2; padding:10px 12px 0; }
 .work-browser-tabs button { display:flex; align-items:center; gap:10px; padding:10px 16px; min-width:205px; text-align:left; color:#4a5972; border:0; border-radius:9px 9px 0 0; background:transparent; }
 .work-browser-tabs button.is-active { background:white; color:#263b63; }
 .work-browser-tabs small { margin-left:auto; font-size:10px; }

@@ -1,3 +1,5 @@
+import type { CityDistrict, CityMission } from "../../api/city";
+
 /** Every completed mission of a district upgrades its building; five stages in total. */
 export const MAX_DISTRICT_LEVEL = 5;
 
@@ -7,6 +9,12 @@ export const DISTRICT_LEVEL_NAMES = ["Начало", "Развитие", "Отк
 export function districtLevel(completedMissions: number, soon = false) {
   if (soon) return 1;
   return Math.max(1, Math.min(MAX_DISTRICT_LEVEL, 1 + Math.floor(completedMissions)));
+}
+
+/** Deferred missions retain their building stage without becoming active assignments again. */
+export function completedDistrictMissions(district: CityDistrict, missions: CityMission[]) {
+  const active = missions.filter(m => m.district === district.id && m.state === "completed").length;
+  return Math.max(active, district.completed_missions ?? 0);
 }
 
 /** Districts whose level went up since the stages the viewer saw last time. */

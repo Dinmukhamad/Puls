@@ -16,7 +16,7 @@ import { ErrorState } from "../../components/ui";
 import { Sheet } from "../../components/Sheet";
 import { PulsarFace } from "../crm/PulsarGuide";
 import { CityMap } from "./CityMap";
-import { DISTRICT_LEVEL_NAMES, MAX_DISTRICT_LEVEL, districtLevel } from "./cityLevels";
+import { DISTRICT_LEVEL_NAMES, MAX_DISTRICT_LEVEL, completedDistrictMissions, districtLevel } from "./cityLevels";
 import { DISTRICT_COLORS, districtLabels } from "./cityDistricts";
 import type { CityLabelInfo } from "../../city3d/types";
 import "../crm/pulsar.css";
@@ -223,7 +223,8 @@ export function CityPage() {
     }, 0);
   }
   const rank = data.level < 2 ? "Новый житель" : data.level < 4 ? "Исследователь" : "Мастер города";
-  const level = districtLevel(missions.filter(m => m.state === "completed").length, selected.soon);
+  const level = districtLevel(completedDistrictMissions(selected, missions), selected.soon);
+  const oktellDeferred = selected.id === "oktell" && missions.length === 0;
   const districtDone = missions.length > 0 && missions.every(m => m.state === "completed" || !m.enabled);
   // The mission's main button already leads to the district's tool: the second link to it is left out.
   const opensTool = !!mission && !selected.soon && selected.id !== "scenarios" && !!actionable && mission.key !== "welcome" && !data.inspecting && !(mission.state === "ready" && data.can_claim);
@@ -231,6 +232,8 @@ export function CityPage() {
   const quests = data.quests?.items ?? [];
   const assigned = data.inspecting ? [] : (assignments.data ?? []).filter(item => item.assigned);
   const todo = quests.filter(q => !q.answered).length + assigned.filter(item => !item.completed).length;
+  // Situations are never dealt twice: an empty day for the operator means every one is answered.
+  const allPassed = !!data.quests && !data.inspecting && quests.length === 0;
   function openQuest(quest: CityQuest) { answer.reset(); setQuestSlot(quest.slot); if (!quest.answered && department === "support") setQuestFocus({ slot: quest.slot, at: Date.now() }); }
   // A new operator meets the first mission as soon as the first visit's cards are answered or put off.
   const welcomeAhead = department === "support" && !data.inspecting && !data.preview && !building && mapStatus !== "loading" && !askGuide && !showControls
@@ -289,15 +292,17 @@ export function CityPage() {
     {department === "support" && !building && <><CityPeekPanel className="city-mission-peek" toolbarSlot="missions" label={`Миссии · ${selected.name}`} compactLabel="Миссии" icon={labels.find(label => label.id === selected.id)?.icon ?? "📋"} holdOpen={claim.isPending}><aside className="city-mission glass glass--regular" data-expanded="true" aria-label={`Район «${selected.name}»`}>
       <div className="city-mission__body" id="city-mission-body" aria-live="polite">
         <div className="city-mission-top"><span className="city-eyebrow">{selected.name}</span><span className="city-state" data-state={mission?.state}>{selected.soon ? "СКОРО" : mission ? MISSION_STATES[mission.state] : "Нет заданий"}</span></div>
-        <div className="city-building-level city-extra" aria-label={`Уровень здания ${level} из ${MAX_DISTRICT_LEVEL}`}><span>{"★".repeat(level)}<em>{"★".repeat(MAX_DISTRICT_LEVEL - level)}</em></span><strong>Здание: {DISTRICT_LEVEL_NAMES[level - 1]}</strong><small>{selected.soon ? "Район строится и откроется позже" : level === MAX_DISTRICT_LEVEL ? "Максимальный уровень — район стал легендой" : districtDone ? "Все миссии района пройдены — здание достроено" : "Каждая пройденная миссия района улучшает здание"}</small></div>
+        <div className="city-building-level city-extra" aria-label={`Уровень здания ${level} из ${MAX_DISTRICT_LEVEL}`}><span>{"★".repeat(level)}<em>{"★".repeat(MAX_DISTRICT_LEVEL - level)}</em></span><strong>Здание: {DISTRICT_LEVEL_NAMES[level - 1]}</strong><small>{oktellDeferred ? "Кабинет, телефония, сообщения и журнал. Обучение появится позже." : selected.soon ? "Район строится и откроется позже" : level === MAX_DISTRICT_LEVEL ? "Максимальный уровень — район стал легендой" : districtDone ? "Все миссии района пройдены — здание достроено" : "Каждая пройденная миссия района улучшает здание"}</small></div>
         {districtPlots.length > 0 && <CityPlotsSummary plots={districtPlots} buildings={data.buildings} canBuild={data.can_build} moved={data.plots_moved} onShow={key => setPlotFocus({ key, at: Date.now() })} onBuild={freePlot && data.can_build ? () => { setPlotFocus({ key: freePlot.key, at: Date.now() }); openPlot(freePlot.key); } : undefined} />}
         {!data.inspecting && !opensTool && selected.id === "driver" && <button className="city-secondary city-extra" onClick={() => setDriverLaunch(true)}>Открыть автопарк →</button>}
         {!data.inspecting && !opensTool && selected.id === "crm" && <Link className="city-secondary city-extra" to="/training/work-sites">Открыть CRM · рабочие сайты →</Link>}
         {!data.inspecting && !opensTool && selected.id === "dispatch" && <Link className="city-secondary city-extra" to="/training/work-sites?site=dispatch">Открыть Диспетчерскую · рабочие сайты →</Link>}
+        {!data.inspecting && !opensTool && selected.id === "oktell" && <Link className="city-secondary city-extra" to="/training/work-sites?site=oktell">Открыть Oktell · рабочие сайты →</Link>}
+
         {selected.id === "scenarios" && <p className="city-copy city-extra">Учебные разговоры с водителем и практика в CRM и Диспетчерской. Все действия выполняются в тренажёре. Коины — за первое успешное прохождение.</p>}
         {selected.soon ? <>
           <h2>Новый район. Новые возможности.</h2>
-          <p className="city-copy city-extra">Миссии появятся после добавления Oktell и подготовки учебных сценариев.</p>
+          <p className="city-copy city-extra">Здесь появятся новые учебные инструменты и миссии.</p>
           <div className="city-guide city-extra"><PulsarFace /><p>А пока продолжим развивать автопарк, CRM-центр и Диспетчерскую. Твой прогресс сохранится.</p></div>
         </> : mission && <>
           <nav className="city-mission-path city-extra" aria-label={`Миссии: ${selected.name}`}>{missions.map((m,i) => <button key={m.key} type="button" onClick={() => selectMission(m.key)} aria-label={`${i+1}. ${m.title}. ${MISSION_STATES[m.state]}`} aria-pressed={mission.key===m.key} data-state={m.state}>{m.state === "completed" ? "✓" : i+1}</button>)}</nav>
@@ -318,14 +323,14 @@ export function CityPage() {
         {selected.soon ? <button className="city-action" disabled>Район строится</button> : mission && <>
           {claim.isError && <p className="city-error" role="alert">{claim.error.message}</p>}
           {selected.id === "scenarios" ? actionable && !data.inspecting ? <Link className="city-action" to={mission.path}>{mission.state === "completed" ? "Повторить для практики →" : "Пройти сценарий →"}</Link> : <button className="city-action" disabled>{mission.state === "unavailable" ? "Сценарий на паузе" : "Просмотр прогресса"}</button> : mission.state === "ready" && data.can_claim ? <button className="city-action" disabled={claim.isPending} onClick={() => claim.mutate(mission.key)}>{claim.isPending ? "Проверяем результат…" : mission.key === "welcome" ? "Начать свой путь →" : "Завершить и получить награду →"}</button> : actionable && mission.key !== "welcome" && !data.inspecting ? selected.id === "driver" ? <button className="city-action" onClick={() => setDriverLaunch(true)}>{mission.state === "completed" ? "Вернуться к практике →" : "Перейти к заданию →"}</button> : <Link className="city-action" to={mission.path}>{mission.state === "completed" ? "Вернуться к практике →" : "Перейти к заданию →"}</Link> : <button className="city-action" disabled>{mission.state === "unavailable" ? "Миссия на паузе" : data.inspecting ? "Просмотр прогресса" : data.preview ? "Предпросмотр без наград" : mission.state === "completed" ? "Миссия пройдена" : "Завершите предыдущую миссию"}</button>}
-          <p className="city-fine city-extra">{selected.id === "scenarios" ? "Коины начисляются автоматически после первого успешного прохождения. Повторная тренировка — без повторной награды." : selected.id === "crm" || selected.id === "dispatch" ? "Рабочие сайты открываются оператору через QR." : "Завершённые ранее действия тоже учитываются."}</p>
+          <p className="city-fine city-extra">{selected.id === "scenarios" ? "Коины начисляются автоматически после первого успешного прохождения. Повторная тренировка — без повторной награды." : ["crm", "dispatch", "oktell"].includes(selected.id) ? "Рабочие сайты открываются оператору через QR." : "Завершённые ранее действия тоже учитываются."}</p>
         </>}
       </div>
     </aside></CityPeekPanel>
 
     <CitySkills labels={labels} selected={selected.id} onSelect={selectDistrict} /></>}
-    {!building && (quests.length > 0 || assigned.length > 0) && <CityPeekPanel className="city-tasks-peek" toolbarSlot="quests" label={todo ? `Задания: осталось ${todo}` : "Задания: всё выполнено"} compactLabel="Задания" icon={<>❗{todo > 0 && <b className="city-count">{todo}</b>}</>} holdOpen={startAssignment.isPending}>
-      <CityTasks quests={quests} coins={data.quests?.coins ?? 0} assigned={assigned} onQuest={openQuest} onStart={item => startAssignment.mutate(item)} starting={startAssignment.isPending ? startAssignment.variables?.id ?? null : null} error={startAssignment.isError ? startAssignment.error.message : null} />
+    {!building && (quests.length > 0 || allPassed || assigned.length > 0) && <CityPeekPanel className="city-tasks-peek" toolbarSlot="quests" label={todo ? `Задания: осталось ${todo}` : "Задания: всё выполнено"} compactLabel="Задания" icon={<>❗{todo > 0 && <b className="city-count">{todo}</b>}</>} holdOpen={startAssignment.isPending}>
+      <CityTasks quests={quests} coins={data.quests?.coins ?? 0} allPassed={allPassed} assigned={assigned} onQuest={openQuest} onStart={item => startAssignment.mutate(item)} starting={startAssignment.isPending ? startAssignment.variables?.id ?? null : null} error={startAssignment.isError ? startAssignment.error.message : null} />
     </CityPeekPanel>}
     {worldQuery.data && <CityWorldPanel world={worldQuery.data} current={department} selected={worldSelected} onPick={pickWorld} onClose={() => setWorldSelected(null)} ready={mapStatus === "ready"} onVisit={visit} onTravel={id => { setDestination(id); setWorldAction({ kind: "travel", target: id, at: Date.now() }); }}
       estates={department === "sales" ? salesLand.data : supportLand.data} mine={mineEstate} onMyEstate={canOpenBuild ? openBuild : undefined}

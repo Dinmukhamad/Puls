@@ -1,47 +1,76 @@
 import { CityWorldEditor } from "./CityWorldEditor";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { city, MISSION_STATES, POINT_KINDS, SITE_STAGES, type CityEconomy, type CitySettings, type CitySituation, type CitySituations, type PointKind } from "../../api/city";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { city, MISSION_STATES, POINT_KINDS, SITE_STAGES, type CityEconomy, type CitySettings, type CitySituation, type CitySituations, type PointKind, type SiteStage } from "../../api/city";
+import { ApiError } from "../../api/client";
 import { cityEstate } from "../../api/cityEstate";
 import { useAuth } from "../../auth/AuthContext";
-import { ErrorState, Skeleton } from "../../components/ui";
-import { isReadyHouse } from "../../city3d/world/familyHouses";
-import { isOfficeBuilding } from "../../city3d/world/officeBuildings";
-import { estateRows, plotEconomyName, readyBuildingLabel } from "./plotCatalogue";
-import "./city.css";
+import { Badge, Button, Card, EmptyState, ErrorState, IconButton, KPI, Pagination, Progress, SegmentedControl, Select, Skeleton, type Tone } from "../../components/ui";
+import { Sheet } from "../../components/Sheet";
+import { useToast } from "../../components/Toast";
+import { coins, plural } from "../../utils/format";
+import { FormFooter, FormStatus, Switch } from "./CityAdminControls";
+import { estateRows, plotEconomyName } from "./plotCatalogue";
 
-/** Dispatch missions count the calls of their group; a trainer cannot ask for more (app/services/city.py TARGET_LIMITS). */
+/** Dispatch calls cannot exceed the server's curriculum. */
 const DISPATCH_TARGETS: Record<string, number> = { dispatch_driver: 2, dispatch_car: 1, dispatch_inventory: 1, dispatch_support: 1, dispatch_limit: 3 };
 type CityAdminTab = "participants" | "groups" | "economy" | "situations" | "settings" | "world" | "estates";
 const CITY_ADMIN_TABS: CityAdminTab[] = ["participants", "groups", "economy", "situations", "settings", "world", "estates"];
 
 export function CityAdminPage() {
   const { user } = useAuth();
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const canEdit = ["trainer", "head", "admin"].includes(user?.role ?? "");
-  const [tab, setTab] = useState<CityAdminTab>(() => {
-    const requested = params.get("tab") as CityAdminTab | null;
-    return requested && CITY_ADMIN_TABS.includes(requested) ? requested : ["head", "admin"].includes(user?.role ?? "") ? "world" : "participants";
-  });
+  const requested = params.get("tab") as CityAdminTab | null;
+  const tab: CityAdminTab = requested && CITY_ADMIN_TABS.includes(requested) ? requested : ["head", "admin"].includes(user?.role ?? "") ? "world" : "participants";
   const settings = useQuery({ queryKey:["city-settings"], queryFn:city.settings, enabled:tab === "settings", refetchOnWindowFocus:false });
-  return <div className="city-page city-admin"><header className="city-heading"><div><span className="city-eyebrow">СТУДИЯ ОБУЧЕНИЯ</span><h1>Управление городом</h1><p>Назначайте команды районов, настраивайте миссии и следите за прогрессом.</p></div><Link className="city-secondary" to="/training/city">Открыть город →</Link></header>
-    <nav className="city-admin-tabs" aria-label="Управление городом"><button className="city-secondary" aria-pressed={tab==='world'} onClick={()=>setTab('world')}>Города и районы</button><button className="city-secondary" aria-pressed={tab==='estates'} onClick={()=>setTab('estates')}>Стройка районов</button><button className="city-secondary" aria-pressed={tab==='participants'} onClick={()=>setTab('participants')}>Прогресс операторов</button><button className="city-secondary" aria-pressed={tab==='groups'} onClick={()=>setTab('groups')}>Города групп</button><button className="city-secondary" aria-pressed={tab==='situations'} onClick={()=>setTab('situations')}>Ситуации дня</button><button className="city-secondary" aria-pressed={tab==='economy'} onClick={()=>setTab('economy')}>Экономика игры</button><button className="city-secondary" aria-pressed={tab==='settings'} onClick={()=>setTab('settings')}>{canEdit?'Настроить миссии':'Условия миссий'}</button></nav>
+  const tabs: { value: CityAdminTab; label: string }[] = [
+    { value: "world", label: "Города и районы" }, { value: "estates", label: "Стройка районов" }, { value: "participants", label: "Прогресс операторов" },
+    { value: "groups", label: "Города групп" }, { value: "situations", label: "Ситуации дня" }, { value: "economy", label: "Экономика игры" },
+    { value: "settings", label: canEdit ? "Настроить миссии" : "Условия миссий" },
+  ];
+  // The tab lives in the address, so a reload or a shared link opens the same section.
+  const select = (next: CityAdminTab) => setParams(current => { const query = new URLSearchParams(current); query.set("tab", next); return query; }, { replace: true });
+  // On a narrow screen the row of sections scrolls; the open one is always in sight.
+  const tabRow = useRef<HTMLDivElement>(null);
+  useEffect(() => { tabRow.current?.querySelector(".segmented__item.is-active")?.scrollIntoView({ block: "nearest", inline: "nearest" }); }, [tab]);
+  return <div className="stack city-admin">
+    <div className="page-head"><div><h1 className="page-title">Управление городом</h1><p className="page-subtitle">Назначайте команды районов, настраивайте миссии и следите за прогрессом.</p></div><div className="page-head__actions"><Link className="btn btn--secondary btn--m" to="/training/city">Открыть город</Link></div></div>
+    <div className="city-admin-tabs" ref={tabRow}><SegmentedControl label="Разделы управления городом" options={tabs} value={tab} onChange={select} /></div>
     {tab==='world'?<CityWorldEditor isHead={user?.role === "head"} />:tab==='estates'?<Estates />:tab==='participants'?<Participants />:tab==='groups'?<Groups />:tab==='economy'?<Economy />:tab==='situations'?<Situations />:settings.data?<MissionEditor initial={settings.data} canEdit={canEdit} />:settings.isError?<ErrorState error={settings.error} onRetry={()=>settings.refetch()} />:<Skeleton height={350} />}
   </div>;
 }
 
+const ROUTE_LEGEND: [string, string][] = [["completed", "Пройдено — награда получена"], ["ready", "Готово к завершению"], ["open", "В работе или впереди"]];
+
 function Participants() {
   const [search,setSearch]=useState(''),[q,setQ]=useState(''),[page,setPage]=useState(1);
   useEffect(()=>{const timer=setTimeout(()=>{setQ(search);setPage(1);},300);return()=>clearTimeout(timer);},[search]);
-  const query=useQuery({queryKey:['city-participants',q,page],queryFn:()=>city.participants(q,page),refetchInterval:30000});
-  return <><div className="city-admin-controls"><label className="field"><span className="field__label">Найти оператора</span><input className="input" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Имя или логин" maxLength={100}/></label><span className="city-admin-warning">{query.data?`Операторов: ${query.data.total}`:'Загрузка…'}<br/>Пройдено — награда получена. Готово — условия выполнены.</span></div>
+  const query=useQuery({queryKey:['city-participants',q,page],queryFn:()=>city.participants(q,page),refetchInterval:30000,placeholderData:keepPreviousData});
+  return <div className="stack stack--tight">
+    <Card padded>
+      <div className="city-admin-search">
+        <label className="field"><span className="field__label">Найти оператора</span><input className="input" type="search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Имя или логин" maxLength={100}/></label>
+        <ul className="city-admin-legend" aria-label="Обозначения шкалы миссий">{ROUTE_LEGEND.map(([state,label])=><li key={state}><span data-state={state} aria-hidden="true"/>{label}</li>)}</ul>
+      </div>
+    </Card>
     {query.isError&&<ErrorState error={query.error} onRetry={()=>query.refetch()}/>}{query.isPending&&<Skeleton height={250}/>}
-    <div className="city-participants">{query.data?.items.map(p=><article className="city-person" key={p.user_id}><div><h3>{p.full_name}</h3><p>{p.login} · уровень {p.level} · {p.xp} XP</p><p>{p.orders} заказов · {p.appeals} обращений</p></div><div className="city-person-progress"><div className="city-person-route" role="img" aria-label={p.missions.map(m=>`${m.title}: ${MISSION_STATES[m.state]}, ${m.current} из ${m.target}`).join('; ')}>{p.missions.map(m=><span key={m.key} data-state={m.state} title={`${m.title}: ${MISSION_STATES[m.state]}`} />)}</div><small>Пройдено {p.completed} / {p.total} · готово к завершению {p.ready}</small></div><Link className="city-secondary" to={`/training/city?operator=${p.user_id}`}>Открыть путь →</Link></article>)}</div>
-    {query.data&&!query.data.items.length&&<p className="secondary">По этому запросу операторов нет.</p>}
-    {query.data&&query.data.total>query.data.size&&<div className="city-admin-controls"><button className="city-secondary" disabled={page===1} onClick={()=>setPage(p=>p-1)}>← Назад</button><span>Страница {page} из {Math.ceil(query.data.total/query.data.size)}</span><button className="city-secondary" disabled={page*query.data.size>=query.data.total} onClick={()=>setPage(p=>p+1)}>Далее →</button></div>}
-  </>;
+    {query.data&&<Card className={query.isPlaceholderData?'city-admin-refreshing':undefined} title="Операторы" subtitle={`${query.data.total} ${plural(query.data.total,'оператор','оператора','операторов')}${q?' по запросу':''}`} padded={false}>
+      {query.data.items.length ? <ul className="city-admin-people">{query.data.items.map(p=><li className="city-admin-person" key={p.user_id}>
+        <div className="city-admin-person__who"><strong>{p.full_name}</strong><span>{p.login} · уровень {p.level} · {p.xp} XP</span><span>{p.orders} {plural(p.orders,'заказ','заказа','заказов')} · {p.appeals} {plural(p.appeals,'обращение','обращения','обращений')}</span></div>
+        <div className="city-admin-person__progress">
+          <div className="city-admin-route" role="img" aria-label={p.missions.map(m=>`${m.title}: ${MISSION_STATES[m.state]}, ${m.current} из ${m.target}`).join('; ')}>{p.missions.map(m=><span key={m.key} data-state={m.state} title={`${m.title}: ${MISSION_STATES[m.state]}`} />)}</div>
+          <span>Пройдено <b>{p.completed} из {p.total}</b>{p.ready?` · готово к завершению ${p.ready}`:''}</span>
+        </div>
+        <Link className="btn btn--secondary btn--s" to={`/training/city?operator=${p.user_id}`}>Открыть путь</Link>
+      </li>)}</ul> : <EmptyState title="Операторы не найдены" hint="Попробуйте другое имя или логин."/>}
+      <div className="city-admin-pagination"><Pagination page={page} size={query.data.size} total={query.data.total} onChange={setPage}/></div>
+    </Card>}
+  </div>;
 }
+
+const STAGE_TONE: Record<SiteStage, Tone> = { planned: "neutral", foundation: "accent", frame: "accent", floors: "accent", done: "success" };
 
 /** Staff only: every visible group's quarters with points, and each member's contribution. Operators never see this. */
 function Groups() {
@@ -49,93 +78,197 @@ function Groups() {
   const kinds=Object.keys(POINT_KINDS) as PointKind[];
   if(query.isError)return <ErrorState error={query.error} onRetry={()=>query.refetch()}/>;
   if(!query.data)return <Skeleton height={250}/>;
-  return <div className="city-groups">
-    <p className="city-admin-warning">Операторы видят только стадии кварталов своей группы и свои очки. Очки: {kinds.map(k=>`${POINT_KINDS[k]} — ${query.data.points[k]}`).join("; ")}.</p>
-    {!query.data.items.length&&<p className="secondary">Нет групп, закреплённых за вами.</p>}
-    {query.data.items.map(g=><article className="city-group-card" key={g.id}>
-      <header><h3>{g.name}</h3><span>{g.total} очков · {g.members.length} операторов</span></header>
-      <ol className="city-group-card__projects">{g.projects.map(p=><li key={p.key}><span>{p.name}</span><small>{SITE_STAGES[p.stage]} · {p.points} / {p.cost}</small><div className="city-meter"><span style={{width:`${p.points/p.cost*100}%`}}/></div></li>)}</ol>
-      <div className="city-group-card__table" role="table" aria-label={`Вклад операторов: ${g.name}`}>
-        <div role="row"><span role="columnheader">Оператор</span>{kinds.map(k=><span role="columnheader" key={k}>{POINT_KINDS[k]}</span>)}<span role="columnheader">Очки</span></div>
-        {g.members.map(m=><div role="row" key={m.user_id}><span role="cell"><Link to={`/training/city?operator=${m.user_id}`}>{m.full_name}</Link></span>{kinds.map(k=><span role="cell" key={k}>{m[k]}</span>)}<span role="cell"><b>{m.points}</b></span></div>)}
-      </div>
-    </article>)}
+  return <div className="stack">
+    <div className="ui-note city-admin-note"><p>Операторы видят только стадии кварталов своей группы и свои очки.</p>
+      <dl className="city-admin-points">{kinds.map(k=><div key={k}><dt>{POINT_KINDS[k]}</dt><dd>{query.data.points[k]} {plural(query.data.points[k],'очко','очка','очков')}</dd></div>)}</dl></div>
+    {!query.data.items.length&&<EmptyState title="Нет групп" hint="За вами пока не закреплена ни одна группа."/>}
+    {query.data.items.map(g=><Card key={g.id} title={g.name} subtitle={`${g.total} ${plural(g.total,'очко','очка','очков')} · ${g.members.length} ${plural(g.members.length,'оператор','оператора','операторов')}`} padded={false}>
+      <div className="card__body city-admin-quarters-body"><ol className="city-admin-quarters">{g.projects.map(p=><li key={p.key}>
+        <Badge tone={STAGE_TONE[p.stage]}>{SITE_STAGES[p.stage]}</Badge>
+        <strong className="city-admin-quarters__name">{p.name}</strong>
+        <Progress value={p.cost>0?p.points/p.cost:0} size="s" label={`${p.name}: ${p.points} из ${p.cost} очков`}/>
+        <span className="city-admin-quarters__count">{p.points} / {p.cost} очков</span>
+      </li>)}</ol></div>
+      {g.members.length>0&&<><div className="table-wrap table-wrap--responsive city-admin-table"><table className="table">
+        <thead><tr><th>Оператор</th>{kinds.map(k=><th className="num" key={k}>{POINT_KINDS[k]}</th>)}<th className="num">Очки</th></tr></thead>
+        <tbody>{g.members.map(m=><tr key={m.user_id}><td><Link to={`/training/city?operator=${m.user_id}`}>{m.full_name}</Link></td>{kinds.map(k=><td className="num" key={k}>{m[k]}</td>)}<td className="num"><strong>{m.points}</strong></td></tr>)}</tbody>
+      </table></div>
+      <div className="card__body city-admin-members"><h3 className="city-admin-subtitle">Операторы группы</h3><ul className="card-list">{g.members.map(m=><li className="list-card" key={m.user_id}>
+        <div className="list-card__head"><Link to={`/training/city?operator=${m.user_id}`}>{m.full_name}</Link><strong className="nowrap">{m.points} {plural(m.points,'очко','очка','очков')}</strong></div>
+        <dl className="list-card__metrics city-admin-metrics">{kinds.map(k=><div className="list-card__metric" key={k}><dt>{POINT_KINDS[k]}</dt><dd>{m[k]}</dd></div>)}</dl>
+      </li>)}</ul></div></>}
+    </Card>)}
   </div>;
 }
 
 const SLOTS = 3;
-/** The daily situations' own set: trainers, the head and the admin edit it; supervisors read it. */
+/** Who asks decides where the situation waits on the map: the depot's taxi, the CRM centre or the guide. */
+const speakerIcon = (speaker: string) => /водител/i.test(speaker) ? "🚕" : /клиент|звонящ/i.test(speaker) ? "📞" : "💡";
+const newSituation = (): CitySituation => ({ id: `own-${Date.now().toString(36)}`, speaker: "Водитель", text: "", options: ["", ""], correct: 0, explanation: "", enabled: true });
+
+/** The daily situations' own set: trainers, the head and the admin create and edit them in a dialog; supervisors read them. */
 function Situations() {
   const client=useQueryClient();
+  const toast=useToast();
   const query=useQuery({queryKey:['city-situations'],queryFn:city.situations,refetchOnWindowFocus:false});
-  const [draft,setDraft]=useState<CitySituations|null>(null),[selected,setSelected]=useState(''),[saved,setSaved]=useState(false);
-  useEffect(()=>{if(query.data){setDraft(structuredClone(query.data));setSelected(s=>s||query.data.items[0]?.id||'');}},[query.data]);
-  const mutation=useMutation({mutationFn:city.saveSituations,onSuccess:data=>{setSaved(true);client.setQueryData(['city-situations'],{...data,can_edit:query.data?.can_edit});}});
+  const [editing,setEditing]=useState<{item:CitySituation;isNew:boolean}|null>(null),[removing,setRemoving]=useState<CitySituation|null>(null);
+  // Every change is saved at once; the answer counts are read again with it.
+  const save=useMutation({
+    mutationFn:(items:CitySituation[])=>city.saveSituations({revision:query.data?.revision??0,items}),
+    onSuccess:data=>{client.setQueryData<CitySituations>(['city-situations'],current=>current&&{...current,...data});void client.invalidateQueries({queryKey:['city-situations']});},
+    onError:error=>{if(error instanceof ApiError&&error.status===409)void client.invalidateQueries({queryKey:['city-situations']});},
+  });
   if(query.isError)return <ErrorState error={query.error} onRetry={()=>query.refetch()}/>;
-  if(!draft)return <Skeleton height={350}/>;
-  const canEdit=!!draft.can_edit, item=draft.items.find(i=>i.id===selected), enabled=draft.items.filter(i=>i.enabled).length;
-  const setItems=(items:CitySituation[])=>{setSaved(false);setDraft(d=>d&&({...d,items}));};
-  const change=(patch:Partial<CitySituation>)=>setItems(draft.items.map(i=>i.id===selected?{...i,...patch}:i));
-  function add(){const id=`own-${Date.now().toString(36)}`;setItems([...draft!.items,{id,speaker:'Водитель',text:'',options:['',''],correct:0,explanation:'',enabled:true}]);setSelected(id);}
-  function remove(){const rest=draft!.items.filter(i=>i.id!==selected);setItems(rest);setSelected(rest[0]?.id??'');}
-  return <form className="city-admin-edit" onSubmit={e=>{e.preventDefault();if(canEdit)mutation.mutate(draft);}}>
-    <p className="city-admin-warning">Каждый день оператор получает {SLOTS} ситуации. Сначала берутся вопросы из тестов, которые он уже прошёл, остальные — из этого набора. Включено: {enabled}, нужно не меньше {SLOTS}. Изменения действуют с новых заданий: сегодняшние уже розданы.{canEdit?'':' Менять ситуации могут тренер, руководитель и администратор.'}</p>
-    <div className="city-editor-fields"><label className="field"><span className="field__label">Ситуация</span><select className="input" value={selected} onChange={e=>setSelected(e.target.value)}>{draft.items.map((i,k)=><option key={i.id} value={i.id}>{k+1}. {i.enabled?'':'(выключена) '}{i.speaker?`${i.speaker}: `:''}{i.text.slice(0,70)||'Новая ситуация'}</option>)}</select></label>
-      {canEdit&&<div className="city-situations__actions"><button type="button" className="city-secondary" onClick={add}>+ Добавить</button>{item&&<button type="button" className="city-secondary" onClick={remove}>Удалить</button>}</div>}</div>
-    {item&&<fieldset disabled={!canEdit||mutation.isPending} style={{border:0,padding:0,margin:0,display:'grid',gap:16}}>
-      <label className="field"><span className="field__label">Кто обращается</span><input className="input" list="city-speakers" maxLength={60} value={item.speaker} onChange={e=>change({speaker:e.target.value})} placeholder="Водитель, Клиент…"/><datalist id="city-speakers"><option value="Водитель"/><option value="Клиент"/></datalist><small className="secondary">«Водитель» ждёт у такси автопарка, «Клиент» — у CRM-центра, остальные — у помощника.</small></label>
-      <label className="field"><span className="field__label">Что случилось</span><textarea className="input" minLength={5} maxLength={1000} required value={item.text} onChange={e=>change({text:e.target.value})}/></label>
-      <fieldset className="city-situations__options"><legend className="field__label">Варианты ответа — отметьте верный</legend>
-        {item.options.map((o,k)=><div key={k} className="city-situations__option"><input type="radio" name="city-correct" aria-label={`Вариант ${k+1} верный`} checked={item.correct===k} onChange={()=>change({correct:k})}/><input className="input" maxLength={300} required value={o} onChange={e=>change({options:item.options.map((x,j)=>j===k?e.target.value:x)})} placeholder={`Вариант ${k+1}`}/>{item.options.length>2&&<button type="button" className="city-secondary" aria-label={`Убрать вариант ${k+1}`} onClick={()=>change({options:item.options.filter((_,j)=>j!==k),correct:item.correct===k?0:item.correct>k?item.correct-1:item.correct})}>×</button>}</div>)}
-        {item.options.length<6&&<button type="button" className="city-secondary" onClick={()=>change({options:[...item.options,'']})}>+ Вариант</button>}
-      </fieldset>
-      <label className="field"><span className="field__label">Пояснение после ответа</span><textarea className="input" maxLength={1000} value={item.explanation} onChange={e=>change({explanation:e.target.value})}/></label>
-      <label className="row"><input type="checkbox" checked={item.enabled} onChange={e=>change({enabled:e.target.checked})}/> Ситуация участвует в заданиях дня</label>
-    </fieldset>}
-    {canEdit&&<button className="city-action" type="submit" disabled={mutation.isPending||enabled<SLOTS}>{mutation.isPending?'Сохраняем…':'Сохранить все ситуации'}</button>}
-    {saved&&<p role="status">Ситуации сохранены.</p>}{mutation.isError&&<ErrorState error={mutation.error}/>}
-  </form>;
+  if(!query.data)return <Skeleton height={350}/>;
+  const {items,can_edit:canEdit=false,answered={},exhausted=0}=query.data;
+  const enabled=items.filter(i=>i.enabled).length;
+  // A day needs three situations: the last three enabled ones cannot be switched off or deleted.
+  const locked=(item:CitySituation)=>item.enabled&&enabled<=SLOTS;
+  const persist=(next:CitySituation[],done:string,then?:()=>void)=>save.mutate(next,{onSuccess:()=>{toast.success(done);then?.();}});
+  function open(item:CitySituation,isNew=false){save.reset();setEditing({item:structuredClone(item),isNew});}
+  return <div className="stack">
+    <p className="ui-note">Каждый день оператор получает до {SLOTS} ситуаций из этого набора. Ситуацию, на которую он уже ответил, верно или нет, он больше не получит. Когда пройдены все включённые, заданий дня нет, пока вы не добавите новые. Изменения действуют с новых заданий: сегодняшние уже розданы.{canEdit?'':' Менять ситуации могут тренер, руководитель и администратор.'}</p>
+    {exhausted>0&&<p className="ui-note city-admin-alert" role="status">У {exhausted} {plural(exhausted,'оператора','операторов','операторов')} не осталось новых ситуаций. Добавьте ситуации, чтобы им снова приходили задания дня.</p>}
+    <Card title="Ситуации дня" subtitle={`Включено ${enabled} из ${items.length} · в день — до ${SLOTS}`} action={canEdit?<Button variant="primary" disabled={save.isPending} onClick={()=>open(newSituation(),true)}>+ Новая ситуация</Button>:undefined} padded={false}>
+      {items.length?<ol className="city-admin-situations">{items.map((item,index)=>{const count=answered[item.id]??0;return <li key={item.id} className={item.enabled?undefined:'is-off'}>
+        <span className="city-admin-situations__icon" aria-hidden="true">{speakerIcon(item.speaker)}</span>
+        <div className="city-admin-situations__body">
+          <div className="city-admin-situations__title"><strong>{index+1}. {item.speaker||'Ситуация'}</strong>{!item.enabled&&<Badge>Выключена</Badge>}</div>
+          <p className="city-admin-situations__text">{item.text}</p>
+          <span className="city-admin-situations__facts">{item.options.length} {plural(item.options.length,'вариант','варианта','вариантов')} ответа · {count?`прошли ${count} ${plural(count,'оператор','оператора','операторов')}`:'ещё никто не проходил'}</span>
+        </div>
+        <div className="city-admin-situations__actions">{canEdit?<>
+          <Switch checked={item.enabled} disabled={save.isPending||locked(item)} onChange={on=>persist(items.map(i=>i.id===item.id?{...i,enabled:on}:i),on?'Ситуация включена':'Ситуация выключена')}>В заданиях<span className="sr-only">: ситуация {index+1}</span></Switch>
+          <Button size="s" aria-label={`Изменить ситуацию ${index+1}`} disabled={save.isPending} onClick={()=>open(item)}>Изменить</Button>
+          <Button size="s" variant="destructive" aria-label={`Удалить ситуацию ${index+1}`} disabled={save.isPending||locked(item)} onClick={()=>{save.reset();setRemoving(item);}}>Удалить</Button>
+        </>:<Button size="s" aria-label={`Открыть ситуацию ${index+1}`} onClick={()=>open(item)}>Открыть</Button>}</div>
+      </li>;})}</ol>:<EmptyState title="Ситуаций пока нет" hint={canEdit?'Создайте первую ситуацию.':undefined}/>}
+    </Card>
+    {canEdit&&enabled<=SLOTS&&<p className="field__note">Включено {enabled} — столько выдаётся в день. Чтобы выключить или удалить ситуацию, сначала добавьте или включите другую.</p>}
+    {!editing&&!removing&&save.isError&&<FormStatus error={save.error}/>}
+    {editing&&<SituationDialog initial={editing.item} isNew={editing.isNew} readOnly={!canEdit} canSwitchOff={editing.isNew||!locked(editing.item)} pending={save.isPending} error={save.isError?save.error:null} onClose={()=>setEditing(null)}
+      onSave={item=>persist(editing.isNew?[...items,item]:items.map(i=>i.id===item.id?item:i),editing.isNew?'Ситуация создана':'Ситуация сохранена',()=>setEditing(null))}/>}
+    {removing&&<Sheet title="Удалить ситуацию?" size="s" onClose={()=>{if(!save.isPending)setRemoving(null);}} footer={<><Button disabled={save.isPending} onClick={()=>setRemoving(null)}>Отмена</Button><Button variant="destructive" disabled={save.isPending} onClick={()=>persist(items.filter(i=>i.id!==removing.id),'Ситуация удалена',()=>setRemoving(null))}>{save.isPending?'Удаляем…':'Удалить'}</Button></>}>
+      <div className="stack stack--tight"><p>«{removing.text}»</p><p className="field__note">Операторы, которые на неё уже ответили, сохранят ответы и коины. Новым она больше не придёт.</p>{save.isError&&<FormStatus error={save.error}/>}</div>
+    </Sheet>}
+  </div>;
 }
 
-/** The game's numbers: head and admin edit them, trainers and supervisors read them. */
+/** One situation in a dialog: who asks, what happened, the answers with the right one, and why. */
+function SituationDialog({initial,isNew,readOnly,canSwitchOff,pending,error,onClose,onSave}:{initial:CitySituation;isNew:boolean;readOnly:boolean;canSwitchOff:boolean;pending:boolean;error:unknown;onClose:()=>void;onSave:(item:CitySituation)=>void}) {
+  const [item,setItem]=useState(initial);
+  const formId=useId();
+  const change=(patch:Partial<CitySituation>)=>setItem(current=>({...current,...patch}));
+  const close=()=>{if(!pending)onClose();};
+  return <Sheet title={readOnly?'Ситуация дня':isNew?'Новая ситуация дня':'Изменить ситуацию'} subtitle={readOnly?undefined:'Действует с новых заданий дня'} onClose={close}
+    footer={readOnly?<Button onClick={onClose}>Закрыть</Button>:<><Button disabled={pending} onClick={close}>Отмена</Button><Button type="submit" form={formId} variant="primary" disabled={pending}>{pending?'Сохраняем…':isNew?'Создать ситуацию':'Сохранить'}</Button></>}>
+    <form id={formId} className="stack city-admin-dialog" onSubmit={e=>{e.preventDefault();if(!readOnly)onSave(item);}}>
+      <fieldset className="city-admin-fieldset" disabled={readOnly||pending}>
+        <label className="field"><span className="field__label">Кто обращается</span><input className="input" list={`${formId}-speakers`} maxLength={60} value={item.speaker} onChange={e=>change({speaker:e.target.value})} placeholder="Водитель, Клиент…"/><datalist id={`${formId}-speakers`}><option value="Водитель"/><option value="Клиент"/></datalist><span className="field__note">«Водитель» ждёт у такси автопарка, «Клиент» — у CRM-центра, остальные — у помощника.</span></label>
+        <label className="field"><span className="field__label">Что случилось</span><textarea className="input" rows={3} minLength={5} maxLength={1000} required value={item.text} onChange={e=>change({text:e.target.value})}/></label>
+        <fieldset className="city-admin-options"><legend className="field__label">Варианты ответа — отметьте верный</legend>
+          {item.options.map((o,k)=><div key={k} className={`city-admin-option${item.correct===k?' is-correct':''}`}>
+            <input type="radio" name={`${formId}-correct`} aria-label={`Вариант ${k+1} верный`} checked={item.correct===k} onChange={()=>change({correct:k})}/>
+            <input className="input" maxLength={300} required value={o} onChange={e=>change({options:item.options.map((x,j)=>j===k?e.target.value:x)})} placeholder={`Вариант ${k+1}`}/>
+            {item.options.length>2&&<IconButton label={`Убрать вариант ${k+1}`} onClick={()=>change({options:item.options.filter((_,j)=>j!==k),correct:item.correct===k?0:item.correct>k?item.correct-1:item.correct})}>×</IconButton>}
+          </div>)}
+          {item.options.length<6&&<div className="city-admin-options__add"><Button size="s" onClick={()=>change({options:[...item.options,'']})}>+ Вариант</Button></div>}
+        </fieldset>
+        <label className="field"><span className="field__label">Пояснение после ответа</span><textarea className="input" rows={3} maxLength={1000} value={item.explanation} onChange={e=>change({explanation:e.target.value})}/></label>
+        <Switch checked={item.enabled} disabled={item.enabled&&!canSwitchOff} onChange={value=>change({enabled:value})} hint={item.enabled&&!canSwitchOff?`Включено ${SLOTS} ситуации — столько выдаётся в день`:undefined}>Ситуация участвует в заданиях дня</Switch>
+      </fieldset>
+      {error?<FormStatus error={error}/>:null}
+    </form>
+  </Sheet>;
+}
+
+/** One numeric setting: the label above, the value in the site's field. */
+function NumberField({ label, value, min, max, onChange }: { label: ReactNode; value: number; min: number; max: number; onChange: (value: number) => void }) {
+  return <label className="field"><span className="field__label">{label}</span><input className="input" type="number" inputMode="numeric" min={min} max={max} required value={value} onChange={e=>onChange(Math.max(0,Math.round(Number(e.target.value)||0)))}/></label>;
+}
+
+type EconomyKey = "prices" | "points" | "projects" | "quests" | "land" | "estate" | "district" | "hq";
+/** Where each section lives in the settings: a save sends it over the latest values of the rest. */
+const ECONOMY_FIELD: Record<EconomyKey, keyof CityEconomy> = { prices: "prices", points: "points", projects: "projects", quests: "quest_coins", land: "land", estate: "estate", district: "district", hq: "hq" };
+/** One number of the game: how it reads, its limits, and how it lands in the settings. */
+interface EconomyValue { key: string; label: ReactNode; value: number; min: number; max: number; set: (draft: CityEconomy, value: number) => CityEconomy }
+interface EconomySection { key: EconomyKey; title: string; subtitle: string; note?: string; groups: { key: string; title?: string; values: EconomyValue[] }[] }
+
+/** The game's numbers by section, read from one set of settings: the page shows them, a dialog edits them. */
+function economySections(e: CityEconomy): EconomySection[] {
+  const levelName = (family: string, i: number) => (family === 'park' || family === 'bigpark') && i === 0 ? 'сбор из скверов (0 — бесплатно)' : i === 0 ? 'покупка' : `ступень ${i + 1}`;
+  const sections: EconomySection[] = [
+    { key: 'prices', title: 'Цены построек', subtitle: 'Коинов за покупку в учебном районе', groups: [{ key: 'all', values: (e.catalogue ?? []).map(b => ({ key: b.key, label: <><span aria-hidden="true">{b.icon}</span>{b.name}</>, value: e.prices[b.key], min: 1, max: 100000, set: (d, v) => ({ ...d, prices: { ...d.prices, [b.key]: v } }) })) }] },
+    { key: 'points', title: 'Очки для города группы', subtitle: 'Сколько очков приносит каждое действие', groups: [{ key: 'all', values: (Object.keys(POINT_KINDS) as PointKind[]).map(k => ({ key: k, label: POINT_KINDS[k], value: e.points[k], min: 0, max: 1000, set: (d, v) => ({ ...d, points: { ...d.points, [k]: v } }) })) }] },
+    { key: 'projects', title: 'Кварталы группы', subtitle: 'Очков на квартал; строятся по очереди: следующий начинается после предыдущего', groups: [{ key: 'all', values: e.projects.map((q, i) => ({ key: q.key, label: `${i + 1}. ${q.name}`, value: q.cost, min: 10, max: 1000000, set: (d, v) => ({ ...d, projects: d.projects.map(x => x.key === q.key ? { ...x, cost: v } : x) }) })) }] },
+    { key: 'quests', title: 'Задания дня', subtitle: 'Награда за ситуацию дня', groups: [{ key: 'all', values: [{ key: 'coins', label: 'Коинов за верный ответ', value: e.quest_coins, min: 0, max: 1000, set: (d, v) => ({ ...d, quest_coins: v }) }] }] },
+  ];
+  if (e.land) sections.push({ key: 'land', title: 'Стоимость земли по зонам', subtitle: 'Коинов за участок', note: 'Зоны идут от центра города к окраине: земля у центра дороже. Её стоимость добавляется к цене сквера, дома или офиса. Все зоны района доступны сразу; они различаются только ценой земли. В ОП три зоны — используются первые три цены.',
+    groups: [{ key: 'all', values: e.land.map((price, i) => ({ key: String(i), label: `Зона ${i + 1}${i === 0 ? ' · у центра' : i === e.land!.length - 1 ? ' · окраина' : ''}`, value: price, min: 0, max: 100000, set: (d, v) => ({ ...d, land: d.land!.map((x, j) => j === i ? v : x) }) })) }] });
+  if (e.estate) sections.push({ key: 'estate', title: 'Районы команд: постройки на участках', subtitle: 'Коинов за ступень', note: 'Первая ступень сквера и дома — покупка (вместе с участком), следующие — улучшения. Готовые дома и офисные здания покупаются целиком, по одной цене. Чем больше этажей и площадь дома, есть ли гараж и терраса — тем дороже. Парк и большой парк не покупаются: их собирают свои скверы, первая ступень — сбор (0 — бесплатно). Купленное не дорожает: новые цены действуют для новых операций, а открытая страница стройки попросит подтвердить новую цену.',
+    groups: estateRows(e.estate).map(row => ({ key: row.key, title: row.title ?? plotEconomyName(row.families[0]), values: row.families.flatMap(family => e.estate![family].map((price, i) => {
+      const gathered = (family === 'park' || family === 'bigpark') && i === 0;
+      return { key: `${family}-${i}`, label: row.title ? plotEconomyName(family) : levelName(family, i), value: price, min: gathered ? 0 : 1, max: 100000, set: (d: CityEconomy, v: number) => ({ ...d, estate: { ...d.estate, [family]: d.estate![family].map((x, j) => j === i ? v : x) } }) };
+    })) })) });
+  if (e.district) sections.push({ key: 'district', title: 'Общие проекты района', subtitle: 'Смета ступени, коинов', note: 'Смета фиксируется при открытии проекта; новая цена не переписывает уже открытые сборы.',
+    groups: Object.entries(e.district).map(([family, levels]) => ({ key: family, title: PROJECT_NAMES[family] ?? family, values: levels.map((cost, i) => ({ key: String(i), label: `ступень ${i + 1}`, value: cost, min: 1, max: 100000, set: (d: CityEconomy, v: number) => ({ ...d, district: { ...d.district, [family]: d.district![family].map((x, j) => j === i ? v : x) } }) })) })) });
+  if (e.hq) sections.push({ key: 'hq', title: 'Учёт прежних общих проектов', subtitle: 'Пороги ступеней', note: 'Ступени по возрастанию. Эти пороги относятся к прежним общим проектам. Главное здание района растёт автоматически при застройке 10, 25, 50 и 75 % всей земли.',
+    groups: [{ key: 'all', values: e.hq.map((need, i) => ({ key: String(i), label: `Ступень ${i + 2}`, value: need, min: 1, max: 1000, set: (d, v) => ({ ...d, hq: d.hq!.map((x, j) => j === i ? v : x) }) })) }] });
+  return sections;
+}
+
+/** The game's numbers at a glance; the head and the admin change one section at a time in a dialog. */
 function Economy() {
   const client=useQueryClient();
+  const toast=useToast();
   const query=useQuery({queryKey:['city-economy'],queryFn:city.economy,refetchOnWindowFocus:false});
-  const [draft,setDraft]=useState<CityEconomy|null>(null),[saved,setSaved]=useState(false);
-  useEffect(()=>{if(query.data)setDraft(structuredClone(query.data));},[query.data]);
-  const mutation=useMutation({mutationFn:city.saveEconomy,onSuccess:async data=>{setSaved(true);client.setQueryData(['city-economy'],{...query.data,...data});await client.invalidateQueries({queryKey:['city']});await client.invalidateQueries({queryKey:['city-groups']});}});
+  const [editing,setEditing]=useState<EconomyKey|null>(null);
+  const save=useMutation({
+    mutationFn:city.saveEconomy,
+    onSuccess:async data=>{client.setQueryData<CityEconomy>(['city-economy'],current=>current&&{...current,...data});await client.invalidateQueries({queryKey:['city']});await client.invalidateQueries({queryKey:['city-groups']});},
+    onError:error=>{if(error instanceof ApiError&&error.status===409)void client.invalidateQueries({queryKey:['city-economy']});},
+  });
   if(query.isError)return <ErrorState error={query.error} onRetry={()=>query.refetch()}/>;
-  if(!draft)return <Skeleton height={350}/>;
-  const canEdit=!!draft.can_edit;
-  const change=(patch:Partial<CityEconomy>)=>{setSaved(false);setDraft(d=>d&&({...d,...patch}));};
-  const number=(value:string)=>Math.max(0,Math.round(Number(value)||0));
-  return <form className="city-admin-edit city-economy" onSubmit={e=>{e.preventDefault();if(canEdit)mutation.mutate(draft);}}>
-    <p className="city-admin-warning">Цены и награда за задание действуют для новых покупок и ответов: уже построенное остаётся по цене покупки. Очки и стоимость кварталов пересчитывают город группы сразу, стадии кварталов могут сдвинуться.{canEdit?'':' Менять настройки могут руководитель и администратор.'}</p>
-    <fieldset disabled={!canEdit||mutation.isPending}>
-      <h3>Цены построек, коинов</h3>
-      <div className="city-economy__grid">{(draft.catalogue??[]).map(b=><label className="field" key={b.key}><span className="field__label">{b.icon} {b.name}</span><input className="input" type="number" min={1} max={100000} required value={draft.prices[b.key]} onChange={e=>change({prices:{...draft.prices,[b.key]:number(e.target.value)}})}/></label>)}</div>
-      <h3>Очки для города группы</h3>
-      <div className="city-economy__grid">{(Object.keys(POINT_KINDS) as PointKind[]).map(k=><label className="field" key={k}><span className="field__label">{POINT_KINDS[k]}</span><input className="input" type="number" min={0} max={1000} required value={draft.points[k]} onChange={e=>change({points:{...draft.points,[k]:number(e.target.value)}})}/></label>)}</div>
-      <h3>Кварталы группы, по очереди</h3>
-      <div className="city-economy__projects">{draft.projects.map((p,i)=><div key={p.key} className="city-editor-fields"><label className="field"><span className="field__label">Название квартала {i+1}</span><input className="input" minLength={3} maxLength={60} required value={p.name} onChange={e=>change({projects:draft.projects.map(q=>q.key===p.key?{...q,name:e.target.value}:q)})}/></label><label className="field"><span className="field__label">Стоимость, очков</span><input className="input" type="number" min={10} max={1000000} required value={p.cost} onChange={e=>change({projects:draft.projects.map(q=>q.key===p.key?{...q,cost:number(e.target.value)}:q)})}/></label></div>)}</div>
-      <h3>Задания дня</h3>
-      <div className="city-economy__grid"><label className="field"><span className="field__label">Коинов за верный ответ</span><input className="input" type="number" min={0} max={1000} required value={draft.quest_coins} onChange={e=>change({quest_coins:number(e.target.value)})}/></label></div>
-      {draft.land&&<><h3>Стоимость земли по зонам, коинов за участок</h3>
-        <p className="city-admin-warning">Зоны идут от центра города к окраине: земля у центра дороже. Её стоимость добавляется к цене сквера, дома или офиса. Все зоны района доступны сразу; они различаются только ценой земли. В ОП три зоны — используются первые три цены.</p>
-        <div className="city-economy__grid">{draft.land.map((price,i)=><label className="field" key={i}><span className="field__label">Зона {i+1}{i===0?' · у центра':i===draft.land!.length-1?' · окраина':''}</span><input className="input" type="number" min={0} max={100000} required value={price} onChange={e=>change({land:draft.land!.map((v,j)=>j===i?number(e.target.value):v)})}/></label>)}</div></>}
-      {draft.estate&&<><h3>Районы команд: постройки на участках, коинов за ступень</h3>
-        <p className="city-admin-warning">Первая ступень сквера и дома — покупка (вместе с участком), следующие — улучшения. Готовые дома и офисные здания покупаются целиком, по одной цене. Чем больше этажей и площадь дома, есть ли гараж и терраса — тем дороже. Парк и большой парк не покупаются: их собирают свои скверы, первая ступень — сбор (0 — бесплатно). Купленное не дорожает: новые цены действуют для новых операций, а открытая страница стройки попросит подтвердить новую цену.</p>
-        <div className="city-economy__projects">{estateRows(draft.estate).map(row=><div key={row.key}>{row.title&&<h4>{row.title}</h4>}<div className="city-economy__grid">{row.families.flatMap(family=>draft.estate![family].map((price,i)=>{const levels=draft.estate![family],gathered=(family==='park'||family==='bigpark')&&i===0;return <label className="field" key={`${family}-${i}`}><span className="field__label">{plotEconomyName(family)} · {gathered?'сбор из скверов (0 — бесплатно)':isReadyHouse(family)||isOfficeBuilding(family)?readyBuildingLabel(family):i===0?'покупка':`ступень ${i+1}`}</span><input className="input" type="number" min={gathered?0:1} max={100000} required value={price} onChange={e=>change({estate:{...draft.estate,[family]:levels.map((v,j)=>j===i?number(e.target.value):v)}})}/></label>;}))}</div></div>)}</div></>}
-      {draft.district&&<><h3>Общие проекты района: смета ступени</h3>
-        <p className="city-admin-warning">Смета фиксируется при открытии проекта; новая цена не переписывает уже открытые сборы.</p>
-        <div className="city-economy__projects">{Object.entries(draft.district).map(([family,levels])=><div key={family} className="city-economy__grid">{levels.map((cost,i)=><label className="field" key={i}><span className="field__label">{PROJECT_NAMES[family]??family} · ступень {i+1}</span><input className="input" type="number" min={1} max={100000} required value={cost} onChange={e=>change({district:{...draft.district,[family]:levels.map((v,j)=>j===i?number(e.target.value):v)}})}/></label>)}</div>)}</div></>}
-      {draft.hq&&<><h3>Учёт прежних общих проектов: пороги ступеней</h3>
-        <div className="city-economy__grid">{draft.hq.map((need,i)=><label className="field" key={i}><span className="field__label">Ступень {i+2}</span><input className="input" type="number" min={1} max={1000} required value={need} onChange={e=>change({hq:draft.hq!.map((v,j)=>j===i?number(e.target.value):v)})}/></label>)}</div>
-        <p className="city-admin-warning">Ступени по возрастанию. Эти пороги относятся к прежним общим проектам. Главное здание района растёт автоматически при застройке 10, 25, 50 и 75 % всей земли.</p></>}
-      {canEdit&&<button className="city-action" type="submit">{mutation.isPending?'Сохраняем…':'Сохранить настройки'}</button>}
-    </fieldset>
-    {saved&&<p role="status">Настройки игры сохранены.</p>}{mutation.isError&&<ErrorState error={mutation.error}/>}
-  </form>;
+  if(!query.data)return <Skeleton height={350}/>;
+  const economy=query.data,canEdit=!!economy.can_edit,sections=economySections(economy);
+  const section=sections.find(s=>s.key===editing);
+  return <div className="stack">
+    <p className="ui-note">Цены и награда за задание действуют для новых покупок и ответов: уже построенное остаётся по цене покупки. Очки и стоимость кварталов пересчитывают город группы сразу, стадии кварталов могут сдвинуться.{canEdit?'':' Менять настройки могут руководитель и администратор.'}</p>
+    {sections.map(s=><Card key={s.key} className="city-admin-economy-card" title={s.title} subtitle={s.subtitle} action={canEdit?<Button size="s" aria-label={`Изменить: ${s.title}`} disabled={save.isPending} onClick={()=>{save.reset();setEditing(s.key);}}>Изменить</Button>:undefined}>
+      <div className="city-admin-strips">{s.groups.map(g=><section key={g.key}>
+        {s.groups.length>1&&g.title&&<h3 className="city-admin-subtitle">{g.title}</h3>}
+        <dl className="city-admin-strip">{g.values.map(v=><div key={v.key}><dt>{v.label}</dt><dd>{coins(v.value)}</dd></div>)}</dl>
+      </section>)}</div>
+    </Card>)}
+    {section&&<EconomyDialog key={section.key} section={section.key} economy={economy} pending={save.isPending} error={save.isError?save.error:null} onClose={()=>setEditing(null)}
+      onSave={next=>save.mutate({...economy,[ECONOMY_FIELD[section.key]]:next[ECONOMY_FIELD[section.key]]},{onSuccess:()=>{toast.success(`Сохранено: ${section.title}`);setEditing(null);}})}/>}
+  </div>;
+}
+
+/** One section of the game's numbers in a dialog; the rest of the settings go back as they were. */
+function EconomyDialog({section,economy,pending,error,onClose,onSave}:{section:EconomyKey;economy:CityEconomy;pending:boolean;error:unknown;onClose:()=>void;onSave:(next:CityEconomy)=>void}) {
+  const [draft,setDraft]=useState(()=>structuredClone(economy));
+  const formId=useId();
+  const current=economySections(draft).find(s=>s.key===section)!;
+  const close=()=>{if(!pending)onClose();};
+  return <Sheet title={current.title} subtitle={current.subtitle} size={section==='estate'||section==='projects'?'l':'m'} onClose={close}
+    footer={<><Button disabled={pending} onClick={close}>Отмена</Button><Button type="submit" form={formId} variant="primary" disabled={pending}>{pending?'Сохраняем…':'Сохранить'}</Button></>}>
+    <form id={formId} className="stack city-admin-dialog" onSubmit={e=>{e.preventDefault();onSave(draft);}}>
+      {current.note&&<p className="city-admin-card-note">{current.note}</p>}
+      <fieldset className="city-admin-fieldset" disabled={pending}>
+        {section==='projects'?<ol className="city-admin-quarter-list">{draft.projects.map((q,i)=><li key={q.key}>
+          <span className="city-admin-quarter-list__number" aria-hidden="true">{i+1}</span>
+          <label className="field"><span className="field__label">Название квартала {i+1}</span><input className="input" minLength={3} maxLength={60} required value={q.name} onChange={e=>{const name=e.target.value;setDraft(d=>({...d,projects:d.projects.map(x=>x.key===q.key?{...x,name}:x)}));}}/></label>
+          <NumberField label="Стоимость, очков" value={q.cost} min={10} max={1000000} onChange={value=>setDraft(d=>({...d,projects:d.projects.map(x=>x.key===q.key?{...x,cost:value}:x)}))}/>
+        </li>)}</ol>
+        :current.groups.map(g=><section key={g.key} className="city-admin-dialog__group">
+          {current.groups.length>1&&g.title&&<h3 className="city-admin-subtitle">{g.title}</h3>}
+          <div className="city-admin-grid">{g.values.map(v=><NumberField key={v.key} label={v.label} value={v.value} min={v.min} max={v.max} onChange={value=>setDraft(d=>v.set(d,value))}/>)}</div>
+        </section>)}
+      </fieldset>
+      {error?<FormStatus error={error}/>:null}
+    </form>
+  </Sheet>;
 }
 
 const PROJECT_NAMES:Record<string,string>={square:'🌳 Сквер',gazebo:'🌷 Беседка',fountain:'⛲ Площадь с фонтаном',sports:'🏀 Спортплощадка',park:'🏞️ Парк на площади'};
@@ -146,14 +279,40 @@ function Estates() {
   if(query.isError)return <ErrorState error={query.error} onRetry={()=>query.refetch()}/>;
   if(!query.data)return <Skeleton height={250}/>;
   const r=query.data;
-  return <div className="city-groups">
-    <p className="city-admin-warning">Стройку включает руководитель во вкладке «Города и районы». После этого операторы команды могут покупать любые свободные участки во всём районе. Главное здание в центре улучшается автоматически при застройке 10, 25, 50 и 75 % всей земли. Прежние общие постройки и сборы сохраняются.</p>
-    <div className="city-group-card__table" role="table" aria-label="Районы команд">
-      <div role="row"><span role="columnheader">Район</span><span role="columnheader">Стройка</span><span role="columnheader">Операторы</span><span role="columnheader">Занято участков</span><span role="columnheader">Свободно</span><span role="columnheader">Постройки</span><span role="columnheader">Сборы</span><span role="columnheader">Главное здание</span></div>
-      {r.districts.map(d=><div role="row" key={d.id}><span role="cell"><b>{d.name}</b> · {d.city==='sales'?'ОП':'Техподдержка'}</span><span role="cell">{d.land?d.construction?'открыта':'закрыта':'нет земли'}</span><span role="cell">{d.operators}{d.builders?` · строят ${d.builders}`:''}</span><span role="cell">{d.land?`${d.land.taken} / ${d.land.plots}`:'—'}</span><span role="cell">{d.land?Math.max(0,d.land.plots-d.land.taken):'—'}</span><span role="cell">{d.buildings}</span><span role="cell">{d.open_projects}</span><span role="cell">{d.land?`Уровень ${d.landmark_level} из 5`:'—'}</span></div>)}
+  const rows=r.districts.map(d=>({ ...d,
+    cityName:d.city==='sales'?'ОП':'Техподдержка',
+    status:!d.land?{tone:'neutral' as Tone,label:'Нет земли'}:d.construction?{tone:'success' as Tone,label:'Открыта'}:{tone:'neutral' as Tone,label:'Закрыта'},
+    people:`${d.operators}${d.builders?` · строят ${d.builders}`:''}`,
+    taken:d.land?`${d.land.taken} / ${d.land.plots}`:'—',
+    free:d.land?String(Math.max(0,d.land.plots-d.land.taken)):'—',
+    landmark:d.land?`${d.landmark_level} из 5`:'—',
+  }));
+  return <div className="stack">
+    <p className="ui-note">Стройку включает руководитель во вкладке «Города и районы». После этого операторы команды могут покупать любые свободные участки во всём районе. Главное здание в центре улучшается автоматически при застройке 10, 25, 50 и 75 % всей земли. Прежние общие постройки и сборы сохраняются.</p>
+    <Card title="Районы команд" subtitle={`${rows.length} ${plural(rows.length,'район','района','районов')}`} padded={false}>
+      <div className="table-wrap table-wrap--responsive city-admin-table"><table className="table">
+        <thead><tr><th>Район</th><th>Стройка</th><th className="num">Операторы</th><th className="num">Занято участков</th><th className="num">Свободно</th><th className="num">Постройки</th><th className="num">Сборы</th><th className="num">Главное здание</th></tr></thead>
+        <tbody>{rows.map(d=><tr key={d.id}><td><strong>{d.name}</strong><span className="city-admin-muted"> · {d.cityName}</span></td><td><Badge tone={d.status.tone}>{d.status.label}</Badge></td><td className="num">{d.people}</td><td className="num">{d.taken}</td><td className="num">{d.free}</td><td className="num">{d.buildings}</td><td className="num">{d.open_projects}</td><td className="num nowrap">{d.landmark==='—'?'—':`Уровень ${d.landmark}`}</td></tr>)}</tbody>
+      </table></div>
+      <div className="card__body"><ul className="card-list">{rows.map(d=><li className="list-card" key={d.id}>
+        <div className="list-card__head"><span><strong>{d.name}</strong><span className="city-admin-muted"> · {d.cityName}</span></span><Badge tone={d.status.tone}>{d.status.label}</Badge></div>
+        <dl className="list-card__metrics city-admin-metrics">
+          <div className="list-card__metric"><dt>Операторы</dt><dd>{d.people}</dd></div>
+          <div className="list-card__metric"><dt>Занято участков</dt><dd>{d.taken}</dd></div>
+          <div className="list-card__metric"><dt>Свободно</dt><dd>{d.free}</dd></div>
+          <div className="list-card__metric"><dt>Постройки</dt><dd>{d.buildings}</dd></div>
+          <div className="list-card__metric"><dt>Сборы</dt><dd>{d.open_projects}</dd></div>
+          <div className="list-card__metric"><dt>Главное здание</dt><dd>{d.landmark}</dd></div>
+        </dl>
+      </li>)}</ul></div>
+    </Card>
+    <div className="kpi-grid">
+      <KPI label="Операторов без района" value={r.operators_without_district} hint="Их команда не закреплена за районом"/>
+      <KPI label="Построек в инвентаре" value={r.inventory} hint="Остались после перевода в другой район"/>
+      <KPI label="Потрачено на стройку" value={coins(r.coins.buildings)} tone="coin" hint="Участки и постройки, коинов"/>
+      <KPI label="Взносы в проекты" value={coins(r.coins.contributions)} hint={`Возвращено ${coins(r.coins.refunded)} коинов`}/>
     </div>
-    <p className="city-admin-warning">Операторов без района: {r.operators_without_district}. Построек в инвентаре после перевода: {r.inventory}. Потрачено на участки и постройки: {r.coins.buildings} коинов, взносы в проекты: {r.coins.contributions}, возвращено: {r.coins.refunded}.</p>
-    <p className="city-admin-warning">Прежние постройки на участках учебных центров: {r.legacy.buildings} у {r.legacy.operators} операторов, оплачено {r.legacy.paid} коинов. Они остаются на месте; перенос в районы — отдельный этап со сверкой и без повторной оплаты.</p>
+    <p className="ui-note">Прежние постройки на участках учебных центров: {r.legacy.buildings} у {r.legacy.operators} {plural(r.legacy.operators,'оператора','операторов','операторов')}, оплачено {coins(r.legacy.paid)} коинов. Они остаются на месте; перенос в районы — отдельный этап со сверкой и без повторной оплаты.</p>
   </div>;
 }
 
@@ -166,19 +325,30 @@ function MissionEditor({initial,canEdit}:{initial:CitySettings;canEdit:boolean})
   const mission=draft.missions[selected];
   const scenario=selected.startsWith('scenario_');
   function change(patch:Partial<typeof mission>){setSaved(false);setDraft(d=>({...d,missions:{...d.missions,[selected]:{...d.missions[selected],...patch}}}));}
-  return <form className="city-admin-edit" onSubmit={e=>{e.preventDefault();if(canEdit)mutation.mutate(draft);}}>
-    <p className="city-admin-warning">Уже полученные награды и опыт сохраняются. Новые условия применяются к непройденным миссиям. Цели проверяются по данным CRM, Driver Simulator и учебной Диспетчерской: в миссиях Диспетчерской цель — число решённых звонков. Сценарии доступны только техподдержке; их результат проверяет тренажёр диалога и практики.</p>
-    <label className="field"><span className="field__label">Миссия</span><select className="input" value={selected} onChange={e=>setSelected(e.target.value)}>{Object.entries(draft.missions).map(([key,m])=><option key={key} value={key}>{m.title}</option>)}</select></label>
-    <fieldset disabled={!canEdit||mutation.isPending} style={{border:0,padding:0,margin:0,display:'grid',gap:16}}>
-      <label className="field"><span className="field__label">Название</span><input className="input" value={mission.title} minLength={3} maxLength={140} required onChange={e=>change({title:e.target.value})}/></label>
-      <label className="field"><span className="field__label">Задание для оператора</span><textarea className="input" value={mission.description} minLength={5} maxLength={2000} required onChange={e=>change({description:e.target.value})}/></label>
-      <label className="field"><span className="field__label">Подсказка Пульсара</span><textarea className="input" value={mission.pulsar} minLength={5} maxLength={1200} required onChange={e=>change({pulsar:e.target.value})}/></label>
-      <div className="city-editor-fields"><label className="field"><span className="field__label">{scenario?'Цель: успешное прохождение':'Цель: количество действий'}</span><input className="input" type="number" min={1} max={scenario||['welcome','driver_profile'].includes(selected)?1:DISPATCH_TARGETS[selected]??100} value={mission.target} disabled={scenario} required onChange={e=>change({target:Number(e.target.value)})}/></label><label className="field"><span className="field__label">Опыт города, XP</span><input className="input" type="number" min={0} max={1000} value={mission.xp} disabled={scenario} required onChange={e=>change({xp:Number(e.target.value)})}/></label><label className="field"><span className="field__label">{scenario?'Награда за сценарий, коины':'Награда, коины'}</span><input className="input" type="number" min={0} max={selected==='welcome'?0:1000} value={mission.coins} required onChange={e=>change({coins:Number(e.target.value)})}/></label></div>
-      {scenario&&<p className="city-admin-warning">От 0 до 1000 коинов за первое успешное прохождение. 0 — сценарий без награды. Повторная тренировка не начисляет коины. Цель — одно успешное прохождение; XP не начисляется. Изменение награды не переписывает уже выданные коины.</p>}
-      <label className="field"><span className="field__label">Открыть после миссии</span><select className="input" value={mission.prerequisite??''} disabled={scenario||selected==='welcome'} onChange={e=>change({prerequisite:e.target.value||null})}><option value="">Без предыдущего задания</option>{Object.entries(draft.missions).filter(([key])=>key!==selected&&!key.startsWith('scenario_')).map(([key,m])=><option key={key} value={key}>{m.title}</option>)}</select></label>
-      <label className="row"><input type="checkbox" checked={mission.enabled} onChange={e=>change({enabled:e.target.checked})}/> Миссия доступна операторам</label>
-      {canEdit&&<button className="city-action" type="submit">{mutation.isPending?'Сохраняем…':'Сохранить все изменения'}</button>}
-    </fieldset>
-    {saved&&<p role="status">Условия миссий сохранены.</p>}{mutation.isError&&<ErrorState error={mutation.error}/>}
+  const missionOptions=Object.entries(draft.missions).map(([key,m])=>({value:key,label:m.title}));
+  const prerequisites=[{value:'',label:'Без предыдущего задания'},...Object.entries(draft.missions).filter(([key])=>key!==selected&&!key.startsWith('scenario_')).map(([key,m])=>({value:key,label:m.title}))];
+  return <form className="stack" onSubmit={e=>{e.preventDefault();if(canEdit)mutation.mutate(draft);}}>
+    <p className="ui-note">Уже полученные награды и опыт сохраняются. Новые условия применяются к непройденным миссиям. Цели проверяются по данным CRM, Driver Simulator и учебной Диспетчерской: в Диспетчерской цель — число решённых звонков. Сценарии доступны только техподдержке; их результат проверяет тренажёр диалога и практики.</p>
+    <Card title="Миссия" subtitle={`${missionOptions.length} ${plural(missionOptions.length,'миссия','миссии','миссий')} города`}>
+      <label className="field city-admin-field-narrow"><span className="field__label">Выберите миссию</span><Select aria-label="Миссия" value={selected} options={missionOptions} onChange={setSelected}/></label>
+    </Card>
+    <Card title={mission.title} action={<Badge tone={mission.enabled?'success':'neutral'}>{mission.enabled?'Доступна':'Выключена'}</Badge>}>
+      <fieldset className="city-admin-fieldset" disabled={!canEdit||mutation.isPending}>
+        <label className="field"><span className="field__label">Название</span><input className="input" value={mission.title} minLength={3} maxLength={140} required onChange={e=>change({title:e.target.value})}/></label>
+        <label className="field"><span className="field__label">Задание для оператора</span><textarea className="input" rows={3} value={mission.description} minLength={5} maxLength={2000} required onChange={e=>change({description:e.target.value})}/></label>
+        <label className="field"><span className="field__label">Подсказка Пульсара</span><textarea className="input" rows={3} value={mission.pulsar} minLength={5} maxLength={1200} required onChange={e=>change({pulsar:e.target.value})}/></label>
+        <div className="city-admin-grid city-admin-grid--three">
+          <label className="field"><span className="field__label">{scenario?'Цель: успешное прохождение':'Цель: количество действий'}</span><input className="input" type="number" min={1} max={scenario||['welcome','driver_profile'].includes(selected)?1:DISPATCH_TARGETS[selected]??100} value={mission.target} disabled={scenario} required onChange={e=>change({target:Number(e.target.value)})}/></label>
+          <label className="field"><span className="field__label">Опыт города, XP</span><input className="input" type="number" min={0} max={1000} value={mission.xp} disabled={scenario} required onChange={e=>change({xp:Number(e.target.value)})}/></label>
+          <label className="field"><span className="field__label">{scenario?'Награда за сценарий, коины':'Награда, коины'}</span><input className="input" type="number" min={0} max={selected==='welcome'?0:1000} value={mission.coins} required onChange={e=>change({coins:Number(e.target.value)})}/></label>
+        </div>
+        {scenario&&<p className="city-admin-card-note">От 0 до 1000 коинов за первое успешное прохождение. 0 — сценарий без награды. Повторная тренировка не начисляет коины. Цель — одно успешное прохождение; XP не начисляется. Изменение награды не переписывает уже выданные коины.</p>}
+        <label className="field"><span className="field__label">Открыть после миссии</span><Select aria-label="Открыть после миссии" value={mission.prerequisite??''} disabled={scenario||selected==='welcome'} options={prerequisites} onChange={value=>change({prerequisite:value||null})}/></label>
+        <Switch checked={mission.enabled} onChange={value=>change({enabled:value})}>Миссия доступна операторам</Switch>
+      </fieldset>
+    </Card>
+    {canEdit&&<FormFooter status={<FormStatus error={mutation.isError&&mutation.error} saved={saved&&'Условия миссий сохранены.'} note={dirty&&'Есть несохранённые изменения.'}/>}>
+      <Button type="submit" variant="primary" disabled={mutation.isPending}>{mutation.isPending?'Сохраняем…':'Сохранить все изменения'}</Button>
+    </FormFooter>}
   </form>;
 }

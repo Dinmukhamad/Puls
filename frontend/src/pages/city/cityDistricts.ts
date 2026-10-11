@@ -1,5 +1,5 @@
 import type { CityDistrict, CityMission, DistrictId } from "../../api/city";
-import { districtLevel } from "./cityLevels";
+import { completedDistrictMissions, districtLevel } from "./cityLevels";
 import type { CityLabelInfo } from "../../city3d/types";
 
 export const DISTRICT_ICONS: Record<DistrictId, string> = { academy: "🎓", driver: "🚕", crm: "💬", dispatch: "📡", oktell: "🎧", scenarios: "🎭" };
@@ -8,8 +8,8 @@ export const DISTRICT_COLORS: Record<DistrictId, string> = { academy: "#5b8def",
 /** Подписи районов: одни и те же для щитов на карте и для панели навыков. */
 export function districtLabels(districts: CityDistrict[], missions: CityMission[]): CityLabelInfo[] {
   return districts.map(d => {
-    const own = missions.filter(m => m.district === d.id && m.enabled), done = missions.filter(m => m.district === d.id && m.state === "completed").length;
+    const own = missions.filter(m => m.district === d.id && m.enabled), done = completedDistrictMissions(d, missions);
     const reward = own.some(m => m.state === "ready");
-    return { id: d.id, name: d.name, icon: DISTRICT_ICONS[d.id], soon: d.soon, reward, level: districtLevel(done, d.soon), status: d.soon ? "Скоро откроется" : done && done >= own.length ? "✓ Район освоен" : reward ? "✦ Забрать награду" : `${done} из ${Math.max(own.length, done)} миссий` };
+    return { id: d.id, name: d.name, icon: DISTRICT_ICONS[d.id], soon: d.soon, reward, level: districtLevel(done, d.soon), status: d.soon ? "Скоро откроется" : d.id === "oktell" && !own.length ? "Рабочий кабинет" : done && done >= own.length ? "✓ Район освоен" : reward ? "✦ Забрать награду" : `${done} из ${Math.max(own.length, done)} миссий` };
   });
 }

@@ -1,30 +1,30 @@
 .wheel-layout { display:grid; grid-template-columns:1fr; gap:24px; }
-/* Лента получает всю ширину: в узкой колонке её преимущество — видеть
-   соседние призы — как раз и пропадает. */
-.wheel-card { position:relative; text-align:center; }.wheel-card h2 { font-size:30px; letter-spacing:-.03em; margin:16px 0 8px; }.wheel-stage { width:min(100%,340px); aspect-ratio:1; position:relative; margin:36px auto; padding:12px; }.wheel-disc { width:100%; height:100%; border-radius:50%; border:8px solid var(--surface-primary); box-shadow:0 0 0 1px var(--separator),0 10px 40px var(--progress-tint); transition:transform 3s cubic-bezier(.14,.72,.13,1); position:relative; }.wheel-pointer { position:absolute; top:0; left:calc(50% - 11px); width:0; height:0; border-left:11px solid transparent; border-right:11px solid transparent; border-top:24px solid var(--text-primary); z-index:2; }.wheel-center { position:absolute; inset:calc(50% - 47px); width:94px; height:94px; display:flex; flex-direction:column; justify-content:center; background:var(--surface-primary); border-radius:50%; color:var(--text-primary); font-size:22px; font-weight:750; box-shadow:var(--shadow-card); }.wheel-center span { margin-top:4px; font-size:10px; letter-spacing:.2em; color:var(--text-secondary); }.wheel-number { position:absolute; left:50%; top:50%; color:white; font-size:19px; font-weight:650; transform:translate(-50%,-50%) rotate(var(--angle)) translateY(-105px); }.wheel-spin { min-width:220px; min-height:50px; margin-bottom:16px; }.wheel-result { border-color:var(--progress-color); }.raffle-prize { padding:28px 18px; border-radius:var(--radius-m); background:linear-gradient(135deg,var(--accent-tint),var(--progress-tint)); text-align:center; }.raffle-prize>span { font-size:42px; color:var(--accent-primary); }.raffle-prize h3 { font-size:22px; margin-top:12px; }.raffle-card { min-width:0; }
-@media(max-width:800px) { .wheel-card h2 { font-size:26px; } }
-@media(max-width:400px) { .wheel-stage { width:270px; max-width:100%; }.wheel-number { transform:translate(-50%,-50%) rotate(var(--angle)) translateY(-84px); } }
-@media(prefers-reduced-motion:reduce) { .wheel-disc { transition:none; } }
+.wheel-spin { min-width:240px; }.raffle-prize { padding:28px 18px; border-radius:var(--radius-m); background:linear-gradient(135deg,var(--accent-tint),var(--progress-tint)); text-align:center; }.raffle-prize>span { font-size:42px; color:var(--accent-primary); }.raffle-prize h3 { font-size:22px; margin-top:12px; }.raffle-card { min-width:0; }
 
-/* Колесо рисуется на холсте: CSS-диск не давал ни разгона, ни выбега —
-   один переход между двумя углами. Размер задаёт сцена, холст только
-   заполняет её; внутреннее разрешение компонент выставляет сам по
-   devicePixelRatio, иначе на экранах с высокой плотностью круг мылит. */
-.wheel-canvas { width:100%; height:100%; display:block; border-radius:50%; border:8px solid var(--surface-primary); box-shadow:0 0 0 1px var(--separator),0 10px 40px var(--progress-tint); }
-.wheel-mute { background:var(--surface-secondary); border:1px solid var(--control-border); min-height:44px; padding:0 12px; margin-top:4px; color:var(--text-secondary); font:inherit; font-size:12px; cursor:pointer; border-radius:var(--radius-s); }
-.wheel-mute:hover { color:var(--text-primary); }
-.wheel-mute:focus-visible { outline:2px solid var(--accent-primary); outline-offset:2px; }
+/* Лента удачи — обычная карточка сайта: заголовок и действия в шапке, лента
+   на всю ширину, под ней кнопка и сколько попыток осталось. */
+.wheel-card .card__action { flex-wrap:nowrap; }
+.wheel-card__foot { display:grid; justify-items:center; gap:var(--sp-2); text-align:center; }
+.wheel-card__note { margin:0; color:var(--text-secondary); font-size:var(--text-caption); line-height:1.5; }
 
-/* Лента призов. Заняла место круга: горизонтальная полоса показывает, что
-   было рядом и что почти выпало, и лучше живёт на телефоне — там колесо
-   съедало квадрат во весь экран.
-
-   Высота задана в пикселях, а не процентом: холст в grid-контейнере берёт
-   высоту из собственного атрибута, а подгонка размера этот атрибут
-   увеличивает — с процентом полоса разрасталась бы на каждом кадре. */
-.strip-stage { width: 100%; margin: 28px 0 24px; }
-.prize-strip { display: block; width: 100%; height: 168px; }
-@media (max-width: 640px) { .prize-strip { height: 140px; } }
+/* Лента призов: карточки в стиле окна «Что может выпасть» едут под рамкой
+   в центре. Края гаснут маской, поэтому в обеих темах подложка одна. */
+.prize-strip { --cell:160px; position:relative; height:196px; margin:0 0 var(--sp-5); overflow:hidden; border:1px solid var(--separator); border-radius:var(--radius-xl); background:var(--surface-secondary); }
+.prize-strip__track { position:absolute; inset:0; -webkit-mask-image:linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent); mask-image:linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent); }
+.prize-strip__tile { position:absolute; top:22px; left:0; width:var(--cell); height:152px; display:grid; grid-template-rows:auto 1fr auto; justify-items:center; align-items:center; gap:var(--sp-1); padding:var(--sp-3) var(--sp-2); border:1px solid var(--separator); border-radius:var(--radius-l); background:var(--surface-primary); box-shadow:var(--shadow-sm); text-align:center; will-change:transform; transition:border-color var(--motion-fast) var(--ease-standard), box-shadow var(--motion-fast) var(--ease-standard); }
+.prize-strip__sticker { --sticker:#e86aa6; display:grid; place-items:center; width:48px; height:48px; border:3px solid #fff; border-radius:16px; background:color-mix(in srgb, var(--sticker) 28%, #ffffff); box-shadow:0 4px 10px rgba(20,25,35,.16); font-size:26px; line-height:1; }
+.prize-strip__title { display:-webkit-box; overflow:hidden; color:var(--text-primary); font-size:var(--text-secondary-size); font-weight:600; line-height:1.25; overflow-wrap:break-word; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+.prize-strip__reward { padding:2px var(--sp-2); border-radius:var(--radius-pill); background:var(--coin-tint); color:var(--gold-text); font-size:var(--text-micro); font-weight:650; white-space:nowrap; }
+.prize-strip__reward--none { background:var(--surface-tertiary); color:var(--text-secondary); font-weight:600; }
+.prize-strip__tile.is-current { border-color:color-mix(in srgb, var(--accent-primary) 40%, var(--separator)); }
+.prize-strip__tile.is-won { border-color:var(--accent-primary); box-shadow:0 0 0 2px var(--accent-primary), var(--shadow-card); }
+/* Рамка, где лента останавливается: контур и два указателя — сверху и снизу,
+   в зазоре над карточкой, так что надписи они не пересекают. */
+.prize-strip__window { position:absolute; top:11px; bottom:11px; left:50%; width:calc(var(--cell) + 14px); transform:translateX(-50%); border:2px solid var(--accent-primary); border-radius:calc(var(--radius-l) + 5px); pointer-events:none; }
+.prize-strip__window::before, .prize-strip__window::after { content:""; position:absolute; left:50%; width:0; height:0; transform:translateX(-50%); border-left:8px solid transparent; border-right:8px solid transparent; }
+.prize-strip__window::before { top:-1px; border-top:8px solid var(--accent-primary); }
+.prize-strip__window::after { bottom:-1px; border-bottom:8px solid var(--accent-primary); }
+@media (prefers-reduced-motion:reduce) { .prize-strip__tile { transition:none; } }
 
 /* Таблица призов: поля прямо в ячейках, чтобы веса стояли в столбик и их
    можно было сравнить взглядом — ради этого в настройки и заходят. */
@@ -37,13 +37,15 @@
 .prize-table .input--num::-webkit-inner-spin-button, .prize-table .input--num::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 .prize-table { min-width: 560px; }
 
-/* Призы колеса — стикеры: вырубка с белой кромкой, лёгкий наклон и тень.
-   Белая кромка одинакова в обеих темах: так выглядит настоящий стикер. */
-.wheel-prizes-button { position:absolute; top:var(--sp-4); right:var(--sp-4); z-index:1; display:inline-flex; flex-direction:column; align-items:center; gap:6px; max-width:120px; padding:6px; border:0; border-radius:var(--radius-m); background:transparent; color:var(--text-secondary); font:inherit; font-size:var(--text-micro); font-weight:600; line-height:1.25; cursor:pointer; }
-.wheel-prizes-button:hover { color:var(--text-primary); }
+/* «Что может выпасть»: стикер подарка и подпись — в шапке карточки рядом со звуком,
+   той же высоты и с той же рамкой, что кнопка звука (36 px, на телефоне 44 px). */
+.wheel-prizes-button { display:inline-flex; align-items:center; gap:var(--sp-2); height:36px; padding:0 var(--sp-3) 0 4px; border:1px solid var(--control-border); border-radius:var(--radius-s); background:transparent; color:var(--text-primary); font:inherit; font-size:var(--text-caption); font-weight:600; line-height:1.2; white-space:nowrap; cursor:pointer; transition:background var(--motion-fast) var(--ease-standard); }
+.wheel-prizes-button:hover { background:var(--surface-hover); }
 .wheel-prizes-button:focus-visible { outline:2px solid var(--accent-primary); outline-offset:2px; }
-.wheel-prizes-button__sticker { display:grid; place-items:center; width:56px; height:56px; border:3px solid #fff; border-radius:18px; background:color-mix(in srgb, #e86aa6 26%, #ffffff); box-shadow:0 6px 16px rgba(20,25,35,.18); font-size:30px; line-height:1; transform:rotate(-6deg); transition:transform var(--motion-fast) var(--ease-spring); }
+.wheel-prizes-button__sticker { display:grid; place-items:center; flex:none; width:26px; height:26px; border:2px solid #fff; border-radius:9px; background:color-mix(in srgb, #e86aa6 26%, #ffffff); box-shadow:0 2px 6px rgba(20,25,35,.16); font-size:15px; line-height:1; transform:rotate(-6deg); transition:transform var(--motion-fast) var(--ease-spring); }
 .wheel-prizes-button:hover .wheel-prizes-button__sticker, .wheel-prizes-button:focus-visible .wheel-prizes-button__sticker { transform:rotate(0) scale(1.06); }
+/* Призы ленты удачи — стикеры: вырубка с белой кромкой, лёгкий наклон и тень.
+   Белая кромка одинакова в обеих темах: так выглядит настоящий стикер. */
 .prize-stickers { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:var(--sp-4); margin:0; padding:0; list-style:none; }
 .prize-sticker-card { display:flex; flex-direction:column; align-items:center; gap:var(--sp-2); min-width:0; padding:var(--sp-5) var(--sp-3) var(--sp-4); border:1px solid var(--separator); border-radius:var(--radius-l); background:var(--surface-secondary); text-align:center; }
 .prize-sticker { --sticker:#e86aa6; --tilt:-4deg; display:grid; place-items:center; flex:none; width:84px; height:84px; margin-bottom:var(--sp-2); border:4px solid #fff; border-radius:26px; background:color-mix(in srgb, var(--sticker) 28%, #ffffff); box-shadow:0 8px 18px rgba(20,25,35,.2); font-size:44px; line-height:1; transform:rotate(var(--tilt)); transition:transform var(--motion-fast) var(--ease-spring); }
@@ -53,9 +55,21 @@
 .prize-sticker-card__reward { padding:2px var(--sp-2); border-radius:var(--radius-pill); background:var(--coin-tint); color:var(--gold-text); font-size:var(--text-caption); font-weight:650; }
 .prize-sticker-card__chance { color:var(--text-secondary); font-size:var(--text-caption); font-variant-numeric:tabular-nums; }
 .wheel-result__body { display:flex; align-items:center; gap:var(--sp-4); }
+.wheel-result__text { display:grid; gap:var(--sp-1); min-width:0; }
+.wheel-result__head { display:flex; flex-wrap:wrap; align-items:center; gap:var(--sp-2); }
+.wheel-result__head h3 { margin:0; font-size:var(--text-card-title); line-height:1.3; overflow-wrap:anywhere; }
+.wheel-result__text p { margin:0; }
+@media (max-width:767px) {
+  .wheel-prizes-button { height:44px; padding-left:6px; }
+  .wheel-prizes-button__sticker { width:30px; height:30px; border-radius:10px; font-size:17px; }
+}
 @media (max-width:640px) {
-  .wheel-prizes-button { position:static; display:flex; flex-direction:row; width:fit-content; max-width:none; margin:0 auto var(--sp-3); font-size:var(--text-caption); }
-  .wheel-prizes-button__sticker { width:44px; height:44px; border-radius:14px; font-size:24px; }
+  .prize-strip { height:184px; }
+  .prize-strip__tile { top:16px; }
+  .prize-strip__window { top:5px; bottom:5px; }
+  /* Соседние карточки обрезаны краем — пусть гаснут раньше, чтобы обрывки надписей не читались. */
+  .prize-strip__track { -webkit-mask-image:linear-gradient(90deg,transparent,#000 20%,#000 80%,transparent); mask-image:linear-gradient(90deg,transparent,#000 20%,#000 80%,transparent); }
+  .wheel-spin { width:100%; min-width:0; }
   .prize-stickers { grid-template-columns:repeat(2,minmax(0,1fr)); gap:var(--sp-3); }
   .prize-sticker { width:72px; height:72px; font-size:38px; }
 }

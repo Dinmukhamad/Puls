@@ -59,7 +59,7 @@ const DISTRICTS: WorldSpec["districts"] = [
   { id: "driver", angleDeg: DRIVER, ring: 0, color: "#f0a23a", soon: false },
   { id: "crm", angleDeg: CRM, ring: 0, color: "#7b5cff", soon: false },
   { id: "dispatch", angleDeg: DISPATCH, ring: 0, color: "#35b6a6", soon: false },
-  { id: "oktell", angleDeg: OKTELL, ring: 0, color: "#e86aa6", soon: true },
+  { id: "oktell", angleDeg: OKTELL, ring: 0, color: "#e86aa6", soon: false },
 ];
 
 export const WORLD_V1: CitySpec = {
