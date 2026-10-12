@@ -97,13 +97,14 @@ test("purchase shows full land plus building price and respects spendable coins"
 
 test("building overview gives three short steps and one district progress bar", () => {
   const html = render(CityEstateDock, dockProps);
-  assert.match(html, /<ol class="estate-steps"><li>[^<]+<\/li><li>[^<]+<\/li><li>[^<]+<\/li><\/ol>/);
+  // Three steps, the first with how to choose many cells with Ctrl (for the mouse only).
+  assert.match(html, /<ol class="estate-steps"><li>[^<]+<span class="estate-tip--mouse">[^<]+<kbd>Ctrl<\/kbd>[^<]+<\/span>\.<\/li><li>[^<]+<\/li><li>[^<]+<\/li><\/ol>/);
   assert.match(html, /Можно потратить <strong>◈ 850<\/strong>/);
   assert.match(html, /Весь район открыт/);
   assert.match(html, /Свободно 59 клеток/);
   assert.match(html, /застройте ещё 14 клеток/);
   // Roads, trees and lamps come before the houses.
-  assert.match(html, /<li>Проложи дороги и дорожки, посади деревья, поставь фонари — ниже, в «Дорогах и благоустройстве»\.<\/li>/);
+  assert.match(html, /<li>Проложи дороги и дорожки, посади деревья, поставь фонари — ниже, в «Дорогах и благоустройстве»<span/);
   assert.equal((html.match(/role="progressbar"/g) ?? []).length, 1);
   assert.doesNotMatch(html, /Пояса района|Пояс \d|estate-bands|Этап застройки|70 %/);
 });

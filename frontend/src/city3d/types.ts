@@ -24,7 +24,8 @@ export type DecorShape = "cell" | "line" | "area";
  * building from the inventory (`moving`) or a shared project being placed; the building selected; the cell picked to
  * build on, with what is chosen for it (`family`: its cells show round the cell, green where free, red where not) and
  * where a building's front looks (`rotation`, where no road decides); or small things being laid (or taken away) on
- * the cells chosen so far, taps choosing them by `shape`.
+ * the cells chosen so far, taps choosing them by `shape` — or cells chosen with Ctrl before choosing what goes on
+ * them (`tool` null).
  */
 export interface CityBuildView {
   district: string; area: "plots" | "public";
@@ -32,7 +33,7 @@ export interface CityBuildView {
   selected: number | null;
   plot: (PlotAddress & { rotation: number; family?: PlotFamily | DecorFamily | null }) | null;
   /** `anyone`: the test city takes away whoever's small things, not only one's own. */
-  decor: { tool: DecorTool; cells: PlotAddress[]; shape: DecorShape; anyone?: boolean } | null;
+  decor: { tool: DecorTool | null; cells: PlotAddress[]; shape: DecorShape; anyone?: boolean } | null;
 }
 /**
  * What the operator touched on district land: a cell to build on (`problem`: why nothing can go on it), where what is

@@ -26,6 +26,7 @@ from app.db.session import SessionLocal, engine
 from app.main import app
 from app.models.enums import Role
 from app.models.user import Group, User
+from app.services import city_land
 from app.services import coins as coins_service
 
 pytestmark = pytest.mark.asyncio
@@ -53,6 +54,21 @@ async def clean_database() -> AsyncIterator[None]:
     async with SessionLocal() as session:
         await seed_reference_data(session)
     yield
+
+
+#: Земля районов в тестах: клетки островного города, как они шли кольцами до квадратной сетки
+#: (alembic 20261012_city_squares). Правила стройки проверяются на одних и тех же участках, какой бы
+#: ни стала земля карты; её собственный файл (app/data/city_land.json) проверяют
+#: tests/test_city_land_file.py и клиентский тест frontend/src/city3d/world/land.test.mjs.
+RING_LAND = Path(__file__).resolve().parent / "data" / "city_land_rings.json"
+
+
+@pytest.fixture(autouse=True)
+def ring_land(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(city_land, "LAND_FILE", RING_LAND)
+    city_land._land.cache_clear()
+    yield
+    city_land._land.cache_clear()
 
 
 @pytest.fixture

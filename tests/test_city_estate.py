@@ -30,7 +30,8 @@ from tests.conftest import auth, login, make_group, make_user
 pytestmark = pytest.mark.asyncio
 CITY = "/api/v1/learning/city"
 ADMIN = "/api/v1/admin/learning/city"
-# District 1 of the island city (app/data/city_land.json) is made of small cells, a block a band:
+# The tests' land is the island city's as its cells ran in rings (tests/conftest.py RING_LAND).
+# District 1 of it is made of small cells, a block a band:
 # block 1 is the first band, its six rows free in all 63 columns; block 2 is the second band, free
 # in columns 0…33 of its twelve rows (the district's centre comes next); block 5, the outermost
 # band, has the railway across it from column 43 on. A house stands on HOUSE × HOUSE cells, a
@@ -455,9 +456,7 @@ async def test_double_click_and_two_tabs_pay_once(client, session, team):
     assert sorted(await spent(session)) == [-HOUSE_PRICE, -HOUSE_PRICE]
 
 
-async def test_only_free_plots_of_ones_district_at_the_price_seen(
-    client, session, head, team
-):
+async def test_only_free_plots_of_ones_district_at_the_price_seen(client, session, head, team):
     me = auth(await login(client, team.login))
     for place, cells, code in (
         ((5, 16, 1), False, "wrong_plot"),  # the railway runs there
@@ -1016,8 +1015,11 @@ async def test_the_city_has_three_districts_with_land_and_only_they_open(client,
     districts = body["cities"][0]["districts"]
     districts.append(
         {
-            "id": "support-team-4", "name": "Район 4", "group_ids": [],
-            "supervisor_id": None, "construction": True,
+            "id": "support-team-4",
+            "name": "Район 4",
+            "group_ids": [],
+            "supervisor_id": None,
+            "construction": True,
         }
     )
     r = await client.put(ADMIN + "/world", headers=boss, json=body)
@@ -1599,6 +1601,212 @@ async def test_the_cells_reset_refunds_buildings_and_open_contributions_once(
         select(func.count())
         .select_from(CoinTransaction)
         .where(CoinTransaction.idempotency_key.like("city-cells-reset:%"))
+    )
+    assert count == 2
+
+
+def squares_module():
+    path = Path(__file__).resolve().parent.parent / "alembic/versions/20261012_city_squares.py"
+    spec = importlib.util.spec_from_file_location("city_squares_reset", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+async def test_the_square_grid_starts_the_support_districts_again_and_refunds_once(
+    session, supervisor, operator
+):
+    """What the island city's square grid does with its districts (20261012_city_squares): the
+    support districts and their test copies start again, the sales districts keep everything."""
+    await fund(session, operator.id, 1000)
+    mate = await make_user(session, login="mate-squares", group_id=operator.group_id)
+    await fund(session, mate.id, 300)
+
+    def building(family, state, paid, district_id="support-team-1", **place):
+        where = {"module": 1, "u": 0, "v": 0} if state == "placed" else {}
+        return CityObject(
+            district_id=district_id,
+            owner_id=operator.id,
+            family=family,
+            level=1,
+            state=state,
+            rotation=0,
+            source="purchase",
+            paid=paid,
+            **{**where, **place},
+        )
+
+    def project(district_id):
+        return CityProject(
+            district_id=district_id,
+            family="fountain",
+            level=1,
+            module=0,
+            u=2,
+            v=2,
+            rotation=0,
+            size="main",
+            cost=300,
+            funded=0,
+            status="open",
+        )
+
+    house, stored = building("house", "placed", 300), building("square", "stored", 100)
+    # Squares merged into a park: their coins are the park's already.
+    consumed = building("square", "consumed", 100)
+    sales = building("house", "placed", 500, district_id="sales-team-1")
+    # The administrators' test city never cost anything; its sales copy stays as it is too.
+    test_city = building("house", "placed", 999, district_id="test-support-team-1")
+    test_sales = building("house", "placed", 999, district_id="test-sales-team-1")
+    support_project, sales_project = project("support-team-1"), project("sales-team-1")
+    objects = [house, stored, consumed, sales, test_city, test_sales]
+    session.add_all([*objects, support_project, sales_project])
+    await session.flush()
+
+    def cell(district_id, u, **what):
+        return CityCell(district_id=district_id, module=1, u=u, v=0, **what)
+
+    session.add_all(
+        [
+            cell("support-team-1", 0, object_id=house.id),
+            cell("support-team-1", 5, decor="road", owner_id=operator.id, paid=6),
+            cell("support-team-1", 6, decor="tree", owner_id=mate.id, paid=4),
+            cell("sales-team-1", 0, object_id=sales.id),
+            cell("sales-team-1", 5, decor="road", owner_id=operator.id, paid=6),
+            cell("test-support-team-1", 0, object_id=test_city.id),
+            cell("test-support-team-1", 3, decor="lamp", owner_id=operator.id, paid=0),
+            CityDistrictState(
+                district_id="support-team-1", hq_level=3, built_projects=4, landmark_peak_plots=40
+            ),
+            CityDistrictState(
+                district_id="sales-team-1", hq_level=2, built_projects=1, landmark_peak_plots=12
+            ),
+        ]
+    )
+    gifts = (
+        (operator, 40, support_project),
+        (mate, 70, support_project),
+        (mate, 25, sales_project),
+    )
+    for user, amount, target in gifts:
+        tx = await post_transaction(
+            session,
+            user_id=user.id,
+            amount=-amount,
+            tx_type=TxType.CITY_CONTRIBUTION,
+            reason="Проект района",
+            idempotency_key=f"city-op:{user.id}:c{amount}",
+        )
+        session.add(
+            CityContribution(
+                project_id=target.id, user_id=user.id, amount=amount, transaction_id=tx.id
+            )
+        )
+    await session.commit()
+    before = {
+        a.user_id: (a.balance, a.total_earned, a.total_spent)
+        for a in await session.scalars(select(CoinAccount))
+    }
+    reset = squares_module().reset_support
+    refunded = await session.run_sync(lambda s: reset(s.connection()))
+    await session.commit()
+    # The support district's buildings standing or stored, its small things, the gifts to it.
+    assert refunded == {operator.id: 300 + 100 + 6 + 40, mate.id: 4 + 70}
+    accounts = {
+        a.user_id: a
+        for a in await session.scalars(
+            select(CoinAccount).execution_options(populate_existing=True)
+        )
+    }
+    for user_id, amount in refunded.items():
+        balance, earned, total_spent = before[user_id]
+        account = accounts[user_id]
+        assert (account.balance, account.total_earned, account.total_spent) == (
+            balance + amount,
+            earned,
+            total_spent,
+        )
+    resets = list(
+        await session.scalars(
+            select(CoinTransaction).where(
+                CoinTransaction.idempotency_key.like("city-squares-reset:%")
+            )
+        )
+    )
+    assert sorted((t.user_id, t.amount, t.tx_type) for t in resets) == sorted(
+        (u, a, TxType.PURCHASE_REFUND) for u, a in refunded.items()
+    )
+    assert all(t.balance_after == accounts[t.user_id].balance for t in resets)
+    by_user = {t.user_id: t for t in resets}
+    assert by_user[operator.id].meta == {"buildings": 400, "decor": 6, "contributions": 40}
+    assert by_user[mate.id].meta == {"buildings": 0, "decor": 4, "contributions": 70}
+    contributions = await session.scalars(
+        select(CityContribution).execution_options(populate_existing=True)
+    )
+    returned = {(c.project_id, c.amount): bool(c.refund_transaction_id) for c in contributions}
+    assert returned == {
+        (support_project.id, 40): True,
+        (support_project.id, 70): True,
+        (sales_project.id, 25): False,
+    }
+    states = {
+        o.district_id + ":" + o.family + ":" + str(o.paid): o.state
+        for o in await session.scalars(select(CityObject).execution_options(populate_existing=True))
+    }
+    assert states == {
+        "support-team-1:house:300": "archived",
+        "support-team-1:square:100": "archived",
+        "sales-team-1:house:500": "placed",
+        "test-support-team-1:house:999": "archived",
+        "test-sales-team-1:house:999": "placed",
+    }
+    left = await session.execute(select(CityCell.district_id, CityCell.u))
+    assert sorted(left.all()) == [("sales-team-1", 0), ("sales-team-1", 5)]
+    projects = await session.execute(
+        select(CityProject.district_id, CityProject.status).execution_options(
+            populate_existing=True
+        )
+    )
+    assert sorted(projects.all()) == [("sales-team-1", "open"), ("support-team-1", "cancelled")]
+    districts = await session.scalars(
+        select(CityDistrictState).execution_options(populate_existing=True)
+    )
+    assert {
+        d.district_id: (d.hq_level, d.built_projects, d.landmark_peak_plots) for d in districts
+    } == {"support-team-1": (1, 0, 0), "sales-team-1": (2, 1, 12)}
+    notes = list(
+        await session.scalars(
+            select(Notification).where(
+                Notification.title == "Районы Техподдержки начинаются заново"
+            )
+        )
+    )
+    assert sorted(n.user_id for n in notes) == sorted(refunded)
+    bodies = {n.user_id: n.body for n in notes}
+    assert all("квадратные" in body for body in bodies.values())
+    assert bodies[operator.id].endswith("446 коинов.") and bodies[mate.id].endswith("74 коина.")
+    events = await session.scalars(select(CityEvent).where(CityEvent.kind == "reset"))
+    assert sorted((e.district_id, e.payload["land"]) for e in events) == [
+        ("support-team-1", "squares"),
+        ("test-support-team-1", "squares"),
+    ]
+    audit = await session.scalar(
+        select(AuditLog).where(
+            AuditLog.action == "city.land.reset", AuditLog.entity_id == "squares"
+        )
+    )
+    assert audit.payload == {
+        "users": 2,
+        "coins": 446 + 74,
+        "districts": ["support-team-1", "test-support-team-1"],
+    }
+    # Run again (a retried deploy): nothing more comes back.
+    assert await session.run_sync(lambda s: reset(s.connection())) == {}
+    await session.commit()
+    count = await session.scalar(
+        select(func.count())
+        .select_from(CoinTransaction)
+        .where(CoinTransaction.idempotency_key.like("city-squares-reset:%"))
     )
     assert count == 2
 

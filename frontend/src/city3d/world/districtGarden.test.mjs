@@ -16,12 +16,7 @@ const gardens = ['support', 'sales'].flatMap(city => {
 const name = ({ city, centre }) => `${city} ${centre.district}`;
 /** Is a point on the centre's cells (to a hair: the front edge is the block's own)? */
 const inside = (block, centre, p, pad = 1e-6) => {
-  const s = block.shape;
-  let u, v;
-  if (s.kind === 'ring') {
-    const a = Math.atan2(p.z, p.x), turn = ((a - s.a0) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
-    u = turn / (s.a1 - s.a0) * block.cols; v = (Math.hypot(p.x, p.z) - s.r0) / (s.r1 - s.r0) * block.rows;
-  } else { u = (p.x - s.x0) / (s.x1 - s.x0) * block.cols; v = (p.z - s.z0) / (s.z1 - s.z0) * block.rows; }
+  const s = block.shape, u = (p.x - s.x0) / (s.x1 - s.x0) * block.cols, v = (p.z - s.z0) / (s.z1 - s.z0) * block.rows;
   return u > centre.col - pad && u < centre.col + centre.cols + pad && v > centre.row - pad && v < centre.row + centre.rows + pad;
 };
 /** A point in the centre's own frame: `u` along its front, `w` from its middle towards the front. */
@@ -30,12 +25,10 @@ const local = (centre, p) => {
   return { u: dx * c - dz * s, w: dx * s + dz * c };
 };
 const shoelace = points => Math.abs(points.reduce((sum, p, i) => { const q = points[(i + 1) % points.length]; return sum + p.x * q.z - q.x * p.z; }, 0)) / 2;
-/** The area of a ring sector or a rectangle of cells. */
+/** The area of a rectangle of cells. */
 const areaOf = (block, centre) => {
   const s = block.shape;
-  if (s.kind === 'rect') return (s.x1 - s.x0) / block.cols * centre.cols * (s.z1 - s.z0) / block.rows * centre.rows;
-  const dr = (s.r1 - s.r0) / block.rows, ra = s.r0 + centre.row * dr, rb = ra + centre.rows * dr, da = (s.a1 - s.a0) / block.cols * centre.cols;
-  return da / 2 * (rb * rb - ra * ra);
+  return (s.x1 - s.x0) / block.cols * centre.cols * (s.z1 - s.z0) / block.rows * centre.rows;
 };
 
 test('every district centre of both cities has a garden: three of them a city', () => {
@@ -48,7 +41,7 @@ test('the ground covers the centre\'s cells once, in lawn, paths and paving, and
     assert.ok(ground.length > 30, name(g));
     assert.deepEqual([...new Set(ground.map(q => q.colour))].sort(), [G.GARDEN_LAWN, G.GARDEN_PATH, G.GARDEN_PLAZA].sort(), name(g));
     for (const q of ground) for (const p of q.points) assert.ok(inside(block, centre, p), `${name(g)}: ground off the centre`);
-    // The quads tile the centre: their areas add up to its own (a ring's arcs by short chords).
+    // The quads tile the centre: their areas add up to its own.
     const sum = ground.reduce((total, q) => total + shoelace(q.points), 0), whole = areaOf(block, centre);
     assert.ok(Math.abs(sum - whole) / whole < .002, `${name(g)}: ${sum.toFixed(1)} of ${whole.toFixed(1)}`);
     // Lawn most of all; the paving at the front and round the fountain.

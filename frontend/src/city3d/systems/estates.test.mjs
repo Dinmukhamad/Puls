@@ -13,9 +13,16 @@ const built = await build({
 });
 const city = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
 const { THREE } = city, world = city.islandWorld(city.WORLD_X4), grid = city.landGrid(world), cells = city.landCells(grid);
-// The tests' building plot: 3 × 3 cells of district 1's third band, facing the middle of the city (no road beside it).
+// The tests' building plot: 3 × 3 cells of district 1's third band, facing the middle of the city (no road beside it),
+// two cells in from the corner of a window of 15 × 14 cells all for sale (the block is a rectangle round its band's cells).
 const home = grid.blocks.find(b => b.district === 1 && b.band === 3);
-const frame = { ...city.areaFrame(home, 30, 6, city.CELLS, city.CELLS), district: 1, block: home.block, col: 30, row: 6, band: home.band };
+const [plotCol, plotRow] = (() => {
+  const kept = Array.from({ length: home.cols + 1 }, () => new Int32Array(home.rows + 1));
+  for (let c = 0; c < home.cols; c++) for (let r = 0; r < home.rows; r++) kept[c + 1][r + 1] = kept[c][r + 1] + kept[c + 1][r] - kept[c][r] + (home.skip.has(`${c}:${r}`) ? 1 : 0);
+  for (let c = 0; c + 15 <= home.cols; c++) for (let r = 0; r + 14 <= home.rows; r++) if (kept[c + 15][r + 14] - kept[c][r + 14] - kept[c + 15][r] + kept[c][r] === 0) return [c + 2, r + 2];
+  throw new Error('no free land for the tests');
+})();
+const frame = { ...city.areaFrame(home, plotCol, plotRow, city.CELLS, city.CELLS), district: 1, block: home.block, col: plotCol, row: plotRow, band: home.band };
 const blockOf = cell => grid.blocks.find(b => b.district === cell.district && b.block === cell.block);
 class Element extends EventTarget {
   style = {}; dataset = {}; clientWidth = 800; clientHeight = 800;
@@ -40,9 +47,9 @@ function setup(targetGrid = grid) {
   const estates = city.createEstates(ctx, targetGrid, pick => picks.push(pick));
   const state = (objects, sandbox = false, extra = {}) => estates.set({ state: { city: 'support', sandbox, districts: [{ id: districtId, name: 'Тестовый район', number: frame.district, objects, projects: [], land: { open_band: grid.bands }, ...extra }] } });
   const build = placing => estates.setBuild({ district: districtId, area: 'plots', placing, selected: null, plot: null });
-  const aim = (point, azimuth = frame.rotation + .55, aspect = 1) => {
+  const aim = (point, azimuth = frame.rotation + .55, aspect = 1, polar = .86) => {
     camera.aspect = aspect; camera.updateProjectionMatrix();
-    camera.position.copy(point).add(new THREE.Vector3().setFromSpherical(new THREE.Spherical(30, .86, azimuth)));
+    camera.position.copy(point).add(new THREE.Vector3().setFromSpherical(new THREE.Spherical(30, polar, azimuth)));
     camera.lookAt(point); camera.updateMatrixWorld(true);
   };
   const screen = point => { const p = point.clone().project(camera); return { clientX: (p.x + 1) * 400, clientY: (1 - p.y) * 400 }; };
@@ -244,25 +251,32 @@ test('visible house roofs and ready-house facades select the building instead of
   s.estates.setCatalogue(catalogue);
   for (const [family, level] of [['house', 1], ['house', 2], ['house', 5], ['attic', 1]]) {
     s.state([object(family, { level })]); s.build(null);
-    s.aim(new THREE.Vector3(frame.x, 1, frame.z));
     const layout = city.plotLayout(frame, family, level, 7), candidates = [];
     for (const placement of layout.placements) {
       if (placement.kind !== 'roof' && placement.kind !== 'family-house') continue;
       const matrix = new THREE.Matrix4(), model = catalogue.resolve(placement, matrix);
       if (!model) continue;
+      // The top's middle and corners at its front and back edges.
       const box = model.bounds, middle = box.getCenter(new THREE.Vector3());
-      for (const z of [box.min.z + .05, box.max.z - .05]) {
-        candidates.push(new THREE.Vector3(middle.x, box.max.y - .05, z).applyMatrix4(matrix));
+      for (const z of [box.min.z + .05, box.max.z - .05]) for (const x of [middle.x, box.min.x + .05, box.max.x - .05]) {
+        candidates.push(new THREE.Vector3(x, box.max.y - .05, z).applyMatrix4(matrix));
       }
     }
-    const missedRoof = candidates.find(point => {
-      const p = point.clone().project(s.camera), caster = new THREE.Raycaster();
-      if (Math.abs(p.x) >= 1 || Math.abs(p.y) >= 1) return false;
-      caster.setFromCamera(new THREE.Vector2(p.x, p.y), s.camera);
-      const ground = caster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -.2), new THREE.Vector3());
-      const at = ground && city.cellAt(grid, ground);
-      return !at || at.block.block !== frame.block || at.col < frame.col || at.col >= frame.col + 3 || at.row < frame.row || at.row >= frame.row + 3;
-    });
+    // From in front of the house, lower if need be (a low roof hides little of the ground): where a roof's point seen
+    // from the camera lies over the ground beyond the house's cells.
+    let missedRoof;
+    for (const polar of [.86, 1.1, 1.25]) {
+      s.aim(new THREE.Vector3(frame.x, 1, frame.z), frame.rotation + .55, 1, polar);
+      missedRoof = candidates.find(point => {
+        const p = point.clone().project(s.camera), caster = new THREE.Raycaster();
+        if (Math.abs(p.x) >= 1 || Math.abs(p.y) >= 1) return false;
+        caster.setFromCamera(new THREE.Vector2(p.x, p.y), s.camera);
+        const ground = caster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -.2), new THREE.Vector3());
+        const at = ground && city.cellAt(grid, ground);
+        return !at || at.block.block !== frame.block || at.col < frame.col || at.col >= frame.col + 3 || at.row < frame.row || at.row >= frame.row + 3;
+      });
+      if (missedRoof) break;
+    }
     assert.ok(missedRoof, `${family} level ${level} has a visible roof/facade whose old ground-only pick misses the building`);
     s.picks.length = 0; s.tap(missedRoof);
     assert.deepEqual(s.picks, [{ kind: 'object', district: districtId, object: 7 }]);
@@ -494,6 +508,47 @@ test('with Ctrl (or Cmd) either button draws an area: every free cell of the rec
   s.estates.dispose();
 });
 
+test('in build mode Ctrl chooses cells before any tool: an area by a drag, a cell in or out by a click; a plain tap picks one cell', () => {
+  const s = setup(), b = home.block, canvas = s.ctx.renderer.domElement, seen = [];
+  // A neighbour's tree takes one cell of the area.
+  s.state([], false, { decor: { tree: [[b, frame.col + 5, frame.row + 4, 0]] } });
+  s.aim(cellPoint(frame.col + 6, frame.row + 4), frame.rotation + .55);
+  s.build(null);
+  canvas.addEventListener('pointerdown', event => seen.push(event.button));
+  // Ctrl with the left button: every free cell of the rectangle; the camera never hears of it.
+  const from = { block: home, col: frame.col + 3, row: frame.row + 3 }, to = { block: home, col: frame.col + 6, row: frame.row + 4 };
+  s.drag(cellPoint(from.col, from.row), cellPoint(to.col, to.row), { ctrlKey: true });
+  assert.deepEqual(seen, []);
+  const area = city.cellsWithin(grid, from, to).filter(c => !(c.col === frame.col + 5 && c.row === frame.row + 4));
+  assert.equal(area.length, 4 * 2 - 1);
+  assert.deepEqual(chosen(s.picks).sort(), area.map(c => [b, c.col, c.row]).sort());
+  // The page keeps them, with no tool yet: a click with Ctrl (or Cmd) adds a cell, another takes it out again.
+  const keep = () => s.estates.setBuild({ district: districtId, area: 'plots', placing: null, selected: null, plot: null, decor: { tool: null, cells: s.picks.filter(p => p.kind === 'cells').at(-1).cells, shape: 'cell' } });
+  const click = (point, keys) => s.drag(point, point, keys);
+  keep(); s.picks.length = 0;
+  click(cellPoint(frame.col + 9, frame.row + 1), { ctrlKey: true });
+  assert.deepEqual(chosen(s.picks).sort(), [...area.map(c => [b, c.col, c.row]), [b, frame.col + 9, frame.row + 1]].sort());
+  keep(); s.picks.length = 0;
+  click(cellPoint(frame.col + 9, frame.row + 1), { metaKey: true });
+  assert.equal(chosen(s.picks).length, area.length);
+  // A taken cell does not come in.
+  keep(); s.picks.length = 0;
+  click(cellPoint(frame.col + 5, frame.row + 4), { ctrlKey: true });
+  assert.equal(chosen(s.picks).length, area.length);
+  // Without a key a drag stays the camera's, and a tap picks one cell, for a building or one small thing.
+  keep(); s.picks.length = 0;
+  s.drag(cellPoint(frame.col + 3, frame.row + 6), cellPoint(frame.col + 6, frame.row + 6));
+  assert.deepEqual(seen, [0]); assert.equal(chosen(s.picks), undefined);
+  s.tap(cellPoint(frame.col + 9, frame.row + 1));
+  assert.deepEqual(s.picks.map(p => [p.kind, p.col, p.row]), [['plot', frame.col + 9, frame.row + 1]]);
+  // Placing a building from the inventory, Ctrl does nothing to cells.
+  s.estates.setBuild({ district: districtId, area: 'plots', placing: { family: 'house', rotation: 0, moving: 7 }, selected: null, plot: null });
+  s.picks.length = 0;
+  s.drag(cellPoint(from.col, from.row), cellPoint(to.col, to.row), { ctrlKey: true });
+  assert.equal(chosen(s.picks), undefined);
+  s.estates.dispose();
+});
+
 test('in the area mode a plain drag draws an area, and taps choose it by its two corners', () => {
   const s = setup(), b = home.block;
   s.state([]); s.aim(cellPoint(frame.col + 6, frame.row + 4), frame.rotation + .55);
@@ -517,7 +572,9 @@ test('in the area mode a plain drag draws an area, and taps choose it by its two
   s.tap(cellPoint(centre.col + 1, centre.row + 2, block));
   tool(s, { tool: 'pine', cells: s.picks.at(-1)?.cells ?? [], shape: 'area' });
   s.tap(cellPoint(centre.col - 2, centre.row + 3, block));
-  assert.deepEqual(chosen(s.picks).sort(), [[block.block, centre.col - 2, centre.row + 2], [block.block, centre.col - 2, centre.row + 3], [block.block, centre.col - 1, centre.row + 2], [block.block, centre.col - 1, centre.row + 3]].sort());
+  // The squares beside the centre, whichever block of the district sells each (the island city's blocks overlap).
+  const beside = [[-2, 2], [-2, 3], [-1, 2], [-1, 3]].map(([c, r]) => { const at = city.cellAt(grid, city.cellCentre(block, centre.col + c, centre.row + r)); return [at.block.block, at.col, at.row]; });
+  assert.deepEqual(chosen(s.picks).sort(), beside.sort());
   s.estates.dispose();
 });
 

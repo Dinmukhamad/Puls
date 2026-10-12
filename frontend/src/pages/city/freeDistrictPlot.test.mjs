@@ -46,10 +46,14 @@ for (const city of ["support", "sales"]) {
 
   test(`${city}: the outer land can be suggested, and a full district gets no suggestion`, () => {
     const grid = districtPlotGrid(city), outer = grid.blocks.filter(b => b.district === 1 && b.band === grid.bands && b.cols >= 3 && b.rows >= 3).at(-1);
-    // Everything taken by trees but three by three cells at the edge of the land.
-    const spare = { col: outer.cols - 3, row: outer.rows - 3 }, trees = [];
+    // Everything taken by trees but three by three cells for sale at the far edge of the land (the island city's blocks
+    // are rectangles round their cells, its corners not for sale).
+    const free = (c, r) => [0, 1, 2].every(i => [0, 1, 2].every(j => !outer.skip.has(`${c + i}:${r + j}`)));
+    let spare = null;
+    for (let c = outer.cols - 3; c >= 0 && !spare; c--) for (let r = outer.rows - 3; r >= 0 && !spare; r--) if (free(c, r)) spare = { col: c, row: r };
+    const trees = [];
     for (const block of grid.blocks.filter(b => b.district === 1)) for (let c = 0; c < block.cols; c++) for (let r = 0; r < block.rows; r++) {
-      if (block === outer && c >= spare.col && r >= spare.row) continue;
+      if (block === outer && c >= spare.col && c < spare.col + 3 && r >= spare.row && r < spare.row + 3) continue;
       trees.push([block.block, c, r, 0]);
     }
     assert.deepEqual(freeDistrictPlot(grid, { ...district(city, 1, [], { tree: trees }), land: { open_band: 1 } }), { block: outer.block, ...spare, band: outer.band });

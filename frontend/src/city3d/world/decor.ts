@@ -126,7 +126,7 @@ function inside(grid: LandGrid, map: DecorMap, block: LandBlock, links: { way: W
  * along its edges only.
  */
 function paving(ground: GroundQuad[], corners: Point[], links: { way: Way; to: Neighbour }[], half: number, surface: { y: number; colour: string }, filled: [Way, Way][] = []) {
-  // The cell's size along its columns (s) and its rows (t), to keep the widths in units on a ring's narrower cells.
+  // The cell's size along its columns (s) and its rows (t), to keep the widths in units on narrower cells.
   const across = Math.hypot(areaPoint(corners, 1, .5).x - areaPoint(corners, 0, .5).x, areaPoint(corners, 1, .5).z - areaPoint(corners, 0, .5).z);
   const along = Math.hypot(areaPoint(corners, .5, 1).x - areaPoint(corners, .5, 0).x, areaPoint(corners, .5, 1).z - areaPoint(corners, .5, 0).z);
   const hs = Math.min(.48, half / across), ht = Math.min(.48, half / along), P = (s: number, t: number) => areaPoint(corners, s, t);
@@ -184,7 +184,7 @@ function roadside(grid: LandGrid, map: DecorMap, block: LandBlock, col: number, 
 /** The way a cell looks with nothing beside it: towards the middle of the city. */
 function facing(block: LandBlock, col: number, row: number, centre: Point): Point {
   const corners = areaCorners(block, col, row), side = homeSide(block, col, row);
-  const edge = side === "in" || side === "z0" ? areaPoint(corners, .5, 0) : side === "out" || side === "z1" ? areaPoint(corners, .5, 1) : side === "a0" || side === "x0" ? areaPoint(corners, 0, .5) : areaPoint(corners, 1, .5);
+  const edge = side === "z0" ? areaPoint(corners, .5, 0) : side === "z1" ? areaPoint(corners, .5, 1) : side === "x0" ? areaPoint(corners, 0, .5) : areaPoint(corners, 1, .5);
   const dx = edge.x - centre.x, dz = edge.z - centre.z, l = Math.hypot(dx, dz) || 1;
   return { x: dx / l, z: dz / l };
 }

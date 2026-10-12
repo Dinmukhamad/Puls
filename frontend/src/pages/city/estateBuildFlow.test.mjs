@@ -145,6 +145,32 @@ test("transfer to another ready district disables purchases and automatic select
   assert.match(buy, /disabled=""/);
 });
 
+test("cells chosen with Ctrl before a tool: every small thing priced for all of them, a hint where the palette is", () => {
+  const cells = [{ block: 1, col: 0, row: 0 }, { block: 1, col: 1, row: 0 }, { block: 1, col: 2, row: 0 }];
+  const base = { mine: { ...mine, decor, decor_batch: 400 } }, chosen = { ...overview, decor: { tool: null, cells, shape: "cell" } };
+  // The overview tells how to choose many cells at once, beside the palette and in its first step.
+  const start = render(base);
+  assert.match(start, /<p class="estate-tip estate-tip--mouse">Много клеток сразу: зажми <kbd>Ctrl<\/kbd> и протяни мышью по карте — выберется прямоугольник, <kbd>Ctrl<\/kbd> \+ клик добавит или уберёт клетку\. Потом выбери, что на них поставить\.<\/p>/);
+  assert.match(start, /<li>Проложи дороги и дорожки, посади деревья, поставь фонари — ниже, в «Дорогах и благоустройстве»<span class="estate-tip--mouse">, или зажми <kbd>Ctrl<\/kbd> и протяни мышью по клеткам на карте, потом выбери, что на них поставить<\/span>\.<\/li>/);
+  const html = render({ ...base, build: chosen });
+  assert.match(html, /<h2>Выбрано: 3 клетки<\/h2><small>Что поставить на все сразу\?<\/small>/);
+  // Each small thing at its price for all three cells, land included; nothing is bought until one is chosen.
+  assert.match(html, /aria-label="Дорога на 3 клетки: 15 коинов"[^>]*>.*?<strong>Дорога<\/strong><small>◈ 15<\/small>/);
+  assert.match(html, /aria-label="Фонарь на 3 клетки: 45 коинов"[^>]*>.*?<strong>Фонарь<\/strong><small>◈ 45<\/small>/);
+  assert.doesNotMatch(html, /class="city-action"|Спланируй свой район|Показать район на карте/);
+  assert.match(html, />Сбросить выбор<\/button>/);
+  assert.match(html, /Дома и здания ставятся по одному: нажми на клетку без <kbd>Ctrl<\/kbd>\./);
+  // What one cannot pay for says so; too many cells for one go too; a closed district chooses nothing.
+  const poor = render({ mine: { ...base.mine, available: 20 }, build: chosen });
+  assert.match(poor, /<small>◈ 15<\/small>/);
+  assert.match(poor, /<small>◈ 45 · не хватает<\/small>/);
+  const many = render({ mine: { ...base.mine, decor_batch: 2 }, build: chosen });
+  assert.match(many, /role="alert">За раз можно построить не больше 2 клеток\./);
+  const closed = render({ mine: { ...base.mine, status: "closed", message: "Стройка в районе пока закрыта." }, build: chosen });
+  assert.equal((closed.match(/<button type="button" disabled=""/g) ?? []).length, decor.length);
+  assert.match(closed, /<p class="estate-note">Стройка в районе пока закрыта\.<\/p>/);
+});
+
 test("laying small things: the cells chosen, what they cost with the land, and only what one can pay for", () => {
   const cells = [{ block: 1, col: 0, row: 0 }, { block: 1, col: 1, row: 0 }, { block: 1, col: 2, row: 0 }];
   const road = { tool: "road", cells, shape: "line" }, base = { mine: { ...mine, decor, decor_batch: 400 } };
@@ -153,7 +179,7 @@ test("laying small things: the cells chosen, what they cost with the land, and o
   // How taps choose cells: one at a time, by lines (a road's way at first) or by areas; Ctrl with the mouse draws an area.
   assert.match(html, /<div class="estate-shape" role="radiogroup" aria-label="Как выбирать клетки"><button type="button" role="radio" aria-checked="false">Клетка<\/button><button type="button" role="radio" aria-checked="true">Линия<\/button><button type="button" role="radio" aria-checked="false">Область<\/button><\/div>/);
   assert.match(html, /Каждое нажатие продолжает линию от прошлой клетки\./);
-  assert.match(html, /С зажатым <kbd>Ctrl<\/kbd> протяни мышью левой или правой кнопкой — выделится прямоугольник\./);
+  assert.match(html, /С зажатым <kbd>Ctrl<\/kbd> протяни мышью левой или правой кнопкой — выделится прямоугольник, <kbd>Ctrl<\/kbd> \+ клик добавит или уберёт клетку\./);
   const grove = render({ ...base, build: { ...overview, decor: { tool: "road", cells, shape: "area" } } });
   assert.match(grove, /aria-checked="true">Область<\/button>/);
   assert.match(grove, /Нажми на один угол, потом на другой — выберется прямоугольник между ними: дорога в две-три клетки шириной, роща, площадь\./);

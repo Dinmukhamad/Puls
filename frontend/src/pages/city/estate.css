@@ -81,4 +81,7 @@
 .estate-shape button[aria-checked=true]{background:var(--surface-primary);color:var(--text-primary);box-shadow:0 1px 4px rgba(15,23,42,.14),inset 0 0 0 1px var(--accent-primary)}
 .estate-shape button:focus-visible{outline:2px solid var(--accent-primary);outline-offset:1px}
 .estate-shape__hint{margin-top:-4px}
-.estate-placing kbd{display:inline-block;padding:0 5px;border:1px solid var(--separator);border-radius:5px;background:var(--surface-primary);font:inherit;font-size:11px;font-weight:700;line-height:1.5}
+.estate-placing kbd,.estate-tip kbd,.estate-steps kbd{display:inline-block;padding:0 5px;border:1px solid var(--separator);border-radius:5px;background:var(--surface-primary);font:inherit;font-size:11px;font-weight:700;line-height:1.5}
+/* How to choose many cells at once: with Ctrl and the mouse, so not on a touch screen. */
+.estate-tip{margin:0;padding:10px 12px;border-radius:12px;font-size:12.5px;line-height:1.5;background:color-mix(in srgb,var(--accent-primary) 10%,var(--surface-primary));border:1px solid color-mix(in srgb,var(--accent-primary) 28%,transparent)}
+@media (hover:none) and (pointer:coarse){.estate-tip--mouse{display:none}}

@@ -7,8 +7,22 @@ const built = await build({ stdin: { contents: `export * from './decor.ts'; expo
 const D = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
 
 const GRIDS = { support: D.landGrid(D.islandWorld(D.WORLD_X4)), sales: D.landGrid(D.generateSalesWorld()) };
-/** A district's block with no cell kept from sale, big enough to lay things out on. */
-const blockOf = grid => grid.blocks.find(b => b.district === 1 && b.skip.size === 0 && b.cols >= 22 && b.rows >= 12);
+/**
+ * A piece of district 1's land to lay things out on: a block and a window of it, 22 × 12 cells all for sale (the island
+ * city's blocks are rectangles round their bands' cells). `C` and `R` give a column and a row of the block from the
+ * window's first.
+ */
+const windowOf = grid => {
+  for (const block of grid.blocks.filter(b => b.district === 1)) {
+    // How many cells are kept from sale before each (col, row): a window is free when it holds none.
+    const kept = Array.from({ length: block.cols + 1 }, () => new Int32Array(block.rows + 1));
+    for (let c = 0; c < block.cols; c++) for (let r = 0; r < block.rows; r++) kept[c + 1][r + 1] = kept[c][r + 1] + kept[c + 1][r] - kept[c][r] + (block.skip.has(`${c}:${r}`) ? 1 : 0);
+    for (let c0 = 0; c0 + 22 <= block.cols; c0++) for (let r0 = 0; r0 + 12 <= block.rows; r0++) {
+      if (kept[c0 + 22][r0 + 12] - kept[c0][r0 + 12] - kept[c0 + 22][r0] + kept[c0][r0] === 0) return { block, b: block.block, C: c => c0 + c, R: r => r0 + r };
+    }
+  }
+  throw new Error('no free window');
+};
 /** A map of small things: [family, block, col, row, mine?] each. */
 const mapOf = (district, items) => D.decorMap([{ number: district, decor: items.reduce((all, [family, block, col, row, mine = 1]) => ((all[family] ??= []).push([block, col, row, mine]), all), {}) }]);
 const near = (p, q, d = 1e-9) => Math.hypot(p.x - q.x, p.z - q.z) < d;
@@ -23,9 +37,9 @@ test('the server\'s lists become one map of the city\'s small things, whose own 
 
 test('a road joins the roads beside it: an arm out to each, meeting the next one\'s at their shared edge, a lane mark down a straight piece', () => {
   for (const [city, grid] of Object.entries(GRIDS)) {
-    const block = blockOf(grid), b = block.block;
+    const { block, b, C, R } = windowOf(grid);
     // A street along a row with a turn off it: a dead end, a straight piece, a junction of three, a corner.
-    const cells = [[4, 5], [5, 5], [6, 5], [7, 5], [6, 6], [6, 7], [7, 7]];
+    const cells = [[4, 5], [5, 5], [6, 5], [7, 5], [6, 6], [6, 7], [7, 7]].map(([c, r]) => [C(c), R(r)]);
     const map = mapOf(1, cells.map(([c, r]) => ['road', b, c, r])), layout = D.decorLayout(grid, map);
     const of = colour => layout.ground.filter(q => q.colour === colour);
     // A pavement under each road cell, its asphalt square in the middle and an arm for each road it joins.
@@ -37,7 +51,7 @@ test('a road joins the roads beside it: an arm out to each, meeting the next one
     assert.equal(of(MARK).length, 2);
     for (const mark of of(MARK)) {
       const at = D.cellAt(grid, middleOf(mark.points[0], mark.points[2]));
-      assert.ok([[5, 5], [6, 6]].some(([c, r]) => at.col === c && at.row === r), `${city}: a lane mark on ${at.col}:${at.row}`);
+      assert.ok([[5, 5], [6, 6]].some(([c, r]) => at.col === C(c) && at.row === R(r)), `${city}: a lane mark on ${at.col}:${at.row}`);
     }
     // Every arm ends on its cell's edge at the meeting point, as wide as the asphalt; the next cell's arm ends there too.
     for (const [i, [c, r]] of cells.entries()) for (const { to } of links[i]) {
@@ -56,43 +70,58 @@ test('a road two or three cells wide is one piece of asphalt, with the pavement 
   /** Is a point under a quad of this colour (corners in order, convex)? */
   const under = (ground, colour, p) => ground.some(q => q.colour === colour && q.points.every((a, i) => { const b = q.points[(i + 1) % 4]; return (b.x - a.x) * (p.z - a.z) - (b.z - a.z) * (p.x - a.x) >= -1e-9; }) || (q.colour === colour && q.points.every((a, i) => { const b = q.points[(i + 1) % 4]; return (b.x - a.x) * (p.z - a.z) - (b.z - a.z) * (p.x - a.x) <= 1e-9; })));
   for (const [city, grid] of Object.entries(GRIDS)) {
-    const block = blockOf(grid), b = block.block;
+    const { block, b, C, R } = windowOf(grid);
     // Two rows of five: where four of its cells meet the asphalt runs through; on the outer edge the pavement stays.
-    const wide = D.decorLayout(grid, mapOf(1, [5, 5].flatMap((_, k) => [4, 5, 6, 7, 8].map(c => ['road', b, c, 5 + k]))));
-    const meet = D.areaPoint(D.areaCorners(block, 6, 6), .02, .02), edge = D.areaPoint(D.areaCorners(block, 6, 5), .02, .02);
+    const wide = D.decorLayout(grid, mapOf(1, [5, 5].flatMap((_, k) => [4, 5, 6, 7, 8].map(c => ['road', b, C(c), R(5 + k)]))));
+    const meet = D.areaPoint(D.areaCorners(block, C(6), R(6)), .02, .02), edge = D.areaPoint(D.areaCorners(block, C(6), R(5)), .02, .02);
     assert.ok(under(wide.ground, ASPHALT, meet), `${city}: asphalt where four cells meet`);
     assert.ok(!under(wide.ground, ASPHALT, edge), `${city}: the pavement along the outer edge`);
     // A single road turning a corner keeps its pavement inside the turn, as before.
-    const bend = D.decorLayout(grid, mapOf(1, [['road', b, 4, 5], ['road', b, 5, 5], ['road', b, 5, 6]]));
-    assert.ok(!under(bend.ground, ASPHALT, D.areaPoint(D.areaCorners(block, 5, 5), .02, .98)), `${city}: the pavement inside a turn`);
+    const bend = D.decorLayout(grid, mapOf(1, [['road', b, C(4), R(5)], ['road', b, C(5), R(5)], ['road', b, C(5), R(6)]]));
+    assert.ok(!under(bend.ground, ASPHALT, D.areaPoint(D.areaCorners(block, C(5), R(5)), .02, .98)), `${city}: the pavement inside a turn`);
   }
 });
 
 test('a road keeps on across the seam between two bands of the island city', () => {
   const grid = GRIDS.support, inner = grid.blocks.find(b => b.district === 1 && b.band === 3), outer = grid.blocks.find(b => b.district === 1 && b.band === 4);
-  const col = 40, next = D.neighbours(grid, inner, col, inner.rows - 1, 'row+');
-  assert.ok(next.length >= 1 && next.every(n => n.block === outer && n.row === 0), 'the next band\'s first row is right past the last row');
-  const there = next[0], map = mapOf(1, [['road', inner.block, col, inner.rows - 1], ['road', outer.block, there.col, 0]]);
-  const back = D.joins(grid, map, outer, there.col, 0, 'road');
-  assert.deepEqual(back.map(l => [l.way, l.to.block.block, l.to.col, l.to.row]), [['row-', inner.block, col, inner.rows - 1]]);
-  // The two arms end at one point, the middle of where the two cells' edges overlap.
-  const ends = D.decorLayout(grid, map).ground.filter(q => q.colour === ASPHALT && q.points.length === 4).map(q => middleOf(q.points[2], q.points[3]));
-  assert.ok(near(back[0].to.meet, there.meet, 1e-6), 'both sides find the same meeting point');
-  assert.equal(ends.filter(p => near(p, there.meet, 1e-6)).length, 2);
+  const opposite = { 'row-': 'row+', 'row+': 'row-', 'col-': 'col+', 'col+': 'col-' };
+  // The cells of the third band whose square beside them is the fourth band's: on both of its ways out, along x and z.
+  const seam = [];
+  for (let col = 0; col < inner.cols; col++) for (let row = 0; row < inner.rows; row++) {
+    if (inner.skip.has(`${col}:${row}`)) continue;
+    for (const way of D.WAYS) for (const n of D.neighbours(grid, inner, col, row, way)) if (n.block === outer) seam.push({ col, row, way, n });
+  }
+  assert.ok(seam.length > 100, `${seam.length} cells on the seam`);
+  // It steps along x and along z, always outwards: the next band's square lies farther from the middle of the city.
+  assert.ok(seam.some(s => s.way.startsWith('col')) && seam.some(s => s.way.startsWith('row')), 'the seam steps along x and z');
+  for (const { col, row, n } of seam) {
+    const here = D.cellCentre(inner, col, row), there = D.cellCentre(outer, n.col, n.row);
+    assert.ok(Math.hypot(there.x, there.z) > Math.hypot(here.x, here.z), `${col}:${row} → ${n.col}:${n.row} turns inwards`);
+  }
+  for (const { col, row, way, n } of seam.filter((_, i) => i % 9 === 0)) {
+    assert.ok(!n.block.skip.has(`${n.col}:${n.row}`) && n.from === 0 && n.to === 1, 'a whole edge, for sale');
+    const map = mapOf(1, [['road', inner.block, col, row], ['road', outer.block, n.col, n.row]]);
+    const back = D.joins(grid, map, outer, n.col, n.row, 'road');
+    assert.deepEqual(back.map(l => [l.way, l.to.block.block, l.to.col, l.to.row]), [[opposite[way], inner.block, col, row]]);
+    // The two arms end at one point, the middle of the edge the two squares share.
+    const ends = D.decorLayout(grid, map).ground.filter(q => q.colour === ASPHALT && q.points.length === 4).map(q => middleOf(q.points[2], q.points[3]));
+    assert.ok(near(back[0].to.meet, n.meet, 1e-6), 'both sides find the same meeting point');
+    assert.equal(ends.filter(p => near(p, n.meet, 1e-6)).length, 2);
+  }
 });
 
 test('a footpath meets roads and other paths, a hedge closes with hedges, a road ignores both', () => {
   for (const grid of Object.values(GRIDS)) {
-    const block = blockOf(grid), b = block.block;
-    const map = mapOf(1, [['road', b, 10, 4], ['path', b, 10, 5], ['path', b, 10, 6], ['hedge', b, 11, 6], ['hedge', b, 12, 6], ['hedge', b, 13, 6], ['hedge', b, 20, 9]]);
-    assert.deepEqual(D.joins(grid, map, block, 10, 4, 'road'), [], 'a road does not run into a footpath');
-    assert.deepEqual(D.joins(grid, map, block, 10, 5, 'path').map(l => l.way).sort(), ['row+', 'row-']);
-    assert.deepEqual(D.joins(grid, map, block, 10, 6, 'path').map(l => l.way), ['row-'], 'a path does not run into a hedge');
-    assert.deepEqual(D.joins(grid, map, block, 12, 6, 'hedge').map(l => l.way).sort(), ['col+', 'col-']);
+    const { block, b, C, R } = windowOf(grid), cell = ([family, c, r]) => [family, b, C(c), R(r)];
+    const map = mapOf(1, [['road', 10, 4], ['path', 10, 5], ['path', 10, 6], ['hedge', 11, 6], ['hedge', 12, 6], ['hedge', 13, 6], ['hedge', 20, 9]].map(cell));
+    assert.deepEqual(D.joins(grid, map, block, C(10), R(4), 'road'), [], 'a road does not run into a footpath');
+    assert.deepEqual(D.joins(grid, map, block, C(10), R(5), 'path').map(l => l.way).sort(), ['row+', 'row-']);
+    assert.deepEqual(D.joins(grid, map, block, C(10), R(6), 'path').map(l => l.way), ['row-'], 'a path does not run into a hedge');
+    assert.deepEqual(D.joins(grid, map, block, C(12), R(6), 'hedge').map(l => l.way).sort(), ['col+', 'col-']);
     const layout = D.decorLayout(grid, map), hedges = layout.placements.filter(p => p.kind === 'hedge');
     assert.equal(layout.ground.filter(q => q.colour === FOOTPATH).length, 2 + 3, 'two path squares and three arms');
     // Clipped pieces from each hedge's middle out to its neighbours, a short run across a hedge on its own.
-    const on = (c, r) => hedges.filter(p => { const at = D.cellAt(grid, p); return at && at.col === c && at.row === r; }).length;
+    const on = (c, r) => hedges.filter(p => { const at = D.cellAt(grid, p); return at && at.col === C(c) && at.row === R(r); }).length;
     assert.ok(on(11, 6) >= 1 && on(12, 6) >= 2 && on(13, 6) >= 1 && on(20, 9) >= 1, `hedge pieces ${[on(11, 6), on(12, 6), on(13, 6), on(20, 9)]}`);
     assert.ok(hedges.every(p => p.kind === 'hedge' && Number.isFinite(p.rotation)));
   }
@@ -100,23 +129,23 @@ test('a footpath meets roads and other paths, a hedge closes with hedges, a road
 
 test('trees, bushes and flowerbeds stand in their own cells; a lamp by its road lights, a bench faces the road', () => {
   for (const grid of Object.values(GRIDS)) {
-    const block = blockOf(grid), b = block.block;
+    const { block, b, C, R } = windowOf(grid);
     const things = [['tree', 2, 2, 'tree-round'], ['pine', 3, 2, 'tree-cone'], ['birch', 4, 2, 'tree-birch'], ['oak', 5, 2, 'tree-oak'], ['bush', 6, 2, 'bush'], ['flowers', 7, 2, 'flowerbed']];
-    const map = mapOf(1, [...things.map(([family, c, r]) => [family, b, c, r]), ['road', b, 10, 8], ['road', b, 11, 8], ['lamp', b, 10, 9], ['bench', b, 11, 9], ['lamp', b, 20, 9], ['bench', b, 21, 9]]);
+    const map = mapOf(1, [...things.map(([family, c, r]) => [family, b, c, r]), ['road', b, 10, 8], ['road', b, 11, 8], ['lamp', b, 10, 9], ['bench', b, 11, 9], ['lamp', b, 20, 9], ['bench', b, 21, 9]].map(([family, , c, r]) => [family, b, C(c), R(r)]));
     const layout = D.decorLayout(grid, map), at = p => D.cellAt(grid, p);
     for (const [family, c, r, kind] of things) {
-      const mine = layout.placements.filter(p => { const cell = at(p); return cell && cell.col === c && cell.row === r; });
+      const mine = layout.placements.filter(p => { const cell = at(p); return cell && cell.col === C(c) && cell.row === R(r); });
       assert.deepEqual(mine.map(p => p.kind), [kind], `${family} on ${c}:${r}`);
     }
     // The lamp by the road stands at the road's edge of its cell, the one with no road in the middle.
     const lamps = layout.placements.filter(p => p.kind === 'lamp');
     assert.equal(lamps.length, 2); assert.deepEqual(layout.lamps, lamps);
-    const roadside = lamps.find(p => at(p).col === 10), alone = lamps.find(p => at(p).col === 20);
-    const centre = D.cellCentre(block, 10, 9), meet = D.neighbours(grid, block, 10, 9, 'row-')[0].meet;
+    const roadside = lamps.find(p => at(p).col === C(10)), alone = lamps.find(p => at(p).col === C(20));
+    const centre = D.cellCentre(block, C(10), R(9)), meet = D.neighbours(grid, block, C(10), R(9), 'row-')[0].meet;
     assert.ok(Math.hypot(roadside.x - meet.x, roadside.z - meet.z) < Math.hypot(centre.x - meet.x, centre.z - meet.z) - .8, 'the lamp stands by the road');
-    assert.ok(near(alone, D.cellCentre(block, 20, 9), 1e-9), 'a lamp with no road beside it stands in the middle');
+    assert.ok(near(alone, D.cellCentre(block, C(20), R(9)), 1e-9), 'a lamp with no road beside it stands in the middle');
     // The bench by the road looks at it.
-    const bench = layout.placements.find(p => p.kind === 'bench' && at(p).col === 11), to = D.neighbours(grid, block, 11, 9, 'row-')[0].meet;
+    const bench = layout.placements.find(p => p.kind === 'bench' && at(p).col === C(11)), to = D.neighbours(grid, block, C(11), R(9), 'row-')[0].meet;
     const look = { x: Math.sin(bench.rotation), z: Math.cos(bench.rotation) }, dx = to.x - bench.x, dz = to.z - bench.z;
     assert.ok((look.x * dx + look.z * dz) / Math.hypot(dx, dz) > .99, 'the bench faces the road');
   }
@@ -124,7 +153,7 @@ test('trees, bushes and flowerbeds stand in their own cells; a lamp by its road 
 
 test('a building turns its front to the road beside it, to the most of it, else where its owner turned it', () => {
   for (const [city, grid] of Object.entries(GRIDS)) {
-    const block = blockOf(grid), b = block.block, col = 10, row = 5;
+    const { block, b, C, R } = windowOf(grid), col = C(10), row = R(5);
     const home = D.homeSide(block, col, row, 3, 3), empty = D.decorMap([]);
     for (const rotation of [0, 1, 2, 3]) assert.deepEqual(D.buildingFacing(grid, empty, block, col, row, 3, 3, rotation), { side: D.turnedSide(block, home, rotation), street: false }, `${city}: turned ${rotation}`);
     // A road along the plot's edge, a cell or the whole edge of it: the front looks there, however it was turned.

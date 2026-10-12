@@ -137,7 +137,12 @@ export function CityPage() {
     if (sandboxOn && (pick.kind === "project" || pick.kind === "public")) { setWorldSelected(null); openSandbox(pick.district, true); return; }
     if (pick.kind === "public") { setBuilding(null); setWorldSelected(pick.district); focusLand({ district: pick.district, kind: "public" }); return; }
     if (pick.kind === "place") setBuilding(b => b && { ...b, spot: { module: pick.module, u: pick.u, v: pick.v, rotation: pick.rotation, problem: pick.problem } });
-    else if (pick.kind === "cells") setBuilding(b => b && b.decor && b.district === pick.district ? { ...b, decor: { ...b.decor, cells: pick.cells } } : b);
+    else if (pick.kind === "cells") setBuilding(b => {
+      if (!b || b.district !== pick.district) return b;
+      // Cells chosen with Ctrl before a tool: they wait for what goes on them; none left, the dock goes back.
+      if (!b.decor || b.decor.tool === null) return pick.cells.length ? { ...b, plot: null, selected: null, decor: { tool: null, cells: pick.cells, shape: "cell", ...(b.decor?.anyone || sandboxOn ? { anyone: true } : {}) } } : { ...b, decor: null };
+      return { ...b, decor: { ...b.decor, cells: pick.cells } };
+    });
     else if (pick.kind === "plot") {
       if (building?.district !== pick.district) return;
       // Another cell keeps what is chosen, so the same building can be tried cell after cell; the same cell keeps all.
@@ -146,7 +151,8 @@ export function CityPage() {
         const same = b.plot && b.plot.block === pick.block && b.plot.col === pick.col && b.plot.row === pick.row;
         const plot = same ? { ...b.plot!, band: pick.band, problem: pick.problem }
           : { block: pick.block, col: pick.col, row: pick.row, band: pick.band, problem: pick.problem, rotation: b.plot?.rotation ?? 0, family: b.plot?.family ?? null, at: null };
-        return { ...b, plot, selected: null };
+        // A tap without Ctrl leaves the cells chosen with it for this one cell.
+        return { ...b, plot, selected: null, decor: b.decor?.tool === null ? null : b.decor };
       });
       focusLand({ district: pick.district, kind: "plot", plot: { block: pick.block, col: pick.col, row: pick.row } });
     }

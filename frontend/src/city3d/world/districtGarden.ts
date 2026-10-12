@@ -4,8 +4,8 @@
  * one on the left (as the city sees it) round a fountain, the one on the right with flowerbeds along its walk; trees
  * along the back and the ends, lamps where the paths meet, benches. Nothing stands where the main building grows (its
  * LANDMARK_SIDE square in the middle, world/districtLandmark.ts), only its lawn and the way in, which it covers.
- * Pure data, no three.js: the ground as quads for one mesh, laid out in the block's own columns and rows so that it
- * follows the island city's rings; everything else as placements for the instance pools, the lamps also lit at night.
+ * Pure data, no three.js: the ground as quads for one mesh, laid out in the block's own columns and rows; everything
+ * else as placements for the instance pools, the lamps also lit at night.
  */
 import type { GroundQuad } from "./decor";
 import { LANDMARK_SIDE } from "./districtLandmark";
@@ -21,7 +21,7 @@ export const GARDEN_LAWN = "#8dbb6f", GARDEN_PATH = "#e3dbc9", GARDEN_PLAZA = "#
 const WALK = 2.4, PATH = 1.2, BACK = 2, END = 1.9;
 /** Trees stand this far in from the centre's back and ends, so their crowns stay over its own cells. */
 const EDGE = 1;
-/** A ground quad runs along the front no longer than this, so on a ring it bends with the land. */
+/** A ground quad runs along the front no longer than this. */
 const STEP = 1.5;
 
 interface Region { u0: number; u1: number; w0: number; w1: number; colour: string }
@@ -71,7 +71,7 @@ function groundOf(at: (u: number, w: number) => Point, regions: Region[], W: num
 /** A district centre's garden on its block. */
 export function districtGarden(block: LandBlock, centre: DistrictCentre): Garden {
   const { at, local, W, D } = centreMap(block, centre), E = W / 2;
-  // How far along the front the main building's square reaches (on a ring its corners spread at the front), and
+  // How far along the front the main building's square reaches, and
   // which way along the front is the left of someone facing the building from the city.
   const half = LANDMARK_SIDE / 2, sin = Math.sin(centre.area.rotation), cos = Math.cos(centre.area.rotation);
   const corner = (lu: number, lw: number) => local({ x: centre.area.x + cos * lu + sin * lw, z: centre.area.z - sin * lu + cos * lw });
