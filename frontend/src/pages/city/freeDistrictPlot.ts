@@ -17,11 +17,11 @@ export function districtPlotGrid(city: DepartmentId): LandGrid {
   return grid;
 }
 
-/** A free plot of 3 × 3 cells for a building: its first cell and its band. */
+/** Free cells for a house, 3 × 3 of them: the first cell and its band. */
 export interface FreePlot { block: number; col: number; row: number; band: number }
 
 /**
- * Suggest free cells for a building, 3 × 3 of them, nearest the district's centre, without reserving them or buying
+ * Suggest free cells for a house, 3 × 3 of them, nearest the district's centre, without reserving them or buying
  * anything. Buildings, roads, trees and every other small thing take cells. The server rechecks at purchase.
  */
 export function freeDistrictPlot(grid: LandGrid, district: DistrictEstate): FreePlot | null {

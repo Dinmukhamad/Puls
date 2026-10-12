@@ -20,8 +20,8 @@ def defaults():
     return {
         "prices": {key: item["price"] for key, item in BUILDINGS.items()},
         "quest_coins": COINS,
-        # Team districts (docs/CITY_ESTATES.md): coins per level of what stands on a plot, the
-        # land of each band, a cell of each small thing, project estimates and HQ steps.
+        # Team districts (docs/CITY_ESTATES.md): coins per level of each building, a cell of land
+        # in each band, a cell of each small thing, project estimates and HQ steps.
         **estate_defaults(),
     }
 
@@ -44,9 +44,14 @@ async def economy(session):
         values["decor"] |= {
             k: v for k, v in (row.values.get("decor") or {}).items() if k in values["decor"]
         }
-        for key in ("hq", "land"):
-            if len(row.values.get(key) or []) == len(values[key]):
-                values[key] = row.values[key]
+        if len(row.values.get("hq") or []) == len(values["hq"]):
+            values["hq"] = row.values["hq"]
+        land = row.values.get("land") or []
+        if len(land) == len(values["land"]):
+            # Land was priced per 3 × 3 plot until buildings took cells of their own size: such
+            # a saved price becomes a ninth of itself per cell, so a house's land costs the same.
+            per_cell = row.values.get("land_unit") == "cell"
+            values["land"] = land if per_cell else [v and max(1, round(v / 9)) for v in land]
     return {"revision": row.revision if row else 0, **values}
 
 
@@ -57,14 +62,16 @@ async def save(session, actor, body):
         key: value if value is not None else current[key]
         for key, value in body.model_dump(exclude={"revision"}).items()
     }
+    # The land prices saved from now on are per cell (see economy()); the mark stays in the row.
+    stored = {**values, "land_unit": "cell"}
     revision = body.revision + 1
     if body.revision == 0:
-        session.add(CityEconomy(id=1, revision=revision, values=values, updated_by_id=actor.id))
+        session.add(CityEconomy(id=1, revision=revision, values=stored, updated_by_id=actor.id))
     else:
         result = await session.execute(
             update(CityEconomy)
             .where(CityEconomy.id == 1, CityEconomy.revision == body.revision)
-            .values(revision=revision, values=values, updated_by_id=actor.id)
+            .values(revision=revision, values=stored, updated_by_id=actor.id)
         )
         if result.rowcount != 1:
             raise ConflictError("Настройки уже изменили. Обновите страницу и повторите.")

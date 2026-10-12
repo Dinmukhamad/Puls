@@ -110,8 +110,10 @@ export function CityPage() {
     return views;
   }, [sandboxOn, department, sandboxLand.data, supportLand.data, salesLand.data]);
   const [building, setBuilding] = useState<BuildState | null>(null), [estateFocus, setEstateFocus] = useState<EstateTarget & { at: number }>();
-  const buildView = useMemo(() => building && { district: building.district, area: building.area, placing: building.placing, selected: building.selected, plot: building.plot && { block: building.plot.block, col: building.plot.col, row: building.plot.row, rotation: building.plot.rotation }, decor: building.decor ?? null },
-    [building?.district, building?.area, building?.placing, building?.selected, building?.plot, building?.decor]); // eslint-disable-line react-hooks/exhaustive-deps
+  const buildPlot = building?.plot;
+  const buildView = useMemo(() => building && { district: building.district, area: building.area, placing: building.placing, selected: building.selected, plot: buildPlot ? { block: buildPlot.block, col: buildPlot.col, row: buildPlot.row, rotation: buildPlot.rotation, family: buildPlot.family } : null, decor: building.decor ?? null },
+    // The map's own report of where the chosen thing goes (`at`) changes nothing it shows.
+    [building?.district, building?.area, building?.placing, building?.selected, buildPlot?.block, buildPlot?.col, buildPlot?.row, buildPlot?.rotation, buildPlot?.family, !!buildPlot, building?.decor]); // eslint-disable-line react-hooks/exhaustive-deps
   const focusLand = (target: EstateTarget) => setEstateFocus({ ...target, at: Date.now() });
   const landOf = (district: string) => (district.startsWith("sales-") ? salesLand.data : supportLand.data)?.districts.find(d => d.id === district) ?? null;
   const homeEstate = estateQuery.data?.district;
@@ -121,9 +123,11 @@ export function CityPage() {
     [homeEstate?.id, homeEstate?.city, ownLand, estateQuery.data?.status]);
   function chooseFreePlot() {
     if (!homeEstate || !suggestedPlot || building?.district !== homeEstate.id || estateQuery.data?.status !== "ready") return;
+    // The middle cell of the free 3 × 3, with a house chosen: the map shows the house on all nine.
+    const middle = { block: suggestedPlot.block, col: suggestedPlot.col + 1, row: suggestedPlot.row + 1 };
     setBuilding({ ...building, area: "plots", placing: null, selected: null, spot: null, project: false, decor: null,
-      plot: { block: suggestedPlot.block, col: suggestedPlot.col, row: suggestedPlot.row, band: suggestedPlot.band, problem: null, rotation: 0 } });
-    focusLand({ district: homeEstate.id, kind: "plot", plot: suggestedPlot });
+      plot: { ...middle, band: suggestedPlot.band, problem: null, rotation: 0, family: "house", at: null } });
+    focusLand({ district: homeEstate.id, kind: "plot", plot: middle });
   }
   useEffect(() => {
     // A transfer may arrive through polling while an old plot or inventory placement is still open.
@@ -136,9 +140,21 @@ export function CityPage() {
     else if (pick.kind === "cells") setBuilding(b => b && b.decor && b.district === pick.district ? { ...b, decor: { ...b.decor, cells: pick.cells } } : b);
     else if (pick.kind === "plot") {
       if (building?.district !== pick.district) return;
-      setBuilding(b => b && { ...b, plot: { block: pick.block, col: pick.col, row: pick.row, band: pick.band, problem: pick.problem, rotation: 0 }, selected: null });
+      // Another cell keeps what is chosen, so the same building can be tried cell after cell; the same cell keeps all.
+      setBuilding(b => {
+        if (!b) return b;
+        const same = b.plot && b.plot.block === pick.block && b.plot.col === pick.col && b.plot.row === pick.row;
+        const plot = same ? { ...b.plot!, band: pick.band, problem: pick.problem }
+          : { block: pick.block, col: pick.col, row: pick.row, band: pick.band, problem: pick.problem, rotation: b.plot?.rotation ?? 0, family: b.plot?.family ?? null, at: null };
+        return { ...b, plot, selected: null };
+      });
       focusLand({ district: pick.district, kind: "plot", plot: { block: pick.block, col: pick.col, row: pick.row } });
     }
+    else if (pick.kind === "footprint") setBuilding(b => {
+      const plot = b?.plot;
+      if (!b || !plot || b.district !== pick.district || plot.family !== pick.family || plot.rotation !== pick.rotation || plot.block !== pick.cell.block || plot.col !== pick.cell.col || plot.row !== pick.cell.row) return b;
+      return { ...b, plot: { ...plot, at: { col: pick.col, row: pick.row, problem: pick.problem } } };
+    });
     else if (pick.kind === "project") setWorldSelected(pick.district);
     else if (pick.kind === "object") {
       setBuilding(b => ({ district: pick.district, area: b?.district === pick.district ? b.area : "plots", placing: null, selected: pick.object, plot: null, spot: null, project: b?.district === pick.district ? b.project : false }));

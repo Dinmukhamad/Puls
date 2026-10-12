@@ -25,7 +25,7 @@ const offices = officeFamilies.map((family, i) => entry(family, OFFICE_BUILDINGS
 const catalogue = [entry("square", "Сквер"), entry("house", "Дом"), entry("carport", "Коттедж с навесом", true, 500), ...offices, entry("park", "Парк"), entry("bigpark", "Большой парк")];
 const district = { id: "support-team-1", name: "Первый район", number: 1, construction: true, mine: true, managed: true, land: { plots: 10, taken: 0, open_band: 1, bands: [{ band: 1, plots: 10, taken: 0 }] }, hq: { level: 1, name: "Штаб", built: 0, next: null }, objects: [], projects: [], version: 1 };
 const mine = { status: "ready", message: null, district: { id: district.id, city: "support", name: district.name }, objects: [], catalogue, projects: [], land_prices: [200], economy_revision: 1, balance: 1500, available: 1500, legacy: { count: 0, paid: 0 }, managed: [] };
-const selectedPlot = { district: district.id, area: "plots", placing: null, selected: null, plot: { block: 1, col: 0, row: 0, band: 1, problem: null, rotation: 0 }, spot: null, project: false };
+const selectedPlot = { district: district.id, area: "plots", placing: null, selected: null, plot: { block: 1, col: 0, row: 0, band: 1, problem: null, rotation: 0, family: null, at: null }, spot: null, project: false };
 const noop = () => {};
 function render(Dock, props) {
   const client = new QueryClient();
@@ -56,16 +56,18 @@ test("economy groups office prices once with readable names, keeping staged buil
   assert.equal(plotEconomyName("unknown"), "unknown");
 });
 
-test("paid purchase shows offices as one-price buildings with land added and affordability enforced", () => {
-  const html = render(CityEstateDock, { mine, land: district });
+test("paid purchase shows offices as one-price buildings on 2 × 2 cells with their land added and affordability enforced", () => {
+  const rich = { ...mine, available: 2000 }, html = render(CityEstateDock, { mine: rich, land: district });
   const officeSection = section(html, "Офисные здания"), houseSection = section(html, "Готовые дома");
   assert.match(officeSection, /по одной цене, без ступеней/);
   for (const office of offices) {
-    assert.ok(officeSection.includes(`<strong>${office.name}</strong>`));
+    const price = office.levels[0].price + 4 * 200;
+    assert.ok(officeSection.includes(`<strong>${office.name}</strong><small>2 × 2 клетки · ◈ ${price.toLocaleString("ru-RU")}</small>`), `${office.family} includes its four cells of land`);
     assert.ok(!houseSection.includes(`<strong>${office.name}</strong>`));
-    const button = officeSection.match(new RegExp(`<button([^>]*aria-label="${office.name} за ${office.levels[0].price + 200} коинов"[^>]*)>`));
-    assert.ok(button, `${office.family} purchase includes land price`);
-    assert.equal(button[1].includes('disabled=""'), office.levels[0].price + 200 > mine.available);
+    const chosen = render(CityEstateDock, { mine: rich, land: district, build: { ...selectedPlot, plot: { ...selectedPlot.plot, family: office.family, at: { col: 0, row: 0, problem: null } } } });
+    const button = chosen.match(/<button type="button" class="city-action"([^>]*)>(Купить|Не хватает)[^<]*<\/button>/);
+    assert.ok(button, `${office.family} can be bought once chosen`);
+    assert.equal(button[1].includes('disabled=""'), price > rich.available);
   }
   assert.ok(houseSection.includes("Коттедж с навесом"));
 });
@@ -76,7 +78,7 @@ test("sandbox exposes all offices separately and builds them for free", () => {
   for (const office of offices) {
     assert.ok(officeSection.includes(`<strong>${office.name}</strong>`));
     assert.ok(!houseSection.includes(`<strong>${office.name}</strong>`));
-    assert.ok(officeSection.includes(`aria-label="${office.name} бесплатно">Бесплатно</button>`));
+    assert.ok(officeSection.includes(`aria-label="${office.name}: 2 × 2 клетки, бесплатно. Показать место на карте">Выбрать</button>`));
   }
 });
 
