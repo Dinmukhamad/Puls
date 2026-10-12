@@ -50,7 +50,7 @@ test("complex shows whole-land growth and the server's exact remaining count", (
   assert.match(html, /застройте ещё 26 клеток/);
   // Buildings make the district grow; its roads and trees do not.
   assert.match(html, /Дороги, деревья и фонари в застройку не входят/);
-  assert.match(html, /Дом, офис или сквер занимает 3 × 3 клетки/);
+  assert.match(html, /Дом занимает 3 × 3 клетки, офис и сквер — 2 × 2/);
   assert.match(html, /Уровень 3 открывается при застройке 25 % всего района/);
   assert.match(html, /aria-label="Застройка района для роста главного здания"[^>]+aria-valuenow="12"/);
   assert.match(html, /Растёт автоматически/);
@@ -117,12 +117,12 @@ test("sandbox public mode changes complex levels and keeps personal house buying
   assert.doesNotMatch(html, /Открыть проект|Общие проекты на площади|Выбрать место|Ступень штаба|Этап застройки/);
   const maximum = render(CitySandboxDock, { ...base, state: { ...base.state, districts: [{ ...district, landmark: { ...landmark, level: 5, next: null } }] }, build: publicMode });
   assert.match(maximum, /disabled=""[^>]+aria-label="Уровень главного здания: больше"/);
-  const selected = render(CitySandboxDock, { ...base, build: { ...personal, plot: { block: 1, col: 0, row: 0, band: 1, problem: null, rotation: 0 } } });
-  assert.match(selected, /aria-label="Небольшой дом бесплатно"/);
-  assert.match(selected, /3 × 3 клетки · постройка бесплатна в тестовом городе/);
+  const selected = render(CitySandboxDock, { ...base, build: { ...personal, plot: { block: 1, col: 0, row: 0, band: 1, problem: null, rotation: 0, family: null, at: null } } });
+  assert.match(selected, /aria-label="Небольшой дом: 3 × 3 клетки, бесплатно\. Показать место на карте">Выбрать/);
+  assert.match(selected, /Зона 1 · в тестовом городе всё бесплатно/);
   assert.doesNotMatch(selected, /aria-label="Уровень главного здания"/);
-  const outer = render(CitySandboxDock, { ...base, build: { ...personal, plot: { block: 5, col: 0, row: 0, band: 2, problem: null, rotation: 0 } } });
-  assert.match(outer, /aria-label="Небольшой дом бесплатно">Бесплатно/);
+  const outer = render(CitySandboxDock, { ...base, build: { ...personal, plot: { block: 5, col: 1, row: 1, band: 2, problem: null, rotation: 0, family: "house", at: { col: 0, row: 0, problem: null } } } });
+  assert.match(outer, /<button type="button" class="city-action">Построить бесплатно<\/button>/);
   assert.doesNotMatch(outer, /Открыть этап|Этап застройки|Проверка этапов/);
   const overview = render(CitySandboxDock, { ...base, build: personal });
   assert.match(overview, /Весь район открыт/);

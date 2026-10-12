@@ -16,11 +16,7 @@ const { THREE } = city, world = city.islandWorld(city.WORLD_X4), grid = city.lan
 // The tests' building plot: 3 × 3 cells of district 1's third band, facing the middle of the city (no road beside it).
 const home = grid.blocks.find(b => b.district === 1 && b.band === 3);
 const frame = { ...city.areaFrame(home, 30, 6, city.CELLS, city.CELLS), district: 1, block: home.block, col: 30, row: 6, band: home.band };
-/** The plot of 3 × 3 cells a tap on a cell picks: round it, moved into its block where it would stick out. */
-const anchored = (block, col, row) => ({ col: Math.max(0, Math.min(block.cols - 3, col - 1)), row: Math.max(0, Math.min(block.rows - 3, row - 1)) });
 const blockOf = cell => grid.blocks.find(b => b.district === cell.district && b.block === cell.block);
-/** Cells whose picked plot is all for sale. */
-const clear = cell => { const block = blockOf(cell), a = anchored(block, cell.col, cell.row); for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) if (block.skip.has(`${a.col + i}:${a.row + j}`)) return false; return true; };
 class Element extends EventTarget {
   style = {}; dataset = {}; clientWidth = 800; clientHeight = 800;
   children = []; attributes = {}; nodes = new Map(); parent = null;
@@ -94,17 +90,16 @@ test('normal exploration hides plot grids; personal build shows only own land an
     }
     assert.deepEqual(centres.geometry.index.array, paving);
   }
-  // The seams under the cells show with them, of the same district, and always lose to the cells over them.
-  const seams = s.ctx.scene.getObjectByName('district-seams');
-  assert.ok(seams.visible && seams.geometry.drawRange.count > 0);
-  assert.ok(seams.material.polygonOffsetFactor > plots.material.polygonOffsetFactor && seams.material.polygonOffsetFactor < 0);
-  const seamPosition = seams.geometry.getAttribute('position'), seamIndex = seams.geometry.index;
-  for (let i = seams.geometry.drawRange.start; i < seams.geometry.drawRange.start + seams.geometry.drawRange.count; i += 30) {
-    const vertices = Array.from(seamIndex.array.slice(i, i + 3));
-    const point = { x: vertices.reduce((sum, v) => sum + seamPosition.getX(v), 0) / 3, z: vertices.reduce((sum, v) => sum + seamPosition.getZ(v), 0) / 3 };
-    assert.equal(city.cellUnder(grid, point)?.block.district, 3, 'the seams under the chosen district\'s cells only');
-  }
-  s.estates.setActive(false); assert.equal(plots.visible, false); assert.equal(seams.visible, false);
+  // The grid draws its own white lines from each cell's coordinates: unlit and out of the shadows, so it does not
+  // shimmer; whole cells side by side, with nothing under them.
+  assert.ok(plots.material.isMeshBasicNodeMaterial && plots.material.colorNode, 'an unlit grid with its own lines');
+  assert.equal(plots.receiveShadow, false); assert.equal(plots.castShadow, false);
+  const uv = plots.geometry.getAttribute('cellUv');
+  assert.equal(uv.itemSize, 2); assert.equal(uv.count, plots.geometry.getAttribute('position').count);
+  assert.deepEqual(Array.from(uv.array.slice(0, 8)), [0, 0, 1, 0, 1, 1, 0, 1]);
+  assert.equal(s.ctx.scene.getObjectByName('district-seams'), undefined);
+  assert.ok(centres.receiveShadow, 'the gardens\' paving stays lit ground');
+  s.estates.setActive(false); assert.equal(plots.visible, false);
   s.build(null); assert.equal(plots.visible, false, 'background build updates never reveal an inactive grid');
   s.estates.setActive(true); assert.equal(plots.visible, true);
   s.estates.setBuild({ district: districtId, area: 'public', placing: null, selected: null, plot: null });
@@ -114,7 +109,6 @@ test('normal exploration hides plot grids; personal build shows only own land an
   s.estates.dispose();
   assert.equal(s.ctx.scene.getObjectByName('district-plots'), undefined);
   assert.equal(s.ctx.scene.getObjectByName('district-centres'), undefined);
-  assert.equal(s.ctx.scene.getObjectByName('district-seams'), undefined);
 });
 
 test('every centre is a garden round its main building, its lamps lit at night; an old square keeps its own look', () => {
@@ -177,7 +171,7 @@ test('personal build focus includes every own cell, including occupied land and 
   const focus = s.estates.focus({ district: districtId, kind: 'district' }, 48, .86);
   assert.ok(focus.bounds, 'the runtime receives an area to fit instead of a single nearby plot');
   for (const cell of own) for (const corner of cell.corners) {
-    assert.ok(focus.bounds.containsPoint(new THREE.Vector3(corner.x, .203, corner.z)), 'all own land remains in the camera area');
+    assert.ok(focus.bounds.containsPoint(new THREE.Vector3(corner.x, focus.bounds.min.y, corner.z)), 'all own land remains in the camera area');
   }
   assert.deepEqual(focus.point.toArray(), focus.bounds.getCenter(new THREE.Vector3()).toArray());
   // Houses over the whole district, 3 × 3 cells each.
@@ -194,13 +188,13 @@ test('personal build focus includes every own cell, including occupied land and 
   s.estates.dispose();
 });
 
-test('taps in a fitted whole-district camera pick the plot of 3 × 3 cells round the cell tapped, across the outer land', () => {
+test('taps in a fitted whole-district camera pick the one cell tapped, across the outer land', () => {
   const s = setup(), canvas = s.ctx.renderer.domElement;
   const freeFrame = { getBoundingClientRect: () => ({ left: 200, top: 30, right: 740, bottom: 670, width: 540, height: 640 }) };
   const rig = city.createCameraRig(s.camera, { dom: canvas, host: canvas, frame: freeFrame, radius: world.radius, reach: world.radius + 20, reducedMotion: true, onView() {} });
   rig.resize(800, 800);
   for (const number of [1, 2, 3]) {
-    const id = `support-team-${number}`, own = cells.filter(c => c.district === number && clear(c));
+    const id = `support-team-${number}`, own = cells.filter(c => c.district === number);
     s.estates.set({ state: { city: 'support', sandbox: false, districts: [{ id, number, name: 'Район', objects: [], projects: [], land: { open_band: 1 } }] } });
     s.estates.setBuild({ district: id, area: 'plots', placing: null, selected: null, plot: null });
     const focus = s.estates.focus({ district: id, kind: 'district' }, 48, .86);
@@ -208,7 +202,7 @@ test('taps in a fitted whole-district camera pick the plot of 3 × 3 cells round
     assert.ok(rig.currentView().distance > 140 * world.radius / 150, 'the actual estate picker works beyond the former camera limit');
     for (const cell of [own[0], own[Math.floor(own.length / 2)], own.at(-1)]) {
       s.picks.length = 0; s.tap(new THREE.Vector3(cell.x, .2, cell.z));
-      assert.deepEqual(s.picks, [{ kind: 'plot', district: id, block: cell.block, ...anchored(blockOf(cell), cell.col, cell.row), band: cell.band, problem: null }]);
+      assert.deepEqual(s.picks, [{ kind: 'plot', district: id, block: cell.block, col: cell.col, row: cell.row, band: cell.band, problem: null }]);
     }
   }
   rig.dispose(); s.estates.dispose();
@@ -398,7 +392,7 @@ test('every land district has exactly one main model, with old paid square coord
 });
 
 test('outer cells can be bought on and receive inventory even when cached state still says only band 1 is open', () => {
-  const s = setup(), outer = cells.find(c => c.district === frame.district && c.band === grid.bands && clear(c));
+  const s = setup(), outer = cells.find(c => c.district === frame.district && c.band === grid.bands && c.col > 2 && c.row > 2 && c.col < blockOf(c).cols - 3 && c.row < blockOf(c).rows - 3);
   s.state([], false, { land: { open_band: 1 } }); s.build(null);
   const point = new THREE.Vector3(outer.x, .2, outer.z);
   s.aim(point, outer.rotation + .55); s.tap(point);
@@ -550,7 +544,7 @@ test('small things are drawn: the roads as one paving mesh, trees and lamps with
   assert.ok(roads && roads.geometry.index.count > 0, 'the roads\' paving');
   assert.ok(resolved.includes('tree-cone') && resolved.includes('lamp'), resolved.join(', '));
   assert.ok(s.ctx.scene.children.some(o => /^district-lamp/.test(o.name)), 'the lamp\'s light');
-  // A plot over a road is not free: the tap picks the plot round it with its problem.
+  // A cell under a road is not free: the tap picks it with its problem.
   s.build(null); s.aim(cellPoint(frame.col + 1, frame.row + 4)); s.picks.length = 0;
   s.tap(cellPoint(frame.col + 1, frame.row + 4));
   assert.equal(s.picks.at(-1).kind, 'plot');
@@ -571,11 +565,60 @@ test('a building looks to the road beside it: its frame turns there, and the plo
   state({ road: [0, 1, 2].map(c => [b, frame.col + c, frame.row + 3, 1]) });
   const turned = city.areaFrame(home, frame.col, frame.row, 3, 3, city.sideOf(home, 'row+'), true);
   assert.ok(Math.abs(Math.sin(front() - turned.rotation)) < 1e-9 && Math.cos(front() - turned.rotation) > 0);
-  // Choosing a plot to buy shows an arrow on the side its front will look to.
-  s.estates.setBuild({ district: districtId, area: 'plots', placing: null, selected: null, plot: { block: b, col: frame.col + 6, row: frame.row, band: home.band, problem: null, rotation: 1 } });
+  // A house chosen for a picked cell shows an arrow on the side its front will look to.
+  s.estates.setBuild({ district: districtId, area: 'plots', placing: null, selected: null, plot: { block: b, col: frame.col + 7, row: frame.row + 1, rotation: 1, family: 'house' } });
   const arrow = s.ctx.scene.getObjectByName('district-plot-front');
   assert.ok(arrow?.visible, 'the front arrow');
   const expected = city.areaFrame(home, frame.col + 6, frame.row, 3, 3, city.turnedSide(home, city.homeSide(home, frame.col + 6, frame.row, 3, 3), 1));
   assert.ok(Math.abs(Math.sin(arrow.rotation.y - expected.rotation)) < 1e-9 && Math.cos(arrow.rotation.y - expected.rotation) > 0, 'turned once, a quarter turn from the middle of the city');
+  s.estates.dispose();
+});
+
+/** The cells over the grid now: each quad's colour, by its four corners. */
+function shown(s) {
+  const mesh = s.ctx.scene.getObjectByName('district-chosen-cells');
+  if (!mesh) return [];
+  const colour = mesh.geometry.getAttribute('color'), out = [];
+  for (let i = 0; i < colour.count; i += 4) out.push(`#${new THREE.Color(colour.getX(i), colour.getY(i), colour.getZ(i)).getHexString()}`);
+  return out;
+}
+const YELLOW = '#ffd24a', GREEN = '#35b07a', RED = '#e0525d';
+
+test('a tap picks one cell; what is chosen for it shows its cells round it, green where free and red where not', () => {
+  const s = setup(), b = home.block, footprints = () => s.picks.filter(p => p.kind === 'footprint');
+  // The house of the tests on its 3 × 3 cells, and a road down a column two cells off: a lane two cells wide.
+  s.state([object('house')], false, { decor: { road: [0, 1, 2, 3, 4].map(r => [b, frame.col + 5, frame.row + r, 1]) } });
+  const pick = (col, row, family = null) => s.estates.setBuild({ district: districtId, area: 'plots', placing: null, selected: null, plot: { block: b, col, row, rotation: 0, family } });
+  // The cell alone: yellow, nothing to report.
+  pick(frame.col + 4, frame.row + 1);
+  assert.deepEqual(shown(s), [YELLOW]);
+  assert.equal(footprints().length, 0);
+  // A square fits in the lane, on the picked cell and the one beside it, off the road.
+  pick(frame.col + 4, frame.row + 1, 'square');
+  assert.deepEqual(footprints().at(-1), { kind: 'footprint', district: districtId, cell: { block: b, col: frame.col + 4, row: frame.row + 1 }, family: 'square', col: frame.col + 3, row: frame.row + 1, rotation: 0, problem: null });
+  assert.deepEqual(shown(s), [GREEN, GREEN, GREEN, GREEN, YELLOW]);
+  // A house does not: the lane is two cells wide. It shows round the cell, the house's and the road's cells red.
+  pick(frame.col + 4, frame.row + 1, 'house');
+  const house = footprints().at(-1);
+  assert.equal(house.family, 'house'); assert.deepEqual([house.col, house.row], [frame.col + 3, frame.row]);
+  assert.match(house.problem, /Не помещается: 3 клетки из 9 заняты/);
+  const colours = shown(s);
+  assert.equal(colours.length, 10); assert.equal(colours.at(-1), YELLOW);
+  assert.equal(colours.filter(c => c === RED).length, 3); assert.equal(colours.filter(c => c === GREEN).length, 6);
+  // Picked further on, past the road, the house fits round the cell, and the map says where it goes.
+  pick(frame.col + 8, frame.row + 1, 'house');
+  assert.deepEqual([footprints().at(-1).col, footprints().at(-1).row, footprints().at(-1).problem], [frame.col + 7, frame.row, null]);
+  // Next to the road it moves off it rather than onto it.
+  pick(frame.col + 6, frame.row + 1, 'house');
+  assert.deepEqual([footprints().at(-1).col, footprints().at(-1).problem], [frame.col + 6, null]);
+  // A small thing on the road's cell: that one cell, red.
+  pick(frame.col + 5, frame.row + 1, 'lamp');
+  assert.match(footprints().at(-1).problem, /уже занята/);
+  assert.deepEqual(shown(s), [RED, YELLOW]);
+  // The same choice again reports nothing new.
+  const count = footprints().length;
+  pick(frame.col + 5, frame.row + 1, 'lamp');
+  assert.equal(footprints().length, count);
+  s.estates.setBuild(null); assert.deepEqual(shown(s), []);
   s.estates.dispose();
 });

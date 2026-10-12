@@ -74,22 +74,25 @@ test("district card distinguishes personal ownership and shared projects without
 });
 
 test("purchase shows full land plus building price and respects spendable coins", () => {
-  const selected = { ...buildState, plot: { block: 4, col: 0, row: 0, band: 2, problem: null, rotation: 0 } };
-  const html = render(CityEstateDock, { ...dockProps, build: selected });
-  assert.match(html, /<h2>Свободное место<\/h2><small>3 × 3 клетки · земля ◈ 150, включена в цену<\/small>/);
-  assert.match(html, /aria-label="Небольшой дом за 450 коинов">Купить · ◈ 450<\/button>/);
-  // The front looks to a road beside the plot, or where the operator turns it.
+  // A house on 3 × 3 cells of the second zone: nine cells of land at 15 and the house.
+  const selected = { ...buildState, plot: { block: 4, col: 1, row: 1, band: 2, problem: null, rotation: 0, family: "house", at: { col: 0, row: 0, problem: null } } };
+  const prices = { ...mine, land_prices: [20, 15, 10] };
+  const html = render(CityEstateDock, { ...dockProps, mine: prices, build: selected });
+  assert.match(html, /<h2>Клетка выбрана<\/h2><small>Зона 2 · земля ◈ 15 за клетку<\/small>/);
+  assert.match(html, /<strong>Небольшой дом<\/strong><small>3 × 3 клетки · ◈ 435<\/small>/);
+  assert.match(html, /Земля 9 × ◈ 15 = ◈ 135 \+ дом ◈ 300/);
+  assert.match(html, /<button type="button" class="city-action">Купить · ◈ 435<\/button>/);
+  // The front looks to a road beside the house, or where the operator turns it.
   assert.match(html, />Повернуть фасад<\/button>/);
   assert.doesNotMatch(html, /пояс|Квартал/);
-  const insufficient = render(CityEstateDock, { ...dockProps, mine: { ...mine, available: 400 }, build: selected });
-  assert.match(insufficient, /disabled=""[^>]+aria-label="Небольшой дом за 450 коинов">Не хватает 50<\/button>/);
-  const outer = render(CityEstateDock, { ...dockProps, build: { ...selected, plot: { ...selected.plot, band: 3 } } });
-  assert.match(outer, /aria-label="Небольшой дом за 400 коинов">Купить · ◈ 400/);
+  const insufficient = render(CityEstateDock, { ...dockProps, mine: { ...prices, available: 400 }, build: selected });
+  assert.match(insufficient, /disabled="">Не хватает 35<\/button>/);
+  const outer = render(CityEstateDock, { ...dockProps, mine: prices, build: { ...selected, plot: { ...selected.plot, band: 3 } } });
+  assert.match(outer, />Купить · ◈ 390</);
   assert.doesNotMatch(outer, /До расширения|Откроется позже|Этап застройки/);
-  const occupied = render(CityEstateDock, { ...dockProps, build: { ...selected, plot: { ...selected.plot, band: 3, problem: "Часть этих клеток уже занята" } } });
-  assert.match(occupied, /<h2>Выбранное место<\/h2>/);
-  assert.match(occupied, /Часть этих клеток уже занята/);
-  assert.match(occupied, /disabled=""[^>]+aria-label="Небольшой дом за 400 коинов"/);
+  const occupied = render(CityEstateDock, { ...dockProps, mine: prices, build: { ...selected, plot: { ...selected.plot, band: 3, at: { col: 0, row: 0, problem: "Не помещается: 3 клетки из 9 заняты — они красные на карте." } } } });
+  assert.match(occupied, /role="alert">Не помещается: 3 клетки из 9 заняты/);
+  assert.match(occupied, /disabled="">Купить · ◈ 390<\/button>/);
 });
 
 test("building overview gives three short steps and one district progress bar", () => {

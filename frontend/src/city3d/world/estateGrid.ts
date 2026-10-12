@@ -1,10 +1,10 @@
 /**
  * The shapes of the team districts' catalogue, shared with the server (app/services/city_estate.py) and light
  * enough for any page: no world generation, no three.js. The districts' land is small cells (world/land.ts):
- * what operators build stands on plots of PLOT_CELLS × PLOT_CELLS cells wherever it fits, a square, a house or a
- * ready house (world/familyHouses.ts) on one plot, parks on the plots of the squares they gathered from; the small
- * things, roads, footpaths, trees, lamps and the rest, take a cell each. What a district built together stands on
- * cells of its old public square, a module of MODULE_CELLS × MODULE_CELLS.
+ * what operators build stands on cells of its own size wherever it fits, a house or a ready house
+ * (world/familyHouses.ts) on 3 × 3, a square or an office tower on 2 × 2, parks on the cells of the squares they
+ * gathered from (4 × 4, 6 × 4); the small things, roads, footpaths, trees, lamps and the rest, take a cell each. What
+ * a district built together stands on cells of its old public square, a module of MODULE_CELLS × MODULE_CELLS.
  */
 import type { ReadyHouse } from "./familyHouses";
 import type { OfficeBuilding } from "./officeBuildings";
@@ -13,8 +13,7 @@ export type PlotFamily = "square" | "house" | ReadyHouse | OfficeBuilding | "par
 /** The small things operators lay a cell at a time, as the server's DECOR_FAMILIES. */
 export type DecorFamily = "road" | "path" | "tree" | "pine" | "birch" | "oak" | "lamp" | "bench" | "bush" | "flowers" | "hedge";
 export const DECOR_FAMILIES: readonly DecorFamily[] = ["road", "path", "tree", "pine", "birch", "oak", "lamp", "bench", "bush", "flowers", "hedge"];
-/** A building's plot is this many cells each way (the server's PLOT_CELLS, world/land.ts CELLS). */
-export const PLOT_CELLS = 3;
+export const isDecorFamily = (family: string): family is DecorFamily => (DECOR_FAMILIES as readonly string[]).includes(family);
 export type ProjectFamily = "square" | "gazebo" | "fountain" | "sports" | "park";
 
 /**
@@ -34,10 +33,10 @@ export const LAND_DISTRICTS = 3;
 /** Whether district number n has land to build on. */
 export const preparedLand = (number: number) => number >= 1 && number <= LAND_DISTRICTS;
 
-/** Columns × rows of plots (unturned) and levels of what operators build, as the server's PLOT_FAMILIES. */
+/** Columns × rows of cells (unturned) and levels of what operators build, as the server's PLOT_FAMILIES. */
 export const PLOT_SIZE: Record<PlotFamily, [number, number]> = {
-  square: [1, 1], house: [1, 1], carport: [1, 1], bungalow: [1, 1], attic: [1, 1], modern: [1, 1], bayhouse: [1, 1], terrace: [1, 1], park: [2, 2], bigpark: [3, 2],
-  officea: [1, 1], officeb: [1, 1], officec: [1, 1], officed: [1, 1], officee: [1, 1], officef: [1, 1], officeg: [1, 1], officeh: [1, 1], officei: [1, 1],
+  square: [2, 2], house: [3, 3], carport: [3, 3], bungalow: [3, 3], attic: [3, 3], modern: [3, 3], bayhouse: [3, 3], terrace: [3, 3], park: [4, 4], bigpark: [6, 4],
+  officea: [2, 2], officeb: [2, 2], officec: [2, 2], officed: [2, 2], officee: [2, 2], officef: [2, 2], officeg: [2, 2], officeh: [2, 2], officei: [2, 2],
 };
 export const PLOT_LEVELS: Record<PlotFamily, number> = {
   square: 1, house: 5, carport: 1, bungalow: 1, attic: 1, modern: 1, bayhouse: 1, terrace: 1, park: 2, bigpark: 3,
@@ -50,12 +49,35 @@ export const PROJECT_SIZE: Record<ProjectFamily, [number, number]> = { square: [
 export const PROJECT_LEVELS: Record<ProjectFamily, number> = { square: 1, gazebo: 2, fountain: 2, sports: 3, park: 3 };
 
 const turned = ([w, h]: [number, number], rotation: number): [number, number] => rotation % 2 ? [h, w] : [w, h];
-/** Plots a building takes, turned by quarter turns (a big park stands 3 × 2 or 2 × 3): for telling its size. */
-export const plotSize = (family: PlotFamily, rotation: number) => turned(PLOT_SIZE[family], rotation);
-/** Cells a building takes on the land, turned by quarter turns: PLOT_CELLS for every plot of it. */
-export const plotFootprint = (family: PlotFamily, rotation: number): [number, number] => {
-  const [w, h] = plotSize(family, rotation);
-  return [w * PLOT_CELLS, h * PLOT_CELLS];
-};
+/** Cells a building takes on the land, turned by quarter turns (a big park stands 6 × 4 or 4 × 6). */
+export const plotFootprint = (family: PlotFamily, rotation: number): [number, number] => turned(PLOT_SIZE[family], rotation);
+/** Cells of whatever is bought on a picked cell: a building's footprint, a small thing's one cell. */
+export const itemFootprint = (family: PlotFamily | DecorFamily, rotation = 0): [number, number] =>
+  isDecorFamily(family) ? [1, 1] : plotFootprint(family, rotation);
+
+/**
+ * Where something of w × h cells goes for a cell the operator picked (col, row) in a block of cols × rows: the first
+ * cell of the free place nearest to having the picked cell in its middle, among all the places that cover the picked
+ * cell; `problem(col, row)` says why a cell cannot be built on (null when it is free). When none is free, the place
+ * round the picked cell (kept inside the block), its blocked cells for the map to show, and `fits` false.
+ */
+export function footprintAt(col: number, row: number, w: number, h: number, cols: number, rows: number, problem: (col: number, row: number) => string | null) {
+  const centred = { col: col - Math.floor((w - 1) / 2), row: row - Math.floor((h - 1) / 2) };
+  const blocked = (c0: number, r0: number) => {
+    const out: [number, number][] = [];
+    for (let i = 0; i < w; i++) for (let j = 0; j < h; j++) if (problem(c0 + i, r0 + j)) out.push([c0 + i, r0 + j]);
+    return out;
+  };
+  const places: { col: number; row: number; far: number }[] = [];
+  for (let c0 = col - w + 1; c0 <= col; c0++) for (let r0 = row - h + 1; r0 <= row; r0++) {
+    if (c0 < 0 || r0 < 0 || c0 + w > cols || r0 + h > rows) continue;
+    places.push({ col: c0, row: r0, far: Math.abs(c0 - centred.col) + Math.abs(r0 - centred.row) });
+  }
+  // The nearest to the middle first, then by row and column, so the same pick always lands the same way.
+  places.sort((a, b) => a.far - b.far || a.row - b.row || a.col - b.col);
+  for (const place of places) if (!blocked(place.col, place.row).length) return { col: place.col, row: place.row, fits: true, blocked: [] as [number, number][] };
+  const shown = { col: Math.max(0, Math.min(Math.max(0, cols - w), centred.col)), row: Math.max(0, Math.min(Math.max(0, rows - h), centred.row)) };
+  return { ...shown, fits: false, blocked: blocked(shown.col, shown.row) };
+}
 /** Cells of the public square a shared building takes, turned by quarter turns. */
 export const projectFootprint = (family: ProjectFamily, rotation: number) => turned(PROJECT_SIZE[family], rotation);
