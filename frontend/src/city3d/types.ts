@@ -10,31 +10,34 @@ export type JourneyPhase = "departing" | "tunnel" | "arriving" | null;
 
 /** Team district land of the city on screen (api/cityEstate.ts): plots, buildings, projects, open bands. */
 export interface CityEstateView { state: CityEstates }
-/** A cell of a district's land, or the first cell of a building's plot: block, column and row (world/land.ts). */
+/** A cell of a district's land, or the first cell of a building's place: block, column and row (world/land.ts). */
 export interface PlotAddress { block: number; col: number; row: number }
 /** The tool for small things: one kind to lay, or taking one's own away. */
 export type DecorTool = DecorFamily | "remove";
 /**
  * Build mode in a district: its cells light up (free and taken), or for staff the cells of its public square; a
- * building from the inventory (`moving`) or a shared project being placed; the building selected; the plot of
- * 3 × 3 cells picked for a purchase, with where its front looks (`rotation`, where no road decides); or small things
- * being laid (or taken away) on the cells chosen so far, a tap drawing a line from the last one when `line` is on.
+ * building from the inventory (`moving`) or a shared project being placed; the building selected; the cell picked to
+ * build on, with what is chosen for it (`family`: its cells show round the cell, green where free, red where not) and
+ * where a building's front looks (`rotation`, where no road decides); or small things being laid (or taken away) on
+ * the cells chosen so far, a tap drawing a line from the last one when `line` is on.
  */
 export interface CityBuildView {
   district: string; area: "plots" | "public";
   placing: { family: PlotFamily | ProjectFamily; rotation: number; moving: number | null } | null;
   selected: number | null;
-  plot: (PlotAddress & { rotation: number }) | null;
+  plot: (PlotAddress & { rotation: number; family?: PlotFamily | DecorFamily | null }) | null;
   /** `anyone`: the test city takes away whoever's small things, not only one's own. */
   decor: { tool: DecorTool; cells: PlotAddress[]; line: boolean; anyone?: boolean } | null;
 }
 /**
- * What the operator touched on district land: a plot to buy on (its first cell), where the preview stands now and why
- * it does not fit, a building, a project, the public square, or the cells chosen now for small things (all of them).
+ * What the operator touched on district land: a cell to build on (`problem`: why nothing can go on it), where what is
+ * chosen for the picked cell goes (its first cell) and why it does not fit, where the preview stands now and why it
+ * does not fit, a building, a project, the public square, or the cells chosen now for small things (all of them).
  */
 export type EstatePick =
   | { kind: "public"; district: string }
   | { kind: "plot"; district: string; block: number; col: number; row: number; band: number; problem: string | null }
+  | { kind: "footprint"; district: string; cell: PlotAddress; family: PlotFamily | DecorFamily; col: number; row: number; rotation: number; problem: string | null }
   | { kind: "place"; district: string; module: number; u: number; v: number; rotation: number; problem: string | null }
   | { kind: "object"; district: string; object: number }
   | { kind: "project"; district: string; project: number }

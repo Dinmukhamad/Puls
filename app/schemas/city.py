@@ -118,7 +118,7 @@ class EconomyInput(BaseModel):
         if self.land is not None and (
             len(self.land) != len(LAND_PRICES) or any(not 0 <= v <= 100_000 for v in self.land)
         ):
-            raise ValueError("Укажите цену участка каждого пояса — от 0 до 100 000 коинов")
+            raise ValueError("Укажите цену клетки земли каждого пояса — от 0 до 100 000 коинов")
         if self.decor is not None and (
             set(self.decor) != set(DECOR_PRICES)
             or any(not 0 <= v <= 100_000 for v in self.decor.values())

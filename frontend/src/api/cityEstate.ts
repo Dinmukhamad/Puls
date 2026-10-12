@@ -1,6 +1,7 @@
 /**
  * Team district land (docs/CITY_ESTATES.md): every city is cut into three districts of small cells, and operators lay
- * them out themselves: buildings on 3 × 3 cells, roads, footpaths, trees, lamps and other small things a cell each.
+ * them out themselves: buildings on cells of their own size (a house 3 × 3, a square or an office tower 2 × 2), roads,
+ * footpaths, trees, lamps and other small things a cell each.
  * The client names the cells and what stands on them; the server owns the price, the rules and the order of
  * operations. Every change carries an idempotency key made once per user action: a retry with the same key never
  * pays twice, and a lost answer is looked up by that key.
@@ -78,7 +79,7 @@ export interface MyEstate {
   decor: DecorCatalogue[];
   /** At most this many cells in one laying or taking away. */
   decor_batch: number;
-  /** Coins for a building's plot (3 × 3 cells) of each band, from the centre outwards. */
+  /** Coins for a cell of land under a building in each band, from the centre outwards: a house pays for nine. */
   land_prices: number[];
   economy_revision: number; balance: number; available: number;
   legacy: { count: number; paid: number }; managed: string[];

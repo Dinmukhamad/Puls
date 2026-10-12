@@ -1,15 +1,16 @@
 """Building in team districts (docs/CITY_ESTATES.md) with the existing Puls coins.
 
 The land of each city goes to three districts, cut into small cells (app/services/city_land.py),
-and the operators of a district lay it out themselves. A building, a square, a house or one of the
-ready houses or office towers, stands on PLOT_CELLS × PLOT_CELLS cells wherever it fits, and is
-bought with its land; a house goes up stage by stage from one storey, a ready building is bought as
-it is, at the price of its size; four squares of one operator filling a square become a park, six
-filling a rectangle a big park, at once and for free. The small things, roads, footpaths, trees,
-lamps, benches, bushes, flowerbeds and hedges, take a cell each (DECOR_FAMILIES): they are laid
-many at once, at a small price with the land, and whoever laid one may take it away for its coins
-back. All land is available from the start; its geographic bands determine only the price of land.
-In the centre of every district is its growing main building.
+and the operators of a district lay it out themselves. A building stands on cells of its own size
+wherever it fits, from the cell the operator picked: a house or a ready house on 3 × 3, a square or
+an office tower on 2 × 2. It is bought with its land, a price per cell by band; a house goes up
+stage by stage from one storey, a ready building is bought as it is, at the price of its size; four
+squares of one operator filling a square become a park (4 × 4 cells), six filling a rectangle a big
+park (6 × 4), at once and for free. The small things, roads, footpaths, trees, lamps, benches,
+bushes, flowerbeds and hedges, take a cell each (DECOR_FAMILIES): they are laid many at once, at a
+small price with the land, and whoever laid one may take it away for its coins back. All land is
+available from the start; its geographic bands determine only the price of land. In the centre of
+every district is its growing main building.
 
 Rules the server owns, whatever the client sends: who may build where (only operators, only in
 their own district, only once its construction is opened for the pilot), the
@@ -63,7 +64,7 @@ SMALL_TEAM = 3
 
 #: The nine separate buildings in the supplied "High Rise Office Buildings" collection.
 #: Keys follow the source models in order (Cube.000, .001, .002, .004 through .009); .003 is
-#: part of .002. Every tower is bought finished on one plot, like a ready house.
+#: part of .002. Every tower is bought finished on 2 × 2 cells, like a ready house.
 OFFICE_TOWERS = {
     "officea": ("Офисная башня A", 900),
     "officeb": ("Офисная башня B", 980),
@@ -76,20 +77,17 @@ OFFICE_TOWERS = {
     "officei": ("Офисная башня I", 1700),
 }
 
-#: A building's plot: this many cells each way.
-PLOT_CELLS = city_land.PLOT_CELLS
-
-#: What operators build on their plots. Size is in plots (columns × rows) of PLOT_CELLS × PLOT_CELLS
-#: cells each; a park is never bought,
-#: it gathers itself from `squares` of the operator's own squares (a big park also from a park
-#: and two squares). The `ready` houses are models of the CC0 "Family House Collection"
-#: (frontend world/familyHouses.ts); ready office towers follow from the supplied collection.
-#: Both are bought finished, cheapest first within each collection.
+#: What operators build on the land. Size is in cells (columns × rows, unturned): a house 3 × 3,
+#: a square or an office tower 2 × 2 (frontend world/estateGrid.ts PLOT_SIZE); a park is never
+#: bought, it gathers itself from `squares` of the operator's own squares (a big park also from a
+#: park and two squares) and stands on their cells. The `ready` houses are models of the CC0
+#: "Family House Collection" (frontend world/familyHouses.ts); ready office towers follow from the
+#: supplied collection. Both are bought finished, cheapest first within each collection.
 PLOT_FAMILIES = {
     "square": {
         "name": "Сквер",
         "icon": "🌳",
-        "size": (1, 1),
+        "size": (2, 2),
         "levels": [
             (
                 "Сквер",
@@ -101,7 +99,7 @@ PLOT_FAMILIES = {
     "house": {
         "name": "Дом",
         "icon": "🏡",
-        "size": (1, 1),
+        "size": (3, 3),
         "levels": [
             ("Одноэтажный дом", "Небольшой дом с крыльцом, дорожка и газон."),
             ("Двухэтажный дом", "Второй этаж, живая изгородь и дерево у дома."),
@@ -113,7 +111,7 @@ PLOT_FAMILIES = {
     "carport": {
         "name": "Коттедж с навесом",
         "icon": "🏠",
-        "size": (1, 1),
+        "size": (3, 3),
         "ready": True,
         "levels": [
             (
@@ -126,7 +124,7 @@ PLOT_FAMILIES = {
     "bungalow": {
         "name": "Бунгало",
         "icon": "🏠",
-        "size": (1, 1),
+        "size": (3, 3),
         "ready": True,
         "levels": [
             (
@@ -138,7 +136,7 @@ PLOT_FAMILIES = {
     "attic": {
         "name": "Дом с мансардой",
         "icon": "🏠",
-        "size": (1, 1),
+        "size": (3, 3),
         "ready": True,
         "levels": [
             (
@@ -150,7 +148,7 @@ PLOT_FAMILIES = {
     "modern": {
         "name": "Модерн с гаражом",
         "icon": "🏠",
-        "size": (1, 1),
+        "size": (3, 3),
         "ready": True,
         "levels": [
             (
@@ -162,7 +160,7 @@ PLOT_FAMILIES = {
     "bayhouse": {
         "name": "Дом с эркером",
         "icon": "🏠",
-        "size": (1, 1),
+        "size": (3, 3),
         "ready": True,
         "levels": [
             (
@@ -174,7 +172,7 @@ PLOT_FAMILIES = {
     "terrace": {
         "name": "Модерн с террасой",
         "icon": "🏠",
-        "size": (1, 1),
+        "size": (3, 3),
         "ready": True,
         "levels": [
             (
@@ -187,18 +185,16 @@ PLOT_FAMILIES = {
         key: {
             "name": name,
             "icon": "🏢",
-            "size": (1, 1),
+            "size": (2, 2),
             "ready": True,
-            "levels": [
-                (name, "Готовое высотное офисное здание. Покупается целиком на один участок.")
-            ],
+            "levels": [(name, "Готовое высотное офисное здание. Покупается целиком.")],
         }
         for key, (name, _price) in OFFICE_TOWERS.items()
     },
     "park": {
         "name": "Парк",
         "icon": "🌲",
-        "size": (2, 2),
+        "size": (4, 4),
         "squares": 4,
         "levels": [
             ("Парк", "Четыре сквера стали одним парком: аллеи, газоны, скамейки и деревья."),
@@ -208,7 +204,7 @@ PLOT_FAMILIES = {
     "bigpark": {
         "name": "Большой парк",
         "icon": "🏞️",
-        "size": (3, 2),
+        "size": (6, 4),
         "squares": 6,
         "levels": [
             ("Большой парк", "Шесть скверов стали большим парком: аллея, газоны и деревья."),
@@ -217,10 +213,10 @@ PLOT_FAMILIES = {
         ],
     },
 }
-#: Coins for every level of what stands on a plot (level 1 is the purchase; a park's is its merge).
-#: A ready house costs by its size: floors, footprint, garage, terrace (docs/CITY_ESTATES.md,
-#: «Готовые дома»); office towers extend the ready catalogue above houses. The land of the
-#: plot's band comes on top, as for the others.
+#: Coins for every level of what stands on the land (level 1 is the purchase; a park's is its
+#: merge). A ready house costs by its size: floors, footprint, garage, terrace
+#: (docs/CITY_ESTATES.md, «Готовые дома»); office towers extend the ready catalogue above houses.
+#: The land under it comes on top, as for the others: LAND_PRICES per cell.
 PLOT_PRICES = {
     "square": [40],
     "house": [120, 180, 260, 360, 500],
@@ -234,8 +230,9 @@ PLOT_PRICES = {
     "park": [0, 120],
     "bigpark": [0, 150, 250],
 }
-#: Coins for a plot of each band, from the centre outwards; the land city has the first three.
-LAND_PRICES = [60, 45, 30, 20, 10]
+#: Coins for a cell of land under a building in each band, from the centre outwards (the lake city
+#: has the first three): a house on 3 × 3 cells pays nine of them, a square or an office four.
+LAND_PRICES = [7, 5, 4, 2, 1]
 
 #: The small things operators lay a cell at a time to shape their district: roads and footpaths that
 #: join their neighbours, trees, lamps that light the night, benches, bushes, flowerbeds and hedges.
@@ -376,8 +373,7 @@ def footprint(obj_or_family, rotation=0, *, public=False):
     family = getattr(obj_or_family, "family", obj_or_family)
     if public or getattr(obj_or_family, "owner_id", 1) is None:
         return turned(PROJECT_FAMILIES[family]["size"], rotation)
-    w, h = turned(PLOT_FAMILIES[family]["size"], rotation)
-    return w * PLOT_CELLS, h * PLOT_CELLS
+    return turned(PLOT_FAMILIES[family]["size"], rotation)
 
 
 def cells_of(u, v, w, h):
@@ -1255,19 +1251,19 @@ async def require_public_square(session, district_id):
 
 #: The shapes a park gathers in: (family, columns, rows of cells, rotation), the big park first.
 PARK_SHAPES = (
-    ("bigpark", 3 * PLOT_CELLS, 2 * PLOT_CELLS, 0),
-    ("bigpark", 2 * PLOT_CELLS, 3 * PLOT_CELLS, 1),
-    ("park", 2 * PLOT_CELLS, 2 * PLOT_CELLS, 0),
+    ("bigpark", *PLOT_FAMILIES["bigpark"]["size"], 0),
+    ("bigpark", *turned(PLOT_FAMILIES["bigpark"]["size"], 1), 1),
+    ("park", *PLOT_FAMILIES["park"]["size"], 0),
 )
 
 
 def park_group(objects):
     """The first park the operator's squares (and a park) on one block fill exactly, or None.
 
-    A park is four squares filling a square of 2 × 2 plots; a big park is six squares filling a
-    3 × 2 or 2 × 3 rectangle, or a park and two squares filling one. Squares stand wherever they
-    fit, so only those lying exactly side by side fill one. Big parks go first, then by row and
-    column.
+    A park is four squares filling a square of 2 × 2 squares (4 × 4 cells); a big park is six
+    squares filling a 3 × 2 or 2 × 3 rectangle of them, or a park and two squares filling one.
+    Squares stand wherever they fit, so only those lying exactly side by side fill one. Big parks
+    go first, then by row and column.
     """
     at = {}
     for o in objects:
@@ -1431,8 +1427,8 @@ async def own_object_row(session, user, object_id, version, *, states=("placed",
 
 
 async def purchase(session, user, body):
-    """A catalogue building on free cells of the operator's district, 3 × 3 of them, its land
-    paid with it."""
+    """A catalogue building on free cells of the operator's district, as many as its size from the
+    cell picked (body.col, body.row: its first column and row), every cell of land paid with it."""
 
     async def perform():
         home = await builder(session, user)
@@ -1450,7 +1446,7 @@ async def purchase(session, user, body):
         check_revision(body.economy_revision, values["revision"])
         w, h = footprint(body.family)
         cells, band = await free_cells(session, home, body.block, body.col, body.row, w, h)
-        land, building = values["land"][band - 1], values["estate"][body.family][0]
+        land, building = values["land"][band - 1] * len(cells), values["estate"][body.family][0]
         price = land + building
         tx = await pay(
             session,
@@ -1458,7 +1454,7 @@ async def purchase(session, user, body):
             body.key,
             price,
             f"Мой район: земля и {family['levels'][0][0].lower()}",
-            {"family": body.family, "level": 1, "band": band, "land": land},
+            {"family": body.family, "level": 1, "band": band, "land": land, "cells": len(cells)},
         )
         obj = CityObject(
             district_id=home["id"],

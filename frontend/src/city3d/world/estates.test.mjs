@@ -27,14 +27,18 @@ function catalogue(name) {
   return families;
 }
 
-test('the catalogue matches the server: what stands on plots, what stands on the square, the land of every band', () => {
+test('the catalogue matches the server: what stands on the land and its cells, what stands on the square, the land of every band', () => {
   const plots = catalogue('PLOT_FAMILIES'), projects = catalogue('PROJECT_FAMILIES');
   assert.deepEqual(Object.fromEntries(Object.entries(plots).map(([k, v]) => [k, v.size])), E.PLOT_SIZE);
   assert.deepEqual(Object.fromEntries(Object.entries(plots).map(([k, v]) => [k, v.levels])), E.PLOT_LEVELS);
   assert.deepEqual(Object.fromEntries(Object.entries(projects).map(([k, v]) => [k, v.size])), E.PROJECT_SIZE);
   assert.deepEqual(Object.fromEntries(Object.entries(projects).map(([k, v]) => [k, v.levels])), E.PROJECT_LEVELS);
-  assert.match(server, /"park": \{\n {8}"name": "Парк",\n {8}"icon": "[^"]+",\n {8}"size": \(2, 2\),\n {8}"squares": 4,/);
-  assert.match(server, /"bigpark": \{\n {8}"name": "Большой парк",\n {8}"icon": "[^"]+",\n {8}"size": \(3, 2\),\n {8}"squares": 6,/);
+  assert.match(server, /"park": \{\n {8}"name": "Парк",\n {8}"icon": "[^"]+",\n {8}"size": \(4, 4\),\n {8}"squares": 4,/);
+  assert.match(server, /"bigpark": \{\n {8}"name": "Большой парк",\n {8}"icon": "[^"]+",\n {8}"size": \(6, 4\),\n {8}"squares": 6,/);
+  // A house on 3 × 3 cells, a square and an office on 2 × 2; four squares fill a park, six a big park.
+  assert.deepEqual([E.PLOT_SIZE.house, E.PLOT_SIZE.terrace, E.PLOT_SIZE.square, E.PLOT_SIZE.officea], [[3, 3], [3, 3], [2, 2], [2, 2]]);
+  assert.equal(E.PLOT_SIZE.park[0] * E.PLOT_SIZE.park[1], 4 * E.PLOT_SIZE.square[0] * E.PLOT_SIZE.square[1]);
+  assert.equal(E.PLOT_SIZE.bigpark[0] * E.PLOT_SIZE.bigpark[1], 6 * E.PLOT_SIZE.square[0] * E.PLOT_SIZE.square[1]);
   assert.deepEqual(E.PARK_SQUARES, { park: 4, bigpark: 6 });
   // A price for the land of every band of the island city; the lake city uses the first three.
   const land = server.match(/^LAND_PRICES = \[([^\]]*)\]/m)[1].split(',').map(Number);
@@ -43,6 +47,29 @@ test('the catalogue matches the server: what stands on plots, what stands on the
   assert.match(server, /^SQUARE, MODULE_CELLS = 0, 12$/m);
   assert.equal(E.MODULE_CELLS, 12);
   assert.deepEqual([1, 2, 3, 4].map(E.preparedLand), [true, true, true, false]);
+});
+
+test('what is built on a picked cell goes where it fits round it; where it cannot, its blocked cells show', () => {
+  const free = () => null;
+  // In the open: a house with the picked cell in its middle, a square from it, a small thing on it.
+  assert.deepEqual(E.footprintAt(5, 5, 3, 3, 20, 10, free), { col: 4, row: 4, fits: true, blocked: [] });
+  assert.deepEqual(E.footprintAt(5, 5, 2, 2, 20, 10, free), { col: 5, row: 5, fits: true, blocked: [] });
+  assert.deepEqual(E.footprintAt(5, 5, 1, 1, 20, 10, free), { col: 5, row: 5, fits: true, blocked: [] });
+  // A road down column 4: the house moves off it, still on the picked cell.
+  assert.deepEqual(E.footprintAt(5, 5, 3, 3, 20, 10, c => c === 4 ? 'taken' : null), { col: 5, row: 4, fits: true, blocked: [] });
+  // At the block's corners it stays inside.
+  assert.deepEqual(E.footprintAt(0, 0, 3, 3, 20, 10, free), { col: 0, row: 0, fits: true, blocked: [] });
+  assert.deepEqual(E.footprintAt(19, 9, 3, 3, 20, 10, free), { col: 17, row: 7, fits: true, blocked: [] });
+  // Two free columns between taken ones: no house fits; it shows round the cell, the taken cells blocked.
+  const lane = c => c === 5 || c === 6 ? null : 'taken';
+  assert.deepEqual(E.footprintAt(5, 5, 3, 3, 20, 10, lane), { col: 4, row: 4, fits: false, blocked: [[4, 4], [4, 5], [4, 6]] });
+  assert.deepEqual(E.footprintAt(5, 5, 2, 2, 20, 10, lane), { col: 5, row: 5, fits: true, blocked: [] });
+  // The picked cell itself taken: nothing covering it fits.
+  assert.equal(E.footprintAt(5, 5, 2, 2, 20, 10, (c, r) => c === 5 && r === 5 ? 'taken' : null).fits, false);
+  // The same pick always lands the same way, and a small thing's cell is its own.
+  assert.deepEqual(E.itemFootprint('road'), [1, 1]);
+  assert.deepEqual(E.itemFootprint('house'), [3, 3]);
+  assert.deepEqual(E.itemFootprint('bigpark', 1), [4, 6]);
 });
 
 const KNOWN = new Set(['tree-round', 'tree-oak', 'tree-birch', 'tree-cone', 'bench', 'flowerbed', 'bush', 'hedge', 'lamp', 'cottage', 'roof', 'planter', 'fountain', 'gazebo', 'slide', 'swings', 'sandbox', 'family-house', 'office-building']);
@@ -61,15 +88,15 @@ function samples() {
   return out;
 }
 
-/** A building's plots of 3 × 3 cells in every block: at its first corner, its middle and its last, facing each side. */
-function plotFrames() {
+/** A building's n × n cells in every block: at its first corner, its middle and its last, facing each side. */
+function plotFrames(n = E.CELLS) {
   const out = [];
   for (const grid of Object.values(GRIDS)) for (const block of grid.blocks) {
-    if (block.cols < E.CELLS || block.rows < E.CELLS) continue;
-    const spots = [[0, 0], [Math.floor(block.cols / 2) - 1, Math.floor(block.rows / 2) - 1], [block.cols - E.CELLS, block.rows - E.CELLS]];
+    if (block.cols < n || block.rows < n) continue;
+    const spots = [[0, 0], [Math.floor(block.cols / 2) - 1, Math.floor(block.rows / 2) - 1], [block.cols - n, block.rows - n]];
     for (const [col, row] of spots) for (let turn = 0; turn < 4; turn++) {
-      const side = E.turnedSide(block, E.homeSide(block, col, row, E.CELLS, E.CELLS), turn);
-      out.push(E.areaFrame(block, col, row, E.CELLS, E.CELLS, side, turn % 2 === 0));
+      const side = E.turnedSide(block, E.homeSide(block, col, row, n, n), turn);
+      out.push(E.areaFrame(block, col, row, n, n, side, turn % 2 === 0));
     }
   }
   return out;
@@ -114,14 +141,15 @@ test('a house grows at every stage: one storey, two, a wing, a garage, a three-s
   // The same house looks the same every time; another one differs.
   assert.deepEqual(E.plotLayout(frame, 'house', 3, 11), E.plotLayout(frame, 'house', 3, 11));
   assert.notDeepEqual(E.plotLayout(frame, 'house', 3, 11).placements.map(p => p.tint), E.plotLayout(frame, 'house', 3, 12).placements.map(p => p.tint));
-  // Parks gather more: a park has more than four squares had, a big park more than a park.
-  const one = E.plotLayout(frame, 'square', 1, 3).placements.length;
-  const park = E.plotLayout(E.areaFrame(block, 0, 0, 2 * E.CELLS, 2 * E.CELLS), 'park', 1, 3).placements.length, big = E.plotLayout(E.areaFrame(block, 0, 0, 3 * E.CELLS, 2 * E.CELLS), 'bigpark', 1, 3).placements.length;
+  // Parks gather more: a park has more than two squares had, a big park more than a park.
+  const on = family => E.areaFrame(block, 0, 0, ...E.plotFootprint(family, 0));
+  const one = E.plotLayout(on('square'), 'square', 1, 3).placements.length;
+  const park = E.plotLayout(on('park'), 'park', 1, 3).placements.length, big = E.plotLayout(on('bigpark'), 'bigpark', 1, 3).placements.length;
   assert.ok(park > one * 2 && big > park, `${one} → ${park} → ${big}`);
-  assert.ok(E.plotLayout(E.areaFrame(block, 0, 0, 2 * E.CELLS, 2 * E.CELLS), 'park', 2, 3).placements.some(p => p.kind === 'fountain'), 'a fountain in the park\'s second stage');
+  assert.ok(E.plotLayout(on('park'), 'park', 2, 3).placements.some(p => p.kind === 'fountain'), 'a fountain in the park\'s second stage');
 });
 
-test('all nine offices are finished one-plot purchases and fit a plot of 3 × 3 cells anywhere, facing any side, with an entrance plaza', () => {
+test('all nine offices are finished purchases on 2 × 2 cells and fit them anywhere, facing any side, with an entrance plaza', () => {
   assert.deepEqual(Object.keys(SERVER_OFFICES), Object.keys(E.OFFICE_BUILDINGS));
   assert.equal(Object.keys(SERVER_OFFICES).length, 9);
   assert.ok(!E.isOfficeBuilding('house') && !E.isOfficeBuilding('toString'));
@@ -133,8 +161,8 @@ test('all nine offices are finished one-plot purchases and fit a plot of 3 × 3 
   for (const [family, model] of Object.entries(E.OFFICE_BUILDINGS)) {
     assert.equal(model.name, SERVER_OFFICES[family].name);
     assert.equal(E.PLOT_LEVELS[family], 1);
-    for (const rotation of [0, 1, 2, 3]) assert.deepEqual(E.plotFootprint(family, rotation), [E.CELLS, E.CELLS]);
-    for (const frame of plotFrames()) {
+    for (const rotation of [0, 1, 2, 3]) assert.deepEqual(E.plotFootprint(family, rotation), [2, 2]);
+    for (const frame of plotFrames(2)) {
       const layout = E.plotLayout(frame, family, 1, 19), offices = layout.placements.filter(p => p.kind === 'office-building');
       assert.equal(offices.length, 1);
       const [office] = offices, at = local(frame, office), front = at.w + office.depth / 2;
@@ -206,7 +234,7 @@ test('ready houses: the server sells exactly these, finished, and each stands in
   const prices = Object.fromEntries([...server.slice(server.indexOf('PLOT_PRICES = {')).matchAll(/^ {4}"(\w+)": \[(\d+)\],?$/gm)].map(m => [m[1], Number(m[2])]));
   const costs = ready.map(f => prices[f]);
   assert.ok(costs.every((c, i) => c > 0 && (i === 0 || c > costs[i - 1])), `prices go up: ${costs.join(', ')}`);
-  for (const family of ready) assert.ok(E.isReadyHouse(family) && E.PLOT_LEVELS[family] === 1 && E.PLOT_SIZE[family].join() === '1,1', family);
+  for (const family of ready) assert.ok(E.isReadyHouse(family) && E.PLOT_LEVELS[family] === 1 && E.PLOT_SIZE[family].join() === '3,3', family);
   assert.ok(!E.isReadyHouse('house') && !E.isReadyHouse('square') && !E.isReadyHouse('toString'));
   // Every house in every finish is its own model.
   const names = Array.from({ length: 12 }, (_, v) => E.houseModelName(v));

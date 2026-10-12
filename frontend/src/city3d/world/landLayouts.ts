@@ -1,6 +1,7 @@
 /**
- * What stands on the plots of the team districts (docs/CITY_ESTATES.md): a square, a house or a ready house on one
- * plot, a park on the four plots of the squares it gathered from, a big park on six. Built from the catalogue's
+ * What stands on the cells of the team districts (docs/CITY_ESTATES.md): a house or a ready house on 3 × 3 cells, a
+ * square or an office tower on 2 × 2, a park on the 4 × 4 cells of the four squares it gathered from, a big park on
+ * the 6 × 4 of six. Built from the catalogue's
  * procedural pieces (cottages under gabled roofs, trees, hedges, benches, fountains), so a district reads from any
  * distance and costs only copies in the instance pools. Every stage of a house changes its silhouette: one storey,
  * two, a wing with a terrace, a garage, a three-storey mansion. A ready house is a model of its own
@@ -19,15 +20,15 @@ export interface Layout { placements: Placement[]; surfaces: Surface[] }
 const WALLS = [0, 1, 2, 3, 5, 6, 9, 10, 11, 13], ROOFS = [0, 1, 1, 2, 3, 4], GARAGE = 8, SLATE = 0;
 const TREES: PlacementKind[] = ["tree-round", "tree-oak", "tree-birch", "tree-round", "tree-cone"];
 
-/** A small seeded stream, so neighbouring plots differ and a plot always looks the same. */
+/** A small seeded stream, so neighbouring buildings differ and a building always looks the same. */
 function stream(seed: number) {
   let s = (Math.imul(seed | 0, 2654435761) ^ 0x9e3779b9) >>> 0;
   return () => { s = (Math.imul(s ^ (s >>> 15), 2246822519) + 0x6d2b79f5) >>> 0; return (s >>> 8) / 16777216; };
 }
 
 /**
- * The plot's own frame: `put(kind, lu, lw)` places a piece `lu` along the plot's width and `lw` towards its
- * front (the street), turned `turn` from facing the front; `patch` lays ground `alongU` × `alongW`.
+ * The building's own frame over its cells: `put(kind, lu, lw)` places a piece `lu` along its width and `lw` towards
+ * its front (the street), turned `turn` from facing the front; `patch` lays ground `alongU` × `alongW`.
  */
 function lot(frame: Frame, seed: number) {
   const s = Math.sin(frame.rotation), c = Math.cos(frame.rotation), placements: Placement[] = [], surfaces: Surface[] = [];
@@ -179,25 +180,27 @@ function office(f: Lot, family: OfficeBuilding) {
   f.put("lamp", -Math.min(W - .7, width * .32), D - .6, 0);
 }
 
-/** A park on 2 × 2 plots: lawns, a cross of walks round a middle, trees round the edge and in clumps, benches, lamps. */
+/**
+ * A park on the 4 × 4 cells of its squares: lawns, a cross of walks round a middle (a fountain once it is built), two
+ * trees on each side clear of the walks and one in each quarter, benches along a walk, lamps along the other.
+ */
 function park(f: Lot, level: number) {
-  const { W, D } = f;
+  const { W, D } = f, r = level > 1 ? 2.4 : 1.9;
   f.patch("lawn", 0, 0, 2 * W - .5, 2 * D - .5);
-  f.patch("plaza", 0, 0, 2 * W - .6, 1.3); f.patch("plaza", 0, 0, 1.3, 2 * D - .6);
-  f.disc("plaza", 0, 0, level > 1 ? 3 : 2.3);
-  if (level > 1) { f.put("fountain", 0, 0, 0, { width: 2.4, scale: 1.1 }); for (let k = 0; k < 4; k++) { const a = k * Math.PI / 2 + Math.PI / 4; f.put("bench", Math.sin(a) * 3.6, Math.cos(a) * 3.6, a + Math.PI, { width: .9, scale: .9 }); } }
-  else f.put("flowerbed", 0, 0, 0, { width: 1.6, scale: 1.1 });
-  // Trees round the edge, three to a side, and a clump in each quarter.
-  for (const t of [-.62, 0, .62]) for (const [u, w] of [[t * W, D - 1.1], [t * W, -D + 1.1], [W - 1.1, t * D], [-W + 1.1, t * D]]) if (Math.abs(u) > 1.4 || Math.abs(w) > 1.4) tree(f, u, w, 1.15);
+  f.patch("plaza", 0, 0, 2 * W - .6, 1.2); f.patch("plaza", 0, 0, 1.2, 2 * D - .6);
+  f.disc("plaza", 0, 0, r);
+  if (level > 1) { f.put("fountain", 0, 0, 0, { width: 2, scale: .95 }); for (let k = 0; k < 4; k++) { const a = k * Math.PI / 2 + Math.PI / 4; f.put("bench", Math.sin(a) * (r + .45), Math.cos(a) * (r + .45), a + Math.PI, { width: .9, scale: .85 }); } }
+  else f.put("flowerbed", 0, 0, 0, { width: 1.4, scale: 1 });
+  for (const t of [-.6, .6]) for (const [u, w] of [[t * W, D - 1], [t * W, -D + 1], [W - 1, t * D], [-W + 1, t * D]]) tree(f, u, w, 1.1);
   for (const [qu, qw] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
-    tree(f, qu * W * .45, qw * D * .5, 1.2); tree(f, qu * W * .58, qw * D * .32, 1);
-    f.put("bench", qu * 1.4, qw * D * .55, qu > 0 ? -Math.PI / 2 : Math.PI / 2, { width: .9, scale: .9 });
-    f.put("flowerbed", qu * (level > 1 ? 3.9 : 2.9), qw * (level > 1 ? 3.9 : 2.9), 0, { width: .8, scale: .7 });
-    f.put("lamp", qu * 1.15, qw * D * .32, 0);
+    tree(f, qu * W * .5, qw * D * .5, 1.15);
+    f.put("bench", qu * 1.15, qw * D * .62, qu > 0 ? -Math.PI / 2 : Math.PI / 2, { width: .9, scale: .85 });
+    f.put("lamp", qu * Math.min(W - 1.6, r + 1.3), qw * .95, 0);
+    f.put("flowerbed", qu * 1.25, qw * (D - 1.15), 0, { width: .7, scale: .65 });
   }
 }
 
-/** A big park on 3 × 2 plots: an alley along its length with trees in rows, lawns, benches; then a gazebo and a playground, then a fountain. */
+/** A big park on the 6 × 4 cells of its squares: an alley along its length with trees in rows, lawns, benches; then a gazebo and a playground, then a fountain. */
 function bigpark(f: Lot, level: number) {
   const long = f.W >= f.D, L = long ? f.W : f.D, S = long ? f.D : f.W;
   // In the park's own axes: `a` along its length, `b` across it.
@@ -210,32 +213,33 @@ function bigpark(f: Lot, level: number) {
   patch("plaza", 0, 0, 2 * L - .6, 1.6); patch("plaza", 0, 0, 1.2, 2 * S - .6);
   // Rows of trees along the alley, benches between them.
   for (let a = -L + 2.2; a <= L - 2.2; a += 3.1) {
-    if (Math.abs(a) < 2.6 || (level > 1 && Math.abs(Math.abs(a) - L * .62) < 3)) continue;
+    // Clear of the cross walk (of the fountain's square too), of the gazebo and of the playground.
+    if (Math.abs(a) < (level > 2 ? 3.8 : 2.6) || (level > 1 && Math.abs(Math.abs(a) - L * .62) < 3)) continue;
     grove(a, 1.9, 1.15); grove(a, -1.9, 1.15);
   }
   for (const a of [-L * .38, L * .38]) { put("bench", a, 1.25, Math.PI, { width: .9, scale: .9 }); put("bench", a + 1.4, -1.25, 0, { width: .9, scale: .9 }); }
   // Benches at the cross walk, bushes along the edge of the lawns, lamps at the ends of the alley.
   for (const b of [-S * .55, S * .55]) put("bench", 1.05, b, -Math.PI / 2, { width: .9, scale: .9 });
   for (const a of [-L * .72, -L * .2, L * .2, L * .72]) for (const b of [-(S - .9), S - .9]) put("bush", a, b, a + b, { scale: .7 });
-  for (const a of [-(L - 1.2), L - 1.2]) { put("lamp", a, 1.05, 0); put("lamp", a, -1.05, 0); }
+  for (const a of [-(L - .7), L - .7]) { put("lamp", a, 1.05, 0); put("lamp", a, -1.05, 0); }
   // Clumps of trees in the lawns, more towards the corners.
   for (const [qa, qb] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { grove(qa * (L - 1.6), qb * (S - 1.6), 1.25); grove(qa * L * .78, qb * S * .55, 1.1); grove(qa * L * .3, qb * (S - 1.4), 1); }
   for (const a of [-L * .55, L * .55]) for (const b of [-S * .6, S * .6]) put("flowerbed", a, b, a, { width: .8, scale: .7 });
   if (level > 1) {
     // A gazebo on a round plaza at one end, a playground at the other.
     disc("plaza", -L * .62, 0, 2); put("gazebo", -L * .62, 0, 0, { width: 2.4, scale: .9 });
-    put("flowerbed", -L * .62 - 2.3, 1.6, 0, { width: .7, scale: .6 }); put("flowerbed", -L * .62 - 2.3, -1.6, 1, { width: .7, scale: .6 });
+    put("flowerbed", -L * .62, 2.6, 0, { width: .7, scale: .6 }); put("flowerbed", -L * .62, -2.6, 1, { width: .7, scale: .6 });
     patch("play", L * .62, 0, 4.2, 3.4); put("slide", L * .62 - 1, .6, 0, { scale: .9 }); put("swings", L * .62 + 1.1, -.5, Math.PI / 2, { scale: .9 }); put("sandbox", L * .62 + .9, 1.1, 0, { scale: .8 });
   }
   if (level > 2) {
     // A fountain on a square in the middle and lamps along the alley for the evening.
     disc("plaza", 0, 0, 3.2); put("fountain", 0, 0, 0, { width: 2.6, scale: 1.15 });
-    for (const a of [-L * .82, -L * .4, L * .4, L * .82]) { put("lamp", a, 1.05, 0); put("lamp", a, -1.05, 0); }
+    for (const a of [-L * .2, L * .2]) { put("lamp", a, 1.05, 0); put("lamp", a, -1.05, 0); }
   } else put("flowerbed", 0, 0, 0, { width: 1.4, scale: 1 });
 }
 
 /**
- * What stands on a building's plots at its level, inside its frame (world/land.ts areaFrame over its plots):
+ * What stands on a building's cells at its level, inside its frame (world/land.ts areaFrame over its cells):
  * copies for the instance pools and ground patches. `seed` keeps each building's own look (its id).
  */
 export function plotLayout(frame: Frame, family: PlotFamily, level: number, seed: number): Layout {

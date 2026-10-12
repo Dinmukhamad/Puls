@@ -11,6 +11,6 @@ export function DistrictLandmarkCard({ landmark, compact = false }: { landmark: 
       <div className="city-meter" role="progressbar" aria-label="Застройка района для роста главного здания" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.floor(fill)}><span style={{ width: `${fill}%` }} /></div>
     </div>
     <p className="small">{landmark.next ? <>До «{landmark.next.name}» — {landmark.next.remaining ? <>застройте ещё {landmark.next.remaining.toLocaleString("ru-RU")} {plural(landmark.next.remaining, "клетку", "клетки", "клеток")}</> : "после следующей стройки"}.<small className="estate-landmark__next">Уровень {landmark.next.level} открывается при застройке {landmark.next.percent} % всего района.</small></> : "Главное здание достигло максимального уровня."}</p>
-    {!compact && <p className="secondary small">Одно главное здание стоит в центре района. Улучшения бесплатны: уровень зависит от того, сколько клеток района застроено. Дом, офис или сквер занимает 3 × 3 клетки. Достигнутый уровень сохраняется при переводах сотрудников.</p>}
+    {!compact && <p className="secondary small">Одно главное здание стоит в центре района. Улучшения бесплатны: уровень зависит от того, сколько клеток района застроено. Дом занимает 3 × 3 клетки, офис и сквер — 2 × 2. Достигнутый уровень сохраняется при переводах сотрудников.</p>}
   </section>;
 }
