@@ -52,6 +52,22 @@ test('a road joins the roads beside it: an arm out to each, meeting the next one
   }
 });
 
+test('a road two or three cells wide is one piece of asphalt, with the pavement along its edges only', () => {
+  /** Is a point under a quad of this colour (corners in order, convex)? */
+  const under = (ground, colour, p) => ground.some(q => q.colour === colour && q.points.every((a, i) => { const b = q.points[(i + 1) % 4]; return (b.x - a.x) * (p.z - a.z) - (b.z - a.z) * (p.x - a.x) >= -1e-9; }) || (q.colour === colour && q.points.every((a, i) => { const b = q.points[(i + 1) % 4]; return (b.x - a.x) * (p.z - a.z) - (b.z - a.z) * (p.x - a.x) <= 1e-9; })));
+  for (const [city, grid] of Object.entries(GRIDS)) {
+    const block = blockOf(grid), b = block.block;
+    // Two rows of five: where four of its cells meet the asphalt runs through; on the outer edge the pavement stays.
+    const wide = D.decorLayout(grid, mapOf(1, [5, 5].flatMap((_, k) => [4, 5, 6, 7, 8].map(c => ['road', b, c, 5 + k]))));
+    const meet = D.areaPoint(D.areaCorners(block, 6, 6), .02, .02), edge = D.areaPoint(D.areaCorners(block, 6, 5), .02, .02);
+    assert.ok(under(wide.ground, ASPHALT, meet), `${city}: asphalt where four cells meet`);
+    assert.ok(!under(wide.ground, ASPHALT, edge), `${city}: the pavement along the outer edge`);
+    // A single road turning a corner keeps its pavement inside the turn, as before.
+    const bend = D.decorLayout(grid, mapOf(1, [['road', b, 4, 5], ['road', b, 5, 5], ['road', b, 5, 6]]));
+    assert.ok(!under(bend.ground, ASPHALT, D.areaPoint(D.areaCorners(block, 5, 5), .02, .98)), `${city}: the pavement inside a turn`);
+  }
+});
+
 test('a road keeps on across the seam between two bands of the island city', () => {
   const grid = GRIDS.support, inner = grid.blocks.find(b => b.district === 1 && b.band === 3), outer = grid.blocks.find(b => b.district === 1 && b.band === 4);
   const col = 40, next = D.neighbours(grid, inner, col, inner.rows - 1, 'row+');

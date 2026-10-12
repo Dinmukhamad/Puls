@@ -55,10 +55,12 @@ function setup(targetGrid = grid) {
     for (const type of ['pointerdown', 'pointerup']) canvas.dispatchEvent(Object.assign(new Event(type), options));
   };
   /** A drag with the mouse's left button, from one point of the ground to another. */
-  const drag = (from, to) => {
-    const base = { isPrimary: true, pointerType: 'mouse', pointerId: 1, button: 0 };
+  /** A drag with the mouse, by default with its left button and no key held; `during` runs before it is let go. */
+  const drag = (from, to, { button = 0, ctrlKey = false, metaKey = false, during } = {}) => {
+    const base = { isPrimary: true, pointerType: 'mouse', pointerId: 1, button, ctrlKey, metaKey };
     canvas.dispatchEvent(Object.assign(new Event('pointerdown'), base, screen(from)));
-    for (let k = 1; k <= 8; k++) canvas.dispatchEvent(Object.assign(new Event('pointermove'), base, { buttons: 1 }, screen(from.clone().lerp(to, k / 8))));
+    for (let k = 1; k <= 8; k++) canvas.dispatchEvent(Object.assign(new Event('pointermove'), base, { buttons: button === 2 ? 2 : 1 }, screen(from.clone().lerp(to, k / 8))));
+    during?.();
     canvas.dispatchEvent(Object.assign(new Event('pointerup'), base, screen(to)));
   };
   return { estates, camera, picks, state, build, aim, tap, drag, ctx };
@@ -416,7 +418,7 @@ test('a small thing\'s tool draws a line of free cells with the mouse; a tap add
   // The house on the test plot and a lamp beside it take cells; a tree of a neighbour's too.
   s.state([object('house')], false, { decor: { lamp: [[b, frame.col + 4, frame.row, 1]], tree: [[b, frame.col + 6, frame.row, 0]] } });
   s.aim(cellPoint(frame.col + 4, frame.row + 1), frame.rotation + .55);
-  tool(s, { tool: 'road', cells: [], line: true });
+  tool(s, { tool: 'road', cells: [], shape: 'line' });
   // A drag from the house's own cell through the lamp's and the tree's along a row and down a column: only free cells.
   s.drag(cellPoint(frame.col + 2, frame.row), cellPoint(frame.col + 8, frame.row + 2));
   const path = city.cellsBetween(grid, { block: home, col: frame.col + 2, row: frame.row }, { block: home, col: frame.col + 8, row: frame.row + 2 });
@@ -425,7 +427,7 @@ test('a small thing\'s tool draws a line of free cells with the mouse; a tap add
   assert.deepEqual(chosen(s.picks), free.map(c => [b, c.col, c.row]));
   // The page keeps them; a tap on one of them takes it out, on a free one adds it, on a taken one does nothing.
   const kept = s.picks.at(-1).cells;
-  tool(s, { tool: 'road', cells: kept, line: false });
+  tool(s, { tool: 'road', cells: kept, shape: 'cell' });
   s.picks.length = 0; s.tap(cellPoint(free[0].col, free[0].row));
   assert.deepEqual(chosen(s.picks), kept.slice(1).map(c => [b, c.col, c.row]));
   s.picks.length = 0; s.tap(cellPoint(frame.col + 4, frame.row + 4));
@@ -433,7 +435,7 @@ test('a small thing\'s tool draws a line of free cells with the mouse; a tap add
   s.picks.length = 0; s.tap(cellPoint(frame.col + 4, frame.row));
   assert.deepEqual(chosen(s.picks), kept.map(c => [b, c.col, c.row]), 'the lamp\'s cell is taken');
   // With lines on, a tap goes on from the last cell: every free cell between.
-  tool(s, { tool: 'road', cells: [], line: true });
+  tool(s, { tool: 'road', cells: [], shape: 'line' });
   s.picks.length = 0; s.tap(cellPoint(frame.col + 4, frame.row + 5)); s.tap(cellPoint(frame.col + 4, frame.row + 9));
   assert.deepEqual(chosen(s.picks), [5, 6, 7, 8, 9].map(r => [b, frame.col + 4, frame.row + r]));
   // Another district's land is never chosen, nor is anything chosen without a tool.
@@ -446,7 +448,7 @@ test('a small thing\'s tool draws a line of free cells with the mouse; a tap add
 test('the mouse\'s other buttons and fingers keep moving the camera: only the left button draws', () => {
   const s = setup(), canvas = s.ctx.renderer.domElement, seen = [];
   s.state([]); s.aim(cellPoint(frame.col + 4, frame.row + 1), frame.rotation + .55);
-  tool(s, { tool: 'tree', cells: [], line: false });
+  tool(s, { tool: 'tree', cells: [], shape: 'cell' });
   // A listener of the camera's: it hears the presses the tool does not take.
   canvas.addEventListener('pointerdown', event => seen.push([event.pointerType, event.button]));
   const at = point => { const p = point.clone().project(s.camera); return { clientX: (p.x + 1) * 400, clientY: (1 - p.y) * 400 }; };
@@ -468,15 +470,72 @@ test('the mouse\'s other buttons and fingers keep moving the camera: only the le
   s.estates.dispose();
 });
 
+test('with Ctrl (or Cmd) either button draws an area: every free cell of the rectangle, its size by the pointer', () => {
+  const s = setup(), b = home.block, canvas = s.ctx.renderer.domElement, seen = [];
+  // A neighbour's tree takes one cell of the area.
+  s.state([], false, { decor: { tree: [[b, frame.col + 5, frame.row + 4, 0]] } });
+  s.aim(cellPoint(frame.col + 6, frame.row + 4), frame.rotation + .55);
+  tool(s, { tool: 'road', cells: [], shape: 'line' });
+  canvas.addEventListener('pointerdown', event => seen.push(event.button));
+  const from = { block: home, col: frame.col + 3, row: frame.row + 3 }, to = { block: home, col: frame.col + 10, row: frame.row + 4 };
+  const area = city.cellsWithin(grid, from, to).filter(c => !(c.col === frame.col + 5 && c.row === frame.row + 4));
+  assert.equal(area.length, 8 * 2 - 1);
+  // The right button with Ctrl: a road two cells wide, the camera never hears of it.
+  const label = s.ctx.overlay.children.find(c => c.className === 'c3-area-size');
+  let during = null;
+  s.drag(cellPoint(from.col, from.row), cellPoint(to.col, to.row), { button: 2, ctrlKey: true, during: () => { during = { hidden: label.hidden, text: label.textContent }; } });
+  assert.deepEqual(seen, [], 'the camera keeps out of it');
+  assert.deepEqual(chosen(s.picks).sort(), area.map(c => [b, c.col, c.row]).sort());
+  assert.deepEqual(during, { hidden: false, text: '8 × 2 · 15 клеток' }, 'eight cells along, two across, fifteen of them free');
+  assert.equal(label.hidden, true, 'the size goes when the area is chosen');
+  // The left button with Cmd draws an area too, added to what is chosen; the next tap starts afresh.
+  tool(s, { tool: 'road', cells: s.picks.at(-1).cells, shape: 'line' });
+  s.picks.length = 0;
+  s.drag(cellPoint(frame.col + 3, frame.row + 6), cellPoint(frame.col + 5, frame.row + 8), { metaKey: true });
+  assert.equal(chosen(s.picks).length, 15 + 9);
+  // Without a key the right button stays the camera's; the left one draws its line.
+  tool(s, { tool: 'tree', cells: [], shape: 'cell' }); s.picks.length = 0;
+  s.drag(cellPoint(frame.col + 3, frame.row + 6), cellPoint(frame.col + 6, frame.row + 6), { button: 2 });
+  assert.deepEqual(seen, [2]); assert.equal(chosen(s.picks), undefined);
+  s.estates.dispose();
+});
+
+test('in the area mode a plain drag draws an area, and taps choose it by its two corners', () => {
+  const s = setup(), b = home.block;
+  s.state([]); s.aim(cellPoint(frame.col + 6, frame.row + 4), frame.rotation + .55);
+  tool(s, { tool: 'pine', cells: [], shape: 'area' });
+  s.drag(cellPoint(frame.col + 2, frame.row + 2), cellPoint(frame.col + 4, frame.row + 4));
+  assert.equal(chosen(s.picks).length, 9, 'a grove of three by three');
+  // Taps: the first one a corner, the second the rectangle between them; then a new corner.
+  tool(s, { tool: 'pine', cells: [], shape: 'area' }); s.picks.length = 0;
+  s.tap(cellPoint(frame.col + 6, frame.row + 2));
+  assert.deepEqual(chosen(s.picks), [[b, frame.col + 6, frame.row + 2]]);
+  tool(s, { tool: 'pine', cells: s.picks.at(-1).cells, shape: 'area' });
+  s.tap(cellPoint(frame.col + 8, frame.row + 3));
+  assert.equal(chosen(s.picks).length, 3 * 2);
+  tool(s, { tool: 'pine', cells: s.picks.at(-1).cells, shape: 'area' });
+  s.tap(cellPoint(frame.col + 10, frame.row + 6));
+  assert.equal(chosen(s.picks).length, 3 * 2 + 1, 'a new corner, not a rectangle from the last one');
+  // A corner may lie on the district's centre: the area reaches over it and takes only the cells for sale.
+  const centre = grid.centres.find(c => c.district === frame.district), block = grid.blocks.find(x => x.district === centre.district && x.block === centre.block);
+  tool(s, { tool: 'pine', cells: [], shape: 'area' }); s.picks.length = 0;
+  s.aim(cellPoint(centre.col, centre.row + 2, block), centre.area.rotation + .55);
+  s.tap(cellPoint(centre.col + 1, centre.row + 2, block));
+  tool(s, { tool: 'pine', cells: s.picks.at(-1)?.cells ?? [], shape: 'area' });
+  s.tap(cellPoint(centre.col - 2, centre.row + 3, block));
+  assert.deepEqual(chosen(s.picks).sort(), [[block.block, centre.col - 2, centre.row + 2], [block.block, centre.col - 2, centre.row + 3], [block.block, centre.col - 1, centre.row + 2], [block.block, centre.col - 1, centre.row + 3]].sort());
+  s.estates.dispose();
+});
+
 test('taking away chooses one\'s own small things only; in the test city anyone\'s', () => {
   const s = setup(), b = home.block, decor = { road: [[b, frame.col + 5, frame.row, 1], [b, frame.col + 6, frame.row, 0]], lamp: [[b, frame.col + 7, frame.row, 1]] };
   s.state([object('house')], false, { decor });
   s.aim(cellPoint(frame.col + 6, frame.row + 1), frame.rotation + .55);
-  tool(s, { tool: 'remove', cells: [], line: false });
+  tool(s, { tool: 'remove', cells: [], shape: 'cell' });
   s.drag(cellPoint(frame.col + 2, frame.row), cellPoint(frame.col + 8, frame.row));
   assert.deepEqual(chosen(s.picks), [[b, frame.col + 5, frame.row], [b, frame.col + 7, frame.row]], 'not the house, a neighbour\'s road or a free cell');
   s.state([], true, { decor });
-  tool(s, { tool: 'remove', cells: [], line: false, anyone: true });
+  tool(s, { tool: 'remove', cells: [], shape: 'cell', anyone: true });
   s.picks.length = 0; s.drag(cellPoint(frame.col + 2, frame.row), cellPoint(frame.col + 8, frame.row));
   assert.deepEqual(chosen(s.picks), [5, 6, 7].map(c => [b, frame.col + c, frame.row]));
   s.estates.dispose();

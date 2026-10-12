@@ -15,10 +15,15 @@ export interface PlotAddress { block: number; col: number; row: number }
 /** The tool for small things: one kind to lay, or taking one's own away. */
 export type DecorTool = DecorFamily | "remove";
 /**
+ * How taps choose cells for small things: one at a time, a line from the last one, or an area — a tap on one corner
+ * and a tap on the other. A drag with the mouse draws a line, or an area in the area mode or with Ctrl (Cmd) held.
+ */
+export type DecorShape = "cell" | "line" | "area";
+/**
  * Build mode in a district: its cells light up (free and taken), or for staff the cells of its public square; a
  * building from the inventory (`moving`) or a shared project being placed; the building selected; the plot of
  * 3 × 3 cells picked for a purchase, with where its front looks (`rotation`, where no road decides); or small things
- * being laid (or taken away) on the cells chosen so far, a tap drawing a line from the last one when `line` is on.
+ * being laid (or taken away) on the cells chosen so far, taps choosing them by `shape`.
  */
 export interface CityBuildView {
   district: string; area: "plots" | "public";
@@ -26,7 +31,7 @@ export interface CityBuildView {
   selected: number | null;
   plot: (PlotAddress & { rotation: number }) | null;
   /** `anyone`: the test city takes away whoever's small things, not only one's own. */
-  decor: { tool: DecorTool; cells: PlotAddress[]; line: boolean; anyone?: boolean } | null;
+  decor: { tool: DecorTool; cells: PlotAddress[]; shape: DecorShape; anyone?: boolean } | null;
 }
 /**
  * What the operator touched on district land: a plot to buy on (its first cell), where the preview stands now and why

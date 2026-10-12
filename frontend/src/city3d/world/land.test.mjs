@@ -224,6 +224,46 @@ test('a road is laid along the land\'s lines: every cell between two, through on
   }
 });
 
+test('an area is the rectangle of cells between two, on the land\'s lines and across the seams of the island\'s bands', () => {
+  const key = c => `${c.block.block}:${c.col}:${c.row}`, keys = list => new Set(list.map(key));
+  for (const [city, grid] of Object.entries(GRIDS)) {
+    for (const block of grid.blocks.filter(b => b.skip.size === 0 && b.cols >= 12 && b.rows >= 6)) {
+      const ref = (col, row) => ({ block, col, row }), name = `${city}: block ${block.district}:${block.block}`;
+      // Two rows of ten: a road two cells wide, every cell once, whichever corner it starts from.
+      const strip = L.cellsWithin(grid, ref(2, 1), ref(11, 2));
+      assert.deepEqual([...keys(strip)].sort(), Array.from({ length: 20 }, (_, i) => `${block.block}:${2 + i % 10}:${1 + Math.floor(i / 10)}`).sort(), name);
+      assert.equal(strip.length, 20, name);
+      assert.deepEqual(keys(L.cellsWithin(grid, ref(11, 1), ref(2, 2))), keys(strip), `${name}: from the other corner`);
+      assert.deepEqual(keys(L.cellsWithin(grid, ref(11, 2), ref(2, 1))), keys(strip), `${name}: back to front`);
+      // One cell is an area of one; three by three is nine.
+      assert.deepEqual(L.cellsWithin(grid, ref(4, 3), ref(4, 3)).map(c => [c.col, c.row]), [[4, 3]]);
+      assert.equal(L.cellsWithin(grid, ref(5, 0), ref(7, 2)).length, 9, name);
+    }
+    // Only the first one's district, and only cells for sale: over a district's centre the centre's cells stay out.
+    const centre = grid.centres[0], home = grid.blocks.find(b => b.district === centre.district && b.block === centre.block);
+    const c0 = Math.max(0, centre.col - 2), c1 = Math.min(home.cols - 1, centre.col + centre.cols + 1), r1 = Math.min(home.rows - 1, centre.row + centre.rows);
+    const over = L.cellsWithin(grid, { block: home, col: c0, row: centre.row }, { block: home, col: c1, row: r1 });
+    assert.ok(over.length > 0 && over.every(c => !c.block.skip.has(`${c.col}:${c.row}`) && c.block.district === centre.district), `${city}: an area over the centre`);
+    assert.equal(over.length, (c1 - c0 + 1) * (r1 - centre.row + 1) - centre.cols * centre.rows, `${city}: all the rest of the rectangle`);
+    const [a, b] = [1, 2].map(d => grid.blocks.find(x => x.district === d && x.band === 2));
+    assert.ok(L.cellsWithin(grid, { block: a, col: a.cols - 1, row: 1 }, { block: b, col: 0, row: 1 }).every(c => c.block.district === 1), `${city}: into the next district`);
+  }
+  // On the island an area crosses from one band into the next: the same piece of the ring in both, every middle inside.
+  const grid = GRIDS.support, inner = grid.blocks.find(b => b.district === 1 && b.band === 3), outer = grid.blocks.find(b => b.district === 1 && b.band === 4);
+  const from = { block: inner, col: 40, row: inner.rows - 2 }, to = { block: outer, col: 60, row: 1 };
+  const across = L.cellsWithin(grid, from, to), polar = c => { const p = L.cellCentre(c.block, c.col, c.row); return { r: Math.hypot(p.x, p.z), a: Math.atan2(p.z, p.x) }; };
+  assert.deepEqual([...new Set(across.map(c => c.block.band))].sort(), [3, 4]);
+  assert.deepEqual([...new Set(across.filter(c => c.block === inner).map(c => c.row))].sort((p, q) => p - q), [inner.rows - 2, inner.rows - 1]);
+  assert.deepEqual([...new Set(across.filter(c => c.block === outer).map(c => c.row))].sort((p, q) => p - q), [0, 1]);
+  const ends = [from, to].map(polar), lo = Math.min(...ends.map(e => e.a)) - .02, hi = Math.max(...ends.map(e => e.a)) + .02;
+  assert.ok(across.every(c => { const p = polar(c); return p.a > lo && p.a < hi; }), 'every cell between the two in angle');
+  // Each band's row of the area is unbroken: as many cells as its columns between the ends.
+  for (const block of [inner, outer]) {
+    const cols = across.filter(c => c.block === block && c.row === across.find(x => x.block === block).row).map(c => c.col).sort((p, q) => p - q);
+    assert.deepEqual(cols, Array.from({ length: cols.length }, (_, i) => cols[0] + i), `band ${block.band} unbroken`);
+  }
+});
+
 test('the island city\'s mainland is empty for the districts: no roads, houses, yards, trees, lamps, car parks or traffic', () => {
   const town = L.generateWorld(L.WORLD_X4), bank = L.WORLD_X4.bank, horizon = L.WORLD_X4.horizon;
   const mainland = p => { const r = Math.hypot(p.x, p.z); return r > bank && r < horizon; };

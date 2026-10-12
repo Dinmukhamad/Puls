@@ -17,7 +17,7 @@ import { createPatches } from "../render/terrain";
 import { createLampLights, type LampLights } from "../render/lampLights";
 import { TAP_DISTANCE, TAP_TIME } from "../engine/input";
 import { CELL, MODULE_CELLS, cellPoint, moduleGround, objectLayout, pointCell, siteLayout, squareProblem, plotFootprint, projectFootprint, type ProjectFamily } from "../world/estates";
-import { CELLS, areaCorners, areaFrame, blockCell, cellUnder, cellsBetween, districtBorders, homeSide, type CellRef, type DistrictCentre, type Frame, type LandBlock, type LandGrid } from "../world/land";
+import { CELLS, areaCorners, areaFrame, blockCell, cellUnder, cellsBetween, cellsWithin, districtBorders, homeSide, type CellRef, type DistrictCentre, type Frame, type LandBlock, type LandGrid } from "../world/land";
 import { buildingFacing, decorKey, decorLayout, decorMap, type DecorMap, type GroundQuad } from "../world/decor";
 import { createBorders } from "../render/borders";
 import { plotLayout } from "../world/landLayouts";
@@ -29,6 +29,7 @@ import { districtGarden, type Garden } from "../world/districtGarden";
 import type { Placement, Surface } from "../world/types";
 import type { CityBuildView, CityEstateView, EstatePick, EstateTarget, PlotAddress } from "../types";
 import type { DistrictEstate, PublicObject } from "../../api/cityEstate";
+import { plural } from "../../utils/format";
 
 /** Signs over projects show only this close. */
 const SIGN_REACH = 230;
@@ -378,8 +379,8 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
     cells.visible = points.length > 0;
   }
 
-  // ---- small things: the cells chosen, a stroke being drawn, the cell under the mouse ----
-  let stroke: { from: CellRef; cells: CellRef[]; pointer: number; x: number; y: number; moved: boolean } | null = null, hoverCell: CellRef | null = null, last: CellRef | null = null, tool = "";
+  // ---- small things: the cells chosen, a stroke being drawn (a line or an area), the cell under the mouse ----
+  let stroke: { from: CellRef; cells: CellRef[]; pointer: number; x: number; y: number; moved: boolean; area: boolean } | null = null, hoverCell: CellRef | null = null, last: CellRef | null = null, tool = "";
   const refOf = (a: PlotAddress): CellRef | null => { const block = build ? blockOf(numberOf(build.district), a.block) : undefined; return block ? { block, col: a.col, row: a.row } : null; };
   const keyOf = (c: CellRef) => decorKey(c.block.district, c.block.block, c.col, c.row);
   /** Can the current tool take this cell: a free cell of one's district to lay on, one's own small thing to take away. */
@@ -391,7 +392,9 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
     if (chosen) { ctx.scene.remove(chosen); chosen.geometry.dispose(); chosen = null; }
     if (!build?.decor || !active) return;
     const colour = build.decor.tool === "remove" ? TAKE : OK, quads: { points: { x: number; z: number }[]; y: number; colour: THREE.Color }[] = [];
-    const list = [...build.decor.cells.map(refOf).filter((c): c is CellRef => !!c), ...(stroke?.cells ?? [])];
+    // The corner an area waits on after its first tap shows too.
+    const corner = build.decor.shape === "area" && last && !stroke ? [last] : [];
+    const list = [...build.decor.cells.map(refOf).filter((c): c is CellRef => !!c), ...(stroke?.cells ?? []), ...corner];
     const done = new Set<string>();
     for (const c of list) {
       const key = keyOf(c);
@@ -404,33 +407,57 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
     chosen = flatMesh(quads, pickMaterial, "district-chosen-cells"); chosen.renderOrder = 4;
     ctx.scene.add(chosen);
   }
-  /** Reports the cells chosen now: the ones chosen before with `add` added (or, for a tap on one of them, taken out). */
-  function choose(add: CellRef[], toggle: boolean) {
+  /**
+   * Reports the cells chosen now: the ones chosen before with `add` added (or, for a tap on one of them, taken out).
+   * `from` is where the next tap's line or area starts: the last cell added, or nowhere once an area is done.
+   */
+  function choose(add: CellRef[], toggle: boolean, from: CellRef | null = add.length ? add[add.length - 1] : last) {
     if (!build?.decor) return;
     const now = build.decor.cells.map(refOf).filter((c): c is CellRef => !!c), keys = new Set(now.map(keyOf));
     let next = now;
     if (toggle && add.length === 1 && keys.has(keyOf(add[0]))) next = now.filter(c => keyOf(c) !== keyOf(add[0]));
     else for (const c of add) if (fits(c) && !keys.has(keyOf(c))) { next = [...next, c]; keys.add(keyOf(c)); }
-    if (add.length) last = add[add.length - 1];
+    last = from;
     onPick({ kind: "cells", district: build.district, cells: next.map(c => ({ block: c.block.block, col: c.col, row: c.row })) });
   }
+  /** While an area is drawn: its size by the pointer, in cells across and along when it lies in one block, and how many it takes. */
+  const sizeLabel = document.createElement("div");
+  sizeLabel.className = "c3-area-size"; sizeLabel.setAttribute("aria-hidden", "true"); sizeLabel.hidden = true;
+  function showSize(event: { clientX: number; clientY: number } | null) {
+    if (!event || !stroke?.area || !stroke.moved) { sizeLabel.hidden = true; return; }
+    const end = stroke.cells.length ? stroke.cells : [stroke.from], to = hoverEnd ?? stroke.from;
+    const count = end.filter(fits).length, same = to.block === stroke.from.block;
+    const across = same ? `${Math.abs(to.col - stroke.from.col) + 1} × ${Math.abs(to.row - stroke.from.row) + 1} · ` : "";
+    sizeLabel.textContent = `${across}${count} ${plural(count, "клетка", "клетки", "клеток")}`;
+    // Beside the pointer, on its left in the right half of the map, where the dock may cover it.
+    const rect = ctx.overlay.getBoundingClientRect(), x = event.clientX - rect.left, y = event.clientY - rect.top, left = x > rect.width / 2;
+    sizeLabel.style.transform = `translate3d(${(left ? x - 16 : x + 16).toFixed(0)}px,${(y + 16).toFixed(0)}px,0)${left ? " translateX(-100%)" : ""}`;
+    sizeLabel.hidden = false;
+  }
+  let hoverEnd: CellRef | null = null;
   /** A cell of the own district under a point (for sale or not), or null. */
   function ownCellAt(p: { x: number; z: number }): CellRef | null {
     if (!build) return null;
     const at = cellUnder(grid, p);
     return at && at.block.district === numberOf(build.district) && !at.skipped ? { block: at.block, col: at.col, row: at.row } : null;
   }
+  /** An area's corner: any cell of the own district under a point, so an area may reach over its centre or the railway. */
+  function cornerAt(p: { x: number; z: number }): CellRef | null {
+    if (!build) return null;
+    const at = cellUnder(grid, p);
+    return at && at.block.district === numberOf(build.district) ? { block: at.block, col: at.col, row: at.row } : null;
+  }
 
   function refreshBuild() {
     if (!active) { cells.visible = ghost.visible = selection.visible = front.visible = false; showChosen(); return; }
-    const nextTool = build?.decor ? `${build.district}:${build.decor.tool}` : "";
-    if (nextTool !== tool) { tool = nextTool; last = null; stroke = null; }
+    const nextTool = build?.decor ? `${build.district}:${build.decor.tool}:${build.decor.shape}` : "";
+    if (nextTool !== tool) { tool = nextTool; last = null; stroke = null; sizeLabel.hidden = true; }
     refreshCells(); showSelection(); reported = ""; showGhost(pinned); showChosen();
   }
 
   // ---- the community square and projects still collecting ----
   const layer = document.createElement("div"); layer.className = "c3-plots"; layer.setAttribute("role", "group"); layer.setAttribute("aria-label", "Районы команд");
-  ctx.overlay.append(layer);
+  ctx.overlay.append(layer); ctx.overlay.append(sizeLabel);
   const signs = new Map<string, { el: HTMLButtonElement; point: THREE.Vector3; reach: number; transform: string }>();
   function sign(id: string, icon: string, title: string, sub: string, point: THREE.Vector3, pick: EstatePick, reach = SIGN_REACH) {
     let item = signs.get(id);
@@ -583,17 +610,21 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
     }
     return null;
   }
-  function pick(p: { x: number; z: number }) {
+  function pick(p: { x: number; z: number }, area = build?.decor?.shape === "area") {
     if (build?.placing) {
       const target = previewAt(p);
       if (target) { pinned = target; reported = ""; showGhost(target); }
       return;
     }
     if (build?.decor) {
-      const at = ownCellAt(p);
+      const at = area ? cornerAt(p) : ownCellAt(p);
       if (!at) return;
-      // A tap: one cell, or with lines on, every cell from the last one to it.
-      choose(build.decor.line && last && last.block.district === at.block.district ? cellsBetween(grid, last, at) : [at], !(build.decor.line && last));
+      // A tap: one cell; drawing lines, every cell from the last one to it; drawing areas, the first tap a corner and the
+      // second every cell of the rectangle between them, after which the next tap starts a new one.
+      const from = last && last.block.district === at.block.district ? last : null;
+      if (area) { if (from) choose(cellsWithin(grid, from, at), false, null); else choose([at], true, at); }
+      else if (build.decor.shape === "line" && from) choose(cellsBetween(grid, from, at), false);
+      else choose([at], true);
       return;
     }
     const found = objectAt(p);
@@ -619,24 +650,30 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
     onPick({ kind: "plot", district: build.district, block: at.block.block, col: a.col, row: a.row, band: at.block.band, problem: plotProblem(at.block, a.col, a.row, CELLS, CELLS) });
   }
   let down: { x: number; y: number; time: number } | null = null, pressed = 0, frame = 0, hover: { x: number; y: number } | null = null;
-  /** With a small thing's tool, the mouse's left button draws: the camera keeps the right button, the wheel and the keys. */
+  /**
+   * With a small thing's tool, the mouse's left button draws a line (an area in the area mode), and with Ctrl or Cmd held
+   * either button draws an area: a road two or three cells wide, a grove. The camera keeps the right button, the wheel
+   * and the keys.
+   */
   const onPress = (event: PointerEvent) => {
-    if (!build?.decor || !active || event.pointerType !== "mouse" || event.button !== 0) return;
-    const p = groundAt(event.clientX, event.clientY), at = p && ownCellAt(p);
+    const held = event.ctrlKey || event.metaKey;
+    if (!build?.decor || !active || event.pointerType !== "mouse" || !(event.button === 0 || (event.button === 2 && held))) return;
+    const area = held || build.decor.shape === "area", p = groundAt(event.clientX, event.clientY), at = p && (area ? cornerAt(p) : ownCellAt(p));
     if (!at) return;
     event.stopImmediatePropagation(); event.preventDefault();
     try { canvas.setPointerCapture(event.pointerId); } catch { /* A synthetic pointer. */ }
-    stroke = { from: at, cells: [at], pointer: event.pointerId, x: event.clientX, y: event.clientY, moved: false };
+    stroke = { from: at, cells: [at], pointer: event.pointerId, x: event.clientX, y: event.clientY, moved: false, area };
+    hoverEnd = at;
     showChosen();
   };
   const onDown = (event: PointerEvent) => { if (event.isPrimary) { pressed = 1; down = { x: event.clientX, y: event.clientY, time: performance.now() }; } else { pressed++; down = null; } };
   const onUp = (event: PointerEvent) => {
     if (stroke && event.pointerId === stroke.pointer) {
-      const done = stroke; stroke = null;
+      const done = stroke; stroke = null; hoverEnd = null; sizeLabel.hidden = true;
       try { canvas.releasePointerCapture(event.pointerId); } catch { /* Already released. */ }
-      // A drag lays its whole line; a click is a tap, one cell or a line from the last one.
-      if (done.moved) choose(done.cells, false);
-      else { const p = groundAt(event.clientX, event.clientY); if (p) pick(p); else showChosen(); }
+      // A drag chooses its whole line or area; a click is a tap: one cell, a line from the last one, an area's corner.
+      if (done.moved) choose(done.cells, false, done.area ? null : undefined);
+      else { const p = groundAt(event.clientX, event.clientY); if (p) pick(p, done.area); else showChosen(); }
       return;
     }
     pressed = Math.max(0, pressed - 1);
@@ -654,8 +691,9 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
   const onMove = (event: PointerEvent) => {
     if (stroke && event.pointerId === stroke.pointer) {
       if (Math.hypot(event.clientX - stroke.x, event.clientY - stroke.y) >= TAP_DISTANCE) stroke.moved = true;
-      const p = groundAt(event.clientX, event.clientY), at = p && ownCellAt(p);
-      if (at) { stroke.cells = cellsBetween(grid, stroke.from, at); showChosen(); }
+      const p = groundAt(event.clientX, event.clientY), at = p && (stroke.area ? cornerAt(p) : ownCellAt(p));
+      if (at) { hoverEnd = at; stroke.cells = stroke.area ? cellsWithin(grid, stroke.from, at) : cellsBetween(grid, stroke.from, at); showChosen(); }
+      showSize(event);
       return;
     }
     if ((!build?.placing && !build?.decor) || event.pointerType !== "mouse" || event.buttons || !active) return;
@@ -708,6 +746,8 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
     setCatalogue(value) { catalogue = value; squareKey = ""; builtKey = ""; rebuild(); },
     setBuild(next) {
       const same = build && next && build.district === next.district && build.area === next.area && build.placing?.family === next.placing?.family && build.placing?.moving === next.placing?.moving;
+      // Cleared or laid: a line or an area starts afresh from the next tap.
+      if (build?.decor?.cells.length && !next?.decor?.cells.length) last = null;
       build = next; if (!same) pinned = null;
       if (!next?.decor) hoverCell = null;
       recolour(); refreshBuild(); place();
@@ -755,7 +795,7 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
       offFrame(); offMove(); if (frame) cancelAnimationFrame(frame);
       canvas.removeEventListener("pointerdown", onPress, { capture: true });
       canvas.removeEventListener("pointerdown", onDown); canvas.removeEventListener("pointerup", onUp); canvas.removeEventListener("pointermove", onMove); canvas.removeEventListener("pointerleave", onLeave);
-      layer.remove(); squarePools?.dispose(); squareLights?.dispose(); pools?.dispose(); lights?.dispose();
+      layer.remove(); sizeLabel.remove(); squarePools?.dispose(); squareLights?.dispose(); pools?.dispose(); lights?.dispose();
       for (const mesh of [ground.mesh, ground.centreMesh, ground.seamMesh, squarePatches, patches]) if (mesh) { ctx.scene.remove(mesh); mesh.geometry.dispose(); (mesh.material as THREE.Material).dispose(); }
       if (paving) { ctx.scene.remove(paving); paving.geometry.dispose(); }
       if (chosen) { ctx.scene.remove(chosen); chosen.geometry.dispose(); }

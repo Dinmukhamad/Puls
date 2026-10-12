@@ -75,7 +75,7 @@ export function decorLayout(grid: LandGrid, map: DecorMap): DecorLayout {
     if (at.family === "road" || at.family === "path") {
       const half = at.family === "road" ? ROAD_HALF : PATH_HALF, surface = at.family === "road" ? ASPHALT : FOOTPATH;
       if (at.family === "road") ground.push({ points: corners, ...PAVEMENT });
-      paving(ground, corners, links, half, surface);
+      paving(ground, corners, links, half, surface, inside(grid, map, block, links, at.family));
       if (at.family === "road") lane(ground, corners, links);
       continue;
     }
@@ -102,8 +102,30 @@ export function decorLayout(grid: LandGrid, map: DecorMap): DecorLayout {
   return { ground, placements, lamps };
 }
 
-/** The asphalt (or a footpath) of a cell: a square in its middle and an arm out to every neighbour it joins. */
-function paving(ground: GroundQuad[], corners: Point[], links: { way: Way; to: Neighbour }[], half: number, surface: { y: number; colour: string }) {
+/**
+ * The corners of a cell inside an area of its kind (a road two or three cells wide, a square of footpath): where the
+ * cells beside it on both sides of the corner and the one across the corner join it too. There the paving runs on.
+ */
+function inside(grid: LandGrid, map: DecorMap, block: LandBlock, links: { way: Way; to: Neighbour }[], family: DecorFamily): [Way, Way][] {
+  const kinds = JOINS[family] ?? [], out: [Way, Way][] = [];
+  for (const across of ["row-", "row+"] as const) for (const along of ["col-", "col+"] as const) {
+    const a = links.find(l => l.way === across);
+    if (!a || !links.some(l => l.way === along)) continue;
+    const corner = neighbours(grid, a.to.block, a.to.col, a.to.row, along).some(n => {
+      const there = map.get(decorKey(block.district, n.block.block, n.col, n.row));
+      return !!there && kinds.includes(there.family);
+    });
+    if (corner) out.push([across, along]);
+  }
+  return out;
+}
+
+/**
+ * The asphalt (or a footpath) of a cell: a square in its middle, an arm out to every neighbour it joins, and the
+ * corners `filled` inside a wider area, so a road two or three cells wide is one piece of asphalt with the pavement
+ * along its edges only.
+ */
+function paving(ground: GroundQuad[], corners: Point[], links: { way: Way; to: Neighbour }[], half: number, surface: { y: number; colour: string }, filled: [Way, Way][] = []) {
   // The cell's size along its columns (s) and its rows (t), to keep the widths in units on a ring's narrower cells.
   const across = Math.hypot(areaPoint(corners, 1, .5).x - areaPoint(corners, 0, .5).x, areaPoint(corners, 1, .5).z - areaPoint(corners, 0, .5).z);
   const along = Math.hypot(areaPoint(corners, .5, 1).x - areaPoint(corners, .5, 0).x, areaPoint(corners, .5, 1).z - areaPoint(corners, .5, 0).z);
@@ -116,6 +138,10 @@ function paving(ground: GroundQuad[], corners: Point[], links: { way: Way; to: N
     const [e0, e1] = way === "row-" ? [P(0, 0), P(1, 0)] : way === "row+" ? [P(0, 1), P(1, 1)] : way === "col-" ? [P(0, 0), P(0, 1)] : [P(1, 0), P(1, 1)];
     const ex = e1.x - e0.x, ez = e1.z - e0.z, el = Math.hypot(ex, ez) || 1, ux = ex / el, uz = ez / el;
     ground.push({ points: [a, b, { x: to.meet.x + ux * half, z: to.meet.z + uz * half }, { x: to.meet.x - ux * half, z: to.meet.z - uz * half }], ...surface });
+  }
+  for (const [across, along] of filled) {
+    const [s0, s1] = along === "col-" ? [0, .5 - hs] : [.5 + hs, 1], [t0, t1] = across === "row-" ? [0, .5 - ht] : [.5 + ht, 1];
+    ground.push({ points: [P(s0, t0), P(s1, t0), P(s1, t1), P(s0, t1)], ...surface });
   }
 }
 

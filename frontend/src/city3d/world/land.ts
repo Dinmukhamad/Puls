@@ -332,6 +332,47 @@ export function cellsBetween(grid: LandGrid, from: CellRef, to: CellRef): CellRe
   }
   return out;
 }
+/**
+ * The cells between two as a rectangle on the land's own lines, as an area of small things is laid (a road two or
+ * three cells wide, a grove): on the island city the piece of the ring between them, round it and out from the centre
+ * across the seams between its bands; by the lake the cells between them along x and z. Every cell for sale of the
+ * first one's district whose middle lies within the two cells' outer edges, block by block, row by row.
+ */
+export function cellsWithin(grid: LandGrid, from: CellRef, to: CellRef): CellRef[] {
+  const out: CellRef[] = [], district = from.block.district;
+  /** Columns and rows of a block whose middles lie between lo and hi, measured from `start` in steps of `step`. */
+  const span = (lo: number, hi: number, start: number, step: number, count: number) =>
+    [Math.max(0, Math.ceil((lo - start) / step - .5 - 1e-9)), Math.min(count - 1, Math.floor((hi - start) / step - .5 + 1e-9))];
+  const add = (block: LandBlock, [c0, c1]: number[], [r0, r1]: number[]) => {
+    for (let row = r0; row <= r1; row++) for (let col = c0; col <= c1; col++) if (!block.skip.has(`${col}:${row}`)) out.push({ block, col, row });
+  };
+  if (from.block.shape.kind === "ring") {
+    // Angles from the first cell's middle, so the piece of the ring never wraps round.
+    const a = cellCentre(from.block, from.col, from.row), base = Math.atan2(a.z, a.x), rel = (an: number) => Math.atan2(Math.sin(an - base), Math.cos(an - base));
+    const edges = (c: CellRef) => {
+      const s = c.block.shape as Extract<BlockShape, { kind: "ring" }>, da = (s.a1 - s.a0) / c.block.cols, dr = (s.r1 - s.r0) / c.block.rows, start = rel(s.a0) + c.col * da;
+      return { a0: start, a1: start + da, r0: s.r0 + c.row * dr, r1: s.r0 + (c.row + 1) * dr };
+    };
+    const e = [edges(from), edges(to)], lo = Math.min(e[0].a0, e[1].a0), hi = Math.max(e[0].a1, e[1].a1), rlo = Math.min(e[0].r0, e[1].r0), rhi = Math.max(e[0].r1, e[1].r1);
+    for (const block of grid.blocks) {
+      const s = block.shape;
+      if (block.district !== district || s.kind !== "ring" || s.r1 <= rlo || s.r0 >= rhi) continue;
+      add(block, span(lo, hi, rel(s.a0), (s.a1 - s.a0) / block.cols, block.cols), span(rlo, rhi, s.r0, (s.r1 - s.r0) / block.rows, block.rows));
+    }
+    return out;
+  }
+  const edges = (c: CellRef) => {
+    const s = c.block.shape as Extract<BlockShape, { kind: "rect" }>, dx = (s.x1 - s.x0) / c.block.cols, dz = (s.z1 - s.z0) / c.block.rows;
+    return { x0: s.x0 + c.col * dx, x1: s.x0 + (c.col + 1) * dx, z0: s.z0 + c.row * dz, z1: s.z0 + (c.row + 1) * dz };
+  };
+  const e = [edges(from), edges(to)], xlo = Math.min(e[0].x0, e[1].x0), xhi = Math.max(e[0].x1, e[1].x1), zlo = Math.min(e[0].z0, e[1].z0), zhi = Math.max(e[0].z1, e[1].z1);
+  for (const block of grid.blocks) {
+    const s = block.shape;
+    if (block.district !== district || s.kind !== "rect" || s.x1 <= xlo || s.x0 >= xhi || s.z1 <= zlo || s.z0 >= zhi) continue;
+    add(block, span(xlo, xhi, s.x0, (s.x1 - s.x0) / block.cols, block.cols), span(zlo, zhi, s.z0, (s.z1 - s.z0) / block.rows, block.rows));
+  }
+  return out;
+}
 /** Points along an arc of radius r from angle a0 turning by `turn`, a point a unit or so apart. */
 function arc(r: number, a0: number, turn: number, polar: (r: number, a: number) => Point) {
   const n = Math.max(1, Math.ceil(Math.abs(turn) * r)), out: Point[] = [];

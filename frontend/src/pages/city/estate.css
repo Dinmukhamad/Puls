@@ -71,5 +71,10 @@
 .estate-tools__icon{font-size:22px;line-height:1.1}
 .estate-tools strong{font-size:12px;line-height:1.25}
 .estate-tools small{font-size:11px;color:var(--text-secondary)}
-.estate-line{display:flex;gap:8px;align-items:flex-start;font-size:12px;line-height:1.4;color:var(--text-secondary);cursor:pointer}
-.estate-line input{margin-top:2px;flex:none;accent-color:var(--accent-primary)}
+/* How taps choose the cells of small things: one segmented row, the chosen way in the accent. */
+.estate-shape{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;padding:3px;border:1px solid var(--separator);border-radius:12px;background:var(--city-glass-soft)}
+.estate-shape button{min-height:36px;padding:0 8px;border:0;border-radius:9px;background:transparent;color:var(--text-secondary);font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+.estate-shape button[aria-checked=true]{background:var(--surface-primary);color:var(--text-primary);box-shadow:0 1px 4px rgba(15,23,42,.14),inset 0 0 0 1px var(--accent-primary)}
+.estate-shape button:focus-visible{outline:2px solid var(--accent-primary);outline-offset:1px}
+.estate-shape__hint{margin-top:-4px}
+.estate-placing kbd{display:inline-block;padding:0 5px;border:1px solid var(--separator);border-radius:5px;background:var(--surface-primary);font:inherit;font-size:11px;font-weight:700;line-height:1.5}

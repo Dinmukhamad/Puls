@@ -125,10 +125,16 @@ test("transfer to another ready district disables purchases and automatic select
 
 test("laying small things: the cells chosen, what they cost with the land, and only what one can pay for", () => {
   const cells = [{ block: 1, col: 0, row: 0 }, { block: 1, col: 1, row: 0 }, { block: 1, col: 2, row: 0 }];
-  const road = { tool: "road", cells, line: true }, base = { mine: { ...mine, decor, decor_batch: 400 } };
+  const road = { tool: "road", cells, shape: "line" }, base = { mine: { ...mine, decor, decor_batch: 400 } };
   const html = render({ ...base, build: { ...overview, decor: road } });
   assert.match(html, /<h2>Дорога<\/h2><small>◈ 5 за клетку · земля включена<\/small>/);
-  assert.match(html, /<input type="checkbox" checked=""\/><span>Линией: каждое нажатие продолжает от прошлой клетки<\/span>/);
+  // How taps choose cells: one at a time, by lines (a road's way at first) or by areas; Ctrl with the mouse draws an area.
+  assert.match(html, /<div class="estate-shape" role="radiogroup" aria-label="Как выбирать клетки"><button type="button" role="radio" aria-checked="false">Клетка<\/button><button type="button" role="radio" aria-checked="true">Линия<\/button><button type="button" role="radio" aria-checked="false">Область<\/button><\/div>/);
+  assert.match(html, /Каждое нажатие продолжает линию от прошлой клетки\./);
+  assert.match(html, /С зажатым <kbd>Ctrl<\/kbd> протяни мышью левой или правой кнопкой — выделится прямоугольник\./);
+  const grove = render({ ...base, build: { ...overview, decor: { tool: "road", cells, shape: "area" } } });
+  assert.match(grove, /aria-checked="true">Область<\/button>/);
+  assert.match(grove, /Нажми на один угол, потом на другой — выберется прямоугольник между ними: дорога в две-три клетки шириной, роща, площадь\./);
   assert.match(html, /<p class="estate-ok">Выбрано: 3 клетки · ◈ 15<\/p>/);
   assert.match(html, /<button type="button" class="city-action">Построить · ◈ 15<\/button>/);
   assert.match(html, />Сбросить выбор<\/button>/);
@@ -144,7 +150,7 @@ test("laying small things: the cells chosen, what they cost with the land, and o
   assert.match(many, /role="alert">За раз можно выбрать не больше 2 клеток\./);
   assert.match(many, /disabled="">Построить · ◈ 15<\/button>/);
   // Taking away: one's own only, the coins come back.
-  const away = render({ ...base, build: { ...overview, decor: { tool: "remove", cells: cells.slice(0, 2), line: false } } });
+  const away = render({ ...base, build: { ...overview, decor: { tool: "remove", cells: cells.slice(0, 2), shape: "cell" } } });
   assert.match(away, /<h2>Убрать своё<\/h2><small>Своё и общее района: за своё коины вернутся<\/small>/);
   assert.match(away, /Выбрано: 2 клетки<\/p>/);
   assert.match(away, /<button type="button" class="city-action">Убрать выбранное<\/button>/);

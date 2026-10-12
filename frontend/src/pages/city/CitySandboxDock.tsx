@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { citySandbox, type CityEstates, type DistrictEstate, type MyEstate, type PlotCatalogue, type PlotFamily, type ProjectCatalogue, type ProjectFamily, type PublicObject, type SandboxResult } from "../../api/cityEstate";
 import type { DepartmentId } from "../../api/cityWorld";
 import { projectFootprint } from "../../city3d/world/estateGrid";
-import { DecorPalette, DecorPanel, type BuildState, type EstateTarget } from "./CityEstateDock";
+import { DecorPalette, DecorPanel, decorShape, type BuildState, type EstateTarget } from "./CityEstateDock";
 import type { DecorTool } from "../../city3d/types";
 import { DistrictSwatch } from "./DistrictSwatch";
 import { splitPlotCatalogue } from "./plotCatalogue";
@@ -49,7 +49,7 @@ export function CitySandboxDock({ city, state, mine, build, setBuild, onClose, o
   const go = (next: Partial<BuildState>) => { act.reset(); setNotice(null); setBuild({ ...build, ...next }); };
   const area = (square: boolean) => { go({ area: square ? "public" : "plots", project: square, placing: null, spot: null, plot: null, selected: null, decor: null }); onFocus({ district: build.district, kind: square ? "public" : "district" }); };
   const switchTo = (district: string) => { go({ district, placing: null, spot: null, plot: null, selected: null, decor: null }); onFocus({ district, kind: build.project ? "public" : "district" }); };
-  const useTool = (tool: DecorTool) => go({ area: "plots", project: false, placing: null, spot: null, plot: null, selected: null, decor: { tool, cells: [], line: tool === "road" || tool === "path" || tool === "hedge", anyone: true } });
+  const useTool = (tool: DecorTool) => go({ area: "plots", project: false, placing: null, spot: null, plot: null, selected: null, decor: { tool, cells: [], shape: decorShape(tool), anyone: true } });
   const decorCatalogue = mine?.decor ?? [], decorItems = new Map(decorCatalogue.map(c => [c.family, c]));
   const decorCount = Object.values(land?.decor ?? {}).reduce((n, cells) => n + (cells?.length ?? 0), 0);
   const setDistrict = (body: { landmark_level: number }, text: string) => run({ run: () => citySandbox.district(build.district, body), text: () => text });
@@ -73,7 +73,7 @@ export function CitySandboxDock({ city, state, mine, build, setBuild, onClose, o
   else if (build.decor) {
     const choice = build.decor, item = choice.tool === "remove" ? null : decorItems.get(choice.tool) ?? null;
     body = <DecorPanel choice={choice} item={item} available={null} batch={mine.decor_batch} message={null} ready pending={pending} error={error}
-      onLine={line => go({ decor: { ...choice, line } })}
+      onShape={shape => go({ decor: { ...choice, shape } })}
       onClear={() => go({ decor: { ...choice, cells: [] } })}
       onDone={() => go({ decor: null })}
       onConfirm={() => {

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { cityEstate, operationKey, type DecorCatalogue, type DistrictEstate, type MyEstate, type OperationResult, type OwnObject, type PlotCatalogue, type PlotFamily, type ProjectCatalogue, type ProjectFamily, type PublicObject } from "../../api/cityEstate";
 import { PLOT_LEVELS, PROJECT_LEVELS, plotSize, projectFootprint } from "../../city3d/world/estateGrid";
-import type { DecorTool, EstateTarget, PlotAddress } from "../../city3d/types";
+import type { DecorShape, DecorTool, EstateTarget, PlotAddress } from "../../city3d/types";
 import { plural } from "../../utils/format";
 import { DistrictSwatch } from "./DistrictSwatch";
 import { splitPlotCatalogue, readyBuildingLabel } from "./plotCatalogue";
@@ -15,10 +15,17 @@ export type { EstateTarget };
 /** A plot of 3 × 3 cells picked on the map for a purchase: its first cell, band, front and why it does not fit, if it does not. */
 export interface PickedPlot extends PlotAddress { band: number; problem: string | null; rotation: number }
 /**
- * Small things being laid (one kind) or taken away (one's own; in the test city `anyone`'s): the cells chosen, whether a
- * tap draws a line from the last one.
+ * Small things being laid (one kind) or taken away (one's own; in the test city `anyone`'s): the cells chosen, and how a
+ * tap chooses them: one at a time, a line from the last one, or an area between two corners.
  */
-export interface DecorChoice { tool: DecorTool; cells: PlotAddress[]; line: boolean; anyone?: boolean }
+export interface DecorChoice { tool: DecorTool; cells: PlotAddress[]; shape: DecorShape; anyone?: boolean }
+/** How the cells are chosen at first: roads, footpaths and hedges by lines, everything else a cell at a time. */
+export const decorShape = (tool: DecorTool): DecorShape => tool === "road" || tool === "path" || tool === "hedge" ? "line" : "cell";
+const SHAPES: { value: DecorShape; label: string; hint: string }[] = [
+  { value: "cell", label: "Клетка", hint: "Каждое нажатие — одна клетка." },
+  { value: "line", label: "Линия", hint: "Каждое нажатие продолжает линию от прошлой клетки." },
+  { value: "area", label: "Область", hint: "Нажми на один угол, потом на другой — выберется прямоугольник между ними: дорога в две-три клетки шириной, роща, площадь." },
+];
 /** Build mode as the page keeps it: the city scene gets everything but `spot` and `project` (city3d/types.ts CityBuildView). */
 export interface BuildState {
   district: string; area: "plots" | "public";
@@ -102,7 +109,7 @@ export function CityEstateDock({ mine, land, build, setBuild, onClose, onFocus, 
   });
   const pending = act.isPending;
   const place = (o: OwnObject) => { act.reset(); setNotice(null); setBuild({ ...build, area: "plots", placing: { family: o.family, rotation: 0, moving: o.id }, plot: null, spot: null, selected: null, decor: null }); };
-  const useTool = (tool: DecorTool) => { act.reset(); setNotice(null); setBuild({ ...build, area: "plots", placing: null, plot: null, spot: null, selected: null, decor: { tool, cells: [], line: tool === "road" || tool === "path" || tool === "hedge" } }); };
+  const useTool = (tool: DecorTool) => { act.reset(); setNotice(null); setBuild({ ...build, area: "plots", placing: null, plot: null, spot: null, selected: null, decor: { tool, cells: [], shape: decorShape(tool) } }); };
 
   let body;
   if (showComplex) body = <DistrictLandmarkCard landmark={land!.landmark!} />;
@@ -123,7 +130,7 @@ export function CityEstateDock({ mine, land, build, setBuild, onClose, onFocus, 
   else if (build.decor) {
     const choice = build.decor, item = choice.tool === "remove" ? null : decor.get(choice.tool) ?? null;
     body = <DecorPanel choice={choice} item={item} available={mine.available} batch={mine.decor_batch} message={mine.message} ready={ready} pending={pending} error={act.error}
-      onLine={line => setBuild({ ...build, decor: { ...choice, line } })}
+      onShape={shape => setBuild({ ...build, decor: { ...choice, shape } })}
       onClear={() => { act.reset(); setBuild({ ...build, decor: { ...choice, cells: [] } }); }}
       onDone={() => { act.reset(); setBuild({ ...build, decor: null }); }}
       onConfirm={() => {
@@ -238,14 +245,15 @@ export function DecorPalette({ catalogue, available, ready, own, onTool }: { cat
  * Laying a small thing, or taking some away: how to choose cells, how many are chosen, what it costs (nothing in the
  * test city, `available` null).
  */
-export function DecorPanel({ choice, item, available, batch, message, ready, pending, error, onLine, onClear, onDone, onConfirm }: { choice: DecorChoice; item: DecorCatalogue | null; available: number | null; batch: number; message: string | null; ready: boolean; pending: boolean; error: Error | null; onLine: (line: boolean) => void; onClear: () => void; onDone: () => void; onConfirm: () => void }) {
+export function DecorPanel({ choice, item, available, batch, message, ready, pending, error, onShape, onClear, onDone, onConfirm }: { choice: DecorChoice; item: DecorCatalogue | null; available: number | null; batch: number; message: string | null; ready: boolean; pending: boolean; error: Error | null; onShape: (shape: DecorShape) => void; onClear: () => void; onDone: () => void; onConfirm: () => void }) {
   const free = available === null, removing = choice.tool === "remove", count = choice.cells.length, total = free ? 0 : (item?.price ?? 0) * count;
   const missing = removing || free ? 0 : total - available, limit = batch || 400, tooMany = count > limit;
   return <section className="estate-placing" aria-live="polite">
     <div className="estate-placing__title"><span aria-hidden="true">{removing ? "🧹" : item?.icon}</span><div><h2>{removing ? (choice.anyone ? "Убрать" : "Убрать своё") : item?.name}</h2><small>{removing ? (free ? "Дороги, деревья и другие мелкие постройки" : "Своё и общее района: за своё коины вернутся") : free ? "Бесплатно в тестовом городе" : `◈ ${coins(item?.price ?? 0)} за клетку · земля включена`}</small></div></div>
     {item && <p className="secondary small">{item.about}</p>}
-    <p className="secondary small">{removing ? "Выбери клетки на карте — они подсвечены жёлтым." : "Проведи по свободным клеткам левой кнопкой мыши — получится линия, или нажимай на клетки по одной."} Камера: правая кнопка мыши, колесо и WASD, на телефоне — двумя пальцами.</p>
-    <label className="estate-line"><input type="checkbox" checked={choice.line} onChange={event => onLine(event.target.checked)} /><span>Линией: каждое нажатие продолжает от прошлой клетки</span></label>
+    <p className="secondary small">{removing ? "Выбери клетки на карте — они подсвечены жёлтым. Проведи мышью — линия." : "Проведи по свободным клеткам левой кнопкой мыши — получится линия."} С зажатым <kbd>Ctrl</kbd> протяни мышью левой или правой кнопкой — выделится прямоугольник. Камера: правая кнопка мыши, колесо и WASD, на телефоне — двумя пальцами.</p>
+    <div className="estate-shape" role="radiogroup" aria-label="Как выбирать клетки">{SHAPES.map(o => <button key={o.value} type="button" role="radio" aria-checked={choice.shape === o.value} onClick={() => onShape(o.value)}>{o.label}</button>)}</div>
+    <p className="secondary small estate-shape__hint">{SHAPES.find(o => o.value === choice.shape)?.hint}</p>
     <p className={count ? "estate-ok" : "estate-note"}>{count ? `Выбрано: ${cellsText(count)}${removing || free ? "" : ` · ◈ ${coins(total)}`}` : "Клетки ещё не выбраны"}</p>
     {tooMany && <p className="estate-problem" role="alert">За раз можно выбрать не больше {limit} клеток.</p>}
     {!ready && <p className="estate-note">{message ?? "Стройка в районе пока закрыта."}</p>}
