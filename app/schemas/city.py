@@ -65,15 +65,8 @@ class QuestAnswer(BaseModel):
     answer: int = Field(ge=0, le=5)
 
 
-class ProjectInput(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-    key: str = Field(max_length=40)
-    name: str = Field(min_length=3, max_length=60)
-    cost: int = Field(ge=10, le=1_000_000)
-
-
 class EconomyInput(BaseModel):
-    """The game's numbers; every building, kind of work and quarter must be given.
+    """The game's numbers; every building must be given.
 
     District prices are optional, so a form that does not know them yet keeps the saved ones.
     """
@@ -81,11 +74,10 @@ class EconomyInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     revision: int = Field(ge=0)
     prices: dict[str, int]
-    points: dict[str, int]
-    projects: list[ProjectInput]
     quest_coins: int = Field(ge=0, le=1000)
     estate: dict[str, list[int]] | None = None
     land: list[int] | None = None
+    decor: dict[str, int] | None = None
     district: dict[str, list[int]] | None = None
     hq: list[int] | None = None
 
@@ -93,24 +85,18 @@ class EconomyInput(BaseModel):
     def complete(self):
         from app.services.city import BUILDINGS
         from app.services.city_estate import (
+            DECOR_PRICES,
             HQ_STEPS,
             LAND_PRICES,
             PLOT_FAMILIES,
             PLOT_PRICES,
             PROJECT_COSTS,
         )
-        from app.services.city_group import POINTS, PROJECTS
 
         if set(self.prices) != set(BUILDINGS):
             raise ValueError("Укажите цену каждой постройки")
         if any(not 1 <= v <= 100_000 for v in self.prices.values()):
             raise ValueError("Цена постройки — от 1 до 100 000 коинов")
-        if set(self.points) != set(POINTS):
-            raise ValueError("Укажите очки за каждый вид работы")
-        if any(not 0 <= v <= 1000 for v in self.points.values()):
-            raise ValueError("Очки за работу — от 0 до 1000")
-        if [p.key for p in self.projects] != [p["key"] for p in PROJECTS]:
-            raise ValueError("Кварталы нельзя добавлять, удалять или менять местами")
         for given, default, label in (
             (self.estate, PLOT_PRICES, "постройки района"),
             (self.district, PROJECT_COSTS, "общего проекта"),
@@ -133,6 +119,11 @@ class EconomyInput(BaseModel):
             len(self.land) != len(LAND_PRICES) or any(not 0 <= v <= 100_000 for v in self.land)
         ):
             raise ValueError("Укажите цену участка каждого пояса — от 0 до 100 000 коинов")
+        if self.decor is not None and (
+            set(self.decor) != set(DECOR_PRICES)
+            or any(not 0 <= v <= 100_000 for v in self.decor.values())
+        ):
+            raise ValueError("Укажите цену клетки каждой мелкой постройки — от 0 до 100 000 коинов")
         if self.hq is not None and (
             len(self.hq) != len(HQ_STEPS)
             or any(not 1 <= v <= 1000 for v in self.hq)

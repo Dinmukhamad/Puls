@@ -15,7 +15,7 @@ from app.schemas.city import (
     SituationsInput,
 )
 from app.schemas.city_world import WorldInput
-from app.services import city, city_economy, city_group, city_quests, city_world
+from app.services import city, city_economy, city_quests, city_world
 
 router = APIRouter(tags=["Мой город"])
 
@@ -93,11 +93,6 @@ async def situations(session: SessionDep, user: LearningReader):
 @router.put("/admin/learning/city/situations")
 async def configure_situations(body: SituationsInput, session: SessionDep, user: LearningEditor):
     return await city_quests.save_situations(session, user, body)
-
-
-@router.get("/admin/learning/city/groups")
-async def groups(session: SessionDep, user: LearningReader):
-    return await city_group.groups_overview(session, user)
 
 
 @router.get("/admin/learning/city/operators/{user_id}")

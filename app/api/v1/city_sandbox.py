@@ -9,9 +9,11 @@ from app.core.deps import AdminUser, SessionDep
 from app.schemas.city_estate import (
     SANDBOX_DISTRICT,
     LevelInput,
+    SandboxDecorInput,
     SandboxDistrictInput,
     SandboxPlotInput,
     SandboxProjectInput,
+    SandboxUndecorInput,
 )
 from app.services import city_sandbox
 
@@ -27,6 +29,16 @@ async def state(city_id: str, session: SessionDep, user: AdminUser, response: Re
 @router.post("/plots")
 async def build(body: SandboxPlotInput, session: SessionDep, user: AdminUser):
     return await city_sandbox.build(session, user, body)
+
+
+@router.post("/decor")
+async def lay(body: SandboxDecorInput, session: SessionDep, user: AdminUser):
+    return await city_sandbox.lay(session, user, body)
+
+
+@router.post("/decor/remove")
+async def take_away(body: SandboxUndecorInput, session: SessionDep, user: AdminUser):
+    return await city_sandbox.take_away(session, user, body)
 
 
 @router.post("/buildings/{object_id}/level")

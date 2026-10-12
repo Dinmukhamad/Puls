@@ -69,7 +69,7 @@ async def test_transfer_rejects_old_selected_district_before_charging_or_placing
     body = {
         "key": operation_key,
         "district_id": "support-team-1",  # The plot preview still belongs to the old team.
-        "block": 6,
+        "block": 2,
         "col": 0,
         "row": 0,
     }
@@ -103,7 +103,7 @@ async def test_transfer_rejects_old_selected_district_before_charging_or_placing
     accepted = await client.post(url, headers=me, json=body)
     assert accepted.status_code == 200, accepted.text
     assert accepted.json()["object"]["district_id"] == "sales-team-1"
-    assert accepted.json()["object"]["module"] == 6
+    assert accepted.json()["object"]["module"] == 2
     if action == "place":
         assert accepted.json()["balance"] == money_before[0]
 

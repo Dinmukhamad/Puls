@@ -50,4 +50,4 @@ export function supervisorAssignment(settings: WorldSaveSettings, supervisorId: 
 }
 
 /** Assignment changes affect both cities, personal inventory and staff reports. */
-export const WORLD_QUERY_KEYS = ["city-world", "city-world-settings", "city-estate", "city-estates", "city-estates-report", "city", "city-groups", "city-participants"] as const;
+export const WORLD_QUERY_KEYS = ["city-world", "city-world-settings", "city-estate", "city-estates", "city-estates-report", "city", "city-participants"] as const;

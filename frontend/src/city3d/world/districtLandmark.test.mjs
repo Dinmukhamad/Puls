@@ -14,7 +14,7 @@ const worldDirection = (frame, x, y, z) => ({ x: Math.cos(frame.rotation) * x + 
 
 test('one main building is centred in each reserved district centre, and old squares remain clear of legacy main buildings', () => {
   for (const world of [L.islandWorld(L.WORLD_X4), L.generateSalesWorld()]) {
-    const grid = L.landGrid(world);
+    const grid = L.landGrid(world), cells = L.landCells(grid);
     for (const centre of grid.centres) {
       assert.equal(L.districtMainFrame(centre, null), null);
       for (const status of ['active', 'legacy_occupied']) {
@@ -23,7 +23,7 @@ test('one main building is centred in each reserved district centre, and old squ
         assert.equal(frame.width, status === 'active' ? 18 : 16); assert.equal(frame.width, frame.depth);
         const layout = L.districtMainLayout(frame, 5); assert.equal(layout.placements.length, 1);
         const footprint = L.squareCorners(frame.x, frame.z, frame.rotation, frame.width / 2);
-        for (const plot of grid.plots) assert.ok(!L.polygonsOverlap(footprint, plot.corners, -.05), 'main building never consumes sold personal plots');
+        for (const cell of cells) if (Math.hypot(cell.x - frame.x, cell.z - frame.z) < 30) assert.ok(!L.polygonsOverlap(footprint, cell.corners, -.05), 'main building never stands on cells for sale');
         const bounds = L.landmarkBounds(frame, 5);
         assert.ok(bounds.width < frame.width && bounds.depth < frame.depth, 'largest main stays within its reserved footprint');
         if (status === 'legacy_occupied') assert.ok(!L.polygonsOverlap(footprint, L.squareCorners(centre.square.x, centre.square.z, centre.square.rotation, 9)), 'paid old projects retain their entire original public square');

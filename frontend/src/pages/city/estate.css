@@ -62,3 +62,14 @@
   .estate-catalogue li,.estate-list li{grid-template-columns:36px minmax(0,1fr) auto}.estate-catalogue__icon,.estate-list li>span:first-child{width:36px;height:36px;font-size:19px}
 }
 @media(min-width:768px) and (orientation:portrait){.estate-dock{top:auto;left:var(--city-left);width:auto;height:min(46vh,480px)}}
+/* Дороги и благоустройство: инструмент на каждую мелкую постройку, плиткой по две-три в ряд. */
+.estate-tools{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px}
+.estate-tools button{display:grid;justify-items:center;align-content:start;gap:3px;width:100%;min-height:80px;padding:9px 6px;border:1px solid var(--separator);border-radius:14px;background:var(--city-glass-soft);color:var(--text-primary);font:inherit;text-align:center;cursor:pointer;transition:border-color var(--motion-fast) var(--ease-standard),background var(--motion-fast) var(--ease-standard)}
+.estate-tools button:hover:not(:disabled){border-color:var(--control-border-hover);background:var(--surface-hover)}
+.estate-tools button:focus-visible{outline:2px solid var(--accent-primary);outline-offset:2px}
+.estate-tools button:disabled{opacity:.5;cursor:not-allowed}
+.estate-tools__icon{font-size:22px;line-height:1.1}
+.estate-tools strong{font-size:12px;line-height:1.25}
+.estate-tools small{font-size:11px;color:var(--text-secondary)}
+.estate-line{display:flex;gap:8px;align-items:flex-start;font-size:12px;line-height:1.4;color:var(--text-secondary);cursor:pointer}
+.estate-line input{margin-top:2px;flex:none;accent-color:var(--accent-primary)}

@@ -1,14 +1,20 @@
 /**
  * The shapes of the team districts' catalogue, shared with the server (app/services/city_estate.py) and light
- * enough for any page: no world generation, no three.js. What operators build stands on plots (world/land.ts):
- * a square, a house or a ready house (world/familyHouses.ts) on one plot, parks on the plots of the squares they
- * gathered from. What a district builds together stands on cells of its public square, a module of
- * MODULE_CELLS × MODULE_CELLS.
+ * enough for any page: no world generation, no three.js. The districts' land is small cells (world/land.ts):
+ * what operators build stands on plots of PLOT_CELLS × PLOT_CELLS cells wherever it fits, a square, a house or a
+ * ready house (world/familyHouses.ts) on one plot, parks on the plots of the squares they gathered from; the small
+ * things, roads, footpaths, trees, lamps and the rest, take a cell each. What a district built together stands on
+ * cells of its old public square, a module of MODULE_CELLS × MODULE_CELLS.
  */
 import type { ReadyHouse } from "./familyHouses";
 import type { OfficeBuilding } from "./officeBuildings";
 
 export type PlotFamily = "square" | "house" | ReadyHouse | OfficeBuilding | "park" | "bigpark";
+/** The small things operators lay a cell at a time, as the server's DECOR_FAMILIES. */
+export type DecorFamily = "road" | "path" | "tree" | "pine" | "birch" | "oak" | "lamp" | "bench" | "bush" | "flowers" | "hedge";
+export const DECOR_FAMILIES: readonly DecorFamily[] = ["road", "path", "tree", "pine", "birch", "oak", "lamp", "bench", "bush", "flowers", "hedge"];
+/** A building's plot is this many cells each way (the server's PLOT_CELLS, world/land.ts CELLS). */
+export const PLOT_CELLS = 3;
 export type ProjectFamily = "square" | "gazebo" | "fountain" | "sports" | "park";
 
 /**
@@ -44,7 +50,12 @@ export const PROJECT_SIZE: Record<ProjectFamily, [number, number]> = { square: [
 export const PROJECT_LEVELS: Record<ProjectFamily, number> = { square: 1, gazebo: 2, fountain: 2, sports: 3, park: 3 };
 
 const turned = ([w, h]: [number, number], rotation: number): [number, number] => rotation % 2 ? [h, w] : [w, h];
-/** Plots a building takes, turned by quarter turns (a big park stands 3 × 2 or 2 × 3). */
-export const plotFootprint = (family: PlotFamily, rotation: number) => turned(PLOT_SIZE[family], rotation);
+/** Plots a building takes, turned by quarter turns (a big park stands 3 × 2 or 2 × 3): for telling its size. */
+export const plotSize = (family: PlotFamily, rotation: number) => turned(PLOT_SIZE[family], rotation);
+/** Cells a building takes on the land, turned by quarter turns: PLOT_CELLS for every plot of it. */
+export const plotFootprint = (family: PlotFamily, rotation: number): [number, number] => {
+  const [w, h] = plotSize(family, rotation);
+  return [w * PLOT_CELLS, h * PLOT_CELLS];
+};
 /** Cells of the public square a shared building takes, turned by quarter turns. */
 export const projectFootprint = (family: ProjectFamily, rotation: number) => turned(PROJECT_SIZE[family], rotation);

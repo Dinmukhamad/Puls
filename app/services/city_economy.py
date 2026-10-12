@@ -1,11 +1,8 @@
 """The city game's numbers, which the head and the admin set without a developer.
 
 Until the first save the defaults of the code apply. Prices and the daily reward count for new
-purchases and answers (a building keeps the price paid); points and quarter costs are applied to
-the group city at once, since its progress is always counted from the work itself.
+purchases and answers (a building keeps the price paid).
 """
-
-from copy import deepcopy
 
 from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
@@ -18,16 +15,13 @@ from app.services.rules import write_audit
 def defaults():
     from app.services.city import BUILDINGS
     from app.services.city_estate import estate_defaults
-    from app.services.city_group import POINTS, PROJECTS
     from app.services.city_quests import COINS
 
     return {
         "prices": {key: item["price"] for key, item in BUILDINGS.items()},
-        "points": dict(POINTS),
-        "projects": deepcopy(PROJECTS),
         "quest_coins": COINS,
         # Team districts (docs/CITY_ESTATES.md): coins per level of what stands on a plot, the
-        # land of each band, project estimates and HQ steps.
+        # land of each band, a cell of each small thing, project estimates and HQ steps.
         **estate_defaults(),
     }
 
@@ -43,12 +37,13 @@ async def economy(session):
     if row:
         # Saved values over the defaults, so a building or kind of work added later has a value.
         values["prices"] |= {k: v for k, v in row.values["prices"].items() if k in values["prices"]}
-        values["points"] |= {k: v for k, v in row.values["points"].items() if k in values["points"]}
-        saved = {p["key"]: p for p in row.values["projects"]}
-        values["projects"] = [saved.get(p["key"], p) for p in values["projects"]]
         values["quest_coins"] = row.values["quest_coins"]
         for key in ("estate", "district"):
             values[key] |= same_shape(row.values.get(key), values[key])
+        # Small things added later keep their default price until the head sets one.
+        values["decor"] |= {
+            k: v for k, v in (row.values.get("decor") or {}).items() if k in values["decor"]
+        }
         for key in ("hq", "land"):
             if len(row.values.get(key) or []) == len(values[key]):
                 values[key] = row.values[key]

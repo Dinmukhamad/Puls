@@ -86,9 +86,10 @@ class CityProject(Base):
 
 
 class CityCell(Base):
-    """A taken plot (module = block, u = column, v = row) or a cell of the public square (module 0).
+    """A taken cell of the land (module = block, u = column, v = row) or of the public square.
 
-    Taken by a building, or reserved on the square by an open project.
+    Taken by a building, reserved on the square by an open project, or holding a small thing laid
+    on it: a road, a footpath, a tree, a lamp… (`decor`), with who laid it and what it cost.
     """
 
     __tablename__ = "city_cells"
@@ -102,6 +103,14 @@ class CityCell(Base):
     project_id: Mapped[int | None] = mapped_column(
         ForeignKey("city_projects.id", ondelete="CASCADE"), nullable=True, index=True
     )
+    #: A small thing on the cell (app/services/city_estate.py DECOR_FAMILIES), or None.
+    decor: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    #: Who laid the small thing; it stays in the district if they leave.
+    owner_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    #: Coins the small thing cost, its land included; taking it away returns them.
+    paid: Mapped[int] = mapped_column(default=0, server_default="0")
 
 
 class CityContribution(Base):

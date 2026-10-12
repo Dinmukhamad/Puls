@@ -7,7 +7,7 @@ import type { CityEstateView, EstatePick, JourneyPhase } from "../../city3d/type
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { city, MISSION_STATES, nextMission, POINT_KINDS, SITE_STAGES, type BuildingKey, type CityBuilt, type CityData, type CityGroup, type CityQuest, type CityReward, type DistrictId, type PointKind } from "../../api/city";
+import { city, MISSION_STATES, nextMission, type BuildingKey, type CityBuilt, type CityData, type CityQuest, type CityReward, type DistrictId } from "../../api/city";
 import { attemptPath, learning, type LearningContent } from "../../api/learning";
 import { CityTasks, speakerIcon } from "./CityTasks";
 import { driverShift } from "../../api/driverShift";
@@ -79,7 +79,6 @@ export function CityPage() {
   const [plotFocus, setPlotFocus] = useState<{ key: string; at: number }>();
   const [questSlot, setQuestSlot] = useState<number | null>(null), [questFocus, setQuestFocus] = useState<{ slot: number; at: number }>();
   const answer = useMutation({ mutationFn: ({ slot, choice }: { slot: number; choice: number }) => city.answer(slot, choice), onSuccess: async () => { await client.invalidateQueries(); }, onError: () => { void query.refetch(); } });
-  const [groupOpen, setGroupOpen] = useState(false), [siteFocus, setSiteFocus] = useState<{ key: string; at: number }>();
   const build = useMutation({ mutationFn: ({ plot, item }: { plot: string; item: BuildingKey }) => city.build(plot, item), onSuccess: async result => { setPlotKey(null); setBuilt(result); setPlotFocus({ key: result.plot, at: Date.now() }); await client.invalidateQueries(); }, onError: () => { void query.refetch(); } });
   const claim = useMutation({ mutationFn: (key: string) => city.claim(key, query.data!.revision), onSuccess: async result => { setReward(result); await client.invalidateQueries(); }, onError: () => { void query.refetch(); } });
   // Simulator scenarios a trainer assigned to the operator: only in the operator's own city.
@@ -111,8 +110,8 @@ export function CityPage() {
     return views;
   }, [sandboxOn, department, sandboxLand.data, supportLand.data, salesLand.data]);
   const [building, setBuilding] = useState<BuildState | null>(null), [estateFocus, setEstateFocus] = useState<EstateTarget & { at: number }>();
-  const buildView = useMemo(() => building && { district: building.district, area: building.area, placing: building.placing, selected: building.selected, plot: building.plot && { block: building.plot.block, col: building.plot.col, row: building.plot.row } },
-    [building?.district, building?.area, building?.placing, building?.selected, building?.plot]); // eslint-disable-line react-hooks/exhaustive-deps
+  const buildView = useMemo(() => building && { district: building.district, area: building.area, placing: building.placing, selected: building.selected, plot: building.plot && { block: building.plot.block, col: building.plot.col, row: building.plot.row, rotation: building.plot.rotation }, decor: building.decor ?? null },
+    [building?.district, building?.area, building?.placing, building?.selected, building?.plot, building?.decor]); // eslint-disable-line react-hooks/exhaustive-deps
   const focusLand = (target: EstateTarget) => setEstateFocus({ ...target, at: Date.now() });
   const landOf = (district: string) => (district.startsWith("sales-") ? salesLand.data : supportLand.data)?.districts.find(d => d.id === district) ?? null;
   const homeEstate = estateQuery.data?.district;
@@ -122,8 +121,8 @@ export function CityPage() {
     [homeEstate?.id, homeEstate?.city, ownLand, estateQuery.data?.status]);
   function chooseFreePlot() {
     if (!homeEstate || !suggestedPlot || building?.district !== homeEstate.id || estateQuery.data?.status !== "ready") return;
-    setBuilding({ ...building, area: "plots", placing: null, selected: null, spot: null, project: false,
-      plot: { block: suggestedPlot.block, col: suggestedPlot.col, row: suggestedPlot.row, band: suggestedPlot.band, problem: null } });
+    setBuilding({ ...building, area: "plots", placing: null, selected: null, spot: null, project: false, decor: null,
+      plot: { block: suggestedPlot.block, col: suggestedPlot.col, row: suggestedPlot.row, band: suggestedPlot.band, problem: null, rotation: 0 } });
     focusLand({ district: homeEstate.id, kind: "plot", plot: suggestedPlot });
   }
   useEffect(() => {
@@ -134,9 +133,10 @@ export function CityPage() {
     if (sandboxOn && (pick.kind === "project" || pick.kind === "public")) { setWorldSelected(null); openSandbox(pick.district, true); return; }
     if (pick.kind === "public") { setBuilding(null); setWorldSelected(pick.district); focusLand({ district: pick.district, kind: "public" }); return; }
     if (pick.kind === "place") setBuilding(b => b && { ...b, spot: { module: pick.module, u: pick.u, v: pick.v, rotation: pick.rotation, problem: pick.problem } });
+    else if (pick.kind === "cells") setBuilding(b => b && b.decor && b.district === pick.district ? { ...b, decor: { ...b.decor, cells: pick.cells } } : b);
     else if (pick.kind === "plot") {
       if (building?.district !== pick.district) return;
-      setBuilding(b => b && { ...b, plot: { block: pick.block, col: pick.col, row: pick.row, band: pick.band, problem: pick.problem }, selected: null });
+      setBuilding(b => b && { ...b, plot: { block: pick.block, col: pick.col, row: pick.row, band: pick.band, problem: pick.problem, rotation: 0 }, selected: null });
       focusLand({ district: pick.district, kind: "plot", plot: { block: pick.block, col: pick.col, row: pick.row } });
     }
     else if (pick.kind === "project") setWorldSelected(pick.district);
@@ -182,7 +182,7 @@ export function CityPage() {
     const key = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || event.defaultPrevented || document.querySelector(".sheet-overlay, [role=dialog][aria-modal=true]")) return;
       event.preventDefault();
-      setBuilding(b => b && (b.placing ? { ...b, placing: null, spot: null, area: b.project ? "public" : "plots" } : b.plot || b.selected !== null ? { ...b, plot: null, selected: null } : null));
+      setBuilding(b => b && (b.placing ? { ...b, placing: null, spot: null, area: b.project ? "public" : "plots" } : b.decor ? { ...b, decor: null } : b.plot || b.selected !== null ? { ...b, plot: null, selected: null } : null));
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
@@ -251,7 +251,7 @@ export function CityPage() {
   }
   return <CityToolbarProvider state={toolbar}><div className="city-immersive" data-department={department} data-building={building ? true : undefined}>
     <CityToolbar />
-    <CityMap key={mapAttempt} department={department} departmentWorld={worldQuery.data} onWorldPick={pickWorld} onArrival={visit} onJourney={setJourney} worldAction={worldAction} estates={estateViews} build={buildView} onEstate={onEstate} estateFocus={estateFocus} sceneIdentity={`${data.user_id}:${data.inspecting ? "inspect" : "self"}`} forceWebGL={params.get("backend") === "webgl"} mascot={mascot} labels={labels} districts={data.districts} missions={data.missions} selected={selected.id} focusRequest={focusRequest} onSelect={selectDistrict} plots={data.plots} onPlot={data.can_build ? openPlot : undefined} plotFocus={plotFocus} sites={data.group?.projects ?? null} onSite={() => setGroupOpen(true)} siteFocus={siteFocus} quests={data.quests?.items ?? []} onQuest={data.inspecting ? undefined : slot => { answer.reset(); setQuestSlot(slot); }} questFocus={questFocus} controls={controls} onControls={user ? () => setControlsEditing(true) : undefined} controlsOpen={showControls} onStatus={setMapStatus} onRetry={retryMap} progressKey={!data.inspecting && !data.preview ? `city-levels:${data.user_id}` : undefined} />
+    <CityMap key={mapAttempt} department={department} departmentWorld={worldQuery.data} onWorldPick={pickWorld} onArrival={visit} onJourney={setJourney} worldAction={worldAction} estates={estateViews} build={buildView} onEstate={onEstate} estateFocus={estateFocus} sceneIdentity={`${data.user_id}:${data.inspecting ? "inspect" : "self"}`} forceWebGL={params.get("backend") === "webgl"} mascot={mascot} labels={labels} districts={data.districts} missions={data.missions} selected={selected.id} focusRequest={focusRequest} onSelect={selectDistrict} plots={data.plots} onPlot={data.can_build ? openPlot : undefined} plotFocus={plotFocus} quests={data.quests?.items ?? []} onQuest={data.inspecting ? undefined : slot => { answer.reset(); setQuestSlot(slot); }} questFocus={questFocus} controls={controls} onControls={user ? () => setControlsEditing(true) : undefined} controlsOpen={showControls} onStatus={setMapStatus} onRetry={retryMap} progressKey={!data.inspecting && !data.preview ? `city-levels:${data.user_id}` : undefined} />
 
     <CityPeekPanel className="city-hud-peek" toolbarSlot="level" label="Уровень, опыт и меню" compactLabel="Уровень" icon={data.level}>
     <header className="city-hud glass glass--regular">
@@ -267,8 +267,7 @@ export function CityPage() {
       <nav className="city-hud__links" aria-label="Обучение">
         {user?.role === "admin" && <button type="button" className="city-group-button" data-open={sandboxOn || undefined} aria-pressed={sandboxOn} onClick={toggleSandbox} aria-label={sandboxOn ? "Выйти из тестового города" : "Тестовый город администраторов"} title="Тестовый город: только для администраторов"><span aria-hidden="true">🧪</span><span className="city-hud__wide">Тест</span></button>}
         {/* Operators build from the toolbar's «Строить»; staff with land of their own, from here. */}
-        {canOpenBuild && !sandboxOn && user?.role !== "operator" && <button type="button" className="city-group-button" data-open={building ? true : undefined} aria-pressed={!!building} onClick={() => building ? setBuilding(null) : openBuild()} aria-label={mineEstate!.district!.city === department ? "Строить в своём районе" : "Мой участок в другом городе"}><span aria-hidden="true">🏡</span><span className="city-hud__wide">{mineEstate!.district!.city === department ? "Строить" : "Мой участок"}</span></button>}
-        {department === "support" && data.group && <button type="button" className="city-group-button" onClick={() => setGroupOpen(true)} aria-label={`Город группы: ${data.group.name}`}><span aria-hidden="true">🏗️</span><span className="city-hud__wide">Группа</span></button>}
+        {canOpenBuild && !sandboxOn && user?.role !== "operator" && <button type="button" className="city-group-button" data-open={building ? true : undefined} aria-pressed={!!building} onClick={() => building ? setBuilding(null) : openBuild()} aria-label={mineEstate!.district!.city === department ? "Строить в своём районе" : "Мой район в другом городе"}><span aria-hidden="true">🏡</span><span className="city-hud__wide">{mineEstate!.district!.city === department ? "Строить" : "Мой район"}</span></button>}
         {user?.role !== "operator" && <Link to="/admin/learning/city" aria-label="Управление городом"><span aria-hidden="true">⚙︎</span><span className="city-hud__wide">Управление</span></Link>}
       </nav>
     </header>
@@ -343,7 +342,6 @@ export function CityPage() {
     {plotKey && <Sheet title={`Участок · ${data.districts.find(d => d.id === data.plots.find(p => p.key === plotKey)?.district)?.name ?? "район"}`} onClose={() => setPlotKey(null)}><CityCatalogue data={data} pending={build.isPending} error={build.isError ? build.error.message : null} onBuild={item => build.mutate({ plot: plotKey, item })} /></Sheet>}
     {built && <Sheet title="Построено!" onClose={() => setBuilt(null)} size="s"><div className="city-celebration"><div className="city-medal" aria-hidden="true">{data.buildings.find(b => b.key === built.item)?.icon ?? "🏗️"}</div><h2>{built.name}</h2><p>Постройка уже стоит в твоём районе. Каждый новый участок делает город твоим.</p><div className="city-rewards"><span>−{built.price} коинов</span><span>Осталось {built.balance.toLocaleString("ru-RU")}</span></div><button className="city-action" onClick={() => setBuilt(null)}>Смотреть город →</button></div></Sheet>}
     {questSlot !== null && data.quests?.items.find(q => q.slot === questSlot) && <Sheet title="Задание дня" onClose={() => setQuestSlot(null)} size="s"><CityQuestCard quest={data.quests.items.find(q => q.slot === questSlot)!} reward={data.quests.coins} readOnly={data.inspecting || data.preview} pending={answer.isPending} error={answer.isError ? answer.error.message : null} onAnswer={choice => answer.mutate({ slot: questSlot, choice })} onNext={(() => { const next = data.quests!.items.find(q => !q.answered && q.slot !== questSlot); return next ? () => { answer.reset(); setQuestSlot(next.slot); setQuestFocus({ slot: next.slot, at: Date.now() }); } : undefined; })()} /></Sheet>}
-    {groupOpen && data.group && <Sheet title={`Город группы · ${data.group.name}`} onClose={() => setGroupOpen(false)}><CityGroupPanel group={data.group} own={!data.inspecting} onShow={key => { setGroupOpen(false); setSiteFocus({ key, at: Date.now() }); }} /></Sheet>}
     {driverLaunch && <Sheet title="Автопарк · Driver Simulator" onClose={() => setDriverLaunch(false)}><DriverEntry /></Sheet>}
   </div></CityToolbarProvider>;
 }
@@ -402,31 +400,6 @@ function OpenOnce({ when, onOpen }: { when: boolean; onOpen: () => void }) {
   return null;
 }
 
-const STAGE_STEPS = ["foundation", "frame", "floors", "done"] as const;
-/** The group's quarters by stage, and the viewer's own points: never another operator's. */
-function CityGroupPanel({ group, own, onShow }: { group: CityGroup; own: boolean; onShow: (key: string) => void }) {
-  const built = group.projects.filter(p => p.stage === "done").length;
-  return <div className="city-group">
-    <p className="city-group__lead">Операторы группы строят эти кварталы вместе: каждая миссия, заказ и обращение двигает стройку. Видно только общий результат — чужие показатели скрыты.</p>
-    <ol className="city-group__projects">{group.projects.map(p => {
-      const step = STAGE_STEPS.indexOf(p.stage as typeof STAGE_STEPS[number]);
-      return <li key={p.key} data-stage={p.stage}>
-        <button type="button" onClick={() => onShow(p.key)} aria-label={`${p.name}: ${SITE_STAGES[p.stage]}. Показать на карте`}>
-          <span className="city-group__icon" aria-hidden="true">{p.stage === "done" ? "🏙️" : p.stage === "planned" ? "📐" : "🏗️"}</span>
-          <span className="city-group__name"><strong>{p.name}</strong><small>{SITE_STAGES[p.stage]}</small></span>
-          <span className="city-group__steps" aria-hidden="true">{STAGE_STEPS.map((s, i) => <i key={s} data-on={i <= step || undefined} />)}</span>
-        </button>
-      </li>;
-    })}</ol>
-    <p className="city-fine">Построено {built} из {group.projects.length}.{group.small ? " В группе меньше трёх человек, поэтому стадия строящегося квартала скрыта: видны только готовые." : ""}</p>
-    <div className="city-group__mine">
-      <div className="city-plots__head"><strong>{own ? "Твой вклад" : "Вклад оператора"}</strong><span>{group.mine.points} очков</span></div>
-      <ul>{(Object.keys(POINT_KINDS) as PointKind[]).map(k => <li key={k}><span>{POINT_KINDS[k]}</span><span>{group.mine[k]} × {group.points[k]}</span></li>)}</ul>
-      {own && <small>Эти цифры видишь только ты и твои руководители.</small>}
-    </div>
-  </div>;
-}
-
 /** One daily situation: who asks, what happened, the options; after the answer, the right one and why. */
 function CityQuestCard({ quest, reward, readOnly, pending, error, onAnswer, onNext }: { quest: CityQuest; reward: number; readOnly: boolean; pending: boolean; error: string | null; onAnswer: (choice: number) => void; onNext?: () => void }) {
   return <div className="city-quest">
@@ -441,6 +414,6 @@ function CityQuestCard({ quest, reward, readOnly, pending, error, onAnswer, onNe
       <strong>{quest.correct ? `Верно! +${quest.coins} коинов` : "Не совсем так"}</strong>
       {quest.explanation && <p>{quest.explanation}</p>}
       {onNext ? <button type="button" className="city-action" onClick={onNext}>Следующее задание →</button> : <small>На сегодня всё. Новые задания появятся завтра.</small>}
-    </div> : <p className="city-fine">{readOnly ? "Просмотр: отвечать может только сам оператор." : `Один ответ. Верный ответ — +${reward} коинов и очки для города группы.`}</p>}
+    </div> : <p className="city-fine">{readOnly ? "Просмотр: отвечать может только сам оператор." : `Один ответ. Верный ответ — +${reward} коинов.`}</p>}
   </div>;
 }

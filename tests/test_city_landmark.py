@@ -16,6 +16,7 @@ from app.services import city_land, city_landmark
 from tests.conftest import auth, login, make_user
 from tests.test_city_estate import (
     CITY,
+    P,
     buy,
     district_view,
     estate,
@@ -73,7 +74,9 @@ async def test_fresh_complex_reserves_the_whole_square_in_real_and_test_cities(
         "rotation": 0,
     }
     assert landmark["plots"] == city_land.plot_count("support-team-1")
-    assert landmark["next"]["need"] == 112 and landmark["peak"] == 0
+    plots = city_land.plot_count("support-team-1")
+    assert landmark["next"]["need"] == city_landmark.needed(plots, 2) == 1078
+    assert landmark["peak"] == 0
     denied = await client.post(
         f"{CITY}/projects",
         headers=sv,
@@ -195,27 +198,41 @@ async def test_filled_plot_cells_grow_complex_once_and_transfers_preserve_its_pe
     me = auth(await login(client, operator.login))
     totals = city_land.band_totals("sales-team-1")
     need = city_landmark.needed(sum(totals), 2)
+    # Squares side by side over the first band, wherever P × P cells of it are free.
     first = [
         (block, u, v)
         for block, shape in city_land.blocks("sales-team-1").items()
         if shape["band"] == 1
-        for v in range(shape["rows"])
-        for u in range(shape["cols"])
-        if (u, v) not in shape["skip"]
+        for v in range(0, shape["rows"] - P + 1, P)
+        for u in range(0, shape["cols"] - P + 1, P)
+        if city_land.area("sales-team-1", block, u, v, P, P)
     ]
-    assert need == 18 and len(first) >= need
-    for block, u, v in first[: need - 1]:
-        result = await buy(client, me, "square", block, u, v)
+    squares = -(-need // (P * P))
+    assert need == 182 and squares == 21 and len(first) >= squares
+    for block, u, v in first[: squares - 1]:
+        result = await buy(client, me, "square", block, u, v, cells=True)
         assert result.status_code == 200, result.text
     view = await district_view(client, me, "sales", "sales-team-1")
-    assert view["landmark"]["level"] == 1 and view["landmark"]["next"]["remaining"] == 1
+    assert view["landmark"]["level"] == 1
+    assert view["landmark"]["next"]["remaining"] == need - (squares - 1) * P * P == 2
     op = key()
-    result = await buy(client, me, "square", *first[need - 1], op=op)
+    result = await buy(client, me, "square", *first[squares - 1], op=op, cells=True)
     assert result.status_code == 200, result.text
-    assert (await buy(client, me, "square", *first[need - 1], op=op)).json()["replayed"]
+    replay = await buy(client, me, "square", *first[squares - 1], op=op, cells=True)
+    assert replay.json()["replayed"]
+    built = squares * P * P
     view = await district_view(client, me, "sales", "sales-team-1")
-    assert view["landmark"]["level"] == 2 and view["landmark"]["taken"] == need
-    assert len(view["objects"]) < need  # Several squares have merged into parks.
+    assert view["landmark"]["level"] == 2 and view["landmark"]["taken"] == built
+    assert len(view["objects"]) < squares  # Several squares have merged into parks.
+    # Roads and trees take cells but build nothing: the main building does not grow by them.
+    road = await client.post(
+        CITY + "/decor",
+        headers=me,
+        json={"key": key(), "family": "road", "cells": [[2, 0, 0]], "economy_revision": 0},
+    )
+    assert road.status_code == 200, road.text
+    landmark = (await district_view(client, me, "sales", "sales-team-1"))["landmark"]
+    assert (landmark["taken"], landmark["peak"]) == (built, built)
     events = list(await session.scalars(select(CityEvent).where(CityEvent.kind == "landmark")))
     assert [event.payload["level"] for event in events] == [2]
     staff = auth(await login(client, admin.login))
@@ -225,7 +242,7 @@ async def test_filled_plot_cells_grow_complex_once_and_transfers_preserve_its_pe
     assert moved.status_code == 200, moved.text
     await estate(client, me)
     after = (await district_view(client, me, "sales", "sales-team-1"))["landmark"]
-    assert (after["taken"], after["peak"], after["level"]) == (0, need, 2)
+    assert (after["taken"], after["peak"], after["level"]) == (0, built, 2)
     assert after["next"]["remaining"] == city_landmark.needed(sum(totals), 3)
     assert (
         len(list(await session.scalars(select(CityEvent).where(CityEvent.kind == "landmark")))) == 1

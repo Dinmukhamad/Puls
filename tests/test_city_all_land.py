@@ -15,6 +15,7 @@ from app.services import city_land, city_landmark
 from tests.conftest import auth, login, make_user
 from tests.test_city_estate import (
     ADMIN,
+    P,
     buy,
     district_view,
     fund,
@@ -25,7 +26,8 @@ from tests.test_city_estate import (
 pytestmark = pytest.mark.asyncio
 
 
-@pytest.mark.parametrize("city,block,bands,price", [("support", 16, 5, 130), ("sales", 6, 3, 150)])
+# The outermost band's block of each city's first district, and a house there with its land.
+@pytest.mark.parametrize("city,block,bands,price", [("support", 5, 5, 130), ("sales", 5, 3, 150)])
 @pytest.mark.parametrize("historical", [False, True])
 async def test_empty_district_accepts_outermost_plot_despite_absent_or_stale_state(
     client, session, head, supervisor, operator, city, block, bands, price, historical
@@ -56,10 +58,10 @@ async def test_empty_district_accepts_outermost_plot_despite_absent_or_stale_sta
     assert result.status_code == 200, result.text
     assert (result.json()["price"], result.json()["balance"]) == (price, 2000 - price)
     state = await session.get(CityDistrictState, district_id, populate_existing=True)
-    assert state.open_band == bands and state.landmark_peak_plots == 1
+    assert state.open_band == bands and state.landmark_peak_plots == P * P
     assert (state.hq_level, state.built_projects) == ((3, 4) if historical else (1, 0))
     after = await district_view(client, me, city, district_id)
-    assert after["land"]["taken"] == 1 and after["land"]["open_band"] == bands
+    assert after["land"]["taken"] == P * P and after["land"]["open_band"] == bands
     events = await session.scalars(select(CityEvent).where(CityEvent.kind == "band"))
     assert list(events) == []
 

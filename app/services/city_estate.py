@@ -1,13 +1,15 @@
 """Building in team districts (docs/CITY_ESTATES.md) with the existing Puls coins.
 
-The land is a Monopoly board (app/services/city_land.py): each city is cut into three districts of
-plots, and the operators of a district buy its plots one by one, each with what stands on it, a
-square, a house or one of the ready houses or office towers, and develop them. A house goes up
-stage by stage from one storey; a ready building is bought as it is, at the price of its size;
-four squares of one operator filling a square of plots become a park, six filling a rectangle a
-big park, at once and for free. All personal plots are available from the start; their geographic
-bands determine only land prices. In the centre of every district is its growing main building.
-Existing public buildings and shared projects retain their places and contributions.
+The land of each city goes to three districts, cut into small cells (app/services/city_land.py),
+and the operators of a district lay it out themselves. A building, a square, a house or one of the
+ready houses or office towers, stands on PLOT_CELLS × PLOT_CELLS cells wherever it fits, and is
+bought with its land; a house goes up stage by stage from one storey, a ready building is bought as
+it is, at the price of its size; four squares of one operator filling a square become a park, six
+filling a rectangle a big park, at once and for free. The small things, roads, footpaths, trees,
+lamps, benches, bushes, flowerbeds and hedges, take a cell each (DECOR_FAMILIES): they are laid
+many at once, at a small price with the land, and whoever laid one may take it away for its coins
+back. All land is available from the start; its geographic bands determine only the price of land.
+In the centre of every district is its growing main building.
 
 Rules the server owns, whatever the client sends: who may build where (only operators, only in
 their own district, only once its construction is opened for the pilot), the
@@ -17,13 +19,15 @@ stored result instead of paying twice, and the same key with a different request
 move only through the coin journal, in the same transaction as the building, its plots and the
 history entry.
 
-Buildings keep their place as (module, u, v): on plots module is the block, u the column and v the
-row; module 0 is the public square of 12 × 12 cells (the client draws both, frontend/src/city3d).
+Buildings keep their place as (module, u, v): on the land module is the block, u the column and v
+the row of their first cell; module 0 is the old public square of 12 × 12 cells (the client draws
+both, frontend/src/city3d). A small thing is only a cell taken (city_cells.decor).
 """
 
 import hashlib
 import json
 from copy import deepcopy
+from uuid import uuid4
 
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy import func, select, true
@@ -72,7 +76,11 @@ OFFICE_TOWERS = {
     "officei": ("Офисная башня I", 1700),
 }
 
-#: What operators build on their plots. Size is in plots (columns × rows); a park is never bought,
+#: A building's plot: this many cells each way.
+PLOT_CELLS = city_land.PLOT_CELLS
+
+#: What operators build on their plots. Size is in plots (columns × rows) of PLOT_CELLS × PLOT_CELLS
+#: cells each; a park is never bought,
 #: it gathers itself from `squares` of the operator's own squares (a big park also from a park
 #: and two squares). The `ready` houses are models of the CC0 "Family House Collection"
 #: (frontend world/familyHouses.ts); ready office towers follow from the supplied collection.
@@ -229,6 +237,51 @@ PLOT_PRICES = {
 #: Coins for a plot of each band, from the centre outwards; the land city has the first three.
 LAND_PRICES = [60, 45, 30, 20, 10]
 
+#: The small things operators lay a cell at a time to shape their district: roads and footpaths that
+#: join their neighbours, trees, lamps that light the night, benches, bushes, flowerbeds and hedges.
+#: Their price includes the cell's land; whoever laid one may take it away for its coins back.
+DECOR_FAMILIES = {
+    "road": {
+        "name": "Дорога",
+        "icon": "🛣️",
+        "about": "Клетка дороги. Соседние клетки сами собираются в улицу, поворот или перекрёсток.",
+    },
+    "path": {
+        "name": "Пешеходная дорожка",
+        "icon": "🚶",
+        "about": "Мощёная дорожка через газон: соединяется с дорожками и дорогами рядом.",
+    },
+    "tree": {"name": "Клён", "icon": "🌳", "about": "Лиственное дерево с круглой кроной."},
+    "pine": {"name": "Ель", "icon": "🌲", "about": "Стройная вечнозелёная ель."},
+    "birch": {"name": "Берёза", "icon": "🌿", "about": "Белый ствол и светлая крона."},
+    "oak": {"name": "Дуб", "icon": "🍂", "about": "Широкий раскидистый дуб."},
+    "lamp": {"name": "Фонарь", "icon": "💡", "about": "Вечером зажигается и освещает клетку."},
+    "bench": {"name": "Скамейка", "icon": "🪑", "about": "Скамейка вдоль дорожки или у дерева."},
+    "bush": {"name": "Куст", "icon": "🌱", "about": "Невысокий куст для газонов и дворов."},
+    "flowers": {"name": "Клумба", "icon": "🌷", "about": "Круглая клумба с цветами."},
+    "hedge": {
+        "name": "Живая изгородь",
+        "icon": "🟩",
+        "about": "Подстриженные кусты: соседние клетки изгороди смыкаются в ограду.",
+    },
+}
+#: Coins for a cell of each small thing, its land included.
+DECOR_PRICES = {
+    "road": 5,
+    "path": 3,
+    "tree": 10,
+    "pine": 10,
+    "birch": 10,
+    "oak": 12,
+    "lamp": 15,
+    "bench": 8,
+    "bush": 5,
+    "flowers": 6,
+    "hedge": 4,
+}
+#: At most this many cells in one laying or taking away.
+DECOR_BATCH = 400
+
 #: What a district builds together on its public square. Size is in cells of the square.
 PROJECT_FAMILIES = {
     "square": {
@@ -304,6 +357,7 @@ def estate_defaults():
     return {
         "estate": deepcopy(PLOT_PRICES),
         "land": list(LAND_PRICES),
+        "decor": dict(DECOR_PRICES),
         "district": deepcopy(PROJECT_COSTS),
         "hq": list(HQ_STEPS),
     }
@@ -318,11 +372,12 @@ def turned(size, rotation):
 
 
 def footprint(obj_or_family, rotation=0, *, public=False):
-    """Columns × rows of plots (or cells of the public square) a building takes."""
+    """Columns × rows of cells a building takes (of the land, or of the public square)."""
     family = getattr(obj_or_family, "family", obj_or_family)
     if public or getattr(obj_or_family, "owner_id", 1) is None:
         return turned(PROJECT_FAMILIES[family]["size"], rotation)
-    return turned(PLOT_FAMILIES[family]["size"], rotation)
+    w, h = turned(PLOT_FAMILIES[family]["size"], rotation)
+    return w * PLOT_CELLS, h * PLOT_CELLS
 
 
 def cells_of(u, v, w, h):
@@ -464,11 +519,11 @@ async def operation(session, user, key, kind, request, perform):
         )
         await session.commit()
     except IntegrityError:
-        # The database refused a plot, a cell or the key itself: another request got there first.
+        # The database refused a cell or the key itself: another request got there first.
         await session.rollback()
         if (done := await stored_result(session, user.id, key, print_)) is not None:
             return done
-        raise ConflictError("Участок уже заняли. Обновите город и выберите другой.") from None
+        raise ConflictError("Это место уже заняли. Обновите город и выберите другое.") from None
     return {**result, "replayed": False}
 
 
@@ -603,6 +658,32 @@ def project_catalogue(project_costs):
     ]
 
 
+def decor_catalogue(decor_prices):
+    return [
+        {
+            "family": key,
+            "name": item["name"],
+            "icon": item["icon"],
+            "about": item["about"],
+            "price": decor_prices[key],
+        }
+        for key, item in DECOR_FAMILIES.items()
+    ]
+
+
+def decor_view(cells, user, *, home=False):
+    """A district's small things by kind: [block, column, row, 1 if the viewer may take it away].
+
+    That is what the viewer laid, and in their own district (`home`) what has become the
+    district's, left by operators who moved on.
+    """
+    out = {}
+    for cell in cells:
+        mine = int(cell.owner_id == user.id if cell.owner_id is not None else home)
+        out.setdefault(cell.decor, []).append([cell.module, cell.u, cell.v, mine])
+    return out
+
+
 async def members(session, districts):
     """Active operators of every district."""
     groups = {g: key for key, d in districts.items() for g in d["group_ids"]}
@@ -622,33 +703,43 @@ async def members(session, districts):
     return counts
 
 
-async def taken_plots(session, ids):
-    """Taken plots by district and band."""
-    out = {key: [0] * city_land.bands(city_land.split(key)[0]) for key in ids}
+async def land_counts(session, ids):
+    """Taken cells by district and band: by anything (`taken`) and by buildings only (`built`).
+
+    The main building grows with the land built on; a road, a tree or a lamp takes a cell but
+    builds nothing.
+    """
+    out = {}
+    for key in ids:
+        bands = city_land.bands(city_land.split(key)[0])
+        out[key] = {"taken": [0] * bands, "built": [0] * bands}
     if not ids:
         return out
-    rows = await session.execute(
-        select(CityCell.district_id, CityCell.module, func.count())
-        .where(CityCell.district_id.in_(ids), CityCell.module != SQUARE)
-        .group_by(CityCell.district_id, CityCell.module)
-    )
-    for district_id, block, count in rows:
-        band = city_land.band_of(district_id, block)
-        if band:
-            out[district_id][band - 1] += count
+    for column, condition in (("taken", true()), ("built", CityCell.decor.is_(None))):
+        rows = await session.execute(
+            select(CityCell.district_id, CityCell.module, func.count())
+            .where(CityCell.district_id.in_(ids), CityCell.module != SQUARE, condition)
+            .group_by(CityCell.district_id, CityCell.module)
+        )
+        for district_id, block, count in rows:
+            band = city_land.band_of(district_id, block)
+            if band:
+                out[district_id][column][band - 1] += count
     return out
 
 
-def land_view(district_id, taken, state):
+def land_view(district_id, counts):
     totals = city_land.band_totals(district_id)
     if not any(totals):
         return None
+    taken = counts["taken"]
     return {
-        "plots": sum(totals),
+        "cells": sum(totals),
         "taken": sum(taken),
+        "built": sum(counts["built"]),
         "open_band": city_land.open_band(district_id),
         "bands": [
-            {"band": i + 1, "plots": total, "taken": taken[i]} for i, total in enumerate(totals)
+            {"band": i + 1, "cells": total, "taken": taken[i]} for i, total in enumerate(totals)
         ],
     }
 
@@ -726,7 +817,14 @@ async def describe(session, user, districts, *, mine, manages, small):
         if projects
         else {}
     )
-    taken = await taken_plots(session, ids)
+    counts = await land_counts(session, ids)
+    decor = {key: [] for key in ids}
+    for cell in await listed(
+        select(CityCell)
+        .where(CityCell.district_id.in_(ids), CityCell.decor.is_not(None))
+        .order_by(CityCell.district_id, CityCell.module, CityCell.v, CityCell.u)
+    ):
+        decor[cell.district_id].append(cell)
     items = []
     for key, d in districts.items():
         state = states.get(key)
@@ -740,10 +838,10 @@ async def describe(session, user, districts, *, mine, manages, small):
                 "construction": d["construction"],
                 "mine": mine(key),
                 "managed": manages(key),
-                "land": land_view(key, taken[key], state),
+                "land": land_view(key, counts[key]),
                 "landmark": city_landmark.view(
                     city_land.plot_count(key),
-                    sum(taken[key]),
+                    sum(counts[key]["built"]),
                     state.landmark_peak_plots if state else 0,
                     legacy=any(o.district_id == key and o.module == SQUARE for o in objects)
                     or any(p.district_id == key and p.module == SQUARE for p in projects),
@@ -757,6 +855,7 @@ async def describe(session, user, districts, *, mine, manages, small):
                     else None,
                 },
                 "objects": [public_object(o, user) for o in objects if o.district_id == key],
+                "decor": decor_view(decor[key], user, home=mine(key)),
                 "projects": [
                     project_view(p, given.get(p.id, 0), small=small(key), exact=manages(key))
                     for p in projects
@@ -852,6 +951,8 @@ async def estate(session, user):
         "district": home and {"id": home["id"], "city": home["city"], "name": home["name"]},
         "objects": [own_object(o) for o in objects],
         "catalogue": plot_catalogue(values["estate"]),
+        "decor": decor_catalogue(values["decor"]),
+        "decor_batch": DECOR_BATCH,
         "projects": project_catalogue(values["district"]),
         "land_prices": values["land"],
         "economy_revision": values["revision"],
@@ -926,17 +1027,32 @@ def real_land():
     return ~CityObject.district_id.startswith(city_land.SANDBOX)
 
 
+def left_behind(user, home):
+    """The operator's small things on the land of a district not theirs (any, without one)."""
+    query = select(CityCell).where(
+        CityCell.owner_id == user.id,
+        CityCell.decor.is_not(None),
+        ~CityCell.district_id.startswith(city_land.SANDBOX),
+    )
+    return query.where(CityCell.district_id != home["id"]) if home else query
+
+
 async def needs_reconcile(session, user, districts):
     home = home_district(districts, user)
-    return (await session.scalar(elsewhere(user, home).limit(1))) is not None
+    return (
+        await session.scalar(elsewhere(user, home).limit(1)) is not None
+        or await session.scalar(left_behind(user, home).limit(1)) is not None
+    )
 
 
 async def reconcile(session, user, districts=None):
-    """Personal land follows the operator: plots outside the current district are released.
+    """Personal land follows the operator: buildings outside the current district are released.
 
-    Buildings from them go to the inventory with their level and what was paid, and can be put on
-    free plots of the new district for free; shared buildings and contributions stay in the district
-    they were made for (TZ §18). Returns whether anything moved.
+    They go to the inventory with their level and what was paid, and can be put on free cells of
+    the new district for free; shared buildings and contributions stay in the district they were
+    made for (TZ §18). Roads, trees, lamps and the rest stay where they were laid, for the team
+    that uses them: they become the district's (any of its operators may take them away), and
+    what they cost goes back to the operator. Returns whether anything moved.
     """
     districts = districts if districts is not None else await world_districts(session)
     home = home_district(districts, user)
@@ -947,6 +1063,28 @@ async def reconcile(session, user, districts=None):
         obj.state, obj.module, obj.u, obj.v = "stored", None, None, None
         obj.version += 1
         event(session, district_id, "transfer", obj=obj, payload={"user": user.id})
+        moved = True
+    left = {}
+    for cell in await session.scalars(left_behind(user, home)):
+        left.setdefault(cell.district_id, []).append(cell)
+    for district_id, cells in sorted(left.items()):
+        refund = sum(cell.paid for cell in cells)
+        for cell in cells:
+            cell.owner_id, cell.paid = None, 0
+        tx = None
+        if refund:
+            tx = await post_transaction(
+                session,
+                user_id=user.id,
+                amount=refund,
+                tx_type=TxType.PURCHASE_REFUND,
+                reason="Мой район: дороги и благоустройство остались прежнему району",
+                idempotency_key=f"city-decor-left:{user.id}:{uuid4().hex}",
+                meta={"cells": len(cells), "district": district_id},
+                evaluate_achievements=False,
+            )
+        payload = {"do": "hand_over", "user": user.id, "cells": len(cells)}
+        event(session, district_id, "decor", amount=refund, tx=tx, payload=payload)
         moved = True
     if moved:
         await session.flush()
@@ -961,7 +1099,7 @@ async def reconcile_many(session, user_ids, districts):
             await reconcile(session, user, districts)
 
 
-# ---- plots and cells -----------------------------------------------------------------------------
+# ---- cells ---------------------------------------------------------------------------------------
 
 
 async def release_cells(session, obj):
@@ -971,8 +1109,17 @@ async def release_cells(session, obj):
 
 
 async def occupied(session, district_id, module, cells, *, ignore_object=None):
+    """The taken ones among `cells` (u, v) of one module, read within their bounds."""
+    if not cells:
+        return []
+    us, vs = [u for u, _v in cells], [v for _u, v in cells]
     rows = await session.scalars(
-        select(CityCell).where(CityCell.district_id == district_id, CityCell.module == module)
+        select(CityCell).where(
+            CityCell.district_id == district_id,
+            CityCell.module == module,
+            CityCell.u.between(min(us), max(us)),
+            CityCell.v.between(min(vs), max(vs)),
+        )
     )
     wanted = set(cells)
     return [
@@ -996,29 +1143,72 @@ def take_cells(session, district_id, module, cells, *, obj=None, project=None):
         )
 
 
-async def free_plots(session, home, block, col, row, cols=1, rows=1):
-    """The plots of the area if they are the district's and free; else why not."""
-    plots = city_land.area(home["id"], block, col, row, cols, rows)
-    if plots is None:
+async def free_cells(session, home, block, col, row, cols=1, rows=1):
+    """The cells of the area if they are the district's and free; else why not."""
+    cells = city_land.area(home["id"], block, col, row, cols, rows)
+    if cells is None:
         raise ConflictError(
-            "Здесь нет участков твоего района на продажу"
+            "Здесь нет свободной земли твоего района"
             if cols * rows == 1
-            else "Постройка должна целиком помещаться на участках одного квартала",
+            else f"Постройка не помещается: нужны свободные клетки {cols} × {rows} на земле "
+            "района, в одной зоне",
             code="wrong_plot",
         )
     band = city_land.band_of(home["id"], block)
-    if await occupied(session, home["id"], block, plots):
-        raise ConflictError("Этот участок уже занят", code="plot_taken")
-    return plots, band
+    if await occupied(session, home["id"], block, cells):
+        raise ConflictError(
+            "Эта клетка уже занята" if cols * rows == 1 else "Часть этих клеток уже занята",
+            code="plot_taken",
+        )
+    return cells, band
+
+
+async def free_for_decor(session, district_id, cells):
+    """The cells named for small things, each free land of the district once; else why not."""
+    if len(set(cells)) != len(cells):
+        raise ConflictError("Клетки повторяются", code="cells_repeated")
+    by_block = {}
+    for block, col, row in cells:
+        if city_land.area(district_id, block, col, row) is None:
+            raise ConflictError(
+                "Здесь нет свободной земли твоего района. Выберите клетки заново.",
+                code="wrong_plot",
+            )
+        by_block.setdefault(block, []).append((col, row))
+    for block, wanted in by_block.items():
+        if await occupied(session, district_id, block, wanted):
+            raise ConflictError(
+                "Часть клеток уже занята. Обновите город и выберите их заново.",
+                code="plot_taken",
+            )
+    return cells
+
+
+async def decor_cells(session, district_id, cells):
+    """The small things standing on the cells named, every one of them; else why not."""
+    if len(set(cells)) != len(cells):
+        raise ConflictError("Клетки повторяются", code="cells_repeated")
+    by_block = {}
+    for block, col, row in cells:
+        by_block.setdefault(block, []).append((col, row))
+    found = []
+    for block, wanted in by_block.items():
+        found += [c for c in await occupied(session, district_id, block, wanted) if c.decor]
+    if len(found) != len(cells):
+        raise ConflictError(
+            "На части клеток уже ничего нет. Обновите город и выберите их заново.",
+            code="decor_missing",
+        )
+    return found
 
 
 async def widen(session, district_id, actor):
     """Records the district's complex progress; land is available independently of that progress."""
     state = await lock_district(session, district_id)
-    taken = (await taken_plots(session, [district_id]))[district_id]
+    built = (await land_counts(session, [district_id]))[district_id]["built"]
     plots = city_land.plot_count(district_id)
     old_peak = state.landmark_peak_plots
-    peak = max(old_peak, sum(taken))
+    peak = max(old_peak, sum(built))
     old_level = city_landmark.level_for(plots, old_peak)
     level = city_landmark.level_for(plots, peak)
     if peak > old_peak:
@@ -1056,22 +1246,28 @@ async def require_public_square(session, district_id):
         return
     raise ConflictError(
         "Эту площадь занимает комплекс команды. Он растёт автоматически по мере застройки "
-        "района. Другие здания можно строить на личных участках.",
+        "района. Другие здания можно строить на свободных клетках района.",
         code="district_landmark",
     )
 
 
 # ---- parks gather themselves ---------------------------------------------------------------------
 
-#: The shapes a park gathers in: (family, columns, rows, rotation), the big park first.
-PARK_SHAPES = (("bigpark", 3, 2, 0), ("bigpark", 2, 3, 1), ("park", 2, 2, 0))
+#: The shapes a park gathers in: (family, columns, rows of cells, rotation), the big park first.
+PARK_SHAPES = (
+    ("bigpark", 3 * PLOT_CELLS, 2 * PLOT_CELLS, 0),
+    ("bigpark", 2 * PLOT_CELLS, 3 * PLOT_CELLS, 1),
+    ("park", 2 * PLOT_CELLS, 2 * PLOT_CELLS, 0),
+)
 
 
 def park_group(objects):
     """The first park the operator's squares (and a park) on one block fill exactly, or None.
 
-    A park is four squares in a square of plots; a big park is six squares in a 3 × 2 or 2 × 3
-    rectangle, or a park and two squares filling one. Big parks go first, then by row and column.
+    A park is four squares filling a square of 2 × 2 plots; a big park is six squares filling a
+    3 × 2 or 2 × 3 rectangle, or a park and two squares filling one. Squares stand wherever they
+    fit, so only those lying exactly side by side fill one. Big parks go first, then by row and
+    column.
     """
     at = {}
     for o in objects:
@@ -1201,7 +1397,7 @@ def require_selected_district(home, district_id):
     """Reject stale plot coordinates after a transfer rather than use them in the new district."""
     if district_id is not None and district_id != home["id"]:
         raise ConflictError(
-            "Твой район изменился. Открой новый район и выбери участок заново.",
+            "Твой район изменился. Открой новый район и выбери место заново.",
             code="district_changed",
         )
 
@@ -1235,7 +1431,8 @@ async def own_object_row(session, user, object_id, version, *, states=("placed",
 
 
 async def purchase(session, user, body):
-    """A free plot of the operator's district with a catalogue building on it, land and all."""
+    """A catalogue building on free cells of the operator's district, 3 × 3 of them, its land
+    paid with it."""
 
     async def perform():
         home = await builder(session, user)
@@ -1251,7 +1448,8 @@ async def purchase(session, user, body):
             )
         values = await prices(session)
         check_revision(body.economy_revision, values["revision"])
-        plots, band = await free_plots(session, home, body.block, body.col, body.row)
+        w, h = footprint(body.family)
+        cells, band = await free_cells(session, home, body.block, body.col, body.row, w, h)
         land, building = values["land"][band - 1], values["estate"][body.family][0]
         price = land + building
         tx = await pay(
@@ -1259,7 +1457,7 @@ async def purchase(session, user, body):
             user,
             body.key,
             price,
-            f"Мой район: участок и {family['levels'][0][0].lower()}",
+            f"Мой район: земля и {family['levels'][0][0].lower()}",
             {"family": body.family, "level": 1, "band": band, "land": land},
         )
         obj = CityObject(
@@ -1271,14 +1469,14 @@ async def purchase(session, user, body):
             module=body.block,
             u=body.col,
             v=body.row,
-            rotation=0,
+            rotation=body.rotation or 0,
             source="purchase",
             paid=price,
             economy_revision=values["revision"],
         )
         session.add(obj)
         await session.flush()
-        take_cells(session, home["id"], body.block, plots, obj=obj)
+        take_cells(session, home["id"], body.block, cells, obj=obj)
         event(session, home["id"], "purchase", actor=user, obj=obj, amount=price, tx=tx)
         await write_audit(
             session,
@@ -1356,15 +1554,18 @@ async def upgrade(session, user, object_id, body):
 
 
 async def place(session, user, object_id, body):
-    """Puts a building from the inventory (after a transfer) on free plots of the district, free."""
+    """Puts a building from the inventory (after a transfer) on free cells of the district, free.
+
+    Its rotation turns its front (a big park's turns its rectangle too).
+    """
 
     async def perform():
         home = await builder(session, user)
         require_selected_district(home, body.district_id)
         obj = await own_object_row(session, user, object_id, body.version, states=("stored",))
-        rotation = body.rotation % 2 if obj.family == "bigpark" else 0
+        rotation = body.rotation % 4
         w, h = footprint(obj, rotation)
-        plots, _band = await free_plots(session, home, body.block, body.col, body.row, w, h)
+        cells, _band = await free_cells(session, home, body.block, body.col, body.row, w, h)
         obj.district_id, obj.module, obj.u, obj.v, obj.rotation, obj.state = (
             home["id"],
             body.block,
@@ -1374,7 +1575,7 @@ async def place(session, user, object_id, body):
             "placed",
         )
         obj.version += 1
-        take_cells(session, home["id"], body.block, plots, obj=obj)
+        take_cells(session, home["id"], body.block, cells, obj=obj)
         event(session, home["id"], "place", actor=user, obj=obj)
         await session.flush()
         gathers = obj.family in ("square", "park")
@@ -1393,6 +1594,154 @@ async def place(session, user, object_id, body):
         "place",
         {"id": object_id, **body.model_dump(exclude={"key"}, exclude_none=True)},
         perform,
+    )
+
+
+async def turn(session, user, object_id, body):
+    """Turns the front of the operator's own building where no road decides it, for free.
+
+    A building faces a road beside it by itself (the client draws it so); its rotation says where it
+    looks with no road around. Parks have no front.
+    """
+
+    async def perform():
+        await builder(session, user)
+        obj = await own_object_row(session, user, object_id, body.version)
+        if obj.family in ("park", "bigpark"):
+            raise ConflictError("У парка нет фасада, его не поворачивают", code="no_front")
+        obj.rotation = body.rotation % 4
+        obj.version += 1
+        event(session, obj.district_id, "turn", actor=user, obj=obj, payload={"to": obj.rotation})
+        await session.flush()
+        return {"object": own_object(obj), **await balance(session, user.id)}
+
+    return await operation(
+        session,
+        user,
+        body.key,
+        "turn",
+        {"id": object_id, **body.model_dump(exclude={"key"})},
+        perform,
+    )
+
+
+def decor_name(family, count):
+    return f"{DECOR_FAMILIES[family]['name'].lower()} × {count}"
+
+
+async def lay(session, user, body):
+    """Small things on free cells of the operator's district, many at once, paid together.
+
+    Each cell keeps what it cost, its land included, so taking it away returns exactly that.
+    """
+
+    async def perform():
+        home = await builder(session, user)
+        require_selected_district(home, body.district_id)
+        if body.family not in DECOR_FAMILIES:
+            raise NotFoundError("Такой постройки нет в каталоге")
+        values = await prices(session)
+        check_revision(body.economy_revision, values["revision"])
+        cells = await free_for_decor(session, home["id"], [tuple(c) for c in body.cells])
+        each = values["decor"][body.family]
+        price = each * len(cells)
+        tx = await pay(
+            session,
+            user,
+            body.key,
+            price,
+            f"Мой район: {decor_name(body.family, len(cells))}",
+            {"family": body.family, "cells": len(cells), "each": each},
+        )
+        for block, col, row in cells:
+            session.add(
+                CityCell(
+                    district_id=home["id"],
+                    module=block,
+                    u=col,
+                    v=row,
+                    decor=body.family,
+                    owner_id=user.id,
+                    paid=each,
+                )
+            )
+        event(
+            session,
+            home["id"],
+            "decor",
+            actor=user,
+            amount=price,
+            tx=tx,
+            payload={"do": "lay", "family": body.family, "cells": len(cells)},
+        )
+        await write_audit(
+            session,
+            actor_id=user.id,
+            action="city.estate.decor",
+            entity_type="city_district",
+            entity_id=home["id"],
+            payload={"family": body.family, "cells": len(cells), "price": price},
+        )
+        await session.flush()
+        return {"laid": len(cells), "price": price, **await balance(session, user.id)}
+
+    return await operation(
+        session, user, body.key, "decor", body.model_dump(exclude={"key"}), perform
+    )
+
+
+async def take_away(session, user, body):
+    """Small things off the cells named: one's own, their coins back, and the district's.
+
+    The district's are those left by operators who moved on (reconcile); they cost nothing now.
+    """
+
+    async def perform():
+        home = await builder(session, user)
+        require_selected_district(home, body.district_id)
+        found = await decor_cells(session, home["id"], [tuple(c) for c in body.cells])
+        if any(cell.owner_id not in (user.id, None) for cell in found):
+            raise PermissionDeniedError("Убрать можно только своё и общее района")
+        refund = sum(cell.paid for cell in found)
+        kinds = {}
+        for cell in found:
+            kinds[cell.decor] = kinds.get(cell.decor, 0) + 1
+            await session.delete(cell)
+        tx = None
+        if refund:
+            tx = await post_transaction(
+                session,
+                user_id=user.id,
+                amount=refund,
+                tx_type=TxType.PURCHASE_REFUND,
+                reason="Мой район: убрано — "
+                + ", ".join(decor_name(family, n) for family, n in sorted(kinds.items())),
+                idempotency_key=f"city-op:{user.id}:{body.key}",
+                meta={"cells": len(found), "kinds": kinds},
+                evaluate_achievements=False,
+            )
+        event(
+            session,
+            home["id"],
+            "decor",
+            actor=user,
+            amount=refund,
+            tx=tx,
+            payload={"do": "remove", "kinds": kinds, "cells": len(found)},
+        )
+        await write_audit(
+            session,
+            actor_id=user.id,
+            action="city.estate.decor_remove",
+            entity_type="city_district",
+            entity_id=home["id"],
+            payload={"kinds": kinds, "refunded": refund},
+        )
+        await session.flush()
+        return {"removed": len(found), "refunded": refund, **await balance(session, user.id)}
+
+    return await operation(
+        session, user, body.key, "undecor", body.model_dump(exclude={"key"}), perform
     )
 
 
@@ -1769,11 +2118,11 @@ async def report(session):
         .group_by(CityObject.district_id)
     )
     states = {s.district_id: s for s in await session.scalars(select(CityDistrictState))}
-    taken = await taken_plots(session, [k for k in districts if city_land.has_land(k)])
+    counts = await land_counts(session, [k for k in districts if city_land.has_land(k)])
     items = []
     for key, d in districts.items():
         state = states.get(key)
-        land = land_view(key, taken[key], state) if key in taken else None
+        land = land_view(key, counts[key]) if key in counts else None
         items.append(
             {
                 "id": key,
@@ -1782,13 +2131,13 @@ async def report(session):
                 "construction": d["construction"],
                 "operators": team[key],
                 "builders": owners.get(key, 0),
-                "land": land and {k: land[k] for k in ("plots", "taken", "open_band")},
+                "land": land and {k: land[k] for k in ("cells", "taken", "built", "open_band")},
                 "buildings": placed.get(key, 0),
                 "open_projects": open_projects.get(key, 0),
                 "hq_level": state.hq_level if state else 1,
                 "landmark_level": city_landmark.level_for(
-                    land["plots"] if land else 0,
-                    max(land["taken"] if land else 0, state.landmark_peak_plots if state else 0),
+                    land["cells"] if land else 0,
+                    max(land["built"] if land else 0, state.landmark_peak_plots if state else 0),
                 ),
                 "built_projects": state.built_projects if state else 0,
             }
@@ -1822,8 +2171,17 @@ async def report(session):
         .select_from(CityObject)
         .where(CityObject.state == "stored", CityObject.owner_id.is_not(None), real_land())
     )
-    refunds = await total(TxType.PURCHASE_REFUND, "city-refund:%") + await total(
-        TxType.PURCHASE_REFUND, "city-land-reset:%"
+    refunds = sum(
+        [
+            await total(TxType.PURCHASE_REFUND, key)
+            for key in (
+                "city-refund:%",
+                "city-land-reset:%",
+                "city-cells-reset:%",
+                "city-decor-left:%",
+                "city-op:%",
+            )
+        ]
     )
     return {
         "districts": items,

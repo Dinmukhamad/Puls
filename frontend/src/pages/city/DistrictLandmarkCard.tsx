@@ -1,16 +1,16 @@
 import type { DistrictLandmark } from "../../api/cityEstate";
 import { plural } from "../../utils/format";
 
-/** One central building grows as the team occupies the district's personal land. */
+/** One central building grows as the team builds on the district's land (its cells under buildings, `taken` of `plots`). */
 export function DistrictLandmarkCard({ landmark, compact = false }: { landmark: DistrictLandmark; compact?: boolean }) {
   const fill = landmark.plots ? Math.min(100, Math.max(0, landmark.taken / landmark.plots * 100)) : 0;
   return <section className="estate-landmark" aria-label="Развитие главного здания района">
     <div className="estate-placing__title"><span aria-hidden="true">🏢</span><div><h2>Главное здание района</h2><small>{landmark.name} · уровень {landmark.level} из 5</small></div></div>
-    <p className="secondary small">Растёт автоматически, когда команда строит на участках района.</p>
-    <div className="estate-landmark__progress"><div><strong>Застроено {Math.floor(fill)} % района</strong><small>{landmark.taken.toLocaleString("ru-RU")} из {landmark.plots.toLocaleString("ru-RU")} участков</small></div>
+    <p className="secondary small">Растёт автоматически, когда команда строит дома, офисы и скверы. Дороги, деревья и фонари в застройку не входят.</p>
+    <div className="estate-landmark__progress"><div><strong>Застроено {Math.floor(fill)} % района</strong><small>{landmark.taken.toLocaleString("ru-RU")} из {landmark.plots.toLocaleString("ru-RU")} {plural(landmark.plots, "клетки", "клеток", "клеток")}</small></div>
       <div className="city-meter" role="progressbar" aria-label="Застройка района для роста главного здания" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.floor(fill)}><span style={{ width: `${fill}%` }} /></div>
     </div>
-    <p className="small">{landmark.next ? <>До «{landmark.next.name}» — {landmark.next.remaining ? <>займите ещё {landmark.next.remaining.toLocaleString("ru-RU")} {plural(landmark.next.remaining, "участок", "участка", "участков")}</> : "после следующей стройки"}.<small className="estate-landmark__next">Уровень {landmark.next.level} открывается при застройке {landmark.next.percent} % всего района.</small></> : "Главное здание достигло максимального уровня."}</p>
-    {!compact && <p className="secondary small">Одно главное здание стоит в центре района. Улучшения бесплатны: уровень зависит от количества занятых участков. Достигнутый уровень сохраняется при переводах сотрудников.</p>}
+    <p className="small">{landmark.next ? <>До «{landmark.next.name}» — {landmark.next.remaining ? <>застройте ещё {landmark.next.remaining.toLocaleString("ru-RU")} {plural(landmark.next.remaining, "клетку", "клетки", "клеток")}</> : "после следующей стройки"}.<small className="estate-landmark__next">Уровень {landmark.next.level} открывается при застройке {landmark.next.percent} % всего района.</small></> : "Главное здание достигло максимального уровня."}</p>
+    {!compact && <p className="secondary small">Одно главное здание стоит в центре района. Улучшения бесплатны: уровень зависит от того, сколько клеток района застроено. Дом, офис или сквер занимает 3 × 3 клетки. Достигнутый уровень сохраняется при переводах сотрудников.</p>}
   </section>;
 }

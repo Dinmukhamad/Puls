@@ -61,6 +61,20 @@ function samples() {
   return out;
 }
 
+/** A building's plots of 3 × 3 cells in every block: at its first corner, its middle and its last, facing each side. */
+function plotFrames() {
+  const out = [];
+  for (const grid of Object.values(GRIDS)) for (const block of grid.blocks) {
+    if (block.cols < E.CELLS || block.rows < E.CELLS) continue;
+    const spots = [[0, 0], [Math.floor(block.cols / 2) - 1, Math.floor(block.rows / 2) - 1], [block.cols - E.CELLS, block.rows - E.CELLS]];
+    for (const [col, row] of spots) for (let turn = 0; turn < 4; turn++) {
+      const side = E.turnedSide(block, E.homeSide(block, col, row, E.CELLS, E.CELLS), turn);
+      out.push(E.areaFrame(block, col, row, E.CELLS, E.CELLS, side, turn % 2 === 0));
+    }
+  }
+  return out;
+}
+
 test('everything on a plot at every level stands inside its plots and uses known models', () => {
   for (const block of samples()) for (const [family, levels] of Object.entries(E.PLOT_LEVELS)) for (let level = 1; level <= levels; level++) for (const rotation of family === 'bigpark' ? [0, 1] : [0]) {
     const [w, h] = E.plotFootprint(family, rotation);
@@ -88,7 +102,7 @@ test('everything on a plot at every level stands inside its plots and uses known
 });
 
 test('a house grows at every stage: one storey, two, a wing, a garage, a three-storey mansion', () => {
-  const block = GRIDS.support.blocks.find(b => b.band === 3), frame = E.areaFrame(block, 2, 2);
+  const block = GRIDS.support.blocks.find(b => b.band === 3), frame = E.areaFrame(block, 3, 3, E.CELLS, E.CELLS);
   const stages = [1, 2, 3, 4, 5].map(level => E.plotLayout(frame, 'house', level, 11).placements);
   const storeys = list => Math.max(...list.filter(p => p.kind === 'cottage').map(p => p.variant + 1));
   assert.deepEqual(stages.map(storeys), [1, 2, 2, 2, 3]);
@@ -102,12 +116,12 @@ test('a house grows at every stage: one storey, two, a wing, a garage, a three-s
   assert.notDeepEqual(E.plotLayout(frame, 'house', 3, 11).placements.map(p => p.tint), E.plotLayout(frame, 'house', 3, 12).placements.map(p => p.tint));
   // Parks gather more: a park has more than four squares had, a big park more than a park.
   const one = E.plotLayout(frame, 'square', 1, 3).placements.length;
-  const park = E.plotLayout(E.areaFrame(block, 0, 0, 2, 2), 'park', 1, 3).placements.length, big = E.plotLayout(E.areaFrame(block, 0, 0, 3, 2), 'bigpark', 1, 3).placements.length;
+  const park = E.plotLayout(E.areaFrame(block, 0, 0, 2 * E.CELLS, 2 * E.CELLS), 'park', 1, 3).placements.length, big = E.plotLayout(E.areaFrame(block, 0, 0, 3 * E.CELLS, 2 * E.CELLS), 'bigpark', 1, 3).placements.length;
   assert.ok(park > one * 2 && big > park, `${one} → ${park} → ${big}`);
-  assert.ok(E.plotLayout(E.areaFrame(block, 0, 0, 2, 2), 'park', 2, 3).placements.some(p => p.kind === 'fountain'), 'a fountain in the park\'s second stage');
+  assert.ok(E.plotLayout(E.areaFrame(block, 0, 0, 2 * E.CELLS, 2 * E.CELLS), 'park', 2, 3).placements.some(p => p.kind === 'fountain'), 'a fountain in the park\'s second stage');
 });
 
-test('all nine offices are finished one-plot purchases and fit every district plot with an entrance plaza', () => {
+test('all nine offices are finished one-plot purchases and fit a plot of 3 × 3 cells anywhere, facing any side, with an entrance plaza', () => {
   assert.deepEqual(Object.keys(SERVER_OFFICES), Object.keys(E.OFFICE_BUILDINGS));
   assert.equal(Object.keys(SERVER_OFFICES).length, 9);
   assert.ok(!E.isOfficeBuilding('house') && !E.isOfficeBuilding('toString'));
@@ -119,8 +133,8 @@ test('all nine offices are finished one-plot purchases and fit every district pl
   for (const [family, model] of Object.entries(E.OFFICE_BUILDINGS)) {
     assert.equal(model.name, SERVER_OFFICES[family].name);
     assert.equal(E.PLOT_LEVELS[family], 1);
-    for (const rotation of [0, 1, 2, 3]) assert.deepEqual(E.plotFootprint(family, rotation), [1, 1]);
-    for (const grid of Object.values(GRIDS)) for (const frame of grid.plots) {
+    for (const rotation of [0, 1, 2, 3]) assert.deepEqual(E.plotFootprint(family, rotation), [E.CELLS, E.CELLS]);
+    for (const frame of plotFrames()) {
       const layout = E.plotLayout(frame, family, 1, 19), offices = layout.placements.filter(p => p.kind === 'office-building');
       assert.equal(offices.length, 1);
       const [office] = offices, at = local(frame, office), front = at.w + office.depth / 2;
@@ -199,7 +213,7 @@ test('ready houses: the server sells exactly these, finished, and each stands in
   assert.equal(new Set(names).size, 12);
   assert.deepEqual(names.slice(0, 4), ['family-house-1-brick', 'family-house-1-stone', 'family-house-2-brick', 'family-house-2-stone']);
   for (const block of samples()) {
-    const frame = E.areaFrame(block, 0, 0), street = { ...frame, street: true }, inner = { ...frame, street: false };
+    const frame = E.areaFrame(block, 0, 0, E.CELLS, E.CELLS), street = { ...frame, street: true }, inner = { ...frame, street: false };
     for (const [family, m] of Object.entries(E.READY_HOUSES)) {
       const finishes = new Set();
       for (const seed of [1, 2, 3, 5, 8, 13]) {

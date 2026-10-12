@@ -1,18 +1,20 @@
 /**
- * Team district land (docs/CITY_ESTATES.md): every city is cut into three districts of plots, and operators buy
- * them one by one, each with a square or a house on it. The client names the plot and what stands on it; the
- * server owns the price, the rules and the order of operations. Every change carries an idempotency key made once
- * per user action: a retry with the same key never pays twice, and a lost answer is looked up by that key.
+ * Team district land (docs/CITY_ESTATES.md): every city is cut into three districts of small cells, and operators lay
+ * them out themselves: buildings on 3 × 3 cells, roads, footpaths, trees, lamps and other small things a cell each.
+ * The client names the cells and what stands on them; the server owns the price, the rules and the order of
+ * operations. Every change carries an idempotency key made once per user action: a retry with the same key never
+ * pays twice, and a lost answer is looked up by that key.
  */
 import { ApiError, request } from "./client";
 import { CITY_READ_TIMEOUT_MS } from "./city";
 import type { DepartmentId } from "./cityWorld";
-import type { PlotFamily, ProjectFamily } from "../city3d/world/estateGrid";
+import type { DecorFamily, PlotFamily, ProjectFamily } from "../city3d/world/estateGrid";
 
-export type { PlotFamily, ProjectFamily };
+export type { DecorFamily, PlotFamily, ProjectFamily };
 /**
- * Where a building stands: on plots `module` is the block, `u` the column and `v` the row of its first plot, and
- * w × h are plots; on the public square (module 0) they are cells.
+ * Where a building stands: on the land `module` is the block, `u` the column and `v` the row of its first cell, and
+ * w × h are cells; on the public square (module 0) they are its cells. `rotation` turns its front, in quarter turns
+ * from facing the middle of the city, where no road beside it decides.
  */
 export interface Footprint { module: number | null; u: number | null; v: number | null; w: number; h: number; rotation: number }
 /** A building as everyone sees it: shape and stage, never what it cost or whose it is, except "mine". The district's own stand on its square. */
@@ -25,9 +27,12 @@ export interface DistrictProject extends Footprint {
   /** Staff only. */
   funded?: number;
 }
-/** All personal land is available immediately; geographic zones retain their own plot prices. */
-export interface DistrictLandState { plots: number; taken: number; open_band: number; bands: { band: number; plots: number; taken: number }[] }
-/** One main building at the district centre; its level grows with occupied personal plots. */
+/**
+ * All the land is available at once; geographic zones keep their own land prices. Cells for sale, taken by anything,
+ * and built on (by buildings, not roads, trees or lamps), in all and by zone.
+ */
+export interface DistrictLandState { cells: number; taken: number; built: number; open_band: number; bands: { band: number; cells: number; taken: number }[] }
+/** One main building at the district centre; its level grows with the cells built on (`taken` of `plots` cells). */
 export interface DistrictLandmark {
   status: "active" | "legacy_occupied";
   level: number; name: string;
@@ -43,6 +48,8 @@ export interface DistrictEstate {
   landmark: DistrictLandmark | null;
   hq: { level: number; name: string; built: number; next: { level: number; name: string; need: number } | null };
   objects: PublicObject[]; projects: DistrictProject[]; version: number;
+  /** The small things on the land by kind: [block, column, row, 1 if the viewer may take it away: their own, or in their district the district's]. */
+  decor: Partial<Record<DecorFamily, [number, number, number, number][]>>;
 }
 export interface CityEstates {
   city: DepartmentId; districts: DistrictEstate[];
@@ -61,19 +68,24 @@ export interface PlotLevel { level: number; name: string; about: string; price: 
 export interface PlotCatalogue { family: PlotFamily; name: string; icon: string; size: [number, number]; squares: number | null; ready: boolean; levels: PlotLevel[] }
 export interface ProjectLevel { level: number; name: string; about: string; cost: number }
 export interface ProjectCatalogue { family: ProjectFamily; name: string; icon: string; size: [number, number]; project: "main" | "small"; levels: ProjectLevel[] }
+/** A small thing and the price of a cell of it, its land included. */
+export interface DecorCatalogue { family: DecorFamily; name: string; icon: string; about: string; price: number }
 export type EstateStatus = "ready" | "closed" | "no_team" | "no_land" | "staff";
 export interface MyEstate {
   status: EstateStatus; message: string | null;
   district: { id: string; city: DepartmentId; name: string } | null;
   objects: OwnObject[]; catalogue: PlotCatalogue[]; projects: ProjectCatalogue[];
-  /** Coins for a plot of each band, from the centre outwards. */
+  decor: DecorCatalogue[];
+  /** At most this many cells in one laying or taking away. */
+  decor_batch: number;
+  /** Coins for a building's plot (3 × 3 cells) of each band, from the centre outwards. */
   land_prices: number[];
   economy_revision: number; balance: number; available: number;
   legacy: { count: number; paid: number }; managed: string[];
 }
-export interface OperationResult { replayed: boolean; object?: OwnObject | PublicObject; merged?: boolean; price?: number; balance?: number; available?: number; accepted?: number; completed?: boolean; project?: DistrictProject; refunded?: number }
+export interface OperationResult { replayed: boolean; object?: OwnObject | PublicObject; merged?: boolean; price?: number; balance?: number; available?: number; accepted?: number; completed?: boolean; project?: DistrictProject; refunded?: number; laid?: number; removed?: number }
 export interface EstateReport {
-  districts: { id: string; city: DepartmentId; name: string; construction: boolean; operators: number; builders: number; land: { plots: number; taken: number; open_band: number } | null; buildings: number; open_projects: number; landmark_level: number; hq_level: number; built_projects: number }[];
+  districts: { id: string; city: DepartmentId; name: string; construction: boolean; operators: number; builders: number; land: { cells: number; taken: number; built: number; open_band: number } | null; buildings: number; open_projects: number; landmark_level: number; hq_level: number; built_projects: number }[];
   operators_without_district: number; inventory: number;
   legacy: { buildings: number; operators: number; paid: number };
   coins: { buildings: number; contributions: number; refunded: number };
@@ -106,7 +118,13 @@ const post = <T extends OperationResult>(path: string, json: { key: string } & R
 export const cityEstate = {
   city: (city: DepartmentId, signal?: AbortSignal) => request<CityEstates>(`/api/v1/learning/city/cities/${city}`, { signal, timeoutMs: CITY_READ_TIMEOUT_MS }),
   mine: (signal?: AbortSignal) => request<MyEstate>("/api/v1/learning/city/estate", { signal, timeoutMs: CITY_READ_TIMEOUT_MS }),
-  purchase: (json: { key: string; district_id: string; family: PlotFamily; block: number; col: number; row: number; economy_revision: number }) => post("/plots", json),
+  purchase: (json: { key: string; district_id: string; family: PlotFamily; block: number; col: number; row: number; rotation: number; economy_revision: number }) => post("/plots", json),
+  /** Small things of one kind on free cells, [block, column, row] each, paid together. */
+  lay: (json: { key: string; district_id: string; family: DecorFamily; cells: [number, number, number][]; economy_revision: number }) => post("/decor", json),
+  /** One's own small things off the cells named, their coins back. */
+  takeAway: (json: { key: string; district_id: string; cells: [number, number, number][] }) => post("/decor/remove", json),
+  /** Where one's building looks with no road beside it. */
+  turn: (id: number, json: { key: string; version: number; rotation: number }) => post(`/buildings/${id}/turn`, json),
   upgrade: (id: number, json: { key: string; version: number; economy_revision: number }) => post(`/buildings/${id}/upgrade`, json),
   place: (id: number, json: { key: string; district_id: string; version: number; block: number; col: number; row: number; rotation: number }) => post(`/buildings/${id}/place`, json),
   openProject: (json: { key: string; district_id: string; family: ProjectFamily; economy_revision: number; target_id?: number; module?: number; u?: number; v?: number; rotation?: number }) => post("/projects", json),
@@ -121,11 +139,13 @@ export const cityEstate = {
  * take buildings away, set the main building's stage and build or cancel legacy shared projects at once. It never
  * touches the real districts, operators or coins, so its changes need no idempotency key: none of them pays.
  */
-export interface SandboxResult { object?: PublicObject; merged?: boolean; removed?: number; project?: number; cancelled?: number; open_band?: number; hq_level?: number; landmark_level?: number; reset?: boolean }
+export interface SandboxResult { object?: PublicObject; merged?: boolean; removed?: number; laid?: number; project?: number; cancelled?: number; open_band?: number; hq_level?: number; landmark_level?: number; reset?: boolean }
 const SANDBOX = "/api/v1/admin/learning/city/sandbox";
 export const citySandbox = {
   city: (city: DepartmentId, signal?: AbortSignal) => request<CityEstates>(`${SANDBOX}/cities/${city}`, { signal, timeoutMs: CITY_READ_TIMEOUT_MS }),
-  build: (json: { district_id: string; family: PlotFamily; block: number; col: number; row: number }) => request<SandboxResult>(`${SANDBOX}/plots`, { method: "POST", json }),
+  build: (json: { district_id: string; family: PlotFamily; block: number; col: number; row: number; rotation: number }) => request<SandboxResult>(`${SANDBOX}/plots`, { method: "POST", json }),
+  lay: (json: { district_id: string; family: DecorFamily; cells: [number, number, number][] }) => request<SandboxResult>(`${SANDBOX}/decor`, { method: "POST", json }),
+  takeAway: (json: { district_id: string; cells: [number, number, number][] }) => request<SandboxResult>(`${SANDBOX}/decor/remove`, { method: "POST", json }),
   level: (id: number, level: number) => request<SandboxResult>(`${SANDBOX}/buildings/${id}/level`, { method: "POST", json: { level } }),
   remove: (id: number) => request<SandboxResult>(`${SANDBOX}/buildings/${id}`, { method: "DELETE" }),
   district: (id: string, json: { hq_level?: number; landmark_level?: number }) => request<SandboxResult>(`${SANDBOX}/districts/${id}`, { method: "PUT", json }),

@@ -72,7 +72,7 @@ async def test_crm_aggregate_compiles_exact_category_membership_for_both_databas
         assert ("json_array_elements_text" if name == "postgresql" else "json_each") in sql
 
 
-async def test_warm_dashboard_batches_team_evidence_without_changing_city_or_coins(
+async def test_warm_dashboard_reads_the_operators_evidence_once_without_changing_coins(
     session, operator, busy_team,
 ):
     # Daily questions are already dealt, as on a return from another application section.
@@ -94,13 +94,7 @@ async def test_warm_dashboard_batches_team_evidence_without_changing_city_or_coi
     assert len(statements) <= 18
     assert len(crm_reads) == 1
     assert "GROUP BY crm_appeals.author_id" in crm_reads[0]
-    assert data["group"]["mine"] == {
-        "missions": 0, "quests": 0, "orders": 0,
-        "appeals": 300, "closed": 75, "points": 1275,
-    }
-    assert [project["stage"] for project in data["group"]["projects"]] == [
-        "done", "done", "done", "done", "done", "frame",
-    ]
-    assert not data["group"]["small"]
+    # The group city is gone: the teammates' work is no longer read for its quarters.
+    assert "group" not in data
     assert data["balance"] == data["available"] == data["xp"] == 0
     assert await session.scalar(select(func.count()).select_from(CoinTransaction)) == 0

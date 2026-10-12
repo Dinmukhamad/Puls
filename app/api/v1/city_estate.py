@@ -1,4 +1,5 @@
-"""Team district land: public city state, the operator's plots, every change by idempotency key."""
+"""Team district land: public city state, the operator's buildings and small things, every change
+by idempotency key."""
 
 from fastapi import APIRouter, Path, Response
 
@@ -7,9 +8,12 @@ from app.schemas.city_estate import (
     KEY,
     CancelInput,
     ContributionInput,
+    DecorInput,
     PlaceInput,
     ProjectInput,
     PurchaseInput,
+    TurnInput,
+    UndecorInput,
     UpgradeInput,
 )
 from app.services import city_estate
@@ -35,8 +39,26 @@ async def estate(session: SessionDep, user: CurrentUser, response: Response):
 
 @router.post("/learning/city/plots")
 async def purchase(body: PurchaseInput, session: SessionDep, user: CurrentUser):
-    """A free plot of one's district with a square or a house on it."""
+    """A square, a house or an office on free cells of one's district, its land with it."""
     return await city_estate.purchase(session, user, body)
+
+
+@router.post("/learning/city/decor")
+async def lay(body: DecorInput, session: SessionDep, user: CurrentUser):
+    """Roads, footpaths, trees, lamps and other small things on free cells, many at once."""
+    return await city_estate.lay(session, user, body)
+
+
+@router.post("/learning/city/decor/remove")
+async def take_away(body: UndecorInput, session: SessionDep, user: CurrentUser):
+    """One's own small things off the cells named, their coins back."""
+    return await city_estate.take_away(session, user, body)
+
+
+@router.post("/learning/city/buildings/{object_id}/turn")
+async def turn(object_id: int, body: TurnInput, session: SessionDep, user: CurrentUser):
+    """Where one's building looks with no road beside it."""
+    return await city_estate.turn(session, user, object_id, body)
 
 
 @router.post("/learning/city/buildings/{object_id}/upgrade")
@@ -46,7 +68,7 @@ async def upgrade(object_id: int, body: UpgradeInput, session: SessionDep, user:
 
 @router.post("/learning/city/buildings/{object_id}/place")
 async def place(object_id: int, body: PlaceInput, session: SessionDep, user: CurrentUser):
-    """A building from the inventory (after a transfer) onto free plots of the new district."""
+    """A building from the inventory (after a transfer) onto free cells of the new district."""
     return await city_estate.place(session, user, object_id, body)
 
 

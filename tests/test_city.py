@@ -445,77 +445,20 @@ async def test_staff_cannot_build_and_see_operator_plots_read_only(client, sessi
     assert len(view["plots"]) == 16 and not view["can_build"]
 
 
-async def test_group_city_shows_stages_and_only_own_points(client, session, operator):
-    from app.services.city_group import PROJECTS
-
-    sv = await make_user(session, login="sv-group", role=Role.SUPERVISOR)
-    other_sv = await make_user(session, login="sv-other", role=Role.SUPERVISOR)
-    group = await make_group(session, code="GC", supervisor_id=sv.id)
-    await make_group(session, code="GX", supervisor_id=other_sv.id)
-    mates = [await make_user(session, login=f"mate{i}", group_id=group.id) for i in range(2)]
+async def test_the_group_city_is_gone(client, session, operator):
+    """Its quarters gave their land to the districts: an operator in a group gets no quarters, and
+    the staff's breakdown is no more."""
+    group = await make_group(session, code="GC")
     operator.group_id = group.id
     await session.commit()
-    for mate in mates:
-        for _ in range(10):
-            await appeal(session, mate.id)  # 30 points each
     headers = auth(await login(client, operator.login))
-    city = (await client.get(BASE, headers=headers)).json()
-    group_city = city["group"]
-    assert group_city["name"] == "Группа GC" and not group_city["small"]
-    # 60 points of 150: the first quarter is at its frame, the rest planned; no numbers leak.
-    assert [p["stage"] for p in group_city["projects"]] == ["frame"] + ["planned"] * 5
-    assert all(set(p) == {"key", "name", "stage"} for p in group_city["projects"])
-    assert group_city["mine"]["points"] == 0
-    assert "mate0" not in str(group_city) and "Оператор" not in str(group_city["projects"])
-    # The operator's own work counts for the group and shows as their own points.
-    assert (await claim(client, headers, "welcome")).status_code == 200
-    for _ in range(30):
-        await appeal(session, operator.id)
-    group_city = (await client.get(BASE, headers=headers)).json()["group"]
-    assert group_city["mine"]["points"] == 20 + 90
-    assert [p["stage"] for p in group_city["projects"]][:2] == ["done", "foundation"]
-    assert len(PROJECTS) == 6
-    # Operators cannot read the breakdown; supervisors see only their own groups.
-    assert (await client.get(ADMIN + "/groups", headers=headers)).status_code == 403
-    staff = auth(await login(client, sv.login))
-    overview = (await client.get(ADMIN + "/groups", headers=staff)).json()
-    assert [g["name"] for g in overview["items"]] == ["Группа GC"]
-    members = {m["user_id"]: m["points"] for m in overview["items"][0]["members"]}
-    assert members == {operator.id: 110, mates[0].id: 30, mates[1].id: 30}
-    assert overview["items"][0]["projects"][1] == {
-        "key": "site-1",
-        "name": PROJECTS[1]["name"],
-        "stage": "foundation",
-        "points": 20,
-        "cost": 300,
-    }
+    assert "group" not in (await client.get(BASE, headers=headers)).json()
     head = await make_user(session, login="head-group", role=Role.HEAD)
-    everyone = (
-        await client.get(ADMIN + "/groups", headers=auth(await login(client, head.login)))
-    ).json()
-    assert {g["name"] for g in everyone["items"]} == {"Группа GC", "Группа GX"}
-
-
-async def test_small_group_hides_the_quarter_being_built(client, session, operator):
-    group = await make_group(session, code="G2")
-    mate = await make_user(session, login="solo-mate", group_id=group.id)
-    operator.group_id = group.id
-    await session.commit()
-    for _ in range(40):
-        await appeal(session, mate.id)  # 120 of 150 points
-    city = (await client.get(BASE, headers=auth(await login(client, operator.login)))).json()
-    assert city["group"]["small"]
-    assert [p["stage"] for p in city["group"]["projects"]][:2] == ["foundation", "planned"]
-
-
-async def test_no_group_or_staff_preview_has_no_group_city(client, session, operator):
-    assert (await client.get(BASE, headers=auth(await login(client, operator.login)))).json()[
-        "group"
-    ] is None
-    trainer = await make_user(session, login="trainer-group", role=Role.TRAINER)
-    assert (await client.get(BASE, headers=auth(await login(client, trainer.login)))).json()[
-        "group"
-    ] is None
+    staff = auth(await login(client, head.login))
+    assert (await client.get(ADMIN + "/groups", headers=staff)).status_code == 404
+    assert not {"points", "projects"} & set(
+        (await client.get(ADMIN + "/economy", headers=staff)).json()
+    )
 
 
 async def quest_rows(session, user_id):
@@ -569,13 +512,13 @@ async def test_daily_quests_are_dealt_once_and_hide_answers(client, session, ope
     assert city["quests"]["items"][0]["answered"] and city["quests"]["items"][2]["right"] is None
 
 
-async def test_quests_come_from_the_bank_and_count_for_the_group(client, session, operator):
+async def test_quests_come_from_the_bank(client, session, operator):
     from app.models.learning import LearningAttempt, LearningAward, LearningContent
 
     group = await make_group(session, code="GQ")
     operator.group_id = group.id
-    # A material passed before materials left the operator's menu feeds neither the day's
-    # situations nor the group's points.
+    # A material passed before materials left the operator's menu does not feed the day's
+    # situations.
     content = LearningContent(
         kind="test",
         title="Смена номера",
@@ -606,14 +549,12 @@ async def test_quests_come_from_the_bank_and_count_for_the_group(client, session
     rows = await quest_rows(session, operator.id)
     assert all(r.snapshot["source"] == "bank" for r in rows)
     for row in rows:
-        await client.post(
+        answered = await client.post(
             f"{BASE}/quests/{row.slot}/answer",
             headers=headers,
             json={"answer": row.snapshot["correct"]},
         )
-    mine = (await client.get(BASE, headers=headers)).json()["group"]["mine"]
-    assert "materials" not in mine
-    assert mine["quests"] == 3 and mine["points"] == 3 * 5
+        assert answered.json()["coins"] == 10
 
 
 async def test_concurrent_answers_pay_once_and_staff_never_deal(client, session, operator):
@@ -775,14 +716,9 @@ async def test_head_sets_the_game_numbers_and_they_apply(client, session, operat
     current = (await client.get(ADMIN + "/economy", headers=coach)).json()
     assert not current.pop("can_edit") and len(current.pop("catalogue")) == 8
     assert current["revision"] == 0 and current["prices"]["garden"] == 40
-    assert current["quest_coins"] == 10 and len(current["projects"]) == 6
+    assert current["quest_coins"] == 10
     assert (await client.get(ADMIN + "/economy", headers=me)).status_code == 403
     body = {**current, "prices": {**current["prices"], "garden": 25}, "quest_coins": 15}
-    body["points"] = {**current["points"], "appeals": 10}
-    body["projects"] = [
-        {**current["projects"][0], "name": "Квартал «Первый»", "cost": 50},
-        *current["projects"][1:],
-    ]
     assert (await client.put(ADMIN + "/economy", headers=coach, json=body)).status_code == 403
     saved = await client.put(ADMIN + "/economy", headers=boss, json=body)
     assert saved.status_code == 200 and saved.json()["revision"] == 1
@@ -792,23 +728,17 @@ async def test_head_sets_the_game_numbers_and_they_apply(client, session, operat
     for broken in (
         {"prices": {**fresh["prices"], "garden": 0}},
         {"prices": {k: v for k, v in fresh["prices"].items() if k != "tower"}},
-        {"points": {**fresh["points"], "extra": 1}},
-        {"projects": fresh["projects"][::-1]},
+        # The group city's points and quarters are gone with it.
+        {"points": {"appeals": 10}},
         {"quest_coins": 5000},
     ):
         assert (
             await client.put(ADMIN + "/economy", headers=boss, json={**fresh, **broken})
         ).status_code == 422
-    # The operator's city follows: new price, new reward, the group's points and quarter.
-    group = await make_group(session, code="GE")
-    operator.group_id = group.id
-    await session.commit()
-    await appeal(session, operator.id)
+    # The operator's city follows: new price, new reward.
     city = (await client.get(BASE, headers=me)).json()
     assert next(b for b in city["buildings"] if b["key"] == "garden")["price"] == 25
     assert city["quests"]["coins"] == 15
-    assert city["group"]["mine"]["points"] == 10 and city["group"]["points"]["appeals"] == 10
-    assert city["group"]["projects"][0]["name"] == "Квартал «Первый»"
     assert (await claim(client, me, "welcome")).status_code == 200
     await fund(session, operator.id, 30)
     done = await client.post(f"{BASE}/plots/academy-0/build", headers=me, json={"item": "garden"})

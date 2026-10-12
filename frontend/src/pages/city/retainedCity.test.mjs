@@ -38,8 +38,8 @@ function fixture(t) {
     host.append(canvas);
     const raw = Object.fromEntries([
       'setDepartment', 'setDepartmentWorld', 'setEstates', 'setBuild', 'focusEstate', 'focusWorld', 'travelTo', 'skipTravel', 'dispose', 'setActive', 'setLevels', 'setLabels', 'setMascot', 'setPlots',
-      'setSites', 'setQuests', 'setTimeOfDay', 'setControls', 'select', 'setTraffic',
-      'focusMascot', 'focusPlot', 'focusSite', 'focusQuest', 'zoom', 'rotate', 'tilt', 'reset',
+      'setQuests', 'setTimeOfDay', 'setControls', 'select', 'setTraffic',
+      'focusMascot', 'focusPlot', 'focusQuest', 'zoom', 'rotate', 'tilt', 'reset',
     ].map(name => [name, (...args) => calls.push([name, ...args])]));
     const engine = { host, canvas, options, raw, calls, called: name => calls.filter(call => call[0] === name) };
     engines.push(engine);
@@ -53,7 +53,7 @@ function fixture(t) {
 
 function page(overrides = {}) {
   const events = [];
-  const callbacks = Object.fromEntries(['onWorldPick', 'onArrival', 'onJourney', 'onEstate', 'onSelect', 'onView', 'onPlot', 'onSite', 'onQuest', 'onReady', 'onLost', 'onRestored', 'onProgress']
+  const callbacks = Object.fromEntries(['onWorldPick', 'onArrival', 'onJourney', 'onEstate', 'onSelect', 'onView', 'onPlot', 'onQuest', 'onReady', 'onLost', 'onRestored', 'onProgress']
     .map(name => [name, (...args) => events.push([name, ...args])]));
   return {
     events,
@@ -65,7 +65,7 @@ function emitAll(options) {
   options.onWorldPick?.('station'); options.onArrival?.('sales'); options.onJourney?.('departing'); options.onEstate?.({ kind: 'object', district: 'support-team-1', object: 1 });
   options.onSelect('driver');
   options.onView({ azimuth: 2, polar: 1, distance: 40, target: [1, 2, 3] });
-  options.onPlot?.('plot-1'); options.onSite?.('site-1'); options.onQuest?.(1);
+  options.onPlot?.('plot-1'); options.onQuest?.(1);
   options.onProgress?.(.7); options.onLost(); options.onRestored?.(); options.onReady();
 }
 
@@ -167,20 +167,20 @@ test('reattachment refreshes progress and callbacks but keeps traffic and an unc
     levels: { crm: 3, driver: 2 }, grown: ['crm'], labels: [{ id: 'crm', name: 'Новый CRM' }],
     mascot: { gender: 'male', name: 'Оператор' },
     plots: [{ key: 'plot-1', unlocked: true, item: 'cafe' }],
-    sites: [{ key: 'site-1', name: 'Квартал', stage: 2 }], quests: [{ slot: 1, giver: 'trainer', answered: true }],
+    quests: [{ slot: 1, giver: 'trainer', answered: true }],
     timeOfDay: 'night', controls: 'map',
   });
   const second = acquire({ options: newPage.options, traffic: true });
   assert.equal(second.traffic, false, 'a new page default must not restart paused traffic');
   assert.deepEqual(engine.called('setTraffic'), [['setTraffic', true], ['setTraffic', false]]);
   assert.deepEqual(engine.called('select'), [], 'returning must not replay the camera flight');
-  for (const [method, field] of [['setLabels', 'labels'], ['setMascot', 'mascot'], ['setPlots', 'plots'], ['setSites', 'sites'], ['setQuests', 'quests'], ['setTimeOfDay', 'timeOfDay'], ['setControls', 'controls']]) {
+  for (const [method, field] of [['setLabels', 'labels'], ['setMascot', 'mascot'], ['setPlots', 'plots'], ['setQuests', 'quests'], ['setTimeOfDay', 'timeOfDay'], ['setControls', 'controls']]) {
     assert.deepEqual(engine.called(method), [[method, newPage.options[field]]]);
   }
   assert.deepEqual(engine.called('setLevels'), [['setLevels', newPage.options.levels, ['crm']]]);
   emitAll(engine.options);
   assert.deepEqual(oldPage.events, []);
-  assert.deepEqual(newPage.events.map(event => event[0]), ['onWorldPick', 'onArrival', 'onJourney', 'onEstate', 'onSelect', 'onView', 'onPlot', 'onSite', 'onQuest', 'onProgress', 'onLost', 'onReady', 'onRestored', 'onReady']);
+  assert.deepEqual(newPage.events.map(event => event[0]), ['onWorldPick', 'onArrival', 'onJourney', 'onEstate', 'onSelect', 'onView', 'onPlot', 'onQuest', 'onProgress', 'onLost', 'onReady', 'onRestored', 'onReady']);
 });
 
 test('selection changes from both the page and the canvas are remembered across visits', t => {

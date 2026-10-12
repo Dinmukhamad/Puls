@@ -11,7 +11,7 @@ export function CityBuildEntry({ mine, loading, failed, onRetry, onBuild }: {
   const pending = loading || !mine;
   const canEnter = !!mine?.district && (mine.status === "ready" || mine.status === "closed");
   const reason = mine?.message || (mine?.status === "no_land"
-    ? "Для команды пока не назначен район с участками."
+    ? "Для команды пока не назначен район с землёй для стройки."
     : "Для стройки нужна группа супервайзера и назначенный ей район.");
 
   return <>
@@ -20,7 +20,7 @@ export function CityBuildEntry({ mine, loading, failed, onRetry, onBuild }: {
         <h2 id={titleId}>Застройка района</h2>
         {mine?.district && <p className="city-build-entry__district">{mine.district.name}</p>}
       </div></header>
-      <p className="city-build-entry__route">Выбери участок → выбери здание → построй</p>
+      <p className="city-build-entry__route">Проложи дороги → выбери место → построй</p>
       {failed ? <>
         <p className="city-build-entry__notice" role="alert">Не удалось проверить доступ к стройке.</p>
         <button type="button" className="city-secondary city-build-entry__button" onClick={onRetry}>Повторить загрузку</button>
@@ -28,7 +28,7 @@ export function CityBuildEntry({ mine, loading, failed, onRetry, onBuild }: {
         <p className="city-build-entry__notice" role="status">Проверяем твой район…</p>
         <button type="button" className="city-action city-build-entry__button" disabled>Загружаем стройку…</button>
       </> : canEnter ? <>
-        {mine.status === "closed" && <p className="city-build-entry__notice" role="status">{mine.message || "Стройка закрыта руководителем."} Можно посмотреть участки.</p>}
+        {mine.status === "closed" && <p className="city-build-entry__notice" role="status">{mine.message || "Стройка закрыта руководителем."} Можно посмотреть район.</p>}
         <button type="button" className="city-action city-build-entry__button" onClick={onBuild}>Строить в районе</button>
       </> : <>
         <p className="city-build-entry__notice" role="status">{reason}</p>
@@ -51,6 +51,6 @@ export function CityBuildSetupSteps() {
       <li>В разделе «Города и районы» назначить этого супервайзера району своего города.</li>
       <li>Включить «Стройка открыта» у этого района и сохранить настройки.</li>
     </ol>
-    <p>После настройки вернись в город и нажми «Проверить доступ». Все свободные участки района команды будут доступны сразу.</p>
+    <p>После настройки вернись в город и нажми «Проверить доступ». Все свободные клетки района команды будут доступны сразу.</p>
   </div>;
 }

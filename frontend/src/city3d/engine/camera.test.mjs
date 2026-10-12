@@ -4,7 +4,7 @@ import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
 
 const dir = fileURLToPath(new URL('.', import.meta.url));
-const built = await build({ stdin: { contents: 'export * from "./camera.ts"; export { landGrid } from "../world/land.ts"; export { islandWorld } from "../world/cities.ts"; export { WORLD_X4 } from "../world/worldSpec.ts"; export { generateSalesWorld } from "../world/sales.ts"; export * as THREE from "three/webgpu";', resolveDir: dir }, bundle: true, platform: 'node', format: 'esm', write: false, logLevel: 'silent' });
+const built = await build({ stdin: { contents: 'export * from "./camera.ts"; export { landGrid, landCells } from "../world/land.ts"; export { islandWorld } from "../world/cities.ts"; export { WORLD_X4 } from "../world/worldSpec.ts"; export { generateSalesWorld } from "../world/sales.ts"; export * as THREE from "three/webgpu";', resolveDir: dir }, bundle: true, platform: 'node', format: 'esm', write: false, logLevel: 'silent' });
 const city = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
 const { THREE } = city;
 
@@ -538,8 +538,9 @@ test('repeated pause/resume and disposal do not duplicate or leak global listene
 });
 
 const districtGrids = [city.landGrid(city.islandWorld(city.WORLD_X4)), city.landGrid(city.generateSalesWorld())];
+const districtCells = districtGrids.map(grid => city.landCells(grid));
 function districtCorners(grid, district) {
-  return grid.plots.filter(plot => plot.district === district).flatMap(plot => plot.corners.map(point => new THREE.Vector3(point.x, .203, point.z)));
+  return districtCells[districtGrids.indexOf(grid)].filter(cell => cell.district === district).flatMap(cell => cell.corners.map(point => new THREE.Vector3(point.x, .203, point.z)));
 }
 const districtViewports = [
   { name: 'desktop with a right dock', width: 1600, height: 900, left: 310, top: 120, frameWidth: 860, frameHeight: 650 },
@@ -552,7 +553,7 @@ function districtCamera(viewport) {
   return { ...setup({ frame }, viewport), rect };
 }
 
-for (const viewport of districtViewports) test(`all plot corners of both cities fit the free viewport on ${viewport.name}`, () => {
+for (const viewport of districtViewports) test(`all cell corners of both cities fit the free viewport on ${viewport.name}`, () => {
   for (const grid of districtGrids) for (const district of [1, 2, 3]) {
     const { rig, camera, rect } = districtCamera(viewport);
     try {
@@ -589,7 +590,7 @@ test('wide district fitting extends the camera limits, while pinch zoom and a cl
     dom.dispatchEvent(pointer('pointerup', 1, 86, 260));
     dom.dispatchEvent(pointer('pointerup', 2, 246, 260));
     assert.ok(rig.currentView().distance < fitted.distance, 'spreading two fingers zooms into the fitted district');
-    const target = grid.plots.find(plot => plot.district === 1);
+    const target = districtCells[0].find(cell => cell.district === 1);
     rig.focusPoint([target.x, 1, target.z], 30, .86); frames(1);
     const close = rig.currentView();
     assert.ok(Math.abs(close.distance - 30) < 1e-8, 'a subsequent plot or building focus still reaches its close view');

@@ -3,34 +3,42 @@
  */
 import type { DistrictId } from "../api/city";
 import type { BuildingKey } from "./world/plots";
-import type { SiteStage } from "./world/sites";
 import type { CityWorld, DepartmentId } from "../api/cityWorld";
 import type { CityEstates } from "../api/cityEstate";
-import type { PlotFamily, ProjectFamily } from "./world/estateGrid";
+import type { DecorFamily, PlotFamily, ProjectFamily } from "./world/estateGrid";
 export type JourneyPhase = "departing" | "tunnel" | "arriving" | null;
 
 /** Team district land of the city on screen (api/cityEstate.ts): plots, buildings, projects, open bands. */
 export interface CityEstateView { state: CityEstates }
-/** A plot of a district's land: block, column and row (world/land.ts). */
+/** A cell of a district's land, or the first cell of a building's plot: block, column and row (world/land.ts). */
 export interface PlotAddress { block: number; col: number; row: number }
+/** The tool for small things: one kind to lay, or taking one's own away. */
+export type DecorTool = DecorFamily | "remove";
 /**
- * Build mode in a district: its plots light up (those for sale in its open bands), or for staff the cells of its
- * public square; a building from the inventory (`moving`) or a shared project being placed; the building
- * selected; the plot picked for a purchase.
+ * Build mode in a district: its cells light up (free and taken), or for staff the cells of its public square; a
+ * building from the inventory (`moving`) or a shared project being placed; the building selected; the plot of
+ * 3 × 3 cells picked for a purchase, with where its front looks (`rotation`, where no road decides); or small things
+ * being laid (or taken away) on the cells chosen so far, a tap drawing a line from the last one when `line` is on.
  */
 export interface CityBuildView {
   district: string; area: "plots" | "public";
   placing: { family: PlotFamily | ProjectFamily; rotation: number; moving: number | null } | null;
   selected: number | null;
-  plot: PlotAddress | null;
+  plot: (PlotAddress & { rotation: number }) | null;
+  /** `anyone`: the test city takes away whoever's small things, not only one's own. */
+  decor: { tool: DecorTool; cells: PlotAddress[]; line: boolean; anyone?: boolean } | null;
 }
-/** What the operator touched on district land, or where the preview stands now and why it does not fit. */
+/**
+ * What the operator touched on district land: a plot to buy on (its first cell), where the preview stands now and why
+ * it does not fit, a building, a project, the public square, or the cells chosen now for small things (all of them).
+ */
 export type EstatePick =
   | { kind: "public"; district: string }
   | { kind: "plot"; district: string; block: number; col: number; row: number; band: number; problem: string | null }
   | { kind: "place"; district: string; module: number; u: number; v: number; rotation: number; problem: string | null }
   | { kind: "object"; district: string; object: number }
-  | { kind: "project"; district: string; project: number };
+  | { kind: "project"; district: string; project: number }
+  | { kind: "cells"; district: string; cells: PlotAddress[] };
 /** What the camera flies to: a district's centre or public square, a plot, a building. */
 export interface EstateTarget { district: string; kind: "district" | "public" | "plot" | "object"; object?: number; plot?: PlotAddress }
 
@@ -41,8 +49,6 @@ export type TimeOfDay = "day" | "night";
 /** How the mouse and one finger move the camera: "orbit" — as before (drag turns, right button moves), "map" — like a map. */
 export type CityControlScheme = "orbit" | "map";
 /** An operator's plot as the server reports it (api/city.ts CityPlot). */
-/** A group quarter as the server reports it; no list at all means no group, and every quarter stands built. */
-export interface CitySiteInfo { key: string; name: string; stage: SiteStage }
 /** A daily situation as the server reports it (api/city.ts CityQuest): only whether it waits on the map matters here. */
 export interface CityQuestInfo { slot: number; giver: string; answered: boolean }
 export interface CityPlotInfo { key: string; unlocked: boolean; item: BuildingKey | null }
@@ -77,9 +83,6 @@ export interface CityOptions {
   /** The operator's plots; `onPlot` (only when the viewer may build) opens the catalogue for an empty open plot. */
   plots?: CityPlotInfo[];
   onPlot?: (key: string) => void;
-  /** The group city's quarters (null: no group); `onSite` opens the group panel from the sign over the one being built. */
-  sites?: CitySiteInfo[] | null;
-  onSite?: (key: string) => void;
   /** Today's situations; `onQuest` (only for the operator themself) opens one from its "!" on the map. */
   quests?: CityQuestInfo[];
   onQuest?: (slot: number) => void;
@@ -109,8 +112,6 @@ export interface CityControl {
   setPlots: (plots: CityPlotInfo[]) => void;
   /** Flies to a plot, e.g. to show what was just built there. */
   focusPlot: (key: string) => void;
-  setSites: (sites: CitySiteInfo[] | null) => void;
-  focusSite: (key: string) => void;
   setQuests: (quests: CityQuestInfo[]) => void;
   focusQuest: (slot: number) => void;
   zoom: (factor: number) => void; rotate: (radians: number) => void; tilt: (radians: number) => void; reset: () => void;

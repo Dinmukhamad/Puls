@@ -25,7 +25,7 @@ const offices = officeFamilies.map((family, i) => entry(family, OFFICE_BUILDINGS
 const catalogue = [entry("square", "Сквер"), entry("house", "Дом"), entry("carport", "Коттедж с навесом", true, 500), ...offices, entry("park", "Парк"), entry("bigpark", "Большой парк")];
 const district = { id: "support-team-1", name: "Первый район", number: 1, construction: true, mine: true, managed: true, land: { plots: 10, taken: 0, open_band: 1, bands: [{ band: 1, plots: 10, taken: 0 }] }, hq: { level: 1, name: "Штаб", built: 0, next: null }, objects: [], projects: [], version: 1 };
 const mine = { status: "ready", message: null, district: { id: district.id, city: "support", name: district.name }, objects: [], catalogue, projects: [], land_prices: [200], economy_revision: 1, balance: 1500, available: 1500, legacy: { count: 0, paid: 0 }, managed: [] };
-const selectedPlot = { district: district.id, area: "plots", placing: null, selected: null, plot: { block: 1, col: 0, row: 0, band: 1, problem: null }, spot: null, project: false };
+const selectedPlot = { district: district.id, area: "plots", placing: null, selected: null, plot: { block: 1, col: 0, row: 0, band: 1, problem: null, rotation: 0 }, spot: null, project: false };
 const noop = () => {};
 function render(Dock, props) {
   const client = new QueryClient();
@@ -63,7 +63,7 @@ test("paid purchase shows offices as one-price buildings with land added and aff
   for (const office of offices) {
     assert.ok(officeSection.includes(`<strong>${office.name}</strong>`));
     assert.ok(!houseSection.includes(`<strong>${office.name}</strong>`));
-    const button = officeSection.match(new RegExp(`<button([^>]*aria-label="${office.name} на участке за ${office.levels[0].price + 200} коинов"[^>]*)>`));
+    const button = officeSection.match(new RegExp(`<button([^>]*aria-label="${office.name} за ${office.levels[0].price + 200} коинов"[^>]*)>`));
     assert.ok(button, `${office.family} purchase includes land price`);
     assert.equal(button[1].includes('disabled=""'), office.levels[0].price + 200 > mine.available);
   }
@@ -76,12 +76,12 @@ test("sandbox exposes all offices separately and builds them for free", () => {
   for (const office of offices) {
     assert.ok(officeSection.includes(`<strong>${office.name}</strong>`));
     assert.ok(!houseSection.includes(`<strong>${office.name}</strong>`));
-    assert.ok(officeSection.includes(`aria-label="${office.name} на участке бесплатно">Бесплатно</button>`));
+    assert.ok(officeSection.includes(`aria-label="${office.name} бесплатно">Бесплатно</button>`));
   }
 });
 
 test("owned and sandbox offices have no stage or upgrade controls", () => {
-  const office = offices[0], object = { id: 7, family: office.family, level: 1, state: "placed", owner: "mine", district_id: district.id, source: "purchase", paid: 1100, version: 1, squares: 1, module: 1, u: 0, v: 0, w: 1, h: 1, rotation: 0 };
+  const office = offices[0], object = { id: 7, family: office.family, level: 1, state: "placed", owner: "mine", district_id: district.id, source: "purchase", paid: 1100, version: 1, squares: 1, module: 1, u: 0, v: 0, w: 3, h: 3, rotation: 0 };
   const build = { ...selectedPlot, plot: null, selected: object.id };
   const owned = render(CityEstateDock, { mine: { ...mine, objects: [object] }, land: district, build });
   const sandbox = render(CitySandboxDock, { city: "support", state: { city: "support", sandbox: true, districts: [{ ...district, objects: [object] }] }, mine, build });
