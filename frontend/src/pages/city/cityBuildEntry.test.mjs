@@ -21,14 +21,14 @@ test("ready operators have a named district, visible text button and a short con
   const html = render({ mine: ready });
   assert.match(html, /<h2[^>]*>Застройка района<\/h2>/);
   assert.match(html, /Район команды Гаухар/);
-  assert.match(html, /Выбери участок → выбери здание → построй/);
+  assert.match(html, /Проложи дороги → выбери место → построй/);
   assert.match(html, /<button[^>]+class="city-action city-build-entry__button">Строить в районе<\/button>/);
   assert.doesNotMatch(html, /disabled|city-hud__wide|Как открыть стройку|Проверяем/);
 });
 
 test("closed districts keep the entry button with an explicit purchasing restriction", () => {
   const html = render({ mine: { ...ready, status: "closed", message: "Стройка закрыта руководителем." } });
-  assert.match(html, /Стройка закрыта руководителем\. Можно посмотреть участки/);
+  assert.match(html, /Стройка закрыта руководителем\. Можно посмотреть район/);
   assert.match(html, />Строить в районе<\/button>/);
   assert.doesNotMatch(html, /disabled|Как открыть стройку/);
 });
@@ -50,7 +50,7 @@ test("unprepared land explains the problem without offering a purchase entry", (
   assert.match(html, />Как открыть стройку<\/button>/);
   assert.doesNotMatch(html, />Строить в районе<\/button>/);
   const fallback = render({ mine: { status: "no_land", message: null, district: null } });
-  assert.match(fallback, /Для команды пока не назначен район с участками/);
+  assert.match(fallback, /Для команды пока не назначен район с землёй для стройки/);
 });
 
 test("first load and missing data keep a visible disabled entry instead of disappearing", () => {
@@ -85,7 +85,7 @@ test("assignment help gives the responsible role and concrete setup steps, with 
   assert.match(html, /Добавить тебя в активную группу супервайзера/);
   assert.match(html, /Города и районы.*назначить этого супервайзера району своего города/);
   assert.match(html, /Стройка открыта.*сохранить настройки/);
-  assert.match(html, /Все свободные участки района команды будут доступны сразу/);
+  assert.match(html, /Все свободные клетки района команды будут доступны сразу/);
   assert.equal((html.match(/<li>/g) ?? []).length, 3);
   assert.doesNotMatch(html, /href=|<button|разрешение оператору/);
 });

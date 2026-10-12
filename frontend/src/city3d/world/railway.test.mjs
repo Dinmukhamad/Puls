@@ -71,16 +71,20 @@ test('streets, district land and the town keep off the railway', () => {
   }
   for (const [city, world] of [['support', X4], ['sales', SALES]]) {
     const line = world.railway, grid = R.landGrid(world);
-    for (const plot of grid.plots) for (const c of plot.corners) assert.ok(!R.onRailway(line, c, 1), `${city}: plot ${plot.district}:${plot.block}:${plot.col}:${plot.row} on the railway`);
+    for (const cell of R.landCells(grid)) for (const c of cell.corners) assert.ok(!R.onRailway(line, c, 1), `${city}: cell ${cell.district}:${cell.block}:${cell.col}:${cell.row} on the railway`);
     for (const centre of grid.centres) for (const c of centre.area.corners) assert.ok(!R.onRailway(line, c, 2), `${city}: a district's centre on the railway`);
   }
 });
 
 test('sales: the boulevard leads from the lake to the station between the districts', () => {
-  const walks = SALES.surfaces.filter((s) => s.kind === 'walk' && s.x === 0);
-  assert.ok(walks.length >= 2 && walks.every((s) => s.z + s.length / 2 <= 108.6), 'the boulevard stops at the street before the station');
-  const forecourt = R.railPoint(SALES.railway, R.STATION.forecourt, 4);
-  assert.ok(forecourt.z > 111.3 && Math.abs(forecourt.x) < 1, 'the forecourt faces the boulevard across the bottom street');
+  // One walk, no street across it any more: from the lake's shore to the forecourt, between two rows of trees.
+  const walks = SALES.surfaces.filter((s) => s.kind === 'walk' && s.x === 0), forecourt = R.railPoint(SALES.railway, R.STATION.forecourt, 4);
+  assert.equal(walks.length, 1);
+  const [walk] = walks, start = walk.z - walk.length / 2, end = walk.z + walk.length / 2;
+  assert.ok(start < 58 && Math.abs(end - forecourt.z) < 2.5 && Math.abs(forecourt.x) < 1, `the boulevard runs ${start.toFixed(1)}…${end.toFixed(1)}, the forecourt at ${forecourt.z.toFixed(1)}`);
+  assert.ok(!R.onRailway(SALES.railway, { x: 0, z: end - .5 }, 0) && R.onRailway(SALES.railway, { x: 0, z: end + 1 }, 0), 'the boulevard stops at the forecourt');
+  const trees = SALES.placements.filter((p) => p.kind === 'tree-round' && Math.abs(Math.abs(p.x) - 3.4) < 1e-9 && p.z > start && p.z < end);
+  assert.ok(trees.length >= 12, `${trees.length} trees along the boulevard`);
 });
 
 test('along the portal model\'s side walls the ground stays at their top behind them', () => {

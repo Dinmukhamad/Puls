@@ -16,7 +16,7 @@ from app.models.user import CoinAccount, Group
 from app.services import city_world
 from app.services.coins import post_transaction
 from tests.conftest import auth, login, make_group, make_user
-from tests.test_city_estate import legacy_square
+from tests.test_city_estate import P, legacy_square
 
 pytestmark = pytest.mark.asyncio
 CITY = "/api/v1/learning/city"
@@ -534,7 +534,7 @@ async def test_new_assignment_cannot_take_groups_from_untouched_foreign_legacy_c
     assert editable(await editor(client, boss)) == editable(before)
     house = await session.scalar(select(CityObject).execution_options(populate_existing=True))
     assert house.state == "placed" and house.paid == bought.json()["price"]
-    assert await count(session, CityCell) == 1
+    assert await count(session, CityCell) == P * P
     assert await count(session, AuditLog, action="city.world") == 0
     legacy_row = await session.get(CityWorld, 1, populate_existing=True)
     assert legacy_row.cities == raw and legacy_row.revision == 4
@@ -558,7 +558,7 @@ async def test_assigned_supervisor_cannot_be_disabled_before_groups_are_reassign
     assert disabled.status_code == 409, disabled.text
     house = await session.scalar(select(CityObject).execution_options(populate_existing=True))
     assert house.state == "placed" and house.paid == bought.json()["price"]
-    assert await count(session, CityCell) == 1
+    assert await count(session, CityCell) == P * P
     assert await count(session, CoinTransaction) == before_transactions
     view = (await client.get(CITY + "/world", headers=me)).json()
     assert view["home_district"] == "support-team-1" and district(view)["assigned"]

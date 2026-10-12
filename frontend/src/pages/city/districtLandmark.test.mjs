@@ -22,7 +22,7 @@ const { CitySandboxDock } = await load("./CitySandboxDock.tsx");
 const landmark = { status: "active", level: 2, name: "Дом команды", module: 0, u: 0, v: 0, w: 12, h: 12, rotation: 0, taken: 24, plots: 200, peak: 24,
   next: { level: 3, name: "Деловой центр", need: 50, remaining: 26, percent: 25 } };
 const district = { id: "support-team-1", name: "Район 1", number: 1, construction: true, mine: true, managed: true,
-  land: { plots: 200, taken: 24, open_band: 1, bands: [{ band: 1, plots: 50, taken: 24 }, { band: 2, plots: 150, taken: 0 }] }, landmark,
+  land: { cells: 200, taken: 24, built: 24, open_band: 1, bands: [{ band: 1, cells: 50, taken: 24 }, { band: 2, cells: 150, taken: 0 }] }, landmark,
   hq: { level: 2, name: "Штаб", built: 3, next: { level: 3, name: "Главный штаб", need: 6 } }, objects: [], projects: [], version: 1 };
 const mine = { status: "ready", message: null, district: { id: district.id, city: "support", name: district.name }, objects: [],
   catalogue: [{ family: "house", name: "Дом", icon: "🏡", size: [1, 1], squares: null, ready: false, levels: [{ level: 1, name: "Небольшой дом", about: "Дом", price: 300 }] }],
@@ -46,8 +46,11 @@ test("complex shows whole-land growth and the server's exact remaining count", (
   assert.match(html, /Главное здание района/);
   assert.match(html, /Дом команды · уровень 2 из 5/);
   assert.match(html, /Застроено 12 % района/);
-  assert.match(html, /24 из 200 участков/);
-  assert.match(html, /займите ещё 26 участков/);
+  assert.match(html, /24 из 200 клеток/);
+  assert.match(html, /застройте ещё 26 клеток/);
+  // Buildings make the district grow; its roads and trees do not.
+  assert.match(html, /Дороги, деревья и фонари в застройку не входят/);
+  assert.match(html, /Дом, офис или сквер занимает 3 × 3 клетки/);
   assert.match(html, /Уровень 3 открывается при застройке 25 % всего района/);
   assert.match(html, /aria-label="Застройка района для роста главного здания"[^>]+aria-valuenow="12"/);
   assert.match(html, /Растёт автоматически/);
@@ -61,16 +64,16 @@ test("complex retains achieved level even when current land occupancy falls", ()
   const html = render(DistrictLandmarkCard, { landmark: transferred });
   assert.match(html, /уровень 4 из 5/);
   assert.match(html, /Застроено 5 % района/);
-  assert.match(html, /займите ещё 140 участков/);
+  assert.match(html, /застройте ещё 140 клеток/);
   assert.match(html, /Достигнутый уровень сохраняется/);
   const maximum = render(DistrictLandmarkCard, { landmark: { ...landmark, level: 5, name: "Городской комплекс", next: null } });
   assert.match(maximum, /Главное здание достигло максимального уровня/);
-  assert.doesNotMatch(maximum, /займите ещё|Уровень 6/);
+  assert.doesNotMatch(maximum, /застройте ещё|Уровень 6/);
 });
 
 test("active complex replaces district project actions while personal building remains available", () => {
   const html = render(CityDistrictSheet, { district, team, cityName: "Техподдержка", mine, onMyEstate: noop, onOpenProject: noop });
-  assert.match(html, /Выбрать участок/);
+  assert.match(html, /Строить в районе →/);
   assert.match(html, /Развитие главного здания района/);
   assert.match(html, /Вся земля доступна сразу/);
   assert.doesNotMatch(html, /Создать общий проект|Штаб:|построено общих проектов|Сейчас нет открытых сборов|Взносы добровольные/);
@@ -90,13 +93,13 @@ test("legacy squares retain paid project controls beside the same growing main b
 
 test("all land opens at once with one main-building progress and active public mode never opens projects", () => {
   const overview = render(CityEstateDock, dockProps);
-  assert.match(overview, /aria-label="Участки района"/);
+  assert.match(overview, /aria-label="Земля района"/);
   assert.match(overview, /Весь район открыт/);
-  assert.match(overview, /Свободно 176 участков/);
+  assert.match(overview, /Свободно 176 клеток/);
   assert.match(overview, /aria-label="Развитие главного здания района"/);
   assert.doesNotMatch(overview, /Этап застройки|осталось занять ещё|70 %|рядом со штабом/);
   assert.equal((overview.match(/role="progressbar"/g) ?? []).length, 1);
-  assert.match(overview, /займите ещё 26 участков/);
+  assert.match(overview, /застройте ещё 26 клеток/);
   const stalePlacing = { ...publicMode, placing: { family: "fountain", moving: null, rotation: 0 }, spot: { module: 0, u: 0, v: 0, rotation: 0, problem: null } };
   for (const build of [publicMode, stalePlacing]) {
     const html = render(CityEstateDock, { ...dockProps, build });
@@ -114,11 +117,12 @@ test("sandbox public mode changes complex levels and keeps personal house buying
   assert.doesNotMatch(html, /Открыть проект|Общие проекты на площади|Выбрать место|Ступень штаба|Этап застройки/);
   const maximum = render(CitySandboxDock, { ...base, state: { ...base.state, districts: [{ ...district, landmark: { ...landmark, level: 5, next: null } }] }, build: publicMode });
   assert.match(maximum, /disabled=""[^>]+aria-label="Уровень главного здания: больше"/);
-  const selected = render(CitySandboxDock, { ...base, build: { ...personal, plot: { block: 1, col: 0, row: 0, band: 1, problem: null } } });
-  assert.match(selected, /Небольшой дом на участке бесплатно/);
+  const selected = render(CitySandboxDock, { ...base, build: { ...personal, plot: { block: 1, col: 0, row: 0, band: 1, problem: null, rotation: 0 } } });
+  assert.match(selected, /aria-label="Небольшой дом бесплатно"/);
+  assert.match(selected, /3 × 3 клетки · постройка бесплатна в тестовом городе/);
   assert.doesNotMatch(selected, /aria-label="Уровень главного здания"/);
-  const outer = render(CitySandboxDock, { ...base, build: { ...personal, plot: { block: 5, col: 0, row: 0, band: 2, problem: null } } });
-  assert.match(outer, /aria-label="Небольшой дом на участке бесплатно">Бесплатно/);
+  const outer = render(CitySandboxDock, { ...base, build: { ...personal, plot: { block: 5, col: 0, row: 0, band: 2, problem: null, rotation: 0 } } });
+  assert.match(outer, /aria-label="Небольшой дом бесплатно">Бесплатно/);
   assert.doesNotMatch(outer, /Открыть этап|Этап застройки|Проверка этапов/);
   const overview = render(CitySandboxDock, { ...base, build: personal });
   assert.match(overview, /Весь район открыт/);

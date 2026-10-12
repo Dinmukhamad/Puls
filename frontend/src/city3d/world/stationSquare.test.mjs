@@ -16,17 +16,27 @@ const lotCorners = (lot) => [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, d]) =>
   z: lot.z + Math.cos(lot.angle) * a * (lot.length / 2 + .2) - Math.sin(lot.angle) * d * (lot.depth / 2 + .2),
 }));
 
-test('a street runs from the town\'s streets to every station\'s forecourt', () => {
+test('every station has its street; on the old map it runs from the town\'s streets, elsewhere the districts lay theirs', () => {
   for (const [name, world] of Object.entries(CITIES)) {
     const square = squareOf(world), others = world.roads.streets.filter((s) => !square.streets.includes(s) && !square.streets.some((q) => q.every((v, i) => v === s[i])));
     assert.ok(square.streets.length >= 1, `${name}: the square has its street`);
-    for (const [ax, az, bx, bz] of square.streets) {
-      const joins = [[ax, az], [bx, bz]].some(([x, z]) => others.some((road) => R.segmentDistance(x, z, road) < 1e-6));
-      assert.ok(joins, `${name}: the station street meets the town's streets`);
+    if (name === 'v1') {
+      for (const [ax, az, bx, bz] of square.streets) {
+        const joins = [[ax, az], [bx, bz]].some(([x, z]) => others.some((road) => R.segmentDistance(x, z, road) < 1e-6));
+        assert.ok(joins, `${name}: the station street meets the town's streets`);
+      }
+    } else {
+      // The island city's mainland and the lake city's land are the districts' (world/land.ts): their operators lay
+      // the roads, and of the town's streets only those of the island in the middle are left.
+      const reach = name === 'x4' ? R.WORLD_X4.bank : 56;
+      assert.deepEqual(others.filter(([ax, az, bx, bz]) => Math.max(Math.hypot(ax, az), Math.hypot(bx, bz)) > reach), [], `${name}: a town street left on the districts' land`);
     }
-    // The forecourt's front edge is a few steps from a street: the station street, or the sales city's bottom street.
+    // The forecourt's front edge is a few steps from the station street; in the lake city the boulevard comes up to its middle.
     const front = [R.STATION.near, R.STATION.middle, R.STATION.far].map((w) => R.railPoint(world.railway, R.STATION.forecourt, w));
-    for (const p of front) assert.ok(world.roads.streets.some((road) => R.segmentDistance(p.x, p.z, road) <= 4.01), `${name}: the forecourt at ${p.x.toFixed(1)}, ${p.z.toFixed(1)} has a street in front of it`);
+    if (name === 'sales') {
+      const walk = world.surfaces.find((s) => s.kind === 'walk' && s.x === 0);
+      assert.ok(walk && Math.abs(walk.z + walk.length / 2 - front[1].z) < 1 && Math.abs(front[1].x) < 1, `${name}: the boulevard ends at the forecourt`);
+    } else for (const p of front) assert.ok(world.roads.streets.some((road) => R.segmentDistance(p.x, p.z, road) <= 4.01), `${name}: the forecourt at ${p.x.toFixed(1)}, ${p.z.toFixed(1)} has a street in front of it`);
   }
 });
 
@@ -56,7 +66,7 @@ test('every station has a small park: lawn, paths, a fountain with benches round
   }
 });
 
-test('the square keeps off the railway, the districts\' plots and the hills, and the houses there make way for it', () => {
+test('the square keeps off the railway, the districts\' cells and the hills, and the houses there make way for it', () => {
   const lands = { x4: R.landGrid(X4), v1: null, sales: R.landGrid(SALES) };
   for (const [name, world] of Object.entries(CITIES)) {
     const square = squareOf(world), line = world.railway, land = R.flatLand(world);
@@ -64,7 +74,7 @@ test('the square keeps off the railway, the districts\' plots and the hills, and
     for (const p of points) {
       assert.ok(!R.onRailway(line, p, .5), `${name}: ${p.kind ?? 'car park'} at ${p.x.toFixed(1)}, ${p.z.toFixed(1)} on the railway`);
       assert.ok(R.groundHeight(land, p.x, p.z, line) < 1e-9, `${name}: ${p.kind ?? 'car park'} at ${p.x.toFixed(1)}, ${p.z.toFixed(1)} up on the hills`);
-      if (lands[name]) assert.equal(R.plotAt(lands[name], p), null, `${name}: ${p.kind ?? 'car park'} on a plot of the districts`);
+      if (lands[name]) assert.equal(R.cellAt(lands[name], p), null, `${name}: ${p.kind ?? 'car park'} on a cell of the districts`);
     }
     // Of the town's own copies none is left on the square: houses, trees and lamps all made way.
     const own = world.placements.filter((p) => !square.placements.some((q) => q.x === p.x && q.z === p.z && q.kind === p.kind));

@@ -111,8 +111,8 @@ export function CityPage() {
     return views;
   }, [sandboxOn, department, sandboxLand.data, supportLand.data, salesLand.data]);
   const [building, setBuilding] = useState<BuildState | null>(null), [estateFocus, setEstateFocus] = useState<EstateTarget & { at: number }>();
-  const buildView = useMemo(() => building && { district: building.district, area: building.area, placing: building.placing, selected: building.selected, plot: building.plot && { block: building.plot.block, col: building.plot.col, row: building.plot.row } },
-    [building?.district, building?.area, building?.placing, building?.selected, building?.plot]); // eslint-disable-line react-hooks/exhaustive-deps
+  const buildView = useMemo(() => building && { district: building.district, area: building.area, placing: building.placing, selected: building.selected, plot: building.plot && { block: building.plot.block, col: building.plot.col, row: building.plot.row, rotation: building.plot.rotation }, decor: building.decor ?? null },
+    [building?.district, building?.area, building?.placing, building?.selected, building?.plot, building?.decor]); // eslint-disable-line react-hooks/exhaustive-deps
   const focusLand = (target: EstateTarget) => setEstateFocus({ ...target, at: Date.now() });
   const landOf = (district: string) => (district.startsWith("sales-") ? salesLand.data : supportLand.data)?.districts.find(d => d.id === district) ?? null;
   const homeEstate = estateQuery.data?.district;
@@ -122,8 +122,8 @@ export function CityPage() {
     [homeEstate?.id, homeEstate?.city, ownLand, estateQuery.data?.status]);
   function chooseFreePlot() {
     if (!homeEstate || !suggestedPlot || building?.district !== homeEstate.id || estateQuery.data?.status !== "ready") return;
-    setBuilding({ ...building, area: "plots", placing: null, selected: null, spot: null, project: false,
-      plot: { block: suggestedPlot.block, col: suggestedPlot.col, row: suggestedPlot.row, band: suggestedPlot.band, problem: null } });
+    setBuilding({ ...building, area: "plots", placing: null, selected: null, spot: null, project: false, decor: null,
+      plot: { block: suggestedPlot.block, col: suggestedPlot.col, row: suggestedPlot.row, band: suggestedPlot.band, problem: null, rotation: 0 } });
     focusLand({ district: homeEstate.id, kind: "plot", plot: suggestedPlot });
   }
   useEffect(() => {
@@ -134,9 +134,10 @@ export function CityPage() {
     if (sandboxOn && (pick.kind === "project" || pick.kind === "public")) { setWorldSelected(null); openSandbox(pick.district, true); return; }
     if (pick.kind === "public") { setBuilding(null); setWorldSelected(pick.district); focusLand({ district: pick.district, kind: "public" }); return; }
     if (pick.kind === "place") setBuilding(b => b && { ...b, spot: { module: pick.module, u: pick.u, v: pick.v, rotation: pick.rotation, problem: pick.problem } });
+    else if (pick.kind === "cells") setBuilding(b => b && b.decor && b.district === pick.district ? { ...b, decor: { ...b.decor, cells: pick.cells } } : b);
     else if (pick.kind === "plot") {
       if (building?.district !== pick.district) return;
-      setBuilding(b => b && { ...b, plot: { block: pick.block, col: pick.col, row: pick.row, band: pick.band, problem: pick.problem }, selected: null });
+      setBuilding(b => b && { ...b, plot: { block: pick.block, col: pick.col, row: pick.row, band: pick.band, problem: pick.problem, rotation: 0 }, selected: null });
       focusLand({ district: pick.district, kind: "plot", plot: { block: pick.block, col: pick.col, row: pick.row } });
     }
     else if (pick.kind === "project") setWorldSelected(pick.district);
@@ -182,7 +183,7 @@ export function CityPage() {
     const key = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || event.defaultPrevented || document.querySelector(".sheet-overlay, [role=dialog][aria-modal=true]")) return;
       event.preventDefault();
-      setBuilding(b => b && (b.placing ? { ...b, placing: null, spot: null, area: b.project ? "public" : "plots" } : b.plot || b.selected !== null ? { ...b, plot: null, selected: null } : null));
+      setBuilding(b => b && (b.placing ? { ...b, placing: null, spot: null, area: b.project ? "public" : "plots" } : b.decor ? { ...b, decor: null } : b.plot || b.selected !== null ? { ...b, plot: null, selected: null } : null));
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
@@ -267,7 +268,7 @@ export function CityPage() {
       <nav className="city-hud__links" aria-label="Обучение">
         {user?.role === "admin" && <button type="button" className="city-group-button" data-open={sandboxOn || undefined} aria-pressed={sandboxOn} onClick={toggleSandbox} aria-label={sandboxOn ? "Выйти из тестового города" : "Тестовый город администраторов"} title="Тестовый город: только для администраторов"><span aria-hidden="true">🧪</span><span className="city-hud__wide">Тест</span></button>}
         {/* Operators build from the toolbar's «Строить»; staff with land of their own, from here. */}
-        {canOpenBuild && !sandboxOn && user?.role !== "operator" && <button type="button" className="city-group-button" data-open={building ? true : undefined} aria-pressed={!!building} onClick={() => building ? setBuilding(null) : openBuild()} aria-label={mineEstate!.district!.city === department ? "Строить в своём районе" : "Мой участок в другом городе"}><span aria-hidden="true">🏡</span><span className="city-hud__wide">{mineEstate!.district!.city === department ? "Строить" : "Мой участок"}</span></button>}
+        {canOpenBuild && !sandboxOn && user?.role !== "operator" && <button type="button" className="city-group-button" data-open={building ? true : undefined} aria-pressed={!!building} onClick={() => building ? setBuilding(null) : openBuild()} aria-label={mineEstate!.district!.city === department ? "Строить в своём районе" : "Мой район в другом городе"}><span aria-hidden="true">🏡</span><span className="city-hud__wide">{mineEstate!.district!.city === department ? "Строить" : "Мой район"}</span></button>}
         {department === "support" && data.group && <button type="button" className="city-group-button" onClick={() => setGroupOpen(true)} aria-label={`Город группы: ${data.group.name}`}><span aria-hidden="true">🏗️</span><span className="city-hud__wide">Группа</span></button>}
         {user?.role !== "operator" && <Link to="/admin/learning/city" aria-label="Управление городом"><span aria-hidden="true">⚙︎</span><span className="city-hud__wide">Управление</span></Link>}
       </nav>

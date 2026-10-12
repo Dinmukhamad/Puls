@@ -30,13 +30,13 @@ export function createBorders(borders: readonly DistrictBorder[], colourOf: (dis
   for (const border of borders) {
     const { a, b, normal: n, gaps } = border;
     const off = (p: { x: number; z: number }, k: number) => ({ x: p.x + n.x * k, z: p.z + n.z * k });
-    // How far from the middle line each side's colour runs, for the gap there: short of the plots' ground, which starts
-    // .24 in from their edges (systems/estates.ts INSET).
+    // How far from the middle line each side's colour runs, for the gap there: short of the cells' ground, which starts
+    // .1 in from their edges (systems/estates.ts INSET).
     const span = (gap: number) => border.street ? [ROAD_HALF, gap / 2 + .15] : [0, Math.min(HALF, gap / 2 - .03)];
     const [fa, ta] = span(gaps[0]), [fb, tb] = span(gaps[1]);
     quad([off(a, fa), off(b, fb), off(b, tb), off(a, ta)], colourOf(border.toward));
     quad([off(a, -fa), off(b, -fb), off(b, -tb), off(a, -ta)], colourOf(border.away));
-    // The posts at the colour's outer edge, but off the plots themselves; one at each end and evenly between.
+    // The posts at the colour's outer edge, but off the cells themselves; one at each end and evenly between.
     const length = Math.hypot(b.x - a.x, b.z - a.z), count = Math.max(1, Math.floor(length / POST_STEP));
     for (let i = 0; i <= count; i++) {
       const t = (.5 + i * (length - 1) / count) / length, p = { x: a.x + (b.x - a.x) * t, z: a.z + (b.z - a.z) * t };

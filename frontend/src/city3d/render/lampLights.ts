@@ -72,9 +72,13 @@ function lampQuads(quad: THREE.BufferGeometry, lamps: Placement[], y: number, ex
   return geometry;
 }
 
-export function createLampLights(ctx: CityContext): LampLights {
-  const lamps = ctx.world.placements.filter(p => p.kind === "lamp"), level = ctx.night.level;
-  const fog = ctx.scene.fog instanceof THREE.Fog ? ctx.scene.fog : null;
+/** The world's street lamps, or the lamps given (the ones operators put on their districts' cells, systems/estates.ts). */
+export function createLampLights(ctx: CityContext, lamps: Placement[] = ctx.world.placements.filter(p => p.kind === "lamp"), name = "city-lamp"): LampLights {
+  const level = ctx.night.level;
+  // A scene of its own (a city's districts) sits in the city's: the fog is the nearest one up.
+  let holder: THREE.Object3D | null = ctx.scene;
+  while (holder && !(holder instanceof THREE.Scene && holder.fog)) holder = holder.parent;
+  const fog = holder instanceof THREE.Scene && holder.fog instanceof THREE.Fog ? holder.fog : null;
   // Glow fades with the fog, as the ground and lamps under it do.
   const clear = fog ? rangeFogFactor(float(fog.near), float(fog.far)).oneMinus() : float(1);
   // 1 at the centre of a quad, 0 at its inscribed circle and beyond, smooth at both ends.
@@ -108,7 +112,7 @@ export function createLampLights(ctx: CityContext): LampLights {
   halos.material.opacityNode = falloff.pow(3).mul(mix(1, grown, .5)).mul(level).mul(clear.mul(.7).add(.3)).mul(HALO_STRENGTH);
 
   for (const mesh of [pools, halos]) {
-    mesh.name = mesh === pools ? "city-lamp-pools" : "city-lamp-halos";
+    mesh.name = mesh === pools ? `${name}-pools` : `${name}-halos`;
     // The shaders place the copies, so the quad's bounds say nothing; lamps stand all over the city anyway.
     mesh.frustumCulled = false; mesh.matrixAutoUpdate = false; mesh.castShadow = mesh.receiveShadow = false;
     ctx.scene.add(mesh);

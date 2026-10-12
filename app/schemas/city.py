@@ -86,6 +86,7 @@ class EconomyInput(BaseModel):
     quest_coins: int = Field(ge=0, le=1000)
     estate: dict[str, list[int]] | None = None
     land: list[int] | None = None
+    decor: dict[str, int] | None = None
     district: dict[str, list[int]] | None = None
     hq: list[int] | None = None
 
@@ -93,6 +94,7 @@ class EconomyInput(BaseModel):
     def complete(self):
         from app.services.city import BUILDINGS
         from app.services.city_estate import (
+            DECOR_PRICES,
             HQ_STEPS,
             LAND_PRICES,
             PLOT_FAMILIES,
@@ -133,6 +135,11 @@ class EconomyInput(BaseModel):
             len(self.land) != len(LAND_PRICES) or any(not 0 <= v <= 100_000 for v in self.land)
         ):
             raise ValueError("Укажите цену участка каждого пояса — от 0 до 100 000 коинов")
+        if self.decor is not None and (
+            set(self.decor) != set(DECOR_PRICES)
+            or any(not 0 <= v <= 100_000 for v in self.decor.values())
+        ):
+            raise ValueError("Укажите цену клетки каждой мелкой постройки — от 0 до 100 000 коинов")
         if self.hq is not None and (
             len(self.hq) != len(HQ_STEPS)
             or any(not 1 <= v <= 1000 for v in self.hq)

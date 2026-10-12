@@ -12,15 +12,15 @@ const city = await import(`data:text/javascript;base64,${Buffer.from(built.outpu
 const { THREE } = city;
 const WORLDS = { support: city.islandWorld(city.WORLD_X4), sales: city.generateSalesWorld() };
 const hex = (attribute, i) => `#${new THREE.Color(attribute.getX(i), attribute.getY(i), attribute.getZ(i)).getHexString()}`;
-/** On a plot's ground: on a plot for sale and farther in than the .24 its ground keeps from the plot's edges (systems/estates.ts INSET). */
+/** On a cell's ground: on a cell for sale and farther in than the .1 its ground keeps from the cell's edges (systems/estates.ts INSET). */
 const onGround = (grid, p) => {
-  const at = city.plotAt(grid, p);
+  const at = city.cellAt(grid, p);
   if (!at) return false;
-  const c = city.areaFrame(at.block, at.col, at.row).corners;
-  return c.every((q, i) => city.segmentDistance(p.x, p.z, [q.x, q.z, c[(i + 1) % 4].x, c[(i + 1) % 4].z]) > .24);
+  const c = city.areaCorners(at.block, at.col, at.row);
+  return c.every((q, i) => city.segmentDistance(p.x, p.z, [q.x, q.z, c[(i + 1) % 4].x, c[(i + 1) % 4].z]) > .1);
 };
 
-for (const [name, world] of Object.entries(WORLDS)) test(`${name}: each side of a border in its district's colour, flat between the plots, posts along both edges`, () => {
+for (const [name, world] of Object.entries(WORLDS)) test(`${name}: each side of a border in its district's colour, flat between the cells, posts along both edges`, () => {
   const grid = city.landGrid(world), borders = city.districtBorders(grid, world), drawn = city.createBorders(borders, city.districtColour);
   const geometry = drawn.band.geometry, position = geometry.getAttribute('position'), colour = geometry.getAttribute('color'), index = geometry.getIndex();
   assert.equal(position.count, borders.length * 8, 'two quads a border');
@@ -38,17 +38,18 @@ for (const [name, world] of Object.entries(WORLDS)) test(`${name}: each side of 
     for (let j = 0; j < 8; j++) {
       const i = k * 8 + j, district = j < 4 ? border.toward : border.away, p = v(i);
       const across = (p.x - border.a.x) * border.normal.x + (p.z - border.a.z) * border.normal.z;
-      assert.ok(j < 4 ? across > -1e-6 : across < 1e-6, 'a colour on the other district\'s side');
+      // Both halves start at the middle line (to the precision of a float32 position).
+      assert.ok(j < 4 ? across > -1e-4 : across < 1e-4, 'a colour on the other district\'s side');
       assert.equal(hex(colour, i), city.districtColour(district));
     }
-    // Across each quad, never on a plot's ground.
+    // Across each quad, never on a cell's ground.
     for (const q of [0, 4]) for (let s = 0; s <= 4; s++) for (let t = 0; t <= 4; t++) {
       const [a, b, c, d] = [0, 1, 2, 3].map(j => v(k * 8 + q + j)), u = s / 4, w = t / 4;
       const p = a.multiplyScalar((1 - u) * (1 - w)).add(b.multiplyScalar(u * (1 - w))).add(c.multiplyScalar(u * w)).add(d.multiplyScalar((1 - u) * w));
-      assert.ok(!onGround(grid, p), `${name}: the border's colour on a plot at ${p.x.toFixed(2)}, ${p.z.toFixed(2)}`);
+      assert.ok(!onGround(grid, p), `${name}: the border's colour on a cell at ${p.x.toFixed(2)}, ${p.z.toFixed(2)}`);
     }
   });
-  // Posts in pairs, one on each side in that side's colour, off the plots, standing on the ground.
+  // Posts in pairs, one on each side in that side's colour, off the cells, standing on the ground.
   const posts = drawn.posts, matrix = new THREE.Matrix4(), at = new THREE.Vector3(), tint = new THREE.Color();
   assert.ok(posts.count >= borders.length * 4 && posts.count % 2 === 0, `${posts.count} posts`);
   assert.ok(posts.castShadow && posts.instanceColor);
@@ -61,7 +62,7 @@ for (const [name, world] of Object.entries(WORLDS)) test(`${name}: each side of 
     assert.ok(border, `${name}: a post off the borders at ${at.x.toFixed(1)}, ${at.z.toFixed(1)}`);
     const side = (at.x - border.a.x) * border.normal.x + (at.z - border.a.z) * border.normal.z > 0 ? border.toward : border.away;
     assert.equal(`#${tint.getHexString()}`, city.districtColour(side));
-    assert.equal(city.plotAt(grid, at), null, `${name}: a post on a plot at ${at.x.toFixed(1)}, ${at.z.toFixed(1)}`);
+    assert.equal(city.cellAt(grid, at), null, `${name}: a post on a cell at ${at.x.toFixed(1)}, ${at.z.toFixed(1)}`);
     assert.equal(at.y, 0);
   }
   posts.geometry.computeBoundingBox();

@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { cityEstate, operationKey, type DistrictEstate, type DistrictProject, type MyEstate } from "../../api/cityEstate";
 import type { TeamDistrict } from "../../api/cityWorld";
+import { plural } from "../../utils/format";
 import { DistrictSwatch } from "./DistrictSwatch";
 import { districtBuildProgress } from "./districtProgress";
 import { DistrictLandmarkCard } from "./DistrictLandmarkCard";
@@ -24,12 +25,12 @@ export function CityDistrictSheet({ district, team, cityName, mine, onMyEstate, 
   const progress = district?.land && districtBuildProgress(district.land);
   return <div className="stack estate-district">
     <span className="city-eyebrow"><DistrictSwatch district={team.id} />РАЙОН КОМАНДЫ · {cityName}</span>
-    <p className="estate-district__intro">Район — территория команды супервайзера. Вся земля доступна сразу: операторы команды выбирают любые свободные участки и строят за свои коины.</p>
+    <p className="estate-district__intro">Район — территория команды супервайзера. Вся земля доступна сразу: операторы команды прокладывают дороги, сажают деревья и ставят дома на любых свободных клетках за свои коины.</p>
     <p>{team.supervisor ? `Супервайзер: ${team.supervisor}` : "Команда пока не назначена: руководитель назначает супервайзера района в настройках города."}</p>
     {team.mine && <p className="city-world-badge">Твой район</p>}
     <div className="estate-areas">
-      <section className="estate-area"><span aria-hidden="true">🏡</span><div><h3>Личные постройки</h3><p>Договоритесь с командой, где будут дома, офисы и парки. Выбери свободный участок и купи постройку — она принадлежит тебе.</p></div>
-        {home && onMyEstate && <button type="button" className="city-action" onClick={onMyEstate}>Выбрать участок →</button>}
+      <section className="estate-area"><span aria-hidden="true">🏡</span><div><h3>Личные постройки</h3><p>Договоритесь с командой, где будут дороги, дома, офисы и парки. Выбери свободное место и купи постройку — она принадлежит тебе.</p></div>
+        {home && onMyEstate && <button type="button" className="city-action" onClick={onMyEstate}>Строить в районе →</button>}
         {!home && <small>Строить можно в районе своей команды.</small>}
       </section>
       {!activeComplex && <section className="estate-area"><span aria-hidden="true">⛲</span><div><h3>Площадь команды</h3><p>Место для общих проектов. Супервайзер открывает сбор, операторы добровольно вносят коины.</p></div>
@@ -38,7 +39,7 @@ export function CityDistrictSheet({ district, team, cityName, mine, onMyEstate, 
     </div>
     {district?.landmark && <DistrictLandmarkCard landmark={district.landmark} />}
     {district?.landmark?.status === "legacy_occupied" && <p className="estate-note">На площади остаются прежние общие постройки и сборы команды.</p>}
-    {progress ? <p className="secondary small">Для стройки свободно {coins(progress.available)} участков. {district!.construction ? "Стройка открыта." : "Стройка пока закрыта руководителем."}</p>
+    {progress ? <p className="secondary small">Для стройки свободно {coins(progress.available)} {plural(progress.available, "клетка", "клетки", "клеток")}. {district!.construction ? "Стройка открыта." : "Стройка пока закрыта руководителем."}</p>
       : district ? <p className="secondary small">У района нет земли: город делится на три района.</p> : null}
     {!activeComplex && (district?.projects.length ? <section className="estate-section"><h3>Общие проекты</h3>
       {district.projects.map(p => <ProjectCard key={p.id} project={p} canGive={!!canGive} available={mine?.available ?? 0} managed={district.managed} />)}

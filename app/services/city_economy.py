@@ -27,7 +27,7 @@ def defaults():
         "projects": deepcopy(PROJECTS),
         "quest_coins": COINS,
         # Team districts (docs/CITY_ESTATES.md): coins per level of what stands on a plot, the
-        # land of each band, project estimates and HQ steps.
+        # land of each band, a cell of each small thing, project estimates and HQ steps.
         **estate_defaults(),
     }
 
@@ -49,6 +49,10 @@ async def economy(session):
         values["quest_coins"] = row.values["quest_coins"]
         for key in ("estate", "district"):
             values[key] |= same_shape(row.values.get(key), values[key])
+        # Small things added later keep their default price until the head sets one.
+        values["decor"] |= {
+            k: v for k, v in (row.values.get("decor") or {}).items() if k in values["decor"]
+        }
         for key in ("hq", "land"):
             if len(row.values.get(key) or []) == len(values[key]):
                 values[key] = row.values[key]

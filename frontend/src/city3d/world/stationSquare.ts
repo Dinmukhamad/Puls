@@ -6,9 +6,10 @@
  * on land no district plot takes (world/land.ts keeps it out; world/stationSquare.test.mjs checks it).
  *
  * The island cities (x4, v1): the station street runs across the end of the track in front of the forecourt, from
- * the avenue beside the station to the park; the car park lies behind it, the park beside the track. The lake city
- * (sales): the forecourt already faces the bottom street; a short street off it runs along the station's side to
- * the car park, and the park lies on the station's other side, both between the street and the hills.
+ * the avenue beside the station (on x4, whose avenues are gone, from a little past the yard) to the park; the car
+ * park lies behind it, the park beside the track. The lake city (sales): a short street runs along the station's side
+ * to the car park, and the park lies on the station's other side, both between the line where the bottom street ran
+ * and the hills.
  */
 import { rng } from "./generate";
 import { railHeading, railLocal, railPoint, STATION, type RailLine } from "./railway";
@@ -161,9 +162,8 @@ function islandSquare(line: RailLine, streets: readonly Road[]): StationSquare {
 }
 
 /**
- * sales: the bottom street runs past the forecourt; a short street off it along the station's side (towards
- * -w) to the car park beside it, the park on the station's other side, both between the street and the hills,
- * and a zebra crossing from the boulevard to the forecourt.
+ * sales: a short street from where the town's bottom street ran past the forecourt, along the station's side
+ * (towards -w) to the car park beside it; the park on the station's other side, both between that line and the hills.
  */
 function lakeSquare(line: RailLine): StationSquare {
   const plan = planner(line, 4402), { square } = plan;
@@ -172,8 +172,5 @@ function lakeSquare(line: RailLine): StationSquare {
   square.areas.push({ u0: kerb, u1: edge, w0: spur - 1.4, w1: spur + 1.4 });
   plan.lot({ u0: kerb + .7, u1: edge, w0: spur - 25.6, w1: spur - 1.33 }, true);
   plan.park({ u0: kerb + .7, u1: edge, w0: STATION.far + 2, w1: STATION.far + 27.5 }, { u: (kerb + .7 + edge) / 2, w: STATION.far + 14.75 });
-  // On the axis of the boulevard: the town's centre line.
-  const cross = railPoint(line, street, railLocal(line, 0, 0).w);
-  square.crosswalks.push({ x: cross.x, z: cross.z, angle: railHeading(line) + Math.PI / 2 });
   return square;
 }

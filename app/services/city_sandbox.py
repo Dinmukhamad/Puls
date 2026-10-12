@@ -1,16 +1,17 @@
 """The administrators' test city (docs/CITY_ESTATES.md, «Тестовый город»).
 
-Every city has a copy of its three districts for administrators only: the same plots and bands, the
-same houses and office towers, squares that gather into parks, the same shared projects on the
-public square, kept apart from the real city under district ids with the prefix city_land.SANDBOX.
+Every city has a copy of its three districts for administrators only: the same cells and bands,
+the same houses and office towers, squares that gather into parks, the same roads, trees, lamps
+and other small things, the same shared projects on the public square, kept apart from the real
+city under district ids with the prefix city_land.SANDBOX.
 Nothing of it
 reaches operators, the staff report, the coin journal or the real districts' history: the real
 city's views ask only for configured districts, and the operators' own views skip the prefix.
 
-There administrators build for free, set any building's stage up or down, take buildings away,
-set the headquarters' stage, open shared projects and build or cancel them
-at once, and clear a city's test land to start again. The rules of the land stay the real ones
-(all personal land available, free plots, parks gathering from one owner's squares), so what
+There administrators build and lay small things for free, set any building's stage up or down, take
+buildings and small things away, set the headquarters' stage, open shared projects and build or
+cancel them at once, and clear a city's test land to start again. The rules of the land stay the
+real ones (all land available, free cells, parks gathering from one owner's squares), so what
 works here works in the city.
 """
 
@@ -22,6 +23,7 @@ from app.db.base import utcnow
 from app.models.city_estate import CityCell, CityDistrictState, CityObject, CityProject
 from app.services import city_land, city_landmark
 from app.services.city_estate import (
+    DECOR_FAMILIES,
     MODULE_CELLS,
     PLOT_FAMILIES,
     PROJECT_FAMILIES,
@@ -29,11 +31,14 @@ from app.services.city_estate import (
     STAGE_NAMES,
     cells_of,
     complete,
+    decor_cells,
     describe,
     event,
     footprint,
-    free_plots,
+    free_cells,
+    free_for_decor,
     gather_parks,
+    land_counts,
     lock_district,
     lock_project,
     occupied,
@@ -42,7 +47,6 @@ from app.services.city_estate import (
     release_cells,
     require_public_square,
     take_cells,
-    taken_plots,
     widen,
     world_districts,
 )
@@ -113,7 +117,7 @@ async def test_object(session, object_id, *, states=("placed",)):
 
 
 async def build(session, user, body):
-    """A catalogue building on a free plot of a test district, free; parks gather as in the city."""
+    """A catalogue building on free cells of a test district, free; parks gather as in the city."""
     district_id = test_id(body.district_id)
     family = PLOT_FAMILIES.get(body.family)
     if family is None:
@@ -124,7 +128,10 @@ async def build(session, user, body):
             code="recipe_only",
         )
     await lock_user(session, user.id)
-    plots, _band = await free_plots(session, {"id": district_id}, body.block, body.col, body.row)
+    w, h = footprint(body.family)
+    cells, _band = await free_cells(
+        session, {"id": district_id}, body.block, body.col, body.row, w, h
+    )
     obj = CityObject(
         district_id=district_id,
         owner_id=user.id,
@@ -134,18 +141,18 @@ async def build(session, user, body):
         module=body.block,
         u=body.col,
         v=body.row,
-        rotation=0,
+        rotation=body.rotation,
         source="sandbox",
         paid=0,
     )
     session.add(obj)
     try:
         await session.flush()
-        take_cells(session, district_id, body.block, plots, obj=obj)
+        take_cells(session, district_id, body.block, cells, obj=obj)
         await session.flush()
     except IntegrityError:
         await session.rollback()
-        raise ConflictError("Этот участок уже занят", code="plot_taken") from None
+        raise ConflictError("Эти клетки уже заняты", code="plot_taken") from None
     event(session, district_id, "sandbox", actor=user, obj=obj, payload={"do": "build"})
     park = (
         await gather_parks(session, user, district_id, body.block)
@@ -156,6 +163,50 @@ async def build(session, user, body):
     result = park or obj
     await commit(session)
     return {"object": public_object(result, user), "merged": park is not None}
+
+
+async def lay(session, user, body):
+    """Small things of one kind on free cells of a test district, free."""
+    district_id = test_id(body.district_id)
+    if body.family not in DECOR_FAMILIES:
+        raise NotFoundError("Такой постройки нет в каталоге")
+    await lock_user(session, user.id)
+    cells = await free_for_decor(session, district_id, [tuple(c) for c in body.cells])
+    for block, col, row in cells:
+        session.add(
+            CityCell(
+                district_id=district_id,
+                module=block,
+                u=col,
+                v=row,
+                decor=body.family,
+                owner_id=user.id,
+                paid=0,
+            )
+        )
+    event(
+        session,
+        district_id,
+        "sandbox",
+        actor=user,
+        payload={"do": "decor", "family": body.family, "cells": len(cells)},
+    )
+    await commit(session)
+    return {"laid": len(cells)}
+
+
+async def take_away(session, user, body):
+    """Small things off cells of a test district, whoever of the administrators laid them."""
+    district_id = test_id(body.district_id)
+    await lock_user(session, user.id)
+    found = await decor_cells(session, district_id, [tuple(c) for c in body.cells])
+    for cell in found:
+        await session.delete(cell)
+    event(
+        session, district_id, "sandbox", actor=user, payload={"do": "undecor", "cells": len(found)}
+    )
+    await commit(session)
+    return {"removed": len(found)}
 
 
 async def set_level(session, user, object_id, body):
@@ -228,9 +279,9 @@ async def set_district(session, user, district_id, body):
     await commit(session)
     result = {"open_band": district.open_band, "hq_level": district.hq_level}
     if body.landmark_level is not None:
-        taken = (await taken_plots(session, [key]))[key]
+        built = (await land_counts(session, [key]))[key]["built"]
         result["landmark_level"] = city_landmark.level_for(
-            city_land.plot_count(key), max(district.landmark_peak_plots, sum(taken))
+            city_land.plot_count(key), max(district.landmark_peak_plots, sum(built))
         )
     return result
 

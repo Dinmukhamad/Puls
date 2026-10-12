@@ -15,6 +15,7 @@ from tests.test_city_estate import (
     FIRST,
     OFFICES,
     SECOND,
+    P,
     buy,
     district_view,
     estate,
@@ -44,11 +45,36 @@ async def sandbox(client, h, city="support", district="support-team-1"):
     return next(d for d in r.json()["districts"] if d["id"] == district)
 
 
-async def build(client, h, family, block, col, row, district="support-team-1"):
+async def build(client, h, family, block, col, row, district="support-team-1", *, cells=False):
+    """Builds `family` on plot (col, row) of a block (tests/test_city_estate.py); with `cells`,
+    from that very cell."""
+    step = 1 if cells else P
     return await client.post(
         f"{SANDBOX}/plots",
         headers=h,
-        json={"district_id": district, "family": family, "block": block, "col": col, "row": row},
+        json={
+            "district_id": district,
+            "family": family,
+            "block": block,
+            "col": col * step,
+            "row": row * step,
+        },
+    )
+
+
+async def lay(client, h, family, cells, district="support-team-1"):
+    return await client.post(
+        f"{SANDBOX}/decor",
+        headers=h,
+        json={"district_id": district, "family": family, "cells": [list(c) for c in cells]},
+    )
+
+
+async def take_away(client, h, cells, district="support-team-1"):
+    return await client.post(
+        f"{SANDBOX}/decor/remove",
+        headers=h,
+        json={"district_id": district, "cells": [list(c) for c in cells]},
     )
 
 
@@ -75,13 +101,14 @@ async def count(session, model, *where):
 
 
 def first_plot(district_id):
-    """The first plot for sale in the district's first band: (block, column, row)."""
+    """The first P × P cells for sale in the district's first band: (block, column, row)."""
     for number, b in sorted(city_land.blocks(district_id).items()):
-        free = [
-            (c, r) for r in range(b["rows"]) for c in range(b["cols"]) if (c, r) not in b["skip"]
-        ]
-        if b["band"] == 1 and free:
-            return number, *free[0]
+        if b["band"] != 1:
+            continue
+        for r in range(b["rows"] - P + 1):
+            for c in range(b["cols"] - P + 1):
+                if city_land.area(district_id, number, c, r, P, P):
+                    return number, c, r
     raise AssertionError(district_id)
 
 
@@ -93,6 +120,8 @@ async def test_only_administrators_open_the_test_city(
         h = auth(await login(client, user.login))
         assert (await client.get(f"{SANDBOX}/cities/support", headers=h)).status_code == 403
         assert (await build(client, h, "house", FIRST, 0, 0)).status_code == 403
+        assert (await lay(client, h, "road", [(FIRST, 0, 0)])).status_code == 403
+        assert (await take_away(client, h, [(FIRST, 0, 0)])).status_code == 403
         assert (await district(client, h, open_band=2)).status_code == 403
         assert (await project(client, h, "square", u=0, v=0)).status_code == 403
         assert (await client.post(f"{SANDBOX}/cities/support/reset", headers=h)).status_code == 403
@@ -104,8 +133,9 @@ async def test_only_administrators_open_the_test_city(
     assert [d["id"] for d in data["districts"]] == [f"support-team-{n}" for n in (1, 2, 3)]
     first = data["districts"][0]
     assert first["construction"] and first["managed"] and not first["mine"]
-    assert first["land"]["plots"] == city_land.plot_count("support-team-1")
-    assert first["land"]["taken"] == 0 and first["land"]["open_band"] == 5
+    assert first["land"]["cells"] == city_land.plot_count("support-team-1")
+    assert first["land"]["taken"] == first["land"]["built"] == 0
+    assert first["land"]["open_band"] == 5 and first["decor"] == {}
     assert first["objects"] == [] and first["projects"] == [] and first["hq"]["level"] == 1
     assert (await client.get(f"{SANDBOX}/cities/north", headers=me)).status_code == 404
     assert (await build(client, me, "house", FIRST, 0, 0, "support-team-4")).status_code == 422
@@ -127,9 +157,12 @@ async def test_administrators_build_for_free_and_set_any_stage(client, session, 
     assert (await level(client, me, house, 0)).status_code == 422
     view = await sandbox(client, me)
     assert [(o["family"], o["level"]) for o in view["objects"]] == [("house", 4)]
-    assert view["land"]["taken"] == 1
+    assert view["land"]["taken"] == P * P
     # The rules of the land stay the real ones.
     assert (await build(client, me, "house", FIRST, 0, 0)).json()["code"] == "plot_taken"
+    assert (await build(client, me, "house", FIRST, 2, 1, cells=True)).json()["code"] == (
+        "plot_taken"
+    )
     assert (await build(client, me, "park", FIRST, 4, 0)).json()["code"] == "recipe_only"
     assert (await build(client, me, "house", 99, 0, 0)).json()["code"] == "wrong_plot"
     # Ready houses too, finished as they are: one stage.
@@ -149,7 +182,7 @@ async def test_squares_gather_into_parks_and_buildings_go_back(client, session, 
     last = (await build(client, me, "square", FIRST, 1, 1)).json()
     park = last["object"]
     assert last["merged"] and park["family"] == "park"
-    assert (park["u"], park["v"], park["w"], park["h"]) == (0, 0, 2, 2)
+    assert (park["u"], park["v"], park["w"], park["h"]) == (0, 0, 2 * P, 2 * P)
     assert (await level(client, me, park, 2)).json()["object"]["level"] == 2
     assert (await level(client, me, park, 3)).json()["code"] == "bad_level"
     house = (await build(client, me, "house", FIRST, 2, 0)).json()["object"]
@@ -157,7 +190,7 @@ async def test_squares_gather_into_parks_and_buildings_go_back(client, session, 
     r = await client.delete(f"{SANDBOX}/buildings/{park['id']}", headers=me)
     assert r.status_code == 200 and r.json() == {"removed": park["id"]}
     view = await sandbox(client, me)
-    assert [o["id"] for o in view["objects"]] == [house["id"]] and view["land"]["taken"] == 1
+    assert [o["id"] for o in view["objects"]] == [house["id"]] and view["land"]["taken"] == P * P
     assert await count(session, CityCell, CityCell.object_id == park["id"]) == 0
     assert (await build(client, me, "house", FIRST, 1, 1)).status_code == 200
     again = await client.delete(f"{SANDBOX}/buildings/{park['id']}", headers=me)
@@ -170,21 +203,21 @@ async def test_office_towers_build_for_free_under_the_same_land_rules(client, se
         r = await build(client, me, family, FIRST, col, row)
         assert r.status_code == 200, r.text
         tower = r.json()["object"]
-        assert (tower["family"], tower["level"], tower["w"], tower["h"]) == (family, 1, 1, 1)
+        assert (tower["family"], tower["level"], tower["w"], tower["h"]) == (family, 1, P, P)
         assert not r.json()["merged"]
         assert (await level(client, me, tower, 2)).json()["code"] == "bad_level"
     assert (await build(client, me, "officea", FIRST, 0, 0)).json()["code"] == "plot_taken"
-    assert (await build(client, me, "officea", 4, 3, 1)).json()["code"] == "wrong_plot"
+    assert (await build(client, me, "officea", SECOND, 12, 0)).json()["code"] == "wrong_plot"
     view = await sandbox(client, me)
     assert [o["family"] for o in view["objects"]] == list(OFFICES)
-    assert view["land"]["taken"] == len(OFFICES)
+    assert view["land"]["taken"] == len(OFFICES) * P * P
     assert await count(session, CoinTransaction) == 0
     assert (await estate(client, me))["objects"] == []
 
 
 async def test_all_land_stays_open_while_the_headquarters_stage_is_set_at_will(client, session, me):
     # Even an empty sandbox permits construction in its outermost band.
-    assert (await build(client, me, "house", 16, 0, 0)).status_code == 200
+    assert (await build(client, me, "house", 5, 0, 0)).status_code == 200
     r = await district(client, me, open_band=5)
     assert r.status_code == 200 and r.json() == {"open_band": 5, "hq_level": 1}
     denied = await district(client, me, open_band=1)
@@ -252,11 +285,14 @@ async def test_resetting_clears_only_that_test_city(client, session, me):
     await district(client, me, hq_level=4)
     for block in (FIRST, SECOND):
         assert (await build(client, me, "house", block, 0, 0)).status_code == 200
-    other = await build(client, me, "house", *first_plot("support-team-2"), "support-team-2")
+    other = await build(
+        client, me, "house", *first_plot("support-team-2"), "support-team-2", cells=True
+    )
     assert other.status_code == 200
     assert (await project(client, me, "fountain", u=0, v=0)).status_code == 200
     plot = first_plot("sales-team-1")
-    sales = (await build(client, me, "house", *plot, "sales-team-1")).json()["object"]
+    sales = (await build(client, me, "house", *plot, "sales-team-1", cells=True)).json()["object"]
+    assert (await lay(client, me, "lamp", [(SECOND, 0, P)])).status_code == 200
     r = await client.post(f"{SANDBOX}/cities/support/reset", headers=me)
     assert r.status_code == 200 and r.json() == {"city": "support", "reset": True}
     for number in (1, 2):
@@ -269,7 +305,8 @@ async def test_resetting_clears_only_that_test_city(client, session, me):
     ]
     assert await count(session, CityCell, CityCell.district_id.like("test-support-%")) == 0
     assert (await build(client, me, "house", FIRST, 0, 0)).status_code == 200
-    assert (await build(client, me, "house", 16, 0, 0)).status_code == 200
+    assert (await build(client, me, "house", 5, 0, 0)).status_code == 200
+    assert (await lay(client, me, "lamp", [(SECOND, 0, P)])).status_code == 200
     assert (await client.post(f"{SANDBOX}/cities/north/reset", headers=me)).status_code == 404
 
 
@@ -291,7 +328,7 @@ async def test_the_real_city_never_sees_the_test_city(
     for h in (op, me):
         view = await district_view(client, h)
         assert [o["id"] for o in view["objects"]] == [real["id"], legacy_real.id]
-        assert view["land"]["taken"] == 1 and view["land"]["open_band"] == 5
+        assert view["land"]["taken"] == P * P and view["land"]["open_band"] == 5
         assert view["hq"]["level"] == 1 and view["projects"] == []
         cities = (await client.get(f"{CITY}/cities/support", headers=h)).json()["districts"]
         assert not any(d["id"].startswith(city_land.SANDBOX) for d in cities)
@@ -305,7 +342,7 @@ async def test_the_real_city_never_sees_the_test_city(
     report = (await client.get(f"{ADMIN}/estates", headers=me)).json()
     first = next(d for d in report["districts"] if d["id"] == "support-team-1")
     assert (first["buildings"], first["builders"], first["open_projects"]) == (1, 1, 0)
-    assert (first["land"]["taken"], first["hq_level"]) == (1, 1)
+    assert (first["land"]["taken"], first["hq_level"]) == (P * P, 1)
     assert not any(d["id"].startswith(city_land.SANDBOX) for d in report["districts"])
     assert report["inventory"] == 0
     # The test city's tools never reach the real city's buildings and projects.
@@ -338,3 +375,38 @@ async def test_the_real_city_never_sees_the_test_city(
     ]
     assert [p["id"] for p in (await district_view(client, op))["projects"]] == [real_project]
     assert test["id"] != real["id"]
+
+
+async def test_small_things_are_free_and_any_administrator_takes_them_away(
+    client, session, admin, me
+):
+    other = await make_user(session, login="admin-sandbox-2", role=Role.ADMIN)
+    o = auth(await login(client, other.login))
+    r = await lay(client, me, "road", [(FIRST, c, 0) for c in range(4)])
+    assert r.status_code == 200 and r.json() == {"laid": 4}
+    view = await sandbox(client, me)
+    assert view["decor"] == {"road": [[FIRST, c, 0, 1] for c in range(4)]}
+    assert (view["land"]["taken"], view["land"]["built"]) == (4, 0)
+    assert {cell[3] for cell in (await sandbox(client, o))["decor"]["road"]} == {0}
+    # The real city's rules of the land: a taken cell, a group quarter, a building's cells.
+    assert (await lay(client, o, "tree", [(FIRST, 0, 0)])).json()["code"] == "plot_taken"
+    assert (await lay(client, o, "tree", [(FIRST, 18, 0)])).json()["code"] == "wrong_plot"
+    assert (await build(client, o, "house", FIRST, 0, 0)).json()["code"] == "plot_taken"
+    assert (await lay(client, o, "castle", [(FIRST, 9, 0)])).status_code == 404
+    elsewhere = await lay(client, o, "tree", [(FIRST, 9, 0)], "support-team-4")
+    assert elsewhere.status_code == 422
+    # Another administrator takes away what the first laid; nothing is left on a cleared cell.
+    gone = await take_away(client, o, [(FIRST, 0, 0), (FIRST, 1, 0)])
+    assert gone.status_code == 200 and gone.json() == {"removed": 2}
+    assert (await take_away(client, o, [(FIRST, 0, 0)])).json()["code"] == "decor_missing"
+    rows = await session.scalars(select(CityCell).where(CityCell.decor.is_not(None)))
+    assert [(c.district_id, c.u, c.paid, c.owner_id) for c in rows] == [
+        ("test-support-team-1", 2, 0, admin.id),
+        ("test-support-team-1", 3, 0, admin.id),
+    ]
+    # Free; the real city never sees them; a reset clears them.
+    assert await count(session, CoinTransaction) == 0
+    assert (await district_view(client, me))["decor"] == {}
+    await client.post(f"{SANDBOX}/cities/support/reset", headers=me)
+    assert (await sandbox(client, me))["decor"] == {}
+    assert await count(session, CityCell, CityCell.district_id.like("test-%")) == 0
