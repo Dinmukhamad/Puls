@@ -12,7 +12,7 @@ from app.models.driver import DriverOrder, DriverProfile
 from app.models.driver_shift import DriverShift
 from app.models.enums import Role, TxType
 from app.models.progress import Notification
-from app.models.user import CoinAccount
+from app.models.user import CoinAccount, Group
 from app.services.coins import post_transaction
 from app.services.crm_catalog import default_categories
 from app.services.dispatch import mission_facts, solved_calls
@@ -414,31 +414,22 @@ def mission_rows(config, facts, awards):
 
 
 async def dashboard(session, user, *, inspecting=False):
-    # The group city, daily situations and districts build on this module: imported here.
+    # Daily situations and districts build on this module: imported here.
     from app.services.city_economy import economy
     from app.services.city_estate import construction_open, district_index
-    from app.services.city_group import group_city, group_context
     from app.services.city_quests import quests
     from app.services.city_world import settings as department_settings
     from app.services.scenarios import support_group_ids
 
     config = await settings(session)
     operator = user.role == Role.OPERATOR
-    context = await group_context(session, user)
+    # The operator's active group decides whether the scenarios show (app/services/scenarios.py).
+    group = (
+        await session.get(Group, user.group_id) if operator and user.group_id is not None else None
+    )
     # Resolve department ownership once for both scenario visibility and construction.
-    # The active group is already loaded by group_context; no extra directory or group read.
     department_config = await department_settings(session) if operator else None
-    # The operator and active teammates need the same evidence. Read it once for both missions
-    # and the group quarters, so returning to the city does not scan the operator's history twice.
-    facts_by_user = (
-        await evidence(session, [user.id, *(m.id for m in context[1] if m.id != user.id)])
-        if operator else {}
-    )
-    facts = (
-        facts_by_user[user.id]
-        if operator
-        else empty_facts()
-    )
+    facts = (await evidence(session, [user.id]))[user.id] if operator else empty_facts()
     awards = (
         {
             a.mission_key: a
@@ -451,7 +442,7 @@ async def dashboard(session, user, *, inspecting=False):
     # A staff preview includes the curriculum. An inspected operator keeps their own
     # assignment boundary, so sales and unassigned operators never see a TP scenario.
     scenarios_visible = not operator or bool(
-        user.is_active and context[0]
+        user.is_active and group and group.is_active
         and user.group_id in await support_group_ids(session, config=department_config)
     )
     if not scenarios_visible:
@@ -511,9 +502,6 @@ async def dashboard(session, user, *, inspecting=False):
         "buildings": [{**item, "price": prices[key]} for key, item in BUILDINGS.items()],
         "can_build": operator and not inspecting and not moved,
         "plots_moved": moved,
-        "group": await group_city(
-            session, user, context=context, facts=facts_by_user, config=values,
-        ),
         "quests": await quests(session, user, inspecting=inspecting),
     }
 

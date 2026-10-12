@@ -79,11 +79,17 @@ test('no cell on the railway, the station\'s square and street, the lake or a gr
       }
     }
   }
-  // The group quarters stay where they were, with no cell over them.
-  for (const site of SUPPORT.sites) {
-    const s = Math.sin(site.angle), c = Math.cos(site.angle), l = site.length / 2, d = site.depth / 2, reach = Math.hypot(l, d) + 4;
-    const corners = [[-l, -d], [l, -d], [l, d], [-l, d]].map(([a, b]) => ({ x: site.x + s * a + c * b, z: site.z + c * a - s * b }));
-    for (const cell of CELLS.support) if (Math.hypot(cell.x - site.x, cell.z - site.z) < reach) assert.ok(!L.polygonsOverlap(cell.corners, corners), `a cell on group quarter ${site.key}`);
+  // The island city's land is all the districts': beside the centres only the railway, the station's square and its
+  // street keep cells from sale (the group quarters that stood across the canal are gone).
+  const line = SUPPORT.railway, square = L.stationSquare(SUPPORT), grid = GRIDS.support;
+  const streets = SUPPORT.roads.streets.filter(([ax, az, bx, bz]) => Math.max(Math.hypot(ax, az), Math.hypot(bx, bz)) > L.WORLD_X4.bank);
+  for (const block of grid.blocks) for (const key of block.skip) {
+    const [c, r] = key.split(':').map(Number), centre = grid.centres.find(x => x.district === block.district && x.block === block.block);
+    if (centre && c >= centre.col && c < centre.col + centre.cols && r >= centre.row && r < centre.row + centre.rows) continue;
+    const corners = L.areaCorners(block, c, r), middle = L.areaPoint(corners, .5, .5);
+    const kept = [...corners, middle].some(p => L.onRailway(line, p, 1.5) || L.onSquare(line, square, p, 1.5))
+      || streets.some(road => L.segmentPolygonDistance(road, corners) < L.ROAD_GAP);
+    assert.ok(kept, `district ${block.district}, block ${block.block}: cell ${key} kept from sale for nothing`);
   }
 });
 
@@ -237,9 +243,8 @@ test('the island city\'s mainland is empty for the districts: no roads, houses, 
   assert.ok(SUPPORT.roads.crosswalks.every(c => !mainland(c)), 'a crossing on the mainland');
   assert.ok(SUPPORT.routes.every(plan => plan.route.points.every((p, i) => plan.route.hidden[i] || !mainland(p))), 'traffic on the mainland');
   assert.deepEqual([SUPPORT.complexes.length, SUPPORT.alleys.length], [0, 0]);
-  // What stays: the island ring with its road, plots and car parks, the group quarters, the forests on the hills.
+  // What stays: the island ring with its road, plots and car parks, the forests on the hills.
   assert.deepEqual(SUPPORT.roads.rings, town.roads.rings.filter(r => r < bank));
-  assert.equal(SUPPORT.sites.length, town.sites.length);
   assert.equal(SUPPORT.plots.length, town.plots.length);
   assert.ok(SUPPORT.roads.parking.filter(lot => Math.hypot(lot.x, lot.z) < bank).length >= 2);
   assert.ok(SUPPORT.placements.filter(p => Math.hypot(p.x, p.z) > horizon).length > 500, 'the hill forests');

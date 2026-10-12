@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useSearchParams } from "react-router-dom";
-import type { CityDistrict, CityGroup, CityMission, CityPlot, CityQuest, DistrictId } from "../../api/city";
+import type { CityDistrict, CityMission, CityPlot, CityQuest, DistrictId } from "../../api/city";
 import type { CityBuildView, CityControl, CityControlScheme, CityEstateView, CityLabelInfo, CityMascot, EstatePick, EstateTarget, TimeOfDay } from "../../city3d/types";
 import { CONTROL_SCHEMES } from "./cityControls";
 import { completedDistrictMissions, districtLevel, grownDistricts } from "./cityLevels";
@@ -16,15 +16,13 @@ import { watchCityStartup } from "./startupDeadline";
  * leave free, and the camera centres the city there. `progressKey` remembers the levels this viewer has
  * seen, so an upgrade is celebrated once.
  */
-export function CityMap({ department = "support", departmentWorld, onWorldPick, onArrival, onJourney, worldAction, estates, build = null, onEstate, estateFocus, sceneIdentity, districts, missions, labels, selected, onSelect, progressKey, mascot, forceWebGL = false, focusRequest = 0, plots = [], onPlot, plotFocus, sites = null, onSite, siteFocus, quests = [], onQuest, questFocus, controls = "orbit", onControls, controlsOpen = false, onStatus, onRetry }: { department?: DepartmentId; departmentWorld?: CityWorld; onWorldPick?: (id: string) => void; onArrival?: (id: DepartmentId) => void; onJourney?: (phase: JourneyPhase) => void; worldAction?: { kind: "travel" | "skip" | "focus"; target: string; at: number };
+export function CityMap({ department = "support", departmentWorld, onWorldPick, onArrival, onJourney, worldAction, estates, build = null, onEstate, estateFocus, sceneIdentity, districts, missions, labels, selected, onSelect, progressKey, mascot, forceWebGL = false, focusRequest = 0, plots = [], onPlot, plotFocus, quests = [], onQuest, questFocus, controls = "orbit", onControls, controlsOpen = false, onStatus, onRetry }: { department?: DepartmentId; departmentWorld?: CityWorld; onWorldPick?: (id: string) => void; onArrival?: (id: DepartmentId) => void; onJourney?: (phase: JourneyPhase) => void; worldAction?: { kind: "travel" | "skip" | "focus"; target: string; at: number };
   /** Team district land of both cities, the build mode, taps on the land; `estateFocus` flies there when it changes. */
   estates?: Partial<Record<DepartmentId, CityEstateView>>; build?: CityBuildView | null; onEstate?: (pick: EstatePick) => void;
   estateFocus?: EstateTarget & { at: number };
   sceneIdentity: string; districts: CityDistrict[]; missions: CityMission[]; labels: CityLabelInfo[]; selected: DistrictId; onSelect: (id: DistrictId) => void; progressKey?: string; mascot?: CityMascot; forceWebGL?: boolean; focusRequest?: number;
   /** The operator's plots; `onPlot` (when the viewer may build) opens the catalogue; `plotFocus` flies to a plot when it changes. */
   plots?: CityPlot[]; onPlot?: (key: string) => void; plotFocus?: { key: string; at: number };
-  /** The group's quarters (null: no group, all built); `onSite` opens the group panel; `siteFocus` flies to a quarter. */
-  sites?: CityGroup["projects"] | null; onSite?: (key: string) => void; siteFocus?: { key: string; at: number };
   /** Today's situations; `onQuest` (the operator themself) opens one from its "!"; `questFocus` flies to one. */
   quests?: CityQuest[]; onQuest?: (slot: number) => void; questFocus?: { slot: number; at: number };
   /** How the mouse moves the camera (the operator's choice); `onControls` opens the choice from the map tools. */
@@ -39,8 +37,6 @@ export function CityMap({ department = "support", departmentWorld, onWorldPick, 
   const questsKey = JSON.stringify(quests.map(q => ({ slot: q.slot, giver: q.giver, answered: q.answered }))), questsRef = useRef(quests), questRef = useRef(onQuest);
   questsRef.current = quests; questRef.current = onQuest;
   const canQuest = !!onQuest;
-  const sitesKey = JSON.stringify(sites), sitesRef = useRef(sites), siteRef = useRef(onSite);
-  sitesRef.current = sites; siteRef.current = onSite;
   const plotsKey = JSON.stringify(plots.map(p => [p.key, p.unlocked, p.item])), plotsRef = useRef(plots), plotRef = useRef(onPlot);
   plotsRef.current = plots; plotRef.current = onPlot;
   const canBuild = !!onPlot;
@@ -105,7 +101,6 @@ export function CityMap({ department = "support", departmentWorld, onWorldPick, 
         estates: worldRef.current.estates, build: worldRef.current.build, onEstate: pick => { if (!cancelled) worldRef.current.onEstate?.(pick); },
         world, forceWebGL: webGL, stats: showStats, timeOfDay: timeRef.current, controls: controlsRef.current,
         plots: plotsRef.current.map(({ key, unlocked, item }) => ({ key, unlocked, item })), onPlot: canBuild ? key => { if (!cancelled) plotRef.current?.(key); } : undefined,
-        sites: sitesRef.current, onSite: key => { if (!cancelled) siteRef.current?.(key); },
         quests: questsRef.current.map(({ slot, giver, answered }) => ({ slot, giver, answered })), onQuest: canQuest ? slot => { if (!cancelled) questRef.current?.(slot); } : undefined,
         levels: levelsRef.current, selected: selectedRef.current, labels: labelsRef.current, grown: growthRef.current(), mascot: mascotRef.current,
         onSelect: id => { if (!cancelled) selectRef.current(id); }, onView: () => { /* The retained camera owns its view between visits. */ },
@@ -139,8 +134,6 @@ export function CityMap({ department = "support", departmentWorld, onWorldPick, 
   useEffect(() => { control.current?.setQuests(JSON.parse(questsKey)); }, [questsKey]);
   useEffect(() => { if (questFocus) control.current?.focusQuest(questFocus.slot); }, [questFocus?.slot, questFocus?.at]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { control.current?.setPlots(JSON.parse(plotsKey).map(([key, unlocked, item]: [string, boolean, CityPlot["item"]]) => ({ key, unlocked, item }))); }, [plotsKey]);
-  useEffect(() => { control.current?.setSites(JSON.parse(sitesKey)); }, [sitesKey]);
-  useEffect(() => { if (siteFocus) control.current?.focusSite(siteFocus.key); }, [siteFocus?.key, siteFocus?.at]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (plotFocus) control.current?.focusPlot(plotFocus.key); }, [plotFocus?.key, plotFocus?.at]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     control.current?.setTimeOfDay(timeOfDay);

@@ -31,10 +31,10 @@ pytestmark = pytest.mark.asyncio
 CITY = "/api/v1/learning/city"
 ADMIN = "/api/v1/admin/learning/city"
 # District 1 of the island city (app/data/city_land.json) is made of small cells, a block a band:
-# block 1 is the first band, its six rows free in columns 0…17, 30…41 and 54…62 (a group quarter
-# and the station's line between); block 2 is the second band, free in columns 0…33 of its twelve
-# rows (the district's centre comes next). A building stands on P × P cells: "plot" (c, r) of these
-# tests is the building-sized square of cells from column P·c, row P·r.
+# block 1 is the first band, its six rows free in all 63 columns; block 2 is the second band, free
+# in columns 0…33 of its twelve rows (the district's centre comes next); block 5, the outermost
+# band, has the railway across it from column 43 on. A building stands on P × P cells: "plot"
+# (c, r) of these tests is the building-sized square of cells from column P·c, row P·r.
 FIRST, SECOND = 1, 2
 P = city_land.PLOT_CELLS
 # A plot in the first band and what it costs with a house: land 60 + house 120.
@@ -433,8 +433,8 @@ async def test_only_free_plots_of_ones_district_at_the_price_seen(
 ):
     me = auth(await login(client, team.login))
     for place, cells, code in (
-        ((FIRST, 6, 0), False, "wrong_plot"),  # a group quarter stands there
-        ((FIRST, 16, 0), True, "wrong_plot"),  # one of its nine cells is the quarter's
+        ((5, 16, 1), False, "wrong_plot"),  # the railway runs there
+        ((5, 46, 3), True, "wrong_plot"),  # one of its nine cells is the railway's
         ((SECOND, 12, 0), False, "wrong_plot"),  # the district's centre
         ((99, 0, 0), False, "wrong_plot"),  # no such block
         ((FIRST, 61, 0), True, "wrong_plot"),  # past the block's last column
@@ -551,11 +551,11 @@ async def test_every_band_is_open_before_building_and_filling_land_does_not_unlo
     client, session, team
 ):
     me = auth(await login(client, team.login))
-    await fund(session, team.id, 4000)
+    await fund(session, team.id, 8000)
     totals = city_land.band_totals("support-team-1")
-    assert totals[0] == 63 * 6 - 137 and len(totals) == 5
-    # Every plot of the first band: six, four and three side by side in each of its two rows.
-    first = [(FIRST, u, v) for u in (*range(6), *range(10, 14), *range(18, 21)) for v in (0, 1)]
+    assert totals[0] == 63 * 6 and len(totals) == 5
+    # Every plot of the first band: twenty-one side by side in each of its two rows.
+    first = [(FIRST, u, v) for u in range(21) for v in (0, 1)]
     # A team may start in the outermost part before building anything nearer the centre.
     empty = (await district_view(client, me))["land"]
     assert empty["open_band"] == 5 and empty["taken"] == 0
@@ -569,9 +569,9 @@ async def test_every_band_is_open_before_building_and_filling_land_does_not_unlo
     need = len(first) * P * P
     assert land["open_band"] == 5 and land["cells"] == sum(totals)
     assert land["taken"] == land["built"] == need + P * P
-    # The band is full: its last seven cells lie singly between the houses and the quarter.
+    # The band is full, every one of its cells under a house.
     assert land["bands"][0] == {"band": 1, "cells": totals[0], "taken": need}
-    assert totals[0] - need == 7
+    assert need == totals[0]
     r = await buy(client, me, "house", SECOND, 0, 0)
     assert r.status_code == 200 and r.json()["price"] == 45 + 120
     bands = await session.scalars(select(CityEvent.payload).where(CityEvent.kind == "band"))
@@ -1248,7 +1248,7 @@ async def test_small_things_are_laid_on_free_cells_of_the_district_and_paid_toge
     # Any operator of the district builds on any free cell; one cell wrong refuses the batch.
     for cells, code in (
         ([(FIRST, 5, 3), (FIRST, 4, 3)], "plot_taken"),  # a road stands there already
-        ([(FIRST, 18, 0)], "wrong_plot"),  # the group quarter
+        ([(5, 48, 3)], "wrong_plot"),  # the railway
         ([(FIRST, 63, 0)], "wrong_plot"),  # past the block's last column
         ([(SECOND, 40, 2)], "wrong_plot"),  # the district's centre
         ([(FIRST, 6, 5), (FIRST, 6, 5)], "cells_repeated"),

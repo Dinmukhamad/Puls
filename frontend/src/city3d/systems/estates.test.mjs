@@ -4,7 +4,7 @@ import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
 
 const built = await build({
-  stdin: { contents: 'export * from "./estates.ts"; export * from "../render/night.ts"; export * from "../engine/camera.ts"; export * from "../assets/catalogue.ts"; export * from "../world/familyHouses.ts"; export * from "../world/land.ts"; export * from "../world/landLayouts.ts"; export * from "../world/officeBuildings.ts"; export * from "../world/districtLandmark.ts"; export * from "../world/cities.ts"; export * from "../world/worldSpec.ts"; export * as THREE from "three/webgpu";', resolveDir: fileURLToPath(new URL('.', import.meta.url)) },
+  stdin: { contents: 'export * from "./estates.ts"; export * from "../render/night.ts"; export * from "../engine/camera.ts"; export * from "../assets/catalogue.ts"; export * from "../world/familyHouses.ts"; export * from "../world/land.ts"; export * from "../world/districtGarden.ts"; export * from "../world/landLayouts.ts"; export * from "../world/officeBuildings.ts"; export * from "../world/districtLandmark.ts"; export * from "../world/cities.ts"; export * from "../world/worldSpec.ts"; export * as THREE from "three/webgpu";', resolveDir: fileURLToPath(new URL('.', import.meta.url)) },
   bundle: true, platform: 'node', format: 'esm', write: false, logLevel: 'error',
   plugins: [{ name: 'url', setup(b) {
     b.onResolve({ filter: /\?url$/ }, a => ({ path: a.path, namespace: 'url' }));
@@ -113,6 +113,22 @@ test('normal exploration hides plot grids; personal build shows only own land an
   assert.equal(s.ctx.scene.getObjectByName('district-plots'), undefined);
   assert.equal(s.ctx.scene.getObjectByName('district-centres'), undefined);
   assert.equal(s.ctx.scene.getObjectByName('district-seams'), undefined);
+});
+
+test('every centre is a garden round its main building, its lamps lit at night; an old square keeps its own look', () => {
+  const s = setup(); s.state([]);
+  const halos = () => s.ctx.scene.getObjectByName('district-lamp-garden-halos'), lamps = () => halos().geometry.instanceCount;
+  const gardens = grid.centres.map(c => city.districtGarden(grid.blocks.find(b => b.district === c.district && b.block === c.block), c));
+  assert.equal(lamps(), gardens.reduce((sum, g) => sum + g.lamps.length, 0), 'every garden\'s lamps');
+  // The centres' ground is the gardens' lawn, paths and paving, laid out once.
+  const colours = s.ctx.scene.getObjectByName('district-centres').geometry.getAttribute('color'), lawn = new THREE.Color(city.GARDEN_LAWN);
+  assert.ok(Array.from({ length: colours.count }, (_, i) => i).some(i => Math.abs(colours.getX(i) - lawn.r) < 1e-6 && Math.abs(colours.getY(i) - lawn.g) < 1e-6), 'the lawn');
+  // A district whose old square still holds projects keeps that square beside its building, without the garden.
+  s.state([], false, { landmark: { status: 'legacy_occupied', level: 1, module: 0, u: 0, v: 0, w: 12, h: 12, rotation: 0 } });
+  assert.equal(lamps(), gardens.reduce((sum, g, i) => sum + (grid.centres[i].district === frame.district ? 0 : g.lamps.length), 0));
+  assert.ok(s.ctx.scene.getObjectByName('city-patches'), 'the old square\'s paving');
+  s.estates.dispose();
+  assert.equal(halos(), undefined);
 });
 
 test('empty community square and its visible invitation open shared projects; paid objects and project sites retain priority', () => {

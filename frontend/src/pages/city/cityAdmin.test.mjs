@@ -26,17 +26,11 @@ const controls = await build({
   loader: { ".css": "empty" }, write: false,
 });
 
-const kinds = { missions: 20, quests: 5, orders: 3, appeals: 3, closed: 5 };
-const member = (user_id, full_name, points) => ({ user_id, full_name, missions: 1, quests: 2, orders: 0, appeals: 0, closed: 0, points });
 const fixtures = {
   "city-participants": { total: 1, size: 20, page: 1, items: [{ user_id: 7, full_name: "Анна Смирнова", login: "op07", level: 2, xp: 120, orders: 3, appeals: 1, completed: 1, total: 3, ready: 1, missions: [
     { key: "welcome", title: "Старт", state: "completed", current: 1, target: 1 },
     { key: "crm", title: "CRM", state: "ready", current: 2, target: 2 },
     { key: "fleet", title: "Автопарк", state: "locked", current: 0, target: 3 },
-  ] }] },
-  "city-groups": { points: kinds, items: [{ id: 1, name: "Группа 1 - дневная смена", total: 40, members: [member(7, "Анна Смирнова", 25), member(8, "Борис Ким", 15)], projects: [
-    { key: "embankment", name: "Квартал «Набережный»", stage: "foundation", points: 40, cost: 150 },
-    { key: "central", name: "Квартал «Центральный»", stage: "planned", points: 0, cost: 1200 },
   ] }] },
   "city-situations": { revision: 1, can_edit: true, answered: { phone: 4, rude: 1 }, exhausted: 2, items: [
     { id: "phone", speaker: "Водитель", text: "Водитель просит сменить номер телефона.", options: ["Только новый номер", "Старый и новый номера"], correct: 1, explanation: "Нужны оба номера.", enabled: true },
@@ -44,10 +38,9 @@ const fixtures = {
     { id: "rude", speaker: "Водитель", text: "Водитель повышает голос.", options: ["Выслушать", "Перебить", "Положить трубку"], correct: 0, explanation: "", enabled: true },
     { id: "own-x", speaker: "Диспетчер", text: "Диспетчер просит уточнить адрес.", options: ["Уточнить", "Отказать"], correct: 0, explanation: "", enabled: true },
   ] },
-  "city-economy": { revision: 3, can_edit: true, quest_coins: 10, points: kinds,
+  "city-economy": { revision: 3, can_edit: true, quest_coins: 10,
     prices: { garden: 40, gazebo: 50, playground: 60, sports: 70, fountain: 90, cottage: 120, house: 200, tower: 350 },
     catalogue: [{ key: "garden", name: "Сквер", icon: "🌳" }, { key: "playground", name: "Детская площадка", icon: "🎠" }],
-    projects: [{ key: "embankment", name: "Квартал «Набережный»", cost: 150 }, { key: "central", name: "Квартал «Центральный»", cost: 1200 }],
     land: [60, 45, 30], estate: { square: [40], house: [120, 180], carport: [300], officea: [900], park: [0, 120] }, decor: { road: 5, tree: 10, lamp: 15 }, district: { square: [120] }, hq: [1, 3] },
   "city-estates-report": { operators_without_district: 12, inventory: 0, legacy: { buildings: 0, operators: 0, paid: 0 }, coins: { buildings: 0, contributions: 0, refunded: 0 }, districts: [
     { id: "support-team-1", city: "support", name: "Район 1", construction: true, operators: 6, builders: 2, land: { cells: 10635, taken: 36, built: 27, open_band: 1, bands: [] }, buildings: 4, open_projects: 1, landmark_level: 1, hq_level: 1, built_projects: 0 },
@@ -92,7 +85,8 @@ test("the page uses the site's head and one segmented row of sections that follo
   assert.match(html, /<div class="page-head"><div><h1 class="page-title">Управление городом<\/h1><p class="page-subtitle">/);
   assert.match(html, /<div class="page-head__actions"><a href="\/training\/city" class="btn btn--secondary btn--m">Открыть город<\/a><\/div>/);
   assert.match(html, /<div class="city-admin-tabs"><div class="segmented" role="radiogroup" aria-label="Разделы управления городом">/);
-  assert.equal((html.match(/role="radio"/g) ?? []).length, 7);
+  assert.equal((html.match(/role="radio"/g) ?? []).length, 6);
+  assert.doesNotMatch(html, /Города групп/);
   assert.match(html, /<button type="button" role="radio" aria-checked="true" tabindex="0" class="segmented__item is-active">Экономика игры<\/button>/);
   assert.doesNotMatch(html, /city-page|city-heading|city-eyebrow|aria-pressed|city-action|city-secondary/);
   // Without a section in the address a head starts on the cities, a supervisor on the operators.
@@ -133,16 +127,6 @@ test("operators get a search, a legend and a mission scale in rows of one list",
   assert.match(html, /<a href="\/training\/city\?operator=7" class="btn btn--secondary btn--s">Открыть путь<\/a>/);
 });
 
-test("group cities show quarters with their stage above the name and members in a table or a phone list", () => {
-  const html = page("groups");
-  assert.match(html, /<div class="card__body city-admin-quarters-body"><ol class="city-admin-quarters">/);
-  assert.match(html, /<li><span class="badge badge--neutral">Запланирован<\/span><strong class="city-admin-quarters__name">Квартал «Центральный»<\/strong><div class="progress/);
-  assert.match(html, /<li><span class="badge badge--accent">Фундамент<\/span><strong class="city-admin-quarters__name">Квартал «Набережный»<\/strong><div [^>]*><div [^>]*><\/div><\/div><span class="city-admin-quarters__count">40 \/ 150 очков<\/span><\/li>/);
-  assert.match(html, /<div class="table-wrap table-wrap--responsive city-admin-table"><table class="table"><thead><tr><th>Оператор<\/th>/);
-  assert.match(html, /<div class="card__body city-admin-members"><h3 class="city-admin-subtitle">Операторы группы<\/h3><ul class="card-list">/);
-  assert.match(html, /<strong class="nowrap">25 очков<\/strong>/);
-});
-
 test("daily situations are a list; a new one is created in a dialog from the card's button", () => {
   const html = page("situations");
   assert.match(html, /<div class="card__action"><button type="button" class="btn btn--primary btn--m">\+ Новая ситуация<\/button><\/div>/);
@@ -174,12 +158,11 @@ test("daily situations are a list; a new one is created in a dialog from the car
 test("the economy shows its numbers in rows of cells, and each section is changed in a dialog", () => {
   const html = page("economy");
   const titles = [...html.matchAll(/<h2 class="card__title">([^<]+)<\/h2>/g)].map(match => match[1]);
-  assert.deepEqual(titles, ["Цены построек", "Очки для города группы", "Кварталы группы", "Задания дня", "Стоимость земли по зонам", "Районы команд: дома, офисы и скверы", "Дороги и благоустройство", "Общие проекты района", "Учёт прежних общих проектов"]);
+  assert.deepEqual(titles, ["Цены построек", "Задания дня", "Стоимость земли по зонам", "Районы команд: дома, офисы и скверы", "Дороги и благоустройство", "Общие проекты района", "Учёт прежних общих проектов"]);
   assert.deepEqual([...html.matchAll(/aria-label="Изменить: ([^"]+)"[^>]*>Изменить<\/button>/g)].map(match => match[1]), titles);
   // The page itself has no fields: values only, label over number.
   assert.doesNotMatch(html, /<input|<fieldset|Сохранить настройки|готовый дом|офисное здание/);
   assert.match(html, /<dl class="city-admin-strip"><div><dt><span aria-hidden="true">🌳<\/span>Сквер<\/dt><dd>40<\/dd><\/div><div><dt><span aria-hidden="true">🎠<\/span>Детская площадка<\/dt><dd>60<\/dd><\/div><\/dl>/);
-  assert.match(html, /<dt>1\. Квартал «Набережный»<\/dt><dd>150<\/dd><\/div><div><dt>2\. Квартал «Центральный»<\/dt><dd>1\s200<\/dd>/);
   assert.match(html, /<dt>Коинов за верный ответ<\/dt><dd>10<\/dd>/);
   assert.match(html, /<dt>Зона 1 · у центра<\/dt><dd>60<\/dd>.*<dt>Зона 3 · окраина<\/dt><dd>30<\/dd>/s);
   // A section of several kinds names each kind over its row; a single row needs no heading.

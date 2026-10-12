@@ -53,8 +53,11 @@ export interface LandBlock {
  */
 export interface Frame extends Point { rotation: number; width: number; depth: number; corners: Point[]; street: boolean }
 export interface LandCell extends Frame { district: number; block: number; col: number; row: number; band: number }
-/** A district's centre: the cells kept for it (`cols` × `rows` from `col`, `row` of its block, their frame `area`), the headquarters' site and the public square. */
-export interface DistrictCentre { district: number; block: number; col: number; row: number; cols: number; rows: number; area: Frame; hq: Point & { rotation: number }; square: ModuleSlot }
+/**
+ * A district's centre: the cells kept for it (`cols` × `rows` from `col`, `row` of its block, their frame `area`, its
+ * front to `side`), the headquarters' site and the public square.
+ */
+export interface DistrictCentre { district: number; block: number; col: number; row: number; cols: number; rows: number; side: BlockSide; area: Frame; hq: Point & { rotation: number }; square: ModuleSlot }
 export interface LandGrid { city: LandCity; bands: number; blocks: LandBlock[]; centres: DistrictCentre[] }
 
 const TAU = Math.PI * 2, DEG = Math.PI / 180;
@@ -200,6 +203,16 @@ export function districtBorders(grid: LandGrid, world: WorldData): DistrictBorde
     }
   }
   return out;
+}
+
+/** The world point at `col` columns and `row` rows (fractions too) from a block's first corner. */
+export function blockPoint(block: LandBlock, col: number, row: number): Point {
+  const s = block.shape;
+  if (s.kind === "ring") {
+    const r = s.r0 + row * (s.r1 - s.r0) / block.rows, a = s.a0 + col * (s.a1 - s.a0) / block.cols;
+    return { x: Math.cos(a) * r, z: Math.sin(a) * r };
+  }
+  return { x: s.x0 + col * (s.x1 - s.x0) / block.cols, z: s.z0 + row * (s.z1 - s.z0) / block.rows };
 }
 
 /** Where a world point lies in a block, in columns (u) and rows (v) from its first corner; null off the block. */
@@ -353,12 +366,11 @@ export function landJson(grid: LandGrid) {
 }
 
 /**
- * The island city's mainland, empty for the districts: of the generated town only the group quarters stay (drawn apart,
- * world/sites.ts). Its houses, towers, complexes with their yards and walks, trees, parks, the port, the car parks, and
- * now its ring roads and avenues with their crossings, street lamps and traffic go too: the districts' operators lay
- * their own roads. The canal with its arch bridges, the island ring with its plots (world/plots.ts), car parks and
- * ring road, the forests on the hills beyond the horizon stay. The station and its square are laid out afterwards
- * (world/cities.ts).
+ * The island city's mainland, empty for the districts: its houses, towers, complexes with their yards and walks, trees,
+ * parks, the port, the car parks, its ring roads and avenues with their crossings, street lamps and traffic all go: the
+ * districts' operators lay their own roads. The canal with its arch bridges, the island ring with its plots
+ * (world/plots.ts), car parks and ring road, the forests on the hills beyond the horizon stay. The station and its
+ * square are laid out afterwards (world/cities.ts).
  */
 export function clearMainland(world: WorldData) {
   const bank = mainlandOf(world).inner, horizon = world.spec.horizon;
@@ -411,7 +423,7 @@ function builder(clear: (corners: Point[], centre: Point) => boolean) {
       const area = areaFrame(block, c0, r0, nc, nr, side, true), sin = Math.sin(area.rotation), cos = Math.cos(area.rotation), half = area.width / 4;
       const at = (lu: number) => ({ x: area.x + cos * lu, z: area.z - sin * lu });
       return {
-        district: block.district, block: block.block, col: c0, row: r0, cols: nc, rows: nr, area,
+        district: block.district, block: block.block, col: c0, row: r0, cols: nc, rows: nr, side, area,
         hq: { ...at(-half), rotation: area.rotation }, square: { district: block.district, slot: 0, kind: "public", ...at(half), rotation: area.rotation },
       };
     },
@@ -438,15 +450,12 @@ const near = (streets: readonly Road[], x0: number, x1: number, z0: number, z1: 
 export const BORDERS = [-32.7 * DEG, 90 * DEG, -146.7 * DEG];
 function islandLand(world: WorldData): LandGrid {
   const line = world.railway, square = stationSquare(world), streets = world.roads.streets;
-  // What stays of the city on the mainland: the station with its square and its street, the group quarters.
-  const sites = world.sites.map(s => ({ corners: rectangle(s.x, s.z, s.angle, s.length, s.depth, 1.6), r: Math.hypot(s.x, s.z), reach: Math.hypot(s.length, s.depth) / 2 + 4 }));
+  // What stays of the city on the mainland: the station with its square and its street.
   const mainland = mainlandOf(world);
   const kept = near(streets, -mainland.outer, mainland.outer, -mainland.outer, mainland.outer).filter(([ax, az, bx, bz]) => Math.max(Math.hypot(ax, az), Math.hypot(bx, bz)) > mainland.inner);
   const clear = (corners: Point[], centre: Point) => {
     if (line && [...corners, centre].some(p => onRailway(line, p, 1) || (square ? onSquare(line, square, p, 1) : false))) return false;
-    if (kept.length && !offStreets(kept, corners, centre)) return false;
-    const r = Math.hypot(centre.x, centre.z);
-    return sites.every(site => Math.abs(site.r - r) > site.reach || Math.hypot(site.corners[0].x - centre.x, site.corners[0].z - centre.z) > 2 * site.reach || !polygonsOverlap(corners, site.corners));
+    return !kept.length || offStreets(kept, corners, centre);
   };
   const b = builder(clear);
   // The ring roads' circles still part the bands, whose land costs more nearer the centre.

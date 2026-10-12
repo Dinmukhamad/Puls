@@ -47,7 +47,6 @@ export function createCityRetention() {
           onJourney: phase => next.callbacks?.onJourney?.(phase),
           onEstate: pick => next.callbacks?.onEstate?.(pick),
           onPlot: options.onPlot ? key => next.callbacks?.onPlot?.(key) : undefined,
-          onSite: options.onSite ? key => next.callbacks?.onSite?.(key) : undefined,
           onQuest: options.onQuest ? slot => next.callbacks?.onQuest?.(slot) : undefined,
           onReady: () => status("ready"), onLost: () => status("failed"),
           onRestored: () => { status("ready"); next.callbacks?.onRestored?.(); },
@@ -83,7 +82,6 @@ export function createCityRetention() {
         current.control.setLabels(options.labels);
         if (options.mascot) current.control.setMascot(options.mascot);
         current.control.setPlots(options.plots ?? []);
-        current.control.setSites(options.sites ?? null);
         current.control.setQuests(options.quests ?? []);
         current.control.setTimeOfDay(options.timeOfDay ?? "day");
         current.control.setControls(options.controls ?? "orbit");

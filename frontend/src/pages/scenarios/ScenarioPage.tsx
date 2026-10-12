@@ -13,7 +13,7 @@ export function ScenarioPage() {
   const saveAttempt = (value: ScenarioAttempt) => { client.setQueryData(scenarioKeys.attempt(value.id), value); void client.invalidateQueries({ queryKey: scenarioKeys.catalog }); };
   const start = useMutation({ mutationFn: () => scenarios.start(key), onSuccess: value => { saveAttempt(value); navigate(`/training/scenarios/attempts/${encodeURIComponent(value.id)}`); } });
   const answer = useMutation({ mutationFn: ({ step, choice }: { step: number; choice: number }) => scenarios.answer(attemptId!, step, choice), onSuccess: saveAttempt });
-  const finish = useMutation({ mutationFn: () => scenarios.finish(attemptId!), onSuccess: value => { saveAttempt(value); for (const prefix of ["wallet", "coin-progress", "notifications", "city", "city-world", "city-estate", "city-estates", "city-groups", "city-participants", "dashboard", "summary"]) void client.invalidateQueries({ queryKey: [prefix] }); } });
+  const finish = useMutation({ mutationFn: () => scenarios.finish(attemptId!), onSuccess: value => { saveAttempt(value); for (const prefix of ["wallet", "coin-progress", "notifications", "city", "city-world", "city-estate", "city-estates", "city-participants", "dashboard", "summary"]) void client.invalidateQueries({ queryKey: [prefix] }); } });
   const query = attemptId ? attempt : catalog;
   const summary = catalog.data?.items.find(item => item.key === key);
   return <main className="scenario-page">

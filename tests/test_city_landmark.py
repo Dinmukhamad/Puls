@@ -75,7 +75,7 @@ async def test_fresh_complex_reserves_the_whole_square_in_real_and_test_cities(
     }
     assert landmark["plots"] == city_land.plot_count("support-team-1")
     plots = city_land.plot_count("support-team-1")
-    assert landmark["next"]["need"] == city_landmark.needed(plots, 2) == 1064
+    assert landmark["next"]["need"] == city_landmark.needed(plots, 2) == 1078
     assert landmark["peak"] == 0
     denied = await client.post(
         f"{CITY}/projects",

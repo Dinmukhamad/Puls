@@ -157,19 +157,8 @@
 .city-catalogue__icon{display:grid;place-items:center;width:44px;height:44px;border-radius:12px;background:var(--surface-primary);font-size:24px}
 .city-catalogue__text{display:grid;gap:3px;min-width:0}.city-catalogue__text strong{font-size:14px}.city-catalogue__text small{font-size:12px;color:var(--text-secondary);line-height:1.4}
 .city-catalogue .city-action{min-height:40px;width:auto;padding:0 14px;font-size:13px;white-space:nowrap}
-/* The group city (sheet) and its HUD button. */
+/* A HUD button: the test city, building, the open situations. */
 .city-group-button{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 12px;border:1px solid var(--separator);border-radius:12px;background:var(--city-glass-soft);color:var(--text-primary);font:inherit;font-size:13px;font-weight:650;cursor:pointer}
-.city-group{display:grid;gap:14px}
-.city-group__lead{margin:0;font-size:13px;line-height:1.55;color:var(--text-secondary)}
-.city-group__projects{list-style:none;margin:0;padding:0;display:grid;gap:8px}
-.city-group__projects button{width:100%;display:grid;grid-template-columns:40px minmax(0,1fr) auto;align-items:center;gap:12px;padding:10px 12px;border-radius:14px;border:1px solid var(--separator);background:var(--city-soft);color:var(--text-primary);font:inherit;text-align:left;cursor:pointer}
-.city-group__projects li[data-stage=planned] button{opacity:.65}
-.city-group__icon{display:grid;place-items:center;width:40px;height:40px;border-radius:11px;background:var(--surface-primary);font-size:21px}
-.city-group__name{display:grid;gap:3px;min-width:0}.city-group__name strong{font-size:14px}.city-group__name small{font-size:12px;color:var(--text-secondary)}
-.city-group__steps{display:flex;gap:4px}.city-group__steps i{width:14px;height:6px;border-radius:3px;background:color-mix(in srgb,var(--text-primary) 14%,transparent)}.city-group__steps i[data-on]{background:#2f9e5b}
-.city-group__mine{display:grid;gap:8px;padding:12px;border-radius:14px;background:var(--city-glass-soft);border:1px solid var(--separator)}
-.city-group__mine ul{list-style:none;margin:0;padding:0;display:grid;gap:4px}.city-group__mine li{display:flex;justify-content:space-between;font-size:12.5px;color:var(--text-secondary)}
-.city-group__mine small{font-size:11px;color:var(--text-secondary)}
 /* A daily situation (sheet) and the HUD button with open ones. */
 .city-group-button[data-open]{border-color:#e0a800;background:color-mix(in srgb,#ffc21a 22%,var(--surface-primary))}
 .city-quest{display:grid;gap:14px}

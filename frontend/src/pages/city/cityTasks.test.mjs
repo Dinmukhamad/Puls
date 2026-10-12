@@ -41,7 +41,7 @@ test("the day's situations show what is left, what was right and what the reward
   const states = [...html.matchAll(/class="city-task__state">([^<]+)</g)].map(match => match[1]);
   assert.deepEqual(states, ["✓ +10", "Разбор", "Ответить"]);
   assert.equal((html.match(/data-done="true"/g) ?? []).length, 2, "answered situations are dimmed");
-  assert.match(texts(html), /Верный ответ — \+10 коинов и очки для города группы\./);
+  assert.match(texts(html), /Верный ответ — \+10 коинов\./);
   assert.doesNotMatch(html, /От тренера/, "no trainer section without assignments");
   const done = render({ quests: [quest(0, true, true), quest(1, true, true), quest(2, true, false)] });
   assert.match(texts(done), /На сегодня всё\. Новые задания появятся завтра\./);

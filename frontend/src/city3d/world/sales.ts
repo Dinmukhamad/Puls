@@ -36,7 +36,7 @@ export function generateSalesWorld(): WorldData {
     roads: { rings: [], streets, bridges: [], crosswalks: [], parking: [] },
     placements, parks: [], complexes: [], alleys: [], surfaces,
     walks: [Array.from({ length: 65 }, (_, i) => ({ x: Math.cos(i / 64 * Math.PI * 2) * 50, z: Math.sin(i / 64 * Math.PI * 2) * 50 }))],
-    plots: [], sites: [], questSpots: [], routes: [],
+    plots: [], questSpots: [], routes: [],
     railway: RAIL_LINES.sales,
   };
   // The station's street, car park and park, between the town's edge and the hills (world/stationSquare.ts). The

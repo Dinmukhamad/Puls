@@ -3,7 +3,6 @@
  */
 import type { DistrictId } from "../api/city";
 import type { BuildingKey } from "./world/plots";
-import type { SiteStage } from "./world/sites";
 import type { CityWorld, DepartmentId } from "../api/cityWorld";
 import type { CityEstates } from "../api/cityEstate";
 import type { DecorFamily, PlotFamily, ProjectFamily } from "./world/estateGrid";
@@ -50,8 +49,6 @@ export type TimeOfDay = "day" | "night";
 /** How the mouse and one finger move the camera: "orbit" — as before (drag turns, right button moves), "map" — like a map. */
 export type CityControlScheme = "orbit" | "map";
 /** An operator's plot as the server reports it (api/city.ts CityPlot). */
-/** A group quarter as the server reports it; no list at all means no group, and every quarter stands built. */
-export interface CitySiteInfo { key: string; name: string; stage: SiteStage }
 /** A daily situation as the server reports it (api/city.ts CityQuest): only whether it waits on the map matters here. */
 export interface CityQuestInfo { slot: number; giver: string; answered: boolean }
 export interface CityPlotInfo { key: string; unlocked: boolean; item: BuildingKey | null }
@@ -86,9 +83,6 @@ export interface CityOptions {
   /** The operator's plots; `onPlot` (only when the viewer may build) opens the catalogue for an empty open plot. */
   plots?: CityPlotInfo[];
   onPlot?: (key: string) => void;
-  /** The group city's quarters (null: no group); `onSite` opens the group panel from the sign over the one being built. */
-  sites?: CitySiteInfo[] | null;
-  onSite?: (key: string) => void;
   /** Today's situations; `onQuest` (only for the operator themself) opens one from its "!" on the map. */
   quests?: CityQuestInfo[];
   onQuest?: (slot: number) => void;
@@ -118,8 +112,6 @@ export interface CityControl {
   setPlots: (plots: CityPlotInfo[]) => void;
   /** Flies to a plot, e.g. to show what was just built there. */
   focusPlot: (key: string) => void;
-  setSites: (sites: CitySiteInfo[] | null) => void;
-  focusSite: (key: string) => void;
   setQuests: (quests: CityQuestInfo[]) => void;
   focusQuest: (slot: number) => void;
   zoom: (factor: number) => void; rotate: (radians: number) => void; tilt: (radians: number) => void; reset: () => void;

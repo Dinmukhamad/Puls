@@ -388,9 +388,9 @@ async def test_small_things_are_free_and_any_administrator_takes_them_away(
     assert view["decor"] == {"road": [[FIRST, c, 0, 1] for c in range(4)]}
     assert (view["land"]["taken"], view["land"]["built"]) == (4, 0)
     assert {cell[3] for cell in (await sandbox(client, o))["decor"]["road"]} == {0}
-    # The real city's rules of the land: a taken cell, a group quarter, a building's cells.
+    # The real city's rules of the land: a taken cell, the railway's, a building's cells.
     assert (await lay(client, o, "tree", [(FIRST, 0, 0)])).json()["code"] == "plot_taken"
-    assert (await lay(client, o, "tree", [(FIRST, 18, 0)])).json()["code"] == "wrong_plot"
+    assert (await lay(client, o, "tree", [(5, 48, 3)])).json()["code"] == "wrong_plot"
     assert (await build(client, o, "house", FIRST, 0, 0)).json()["code"] == "plot_taken"
     assert (await lay(client, o, "castle", [(FIRST, 9, 0)])).status_code == 404
     elsewhere = await lay(client, o, "tree", [(FIRST, 9, 0)], "support-team-4")

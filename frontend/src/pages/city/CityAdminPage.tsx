@@ -2,11 +2,11 @@ import { CityWorldEditor } from "./CityWorldEditor";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { city, MISSION_STATES, POINT_KINDS, SITE_STAGES, type CityEconomy, type CitySettings, type CitySituation, type CitySituations, type PointKind, type SiteStage } from "../../api/city";
+import { city, MISSION_STATES, type CityEconomy, type CitySettings, type CitySituation, type CitySituations } from "../../api/city";
 import { ApiError } from "../../api/client";
 import { cityEstate } from "../../api/cityEstate";
 import { useAuth } from "../../auth/AuthContext";
-import { Badge, Button, Card, EmptyState, ErrorState, IconButton, KPI, Pagination, Progress, SegmentedControl, Select, Skeleton, type Tone } from "../../components/ui";
+import { Badge, Button, Card, EmptyState, ErrorState, IconButton, KPI, Pagination, SegmentedControl, Select, Skeleton, type Tone } from "../../components/ui";
 import { Sheet } from "../../components/Sheet";
 import { useToast } from "../../components/Toast";
 import { coins, plural } from "../../utils/format";
@@ -15,8 +15,8 @@ import { decorEconomyName, estateRows, plotEconomyName } from "./plotCatalogue";
 
 /** Dispatch calls cannot exceed the server's curriculum. */
 const DISPATCH_TARGETS: Record<string, number> = { dispatch_driver: 2, dispatch_car: 1, dispatch_inventory: 1, dispatch_support: 1, dispatch_limit: 3 };
-type CityAdminTab = "participants" | "groups" | "economy" | "situations" | "settings" | "world" | "estates";
-const CITY_ADMIN_TABS: CityAdminTab[] = ["participants", "groups", "economy", "situations", "settings", "world", "estates"];
+type CityAdminTab = "participants" | "economy" | "situations" | "settings" | "world" | "estates";
+const CITY_ADMIN_TABS: CityAdminTab[] = ["participants", "economy", "situations", "settings", "world", "estates"];
 
 export function CityAdminPage() {
   const { user } = useAuth();
@@ -27,7 +27,7 @@ export function CityAdminPage() {
   const settings = useQuery({ queryKey:["city-settings"], queryFn:city.settings, enabled:tab === "settings", refetchOnWindowFocus:false });
   const tabs: { value: CityAdminTab; label: string }[] = [
     { value: "world", label: "Города и районы" }, { value: "estates", label: "Стройка районов" }, { value: "participants", label: "Прогресс операторов" },
-    { value: "groups", label: "Города групп" }, { value: "situations", label: "Ситуации дня" }, { value: "economy", label: "Экономика игры" },
+    { value: "situations", label: "Ситуации дня" }, { value: "economy", label: "Экономика игры" },
     { value: "settings", label: canEdit ? "Настроить миссии" : "Условия миссий" },
   ];
   // The tab lives in the address, so a reload or a shared link opens the same section.
@@ -38,7 +38,7 @@ export function CityAdminPage() {
   return <div className="stack city-admin">
     <div className="page-head"><div><h1 className="page-title">Управление городом</h1><p className="page-subtitle">Назначайте команды районов, настраивайте миссии и следите за прогрессом.</p></div><div className="page-head__actions"><Link className="btn btn--secondary btn--m" to="/training/city">Открыть город</Link></div></div>
     <div className="city-admin-tabs" ref={tabRow}><SegmentedControl label="Разделы управления городом" options={tabs} value={tab} onChange={select} /></div>
-    {tab==='world'?<CityWorldEditor isHead={user?.role === "head"} />:tab==='estates'?<Estates />:tab==='participants'?<Participants />:tab==='groups'?<Groups />:tab==='economy'?<Economy />:tab==='situations'?<Situations />:settings.data?<MissionEditor initial={settings.data} canEdit={canEdit} />:settings.isError?<ErrorState error={settings.error} onRetry={()=>settings.refetch()} />:<Skeleton height={350} />}
+    {tab==='world'?<CityWorldEditor isHead={user?.role === "head"} />:tab==='estates'?<Estates />:tab==='participants'?<Participants />:tab==='economy'?<Economy />:tab==='situations'?<Situations />:settings.data?<MissionEditor initial={settings.data} canEdit={canEdit} />:settings.isError?<ErrorState error={settings.error} onRetry={()=>settings.refetch()} />:<Skeleton height={350} />}
   </div>;
 }
 
@@ -67,37 +67,6 @@ function Participants() {
       </li>)}</ul> : <EmptyState title="Операторы не найдены" hint="Попробуйте другое имя или логин."/>}
       <div className="city-admin-pagination"><Pagination page={page} size={query.data.size} total={query.data.total} onChange={setPage}/></div>
     </Card>}
-  </div>;
-}
-
-const STAGE_TONE: Record<SiteStage, Tone> = { planned: "neutral", foundation: "accent", frame: "accent", floors: "accent", done: "success" };
-
-/** Staff only: every visible group's quarters with points, and each member's contribution. Operators never see this. */
-function Groups() {
-  const query=useQuery({queryKey:['city-groups'],queryFn:city.groups,refetchInterval:30000});
-  const kinds=Object.keys(POINT_KINDS) as PointKind[];
-  if(query.isError)return <ErrorState error={query.error} onRetry={()=>query.refetch()}/>;
-  if(!query.data)return <Skeleton height={250}/>;
-  return <div className="stack">
-    <div className="ui-note city-admin-note"><p>Операторы видят только стадии кварталов своей группы и свои очки.</p>
-      <dl className="city-admin-points">{kinds.map(k=><div key={k}><dt>{POINT_KINDS[k]}</dt><dd>{query.data.points[k]} {plural(query.data.points[k],'очко','очка','очков')}</dd></div>)}</dl></div>
-    {!query.data.items.length&&<EmptyState title="Нет групп" hint="За вами пока не закреплена ни одна группа."/>}
-    {query.data.items.map(g=><Card key={g.id} title={g.name} subtitle={`${g.total} ${plural(g.total,'очко','очка','очков')} · ${g.members.length} ${plural(g.members.length,'оператор','оператора','операторов')}`} padded={false}>
-      <div className="card__body city-admin-quarters-body"><ol className="city-admin-quarters">{g.projects.map(p=><li key={p.key}>
-        <Badge tone={STAGE_TONE[p.stage]}>{SITE_STAGES[p.stage]}</Badge>
-        <strong className="city-admin-quarters__name">{p.name}</strong>
-        <Progress value={p.cost>0?p.points/p.cost:0} size="s" label={`${p.name}: ${p.points} из ${p.cost} очков`}/>
-        <span className="city-admin-quarters__count">{p.points} / {p.cost} очков</span>
-      </li>)}</ol></div>
-      {g.members.length>0&&<><div className="table-wrap table-wrap--responsive city-admin-table"><table className="table">
-        <thead><tr><th>Оператор</th>{kinds.map(k=><th className="num" key={k}>{POINT_KINDS[k]}</th>)}<th className="num">Очки</th></tr></thead>
-        <tbody>{g.members.map(m=><tr key={m.user_id}><td><Link to={`/training/city?operator=${m.user_id}`}>{m.full_name}</Link></td>{kinds.map(k=><td className="num" key={k}>{m[k]}</td>)}<td className="num"><strong>{m.points}</strong></td></tr>)}</tbody>
-      </table></div>
-      <div className="card__body city-admin-members"><h3 className="city-admin-subtitle">Операторы группы</h3><ul className="card-list">{g.members.map(m=><li className="list-card" key={m.user_id}>
-        <div className="list-card__head"><Link to={`/training/city?operator=${m.user_id}`}>{m.full_name}</Link><strong className="nowrap">{m.points} {plural(m.points,'очко','очка','очков')}</strong></div>
-        <dl className="list-card__metrics city-admin-metrics">{kinds.map(k=><div className="list-card__metric" key={k}><dt>{POINT_KINDS[k]}</dt><dd>{m[k]}</dd></div>)}</dl>
-      </li>)}</ul></div></>}
-    </Card>)}
   </div>;
 }
 
@@ -187,9 +156,9 @@ function NumberField({ label, value, min, max, onChange }: { label: ReactNode; v
   return <label className="field"><span className="field__label">{label}</span><input className="input" type="number" inputMode="numeric" min={min} max={max} required value={value} onChange={e=>onChange(Math.max(0,Math.round(Number(e.target.value)||0)))}/></label>;
 }
 
-type EconomyKey = "prices" | "points" | "projects" | "quests" | "land" | "estate" | "decor" | "district" | "hq";
+type EconomyKey = "prices" | "quests" | "land" | "estate" | "decor" | "district" | "hq";
 /** Where each section lives in the settings: a save sends it over the latest values of the rest. */
-const ECONOMY_FIELD: Record<EconomyKey, keyof CityEconomy> = { prices: "prices", points: "points", projects: "projects", quests: "quest_coins", land: "land", estate: "estate", decor: "decor", district: "district", hq: "hq" };
+const ECONOMY_FIELD: Record<EconomyKey, keyof CityEconomy> = { prices: "prices", quests: "quest_coins", land: "land", estate: "estate", decor: "decor", district: "district", hq: "hq" };
 /** One number of the game: how it reads, its limits, and how it lands in the settings. */
 interface EconomyValue { key: string; label: ReactNode; value: number; min: number; max: number; set: (draft: CityEconomy, value: number) => CityEconomy }
 interface EconomySection { key: EconomyKey; title: string; subtitle: string; note?: string; groups: { key: string; title?: string; values: EconomyValue[] }[] }
@@ -199,8 +168,6 @@ function economySections(e: CityEconomy): EconomySection[] {
   const levelName = (family: string, i: number) => (family === 'park' || family === 'bigpark') && i === 0 ? 'сбор из скверов (0 — бесплатно)' : i === 0 ? 'покупка' : `ступень ${i + 1}`;
   const sections: EconomySection[] = [
     { key: 'prices', title: 'Цены построек', subtitle: 'Коинов за покупку в учебном районе', groups: [{ key: 'all', values: (e.catalogue ?? []).map(b => ({ key: b.key, label: <><span aria-hidden="true">{b.icon}</span>{b.name}</>, value: e.prices[b.key], min: 1, max: 100000, set: (d, v) => ({ ...d, prices: { ...d.prices, [b.key]: v } }) })) }] },
-    { key: 'points', title: 'Очки для города группы', subtitle: 'Сколько очков приносит каждое действие', groups: [{ key: 'all', values: (Object.keys(POINT_KINDS) as PointKind[]).map(k => ({ key: k, label: POINT_KINDS[k], value: e.points[k], min: 0, max: 1000, set: (d, v) => ({ ...d, points: { ...d.points, [k]: v } }) })) }] },
-    { key: 'projects', title: 'Кварталы группы', subtitle: 'Очков на квартал; строятся по очереди: следующий начинается после предыдущего', groups: [{ key: 'all', values: e.projects.map((q, i) => ({ key: q.key, label: `${i + 1}. ${q.name}`, value: q.cost, min: 10, max: 1000000, set: (d, v) => ({ ...d, projects: d.projects.map(x => x.key === q.key ? { ...x, cost: v } : x) }) })) }] },
     { key: 'quests', title: 'Задания дня', subtitle: 'Награда за ситуацию дня', groups: [{ key: 'all', values: [{ key: 'coins', label: 'Коинов за верный ответ', value: e.quest_coins, min: 0, max: 1000, set: (d, v) => ({ ...d, quest_coins: v }) }] }] },
   ];
   if (e.land) sections.push({ key: 'land', title: 'Стоимость земли по зонам', subtitle: 'Коинов за землю под постройку (3 × 3 клетки)', note: 'Зоны идут от центра города к окраине: земля у центра дороже. Её стоимость добавляется к цене сквера, дома или офиса. Все зоны района доступны сразу; они различаются только ценой земли. В ОП три зоны — используются первые три цены. У дорог, деревьев и фонарей земля уже входит в цену клетки.',
@@ -227,7 +194,7 @@ function Economy() {
   const [editing,setEditing]=useState<EconomyKey|null>(null);
   const save=useMutation({
     mutationFn:city.saveEconomy,
-    onSuccess:async data=>{client.setQueryData<CityEconomy>(['city-economy'],current=>current&&{...current,...data});await client.invalidateQueries({queryKey:['city']});await client.invalidateQueries({queryKey:['city-groups']});},
+    onSuccess:async data=>{client.setQueryData<CityEconomy>(['city-economy'],current=>current&&{...current,...data});await client.invalidateQueries({queryKey:['city']});},
     onError:error=>{if(error instanceof ApiError&&error.status===409)void client.invalidateQueries({queryKey:['city-economy']});},
   });
   if(query.isError)return <ErrorState error={query.error} onRetry={()=>query.refetch()}/>;
@@ -235,7 +202,7 @@ function Economy() {
   const economy=query.data,canEdit=!!economy.can_edit,sections=economySections(economy);
   const section=sections.find(s=>s.key===editing);
   return <div className="stack">
-    <p className="ui-note">Цены и награда за задание действуют для новых покупок и ответов: уже построенное остаётся по цене покупки. Очки и стоимость кварталов пересчитывают город группы сразу, стадии кварталов могут сдвинуться.{canEdit?'':' Менять настройки могут руководитель и администратор.'}</p>
+    <p className="ui-note">Цены и награда за задание действуют для новых покупок и ответов: уже построенное остаётся по цене покупки.{canEdit?'':' Менять настройки могут руководитель и администратор.'}</p>
     {sections.map(s=><Card key={s.key} className="city-admin-economy-card" title={s.title} subtitle={s.subtitle} action={canEdit?<Button size="s" aria-label={`Изменить: ${s.title}`} disabled={save.isPending} onClick={()=>{save.reset();setEditing(s.key);}}>Изменить</Button>:undefined}>
       <div className="city-admin-strips">{s.groups.map(g=><section key={g.key}>
         {s.groups.length>1&&g.title&&<h3 className="city-admin-subtitle">{g.title}</h3>}
@@ -253,17 +220,12 @@ function EconomyDialog({section,economy,pending,error,onClose,onSave}:{section:E
   const formId=useId();
   const current=economySections(draft).find(s=>s.key===section)!;
   const close=()=>{if(!pending)onClose();};
-  return <Sheet title={current.title} subtitle={current.subtitle} size={section==='estate'||section==='projects'?'l':'m'} onClose={close}
+  return <Sheet title={current.title} subtitle={current.subtitle} size={section==='estate'?'l':'m'} onClose={close}
     footer={<><Button disabled={pending} onClick={close}>Отмена</Button><Button type="submit" form={formId} variant="primary" disabled={pending}>{pending?'Сохраняем…':'Сохранить'}</Button></>}>
     <form id={formId} className="stack city-admin-dialog" onSubmit={e=>{e.preventDefault();onSave(draft);}}>
       {current.note&&<p className="city-admin-card-note">{current.note}</p>}
       <fieldset className="city-admin-fieldset" disabled={pending}>
-        {section==='projects'?<ol className="city-admin-quarter-list">{draft.projects.map((q,i)=><li key={q.key}>
-          <span className="city-admin-quarter-list__number" aria-hidden="true">{i+1}</span>
-          <label className="field"><span className="field__label">Название квартала {i+1}</span><input className="input" minLength={3} maxLength={60} required value={q.name} onChange={e=>{const name=e.target.value;setDraft(d=>({...d,projects:d.projects.map(x=>x.key===q.key?{...x,name}:x)}));}}/></label>
-          <NumberField label="Стоимость, очков" value={q.cost} min={10} max={1000000} onChange={value=>setDraft(d=>({...d,projects:d.projects.map(x=>x.key===q.key?{...x,cost:value}:x)}))}/>
-        </li>)}</ol>
-        :current.groups.map(g=><section key={g.key} className="city-admin-dialog__group">
+        {current.groups.map(g=><section key={g.key} className="city-admin-dialog__group">
           {current.groups.length>1&&g.title&&<h3 className="city-admin-subtitle">{g.title}</h3>}
           <div className="city-admin-grid">{g.values.map(v=><NumberField key={v.key} label={v.label} value={v.value} min={v.min} max={v.max} onChange={value=>setDraft(d=>v.set(d,value))}/>)}</div>
         </section>)}

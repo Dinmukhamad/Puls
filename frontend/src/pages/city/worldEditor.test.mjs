@@ -153,7 +153,7 @@ test("inactive selected supervisor remains visible and clearable; district witho
 });
 
 test("assignment changes refresh both cities, personal estate, and staff reports", () => {
-  for (const key of ["city-world", "city-world-settings", "city-estate", "city-estates", "city-estates-report", "city", "city-groups", "city-participants"]) assert.ok(WORLD_QUERY_KEYS.includes(key), key);
+  for (const key of ["city-world", "city-world-settings", "city-estate", "city-estates", "city-estates-report", "city", "city-participants"]) assert.ok(WORLD_QUERY_KEYS.includes(key), key);
 });
 
 

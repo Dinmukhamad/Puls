@@ -2,8 +2,8 @@
 
 The land of each city goes to three districts, each of blocks (a band of a district on the round
 island city, a rectangle round the lake on the other), each block a grid of columns × rows of small
-cells with some not for sale (the district's centre, a group quarter, the station). A building
-stands on a square of PLOT_CELLS × PLOT_CELLS cells, a road, a tree or a lamp on one. The file
+cells with some not for sale (the district's centre, the station). A building stands on a square
+of PLOT_CELLS × PLOT_CELLS cells, a road, a tree or a lamp on one. The file
 app/data/city_land.json is written from the client's grid (frontend/src/city3d/world/land.ts) by
 frontend/scripts/city-land.mjs, and a client test fails while it is stale. A cell's address is
 (district, block, column, row); what stands on the land keeps it as (module = block, u = column,

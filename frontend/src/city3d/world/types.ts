@@ -4,7 +4,6 @@
  */
 import type { RailLine } from "./railway";
 import type { Plot } from "./plots";
-import type { Site } from "./sites";
 
 export interface Point { x: number; z: number }
 /** A straight road or bridge centre line: [ax, az, bx, bz]. */
@@ -81,14 +80,12 @@ export interface Placement {
   tint?: number;
   /** Raised this far over the ground: the floors over an arch, towers on their podium, trees on the hills. */
   lift?: number;
-  /** The residential or business quarter (index in WorldData.complexes) this copy belongs to. */
-  site?: number;
 }
 
 /** What a courtyard patch is paved with: walks, lawns, playground rubber, sand, sports courts, their lines, driveways. */
 export type SurfaceKind = "walk" | "lawn" | "plaza" | "play" | "play-blue" | "sand" | "court" | "court-orange" | "line" | "asphalt" | "slab";
 /** A flat patch on the ground: `length` along the direction `angle` (atan2(dx, dz)), `width` across; a disc when `round`. */
-export interface Surface { kind: SurfaceKind; x: number; z: number; angle: number; length: number; width: number; round?: boolean; site?: number }
+export interface Surface { kind: SurfaceKind; x: number; z: number; angle: number; length: number; width: number; round?: boolean }
 /** A residential complex: its buildings stand round a courtyard of `length` × `depth`, the length along `angle`. */
 export interface Complex { x: number; z: number; angle: number; length: number; depth: number; business?: boolean }
 
@@ -130,8 +127,6 @@ export interface WorldData {
   walks: Point[][];
   /** The operator's building plots (world/plots.ts); what stands on them comes from the server. */
   plots: Plot[];
-  /** The group city's quarters (world/sites.ts), drawn by the stage the server reports. */
-  sites: Site[];
   /** Where the daily situations of the map wait, one per slot: the depot's taxi, a car at the CRM centre, the guide. */
   questSpots: Point[];
   routes: RoutePlan[];

@@ -23,7 +23,7 @@ export function CityTasks({ quests, coins, assigned, onQuest, onStart, starting,
           <span className="city-task__state">{q.answered ? q.correct ? `✓ +${q.coins}` : "Разбор" : "Ответить"}</span>
         </button>
       </li>)}</ul>
-      <p className="city-fine">{answered < quests.length ? `Верный ответ — +${coins} коинов и очки для города группы.` : "На сегодня всё. Новые задания появятся завтра."}</p>
+      <p className="city-fine">{answered < quests.length ? `Верный ответ — +${coins} коинов.` : "На сегодня всё. Новые задания появятся завтра."}</p>
     </section>}
     {quests.length === 0 && allPassed && <section aria-labelledby="city-tasks-day">
       <div className="city-tasks__head"><h2 id="city-tasks-day">Задания дня</h2></div>

@@ -25,6 +25,7 @@ import { districtColour, type PlotFamily } from "../world/estateGrid";
 import { HOUSE_SCALE, READY_HOUSES, isReadyHouse } from "../world/familyHouses";
 import { OFFICE_BUILDINGS, isOfficeBuilding, officeBuildingScale, officeBuildingBounds, officeBuildingRayDistance } from "../world/officeBuildings";
 import { districtMainFrame, districtMainLayout, landmarkHeight, landmarkBounds, landmarkRayDistance } from "../world/districtLandmark";
+import { districtGarden, type Garden } from "../world/districtGarden";
 import type { Placement, Surface } from "../world/types";
 import type { CityBuildView, CityEstateView, EstatePick, EstateTarget, PlotAddress } from "../types";
 import type { DistrictEstate, PublicObject } from "../../api/cityEstate";
@@ -34,8 +35,8 @@ const SIGN_REACH = 230;
 /** The square's invitation belongs to a close district view, rather than the whole-city skyline. */
 const SQUARE_SIGN_REACH = 85;
 const OK = new THREE.Color("#35b07a"), BAD = new THREE.Color("#e0525d"), TAKE = new THREE.Color("#f0a23a");
-/** A taken cell, the paving of a centre; in build mode the free cells, and one's own small things while taking them away. */
-const MEADOW = new THREE.Color("#97b67c"), PAVING = new THREE.Color("#ddd4c0"), FOR_SALE = new THREE.Color("#c4e59a"), OWN_DECOR = new THREE.Color("#f2c46d");
+/** A taken cell; in build mode the free cells, and one's own small things while taking them away. */
+const MEADOW = new THREE.Color("#97b67c"), FOR_SALE = new THREE.Color("#c4e59a"), OWN_DECOR = new THREE.Color("#f2c46d");
 /** The seams between the cells: a shade darker than free land, so the grid reads up close and does not ripple from afar. */
 const GROUT = new THREE.Color("#afd088");
 /** The cells' ground over the land, under every patch of what stands on them (render/terrain.ts TOP and its lifts). */
@@ -91,15 +92,14 @@ function flatMesh(quads: { points: { x: number; z: number }[]; y: number; colour
 }
 
 /**
- * Pooled meshes: permanent centre paving, and the own district's grid of cells over the seams between them, visible
- * only in build mode.
+ * Pooled meshes: the permanent ground of the centres' gardens (world/districtGarden.ts), and the own district's grid of
+ * cells over the seams between them, visible only in build mode.
  */
-function plotGround(grid: LandGrid) {
+function plotGround(grid: LandGrid, gardens: readonly Garden[]) {
   const slots = new Map<string, number>(), indices = new Map<number, number[]>(), seams = new Map<number, number[]>();
   const plots = { positions: [] as number[], colours: [] as number[], index: [] as number[] };
   const paving = { positions: [] as number[], colours: [] as number[], index: [] as number[] };
   const grout = { positions: [] as number[], colours: [] as number[], index: [] as number[] };
-  const centres = new Map(grid.centres.map(c => [`${c.district}:${c.block}`, c]));
   const quad = (parts: typeof plots, corners: { x: number; z: number }[], colour: THREE.Color) => {
     const base = parts.positions.length / 3, [a, b, c] = corners;
     for (const p of corners) { parts.positions.push(p.x, PLOT_Y, p.z); parts.colours.push(colour.r, colour.g, colour.b); }
@@ -108,10 +108,9 @@ function plotGround(grid: LandGrid) {
     parts.index.push(...(up ? [base, base + 1, base + 2, base, base + 2, base + 3] : [base, base + 2, base + 1, base, base + 3, base + 2]));
     return base;
   };
+  const colour = new THREE.Color();
+  for (const garden of gardens) for (const q of garden.ground) quad(paving, q.points, colour.set(q.colour));
   for (const block of grid.blocks) {
-    const centre = centres.get(`${block.district}:${block.block}`);
-    // A column at a time: on a ring one quad's straight edge would cut across the round edge onto the next band's cells.
-    if (centre) for (let c = centre.col; c < centre.col + centre.cols; c++) quad(paving, areaCorners(block, c, centre.row, 1, centre.rows), PAVING);
     for (let c = 0; c < block.cols; c++) for (let r = 0; r < block.rows; r++) {
       if (block.skip.has(`${c}:${r}`)) continue;
       slots.set(decorKey(block.district, block.block, c, r), quad(plots, inset(areaCorners(block, c, r)), MEADOW));
@@ -173,12 +172,13 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
     return centre ? districtMainFrame(centre, district.landmark) : null;
   };
 
-  // ---- the ground: cells, centres and their public squares, laid out once ----
-  const ground = plotGround(grid); ctx.scene.add(ground.mesh, ground.centreMesh, ground.seamMesh);
+  // ---- the ground: cells, centres with their gardens and old public squares, laid out once ----
+  const gardens = grid.centres.map(c => districtGarden(blocks.get(`${c.district}:${c.block}`)!, c));
+  const ground = plotGround(grid, gardens); ctx.scene.add(ground.mesh, ground.centreMesh, ground.seamMesh);
   // Where the districts meet: a band in both districts' colours and posts along it (render/borders.ts).
   const borders = createBorders(districtBorders(grid, ctx.world), districtColour); ctx.scene.add(borders.band, borders.posts);
   let squarePatches: THREE.Mesh | null = null, squareKey = "";
-  let squarePools: InstancePools | null = null;
+  let squarePools: InstancePools | null = null, squareLights: LampLights | null = null;
 
   /** Cells something stands on, in every district: buildings' and small things'. */
   let taken = new Set<string>();
@@ -676,18 +676,26 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
   canvas.addEventListener("pointerdown", onPress, { capture: true });
   canvas.addEventListener("pointerdown", onDown); canvas.addEventListener("pointerup", onUp); canvas.addEventListener("pointermove", onMove); canvas.addEventListener("pointerleave", onLeave);
 
+  /** The centres: the garden round the main building, or an old public square still holding its projects beside it. */
   function rebuildSquares() {
     const key = JSON.stringify(grid.centres.map(c => [c.district, view?.state.districts.find(d => d.number === c.district)?.landmark?.status]));
     if (key === squareKey && (squarePools || !catalogue)) return;
     squareKey = key;
     squarePools?.dispose(); squarePools = null;
-    if (squarePatches) { ctx.scene.remove(squarePatches); squarePatches.geometry.dispose(); (squarePatches.material as THREE.Material).dispose(); }
-    const squares = grid.centres.map(c => {
-      const landmark = view?.state.districts.find(d => d.number === c.district)?.landmark;
-      return moduleGround(landmark?.status === "active" ? { ...c.square, x: c.area.x, z: c.area.z, rotation: c.area.rotation } : c.square);
+    squareLights?.dispose(); squareLights = null;
+    if (squarePatches) { ctx.scene.remove(squarePatches); squarePatches.geometry.dispose(); (squarePatches.material as THREE.Material).dispose(); squarePatches = null; }
+    const placements: Placement[] = [], surfaces: Surface[] = [], lamps: Placement[] = [];
+    grid.centres.forEach((c, i) => {
+      if (view?.state.districts.find(d => d.number === c.district)?.landmark?.status === "legacy_occupied") {
+        const old = moduleGround(c.square);
+        placements.push(...old.placements); surfaces.push(...old.surfaces);
+        return;
+      }
+      placements.push(...gardens[i].placements); lamps.push(...gardens[i].lamps);
     });
-    squarePatches = createPatches(squares.flatMap(l => l.surfaces)); ctx.scene.add(squarePatches);
-    if (catalogue) squarePools = createInstancePools(ctx, catalogue, squares.flatMap(l => l.placements));
+    if (surfaces.length) { squarePatches = createPatches(surfaces); ctx.scene.add(squarePatches); }
+    if (catalogue) squarePools = createInstancePools(ctx, catalogue, placements);
+    if (lamps.length) squareLights = createLampLights(ctx, lamps, "district-lamp-garden");
   }
 
   recolour();
@@ -747,7 +755,7 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
       offFrame(); offMove(); if (frame) cancelAnimationFrame(frame);
       canvas.removeEventListener("pointerdown", onPress, { capture: true });
       canvas.removeEventListener("pointerdown", onDown); canvas.removeEventListener("pointerup", onUp); canvas.removeEventListener("pointermove", onMove); canvas.removeEventListener("pointerleave", onLeave);
-      layer.remove(); squarePools?.dispose(); pools?.dispose(); lights?.dispose();
+      layer.remove(); squarePools?.dispose(); squareLights?.dispose(); pools?.dispose(); lights?.dispose();
       for (const mesh of [ground.mesh, ground.centreMesh, ground.seamMesh, squarePatches, patches]) if (mesh) { ctx.scene.remove(mesh); mesh.geometry.dispose(); (mesh.material as THREE.Material).dispose(); }
       if (paving) { ctx.scene.remove(paving); paving.geometry.dispose(); }
       if (chosen) { ctx.scene.remove(chosen); chosen.geometry.dispose(); }
