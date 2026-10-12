@@ -4,12 +4,13 @@
  * a cell at a time, together with footpaths, trees, lamps, benches and the rest (world/decor.ts), and a house, an
  * office tower or a square stands on CELLS × CELLS cells, about PLOT units across, wherever it fits on one block.
  *
- * The island city's cells run in rings, as its plots did before: each band of each district is one block, its
- * columns along the ring and its rows outwards, between the canal bank, the circles where the ring roads ran and the
- * horizon. The lake city's blocks are rectangles round the lake, between the lines where its streets ran. A cell's
- * address is (district, block, column, row), the same on the server (app/data/city_land.json, written from this file
- * by frontend/scripts/city-land.mjs). Bands count outwards from the centre and set the price of land. In every
- * district a few cells near its middle are its centre, where its main building grows. Pure data, no three.js.
+ * Both cities' cells are squares in straight rows along x and z. On the island city each band of each district,
+ * between the canal bank, the circles where the ring roads ran and the horizon, is one block: the rectangle round its
+ * cells, which step along the bank, the horizon and the cuts between the districts. The lake city's blocks are
+ * rectangles round the lake, between the lines where its streets ran. A cell's address is (district, block, column,
+ * row), the same on the server (app/data/city_land.json, written from this file by frontend/scripts/city-land.mjs).
+ * Bands count outwards from the centre and set the price of land. In every district a few cells near its middle are
+ * its centre, where its main building grows. Pure data, no three.js.
  */
 import { segmentDistance } from "./generate";
 import { onRailway } from "./railway";
@@ -22,6 +23,8 @@ import type { Point, Road, WorldData } from "./types";
  * (the station's), and between two districts.
  */
 export const CELLS = 3, PLOT = 9, ROAD_GAP = 1.6, BORDER_GAP = .8;
+/** A cell's side: the island city's cells lie on one lattice of squares from its middle, the lake city's nearly so. */
+export const LAND_CELL = 3;
 /**
  * A district's centre, kept from the cells at the front of one block: the main building grows there (a site of up to
  * 18 × 18, world/districtLandmark.ts), beside the public square of the districts' old shared projects (a module of
@@ -30,14 +33,13 @@ export const CELLS = 3, PLOT = 9, ROAD_GAP = 1.6, BORDER_GAP = .8;
 export const CENTRE_WIDTH = 40, CENTRE_DEPTH = 20;
 
 export type LandCity = "support" | "sales";
-/** An annular sector (angles counter-clockwise, radians) or an axis-aligned rectangle; columns run along a0 → a1 or x, rows along r or z. */
-export type BlockShape = { kind: "ring"; r0: number; r1: number; a0: number; a1: number } | { kind: "rect"; x0: number; x1: number; z0: number; z1: number };
+/** An axis-aligned rectangle: columns run along x, rows along z. */
+export type BlockShape = { kind: "rect"; x0: number; x1: number; z0: number; z1: number };
 /**
- * A side of an area of cells: on a ring the inner and outer edge and the ends at a0 and a1, on a rectangle the sides at
- * x0, x1, z0 and z1. In a block's own terms: "in"/"z0" before the first row, "out"/"z1" past the last, "a0"/"x0"
- * before the first column, "a1"/"x1" past the last.
+ * A side of an area of cells, at x0, x1, z0 or z1. In a block's own terms: "z0" before the first row, "z1" past the
+ * last, "x0" before the first column, "x1" past the last.
  */
-export type BlockSide = "in" | "out" | "a0" | "a1" | "x0" | "x1" | "z0" | "z1";
+export type BlockSide = "x0" | "x1" | "z0" | "z1";
 /** The four ways out of a cell, in its block's own terms: back a row, on a row, back a column, on a column. */
 export type Way = "row-" | "row+" | "col-" | "col+";
 export const WAYS: readonly Way[] = ["row-", "row+", "col-", "col+"];
@@ -58,38 +60,37 @@ export interface LandCell extends Frame { district: number; block: number; col: 
  * front to `side`), the headquarters' site and the public square.
  */
 export interface DistrictCentre { district: number; block: number; col: number; row: number; cols: number; rows: number; side: BlockSide; area: Frame; hq: Point & { rotation: number }; square: ModuleSlot }
-export interface LandGrid { city: LandCity; bands: number; blocks: LandBlock[]; centres: DistrictCentre[] }
+/**
+ * The island city's district `district`, counter-clockwise from the angle a0 to a1 (radians), its land from the radius
+ * r0 to r1: its blocks overlap the others', so the sectors say whose land a point not for sale is, and where the cuts
+ * between the districts run.
+ */
+export interface LandSector { district: number; a0: number; a1: number; r0: number; r1: number }
+export interface LandGrid { city: LandCity; bands: number; blocks: LandBlock[]; centres: DistrictCentre[]; sectors?: LandSector[] }
 
 const TAU = Math.PI * 2, DEG = Math.PI / 180;
 const wrap = (a: number) => ((a % TAU) + TAU) % TAU;
 export const cellKey = (block: number, col: number, row: number) => `${block}:${col}:${row}`;
 
-/** The side of `ways` and of a block's shape: which edge of an area a way leaves by. */
-export function sideOf(block: LandBlock, way: Way): BlockSide {
-  const ring = block.shape.kind === "ring";
-  return way === "row-" ? (ring ? "in" : "z0") : way === "row+" ? (ring ? "out" : "z1") : way === "col-" ? (ring ? "a0" : "x0") : (ring ? "a1" : "x1");
+/** The side of `ways`: which edge of an area a way leaves by (`block` kept for the callers). */
+export function sideOf(_block: LandBlock, way: Way): BlockSide {
+  return way === "row-" ? "z0" : way === "row+" ? "z1" : way === "col-" ? "x0" : "x1";
 }
 /** The way out of a block's area by its side. */
 export function wayOf(side: BlockSide): Way {
-  return side === "in" || side === "z0" ? "row-" : side === "out" || side === "z1" ? "row+" : side === "a0" || side === "x0" ? "col-" : "col+";
+  return side === "z0" ? "row-" : side === "z1" ? "row+" : side === "x0" ? "col-" : "col+";
 }
 
-/**
- * The side an area of a block looks to when nothing else decides: towards the middle of the city. On a ring that is
- * its inner edge; on a rectangle whichever side faces the city's centre most.
- */
+/** The side an area of a block looks to when nothing else decides: whichever faces the middle of the city most. */
 export function homeSide(block: LandBlock, col: number, row: number, cols = 1, rows = 1): BlockSide {
-  const s = block.shape;
-  if (s.kind === "ring") return "in";
-  const dx = (s.x1 - s.x0) / block.cols, dz = (s.z1 - s.z0) / block.rows;
+  const s = block.shape, dx = (s.x1 - s.x0) / block.cols, dz = (s.z1 - s.z0) / block.rows;
   const cx = s.x0 + (col + cols / 2) * dx, cz = s.z0 + (row + rows / 2) * dz;
   return Math.abs(cx) > Math.abs(cz) ? (cx > 0 ? "x0" : "x1") : (cz > 0 ? "z0" : "z1");
 }
 /** The four sides in turn, a quarter turn apart: a building's `rotation` turns its front this many steps from its home side. */
-const TURNS: Record<"ring" | "rect", BlockSide[]> = { ring: ["in", "a1", "out", "a0"], rect: ["z1", "x1", "z0", "x0"] };
-export function turnedSide(block: LandBlock, home: BlockSide, rotation: number): BlockSide {
-  const cycle = TURNS[block.shape.kind], at = cycle.indexOf(home);
-  return cycle[(at + ((rotation % 4) + 4) % 4) % 4];
+const TURNS: BlockSide[] = ["z1", "x1", "z0", "x0"];
+export function turnedSide(_block: LandBlock, home: BlockSide, rotation: number): BlockSide {
+  return TURNS[(TURNS.indexOf(home) + ((rotation % 4) + 4) % 4) % 4];
 }
 
 /**
@@ -97,16 +98,7 @@ export function turnedSide(block: LandBlock, home: BlockSide, rotation: number):
  * front looks to `side` (by default towards the middle of the city); `street` says a road runs along that front.
  */
 export function areaFrame(block: LandBlock, col: number, row: number, cols = 1, rows = 1, side: BlockSide = homeSide(block, col, row, cols, rows), street = false): Frame {
-  const s = block.shape;
-  if (s.kind === "ring") {
-    const dr = (s.r1 - s.r0) / block.rows, da = (s.a1 - s.a0) / block.cols;
-    const ra = s.r0 + row * dr, rb = ra + rows * dr, aa = s.a0 + col * da, ab = aa + cols * da, r = (ra + rb) / 2, a = (aa + ab) / 2;
-    const corners = [[ra, aa], [ra, ab], [rb, ab], [rb, aa]].map(([rr, an]) => ({ x: Math.cos(an) * rr, z: Math.sin(an) * rr }));
-    const rotation = side === "out" ? Math.atan2(Math.cos(a), Math.sin(a)) : side === "a0" ? Math.atan2(Math.sin(a), -Math.cos(a)) : side === "a1" ? Math.atan2(-Math.sin(a), Math.cos(a)) : Math.atan2(-Math.cos(a), -Math.sin(a));
-    const radial = side === "a0" || side === "a1";
-    return { x: Math.cos(a) * r, z: Math.sin(a) * r, rotation, width: radial ? rb - ra : (ab - aa) * r, depth: radial ? (ab - aa) * r : rb - ra, corners, street };
-  }
-  const dx = (s.x1 - s.x0) / block.cols, dz = (s.z1 - s.z0) / block.rows, xa = s.x0 + col * dx, xb = xa + cols * dx, za = s.z0 + row * dz, zb = za + rows * dz;
+  const s = block.shape, dx = (s.x1 - s.x0) / block.cols, dz = (s.z1 - s.z0) / block.rows, xa = s.x0 + col * dx, xb = xa + cols * dx, za = s.z0 + row * dz, zb = za + rows * dz;
   const rotation = side === "z0" ? Math.PI : side === "x1" ? Math.PI / 2 : side === "x0" ? -Math.PI / 2 : 0;
   const across = side === "x0" || side === "x1";
   return {
@@ -117,13 +109,7 @@ export function areaFrame(block: LandBlock, col: number, row: number, cols = 1, 
 
 /** The corners of `cols` × `rows` cells of a block from (col, row), in areaFrame's order, without the rest of the frame. */
 export function areaCorners(block: LandBlock, col: number, row: number, cols = 1, rows = 1): Point[] {
-  const s = block.shape;
-  if (s.kind === "ring") {
-    const dr = (s.r1 - s.r0) / block.rows, da = (s.a1 - s.a0) / block.cols, ra = s.r0 + row * dr, rb = ra + rows * dr, aa = s.a0 + col * da, ab = aa + cols * da;
-    const ca = Math.cos(aa), sa = Math.sin(aa), cb = Math.cos(ab), sb = Math.sin(ab);
-    return [{ x: ca * ra, z: sa * ra }, { x: cb * ra, z: sb * ra }, { x: cb * rb, z: sb * rb }, { x: ca * rb, z: sa * rb }];
-  }
-  const dx = (s.x1 - s.x0) / block.cols, dz = (s.z1 - s.z0) / block.rows, xa = s.x0 + col * dx, xb = xa + cols * dx, za = s.z0 + row * dz, zb = za + rows * dz;
+  const s = block.shape, dx = (s.x1 - s.x0) / block.cols, dz = (s.z1 - s.z0) / block.rows, xa = s.x0 + col * dx, xb = xa + cols * dx, za = s.z0 + row * dz, zb = za + rows * dz;
   return [{ x: xa, z: za }, { x: xb, z: za }, { x: xb, z: zb }, { x: xa, z: zb }];
 }
 
@@ -143,44 +129,41 @@ export function areaPoint(corners: Point[], s: number, t: number): Point {
 }
 
 /**
- * A stretch of the border between two districts, down the middle of the gap that parts their blocks: from `a` to `b`,
- * `normal` pointing into district `toward` (the other side is district `away`), `gaps` the width between the two
- * districts' blocks at `a` and at `b` (in between it changes evenly: the island city's cuts are radial, so they widen
- * outwards). `street` is kept for the renderer: no street runs down a border any more.
+ * A stretch of the border between two districts, down the middle of the gap that parts their cells: from `a` to `b`,
+ * `normal` pointing into district `toward` (the other side is district `away`), `gaps` the width kept clear between
+ * the two districts' cells at `a` and at `b` (in between it changes evenly). `street` is kept for the renderer: no
+ * street runs down a border any more.
  */
 export interface DistrictBorder { a: Point; b: Point; normal: Point; toward: number; away: number; gaps: [number, number]; street: boolean }
 /** Blocks of two districts this close are neighbours: only the gap between two districts parts them. */
 const NEIGHBOURS = 2.5, STEP = 1;
 
 /**
- * Where the districts meet, to draw on the ground (systems/estates.ts): the gap between neighbouring blocks of two
- * districts, a radial cut on the island city, a line on the lake city. Only over dry land: a border stops at the water
- * (the lake and its shore) and on the railway and the station square.
+ * Where the districts meet, to draw on the ground (systems/estates.ts): on the island city the cuts out from the centre
+ * between their sectors, on the lake city the gap between neighbouring blocks of two districts. Only over dry land: a
+ * border stops at the water (the lake and its shore) and on the railway and the station square.
  */
 export function districtBorders(grid: LandGrid, world: WorldData): DistrictBorder[] {
   type Line = Omit<DistrictBorder, "gaps"> & { gap: (p: Point) => number };
   const lines: Line[] = [];
-  for (const A of grid.blocks) for (const B of grid.blocks) {
+  // The island city's cuts, out from the centre where one district's sector begins: both keep BORDER_GAP clear of it.
+  for (const s of grid.sectors ?? []) {
+    const before = grid.sectors!.find(o => o !== s && Math.abs(wrap(o.a1) - wrap(s.a0)) < 1e-9);
+    if (!before || before.district === s.district) continue;
+    const c = Math.cos(s.a0), sn = Math.sin(s.a0);
+    lines.push({ a: { x: c * s.r0, z: sn * s.r0 }, b: { x: c * s.r1, z: sn * s.r1 }, normal: { x: -sn, z: c }, toward: s.district, away: before.district, gap: () => 2 * BORDER_GAP, street: false });
+  }
+  if (!grid.sectors) for (const A of grid.blocks) for (const B of grid.blocks) {
     if (A.district === B.district) continue;
-    const sa = A.shape, sb = B.shape;
-    if (sa.kind === "ring" && sb.kind === "ring") {
-      // B begins just counter-clockwise of A's end, in the same band: the cut between them, from the band's inner edge to its outer one.
-      const turn = wrap(sb.a0 - sa.a1), rm = (sa.r0 + sa.r1) / 2;
-      if (A.band !== B.band || turn * rm > NEIGHBOURS) continue;
-      const t = sa.a1 + turn / 2, c = Math.cos(t), sn = Math.sin(t), r0 = Math.min(sa.r0, sb.r0), r1 = Math.max(sa.r1, sb.r1);
-      const gap = (p: Point) => 2 * Math.hypot(p.x, p.z) * Math.sin(turn / 2);
-      lines.push({ a: { x: c * r0, z: sn * r0 }, b: { x: c * r1, z: sn * r1 }, normal: { x: -sn, z: c }, toward: B.district, away: A.district, gap, street: false });
-    } else if (sa.kind === "rect" && sb.kind === "rect") {
-      // B just past A along x (or along z), the two overlapping across: the gap between them.
-      const dx = sb.x0 - sa.x1, dz = sb.z0 - sa.z1;
-      if (dx >= 0 && dx <= NEIGHBOURS) {
-        const z0 = Math.max(sa.z0, sb.z0), z1 = Math.min(sa.z1, sb.z1), x = (sa.x1 + sb.x0) / 2;
-        if (z1 - z0 > 1) lines.push({ a: { x, z: z0 }, b: { x, z: z1 }, normal: { x: 1, z: 0 }, toward: B.district, away: A.district, gap: () => dx, street: false });
-      }
-      if (dz >= 0 && dz <= NEIGHBOURS) {
-        const x0 = Math.max(sa.x0, sb.x0), x1 = Math.min(sa.x1, sb.x1), z = (sa.z1 + sb.z0) / 2;
-        if (x1 - x0 > 1) lines.push({ a: { x: x0, z }, b: { x: x1, z }, normal: { x: 0, z: 1 }, toward: B.district, away: A.district, gap: () => dz, street: false });
-      }
+    // B just past A along x (or along z), the two overlapping across: the gap between them.
+    const sa = A.shape, sb = B.shape, dx = sb.x0 - sa.x1, dz = sb.z0 - sa.z1;
+    if (dx >= 0 && dx <= NEIGHBOURS) {
+      const z0 = Math.max(sa.z0, sb.z0), z1 = Math.min(sa.z1, sb.z1), x = (sa.x1 + sb.x0) / 2;
+      if (z1 - z0 > 1) lines.push({ a: { x, z: z0 }, b: { x, z: z1 }, normal: { x: 1, z: 0 }, toward: B.district, away: A.district, gap: () => dx, street: false });
+    }
+    if (dz >= 0 && dz <= NEIGHBOURS) {
+      const x0 = Math.max(sa.x0, sb.x0), x1 = Math.min(sa.x1, sb.x1), z = (sa.z1 + sb.z0) / 2;
+      if (x1 - x0 > 1) lines.push({ a: { x: x0, z }, b: { x: x1, z }, normal: { x: 0, z: 1 }, toward: B.district, away: A.district, gap: () => dz, street: false });
     }
   }
   const line = world.railway, square = stationSquare(world), rect = world.land.rectangle;
@@ -208,33 +191,37 @@ export function districtBorders(grid: LandGrid, world: WorldData): DistrictBorde
 /** The world point at `col` columns and `row` rows (fractions too) from a block's first corner. */
 export function blockPoint(block: LandBlock, col: number, row: number): Point {
   const s = block.shape;
-  if (s.kind === "ring") {
-    const r = s.r0 + row * (s.r1 - s.r0) / block.rows, a = s.a0 + col * (s.a1 - s.a0) / block.cols;
-    return { x: Math.cos(a) * r, z: Math.sin(a) * r };
-  }
   return { x: s.x0 + col * (s.x1 - s.x0) / block.cols, z: s.z0 + row * (s.z1 - s.z0) / block.rows };
 }
 
 /** Where a world point lies in a block, in columns (u) and rows (v) from its first corner; null off the block. */
 export function blockCell(block: LandBlock, p: Point): { u: number; v: number } | null {
-  const s = block.shape;
-  let u: number, v: number;
-  if (s.kind === "ring") {
-    const r = Math.hypot(p.x, p.z), a = s.a0 + wrap(Math.atan2(p.z, p.x) - s.a0);
-    u = (a - s.a0) / (s.a1 - s.a0); v = (r - s.r0) / (s.r1 - s.r0);
-  } else { u = (p.x - s.x0) / (s.x1 - s.x0); v = (p.z - s.z0) / (s.z1 - s.z0); }
+  const s = block.shape, u = (p.x - s.x0) / (s.x1 - s.x0), v = (p.z - s.z0) / (s.z1 - s.z0);
   return u < 0 || u > 1 || v < 0 || v > 1 ? null : { u: u * block.cols, v: v * block.rows };
 }
 
-/** The cell under a world point, for sale or not (`skipped`), or null off the land. */
+/** The district whose land a point is on the island city (by its sector, on the land), null off it; undefined by the lake. */
+export function districtAt(grid: LandGrid, p: Point): number | null | undefined {
+  if (!grid.sectors) return undefined;
+  const r = Math.hypot(p.x, p.z), a = Math.atan2(p.z, p.x);
+  return grid.sectors.find(s => r >= s.r0 && r <= s.r1 && wrap(a - s.a0) < s.a1 - s.a0)?.district ?? null;
+}
+/**
+ * The cell under a world point, for sale or not (`skipped`), or null off the land. The island city's blocks overlap: a
+ * cell for sale in one of them is the one, else the cell of the block of the district whose land the point is.
+ */
 export function cellUnder(grid: LandGrid, p: Point): { block: LandBlock; col: number; row: number; skipped: boolean } | null {
+  let off: { block: LandBlock; col: number; row: number; skipped: boolean } | null = null, owner: number | null | undefined;
   for (const block of grid.blocks) {
     const at = blockCell(block, p);
     if (!at) continue;
     const col = Math.min(block.cols - 1, Math.floor(at.u)), row = Math.min(block.rows - 1, Math.floor(at.v));
-    return { block, col, row, skipped: block.skip.has(`${col}:${row}`) };
+    if (!block.skip.has(`${col}:${row}`)) return { block, col, row, skipped: false };
+    if (off) continue;
+    if (owner === undefined && grid.sectors) owner = districtAt(grid, p);
+    if (!grid.sectors || owner === block.district) off = { block, col, row, skipped: true };
   }
-  return null;
+  return off;
 }
 /** The cell for sale under a world point, or null (a cell not for sale, off the land). */
 export function cellAt(grid: LandGrid, p: Point): { block: LandBlock; col: number; row: number } | null {
@@ -244,48 +231,41 @@ export function cellAt(grid: LandGrid, p: Point): { block: LandBlock; col: numbe
 
 /**
  * The cells next to a cell on one of its ways, with the stretch of the edge they share: in the same block the cell
- * beside it; past the block's edge the cells of the district's block on the other side that touch it there (the next
- * band of the island city may have more columns, so there can be two). `from`/`to` say where on the cell's own edge
- * they meet (0…1 along it) and `meet` is the middle of that stretch: a road from both cells joins there exactly.
- * A district's border and land not for sale have no neighbours.
+ * beside it; else the same square for sale in another of the district's blocks (where the island city's bands meet);
+ * past the edge of a lake city's block the cells of the district's block on the other side that touch it there (cells
+ * of another size, so there can be two). `from`/`to` say where on the cell's own edge they meet (0…1 along it) and
+ * `meet` is the middle of that stretch: a road from both cells joins there exactly. A district's border and land not
+ * for sale have no neighbours.
  */
 export interface Neighbour { block: LandBlock; col: number; row: number; from: number; to: number; meet: Point }
 export function neighbours(grid: LandGrid, block: LandBlock, col: number, row: number, way: Way): Neighbour[] {
   const dc = way === "col-" ? -1 : way === "col+" ? 1 : 0, dr = way === "row-" ? -1 : way === "row+" ? 1 : 0, c = col + dc, r = row + dr;
-  if (c >= 0 && r >= 0 && c < block.cols && r < block.rows) {
-    if (block.skip.has(`${c}:${r}`)) return [];
-    const corners = areaCorners(block, col, row);
-    const meet = way === "row-" ? areaPoint(corners, .5, 0) : way === "row+" ? areaPoint(corners, .5, 1) : way === "col-" ? areaPoint(corners, 0, .5) : areaPoint(corners, 1, .5);
-    return [{ block, col: c, row: r, from: 0, to: 1, meet }];
-  }
+  const on = c >= 0 && r >= 0 && c < block.cols && r < block.rows, corners = areaCorners(block, col, row);
+  const meet = () => way === "row-" ? areaPoint(corners, .5, 0) : way === "row+" ? areaPoint(corners, .5, 1) : way === "col-" ? areaPoint(corners, 0, .5) : areaPoint(corners, 1, .5);
+  if (on && !block.skip.has(`${c}:${r}`)) return [{ block, col: c, row: r, from: 0, to: 1, meet: meet() }];
+  // The same square of the lattice for sale in another of the district's blocks: where the island city's bands meet.
+  const there = latticeCell(grid, block, c, r);
+  if (there) return [{ ...there, from: 0, to: 1, meet: meet() }];
+  if (on) return [];
   const out: Neighbour[] = [], s = block.shape, EPS = 1e-6;
   for (const other of grid.blocks) {
     if (other === block || other.district !== block.district) continue;
     const o = other.shape;
     // Along the shared edge: this cell's stretch [lo, hi], the other block's start and step there, its row or column.
     let lo: number, hi: number, start: number, step: number, count: number, fixed: number, along: "col" | "row", at: (k: number) => Point;
-    if (s.kind === "ring" && o.kind === "ring") {
-      if (way === "col-" || way === "col+") continue;
-      const R = way === "row+" ? s.r1 : s.r0;
-      if (Math.abs((way === "row+" ? o.r0 : o.r1) - R) > EPS) continue;
-      const da = (s.a1 - s.a0) / block.cols;
-      lo = s.a0 + col * da; hi = lo + da; start = o.a0; step = (o.a1 - o.a0) / other.cols; count = other.cols;
-      fixed = way === "row+" ? 0 : other.rows - 1; along = "col"; at = k => ({ x: Math.cos(k) * R, z: Math.sin(k) * R });
-    } else if (s.kind === "rect" && o.kind === "rect") {
-      if (way === "col-" || way === "col+") {
-        const X = way === "col+" ? s.x1 : s.x0;
-        if (Math.abs((way === "col+" ? o.x0 : o.x1) - X) > EPS) continue;
-        const dz = (s.z1 - s.z0) / block.rows;
-        lo = s.z0 + row * dz; hi = lo + dz; start = o.z0; step = (o.z1 - o.z0) / other.rows; count = other.rows;
-        fixed = way === "col+" ? 0 : other.cols - 1; along = "row"; at = k => ({ x: X, z: k });
-      } else {
-        const Z = way === "row+" ? s.z1 : s.z0;
-        if (Math.abs((way === "row+" ? o.z0 : o.z1) - Z) > EPS) continue;
-        const dx = (s.x1 - s.x0) / block.cols;
-        lo = s.x0 + col * dx; hi = lo + dx; start = o.x0; step = (o.x1 - o.x0) / other.cols; count = other.cols;
-        fixed = way === "row+" ? 0 : other.rows - 1; along = "col"; at = k => ({ x: k, z: Z });
-      }
-    } else continue;
+    if (way === "col-" || way === "col+") {
+      const X = way === "col+" ? s.x1 : s.x0;
+      if (Math.abs((way === "col+" ? o.x0 : o.x1) - X) > EPS) continue;
+      const dz = (s.z1 - s.z0) / block.rows;
+      lo = s.z0 + row * dz; hi = lo + dz; start = o.z0; step = (o.z1 - o.z0) / other.rows; count = other.rows;
+      fixed = way === "col+" ? 0 : other.cols - 1; along = "row"; at = k => ({ x: X, z: k });
+    } else {
+      const Z = way === "row+" ? s.z1 : s.z0;
+      if (Math.abs((way === "row+" ? o.z0 : o.z1) - Z) > EPS) continue;
+      const dx = (s.x1 - s.x0) / block.cols;
+      lo = s.x0 + col * dx; hi = lo + dx; start = o.x0; step = (o.x1 - o.x0) / other.cols; count = other.cols;
+      fixed = way === "row+" ? 0 : other.rows - 1; along = "col"; at = k => ({ x: k, z: Z });
+    }
     const first = Math.max(0, Math.floor((lo - start) / step)), last = Math.min(count - 1, Math.ceil((hi - start) / step) - 1);
     for (let k = first; k <= last; k++) {
       const a = Math.max(lo, start + k * step), b = Math.min(hi, start + (k + 1) * step);
@@ -297,6 +277,38 @@ export function neighbours(grid: LandGrid, block: LandBlock, col: number, row: n
   return out;
 }
 
+/**
+ * The cell for sale of the district at the place of (col, row) of a block, off it or on it, in another of the
+ * district's blocks whose cells lie on the same lattice; null if there is none. The island city's blocks overlap.
+ */
+function latticeCell(grid: LandGrid, block: LandBlock, col: number, row: number): CellRef | null {
+  const mine = areaCorners(block, col, row), middle = areaPoint(mine, .5, .5);
+  for (const other of grid.blocks) {
+    if (other === block || other.district !== block.district) continue;
+    const at = blockCell(other, middle);
+    if (!at) continue;
+    const c = Math.floor(at.u), r = Math.floor(at.v);
+    if (c >= other.cols || r >= other.rows || other.skip.has(`${c}:${r}`)) continue;
+    const theirs = areaCorners(other, c, r);
+    if (mine.every((p, i) => Math.abs(p.x - theirs[i].x) < 1e-6 && Math.abs(p.z - theirs[i].z) < 1e-6)) return { block: other, col: c, row: r };
+  }
+  return null;
+}
+
+/**
+ * How many columns and rows a rectangle of cells from one to another spans: in one block, or across blocks whose cells
+ * lie on the same lattice (the island city's bands); null if they do not line up.
+ */
+export function areaSpan(from: CellRef, to: CellRef): [number, number] | null {
+  if (from.block === to.block) return [Math.abs(to.col - from.col) + 1, Math.abs(to.row - from.row) + 1];
+  const a = areaCorners(from.block, from.col, from.row), b = areaCorners(to.block, to.col, to.row);
+  const w = a[1].x - a[0].x, d = a[3].z - a[0].z;
+  if (Math.abs(b[1].x - b[0].x - w) > 1e-6 || Math.abs(b[3].z - b[0].z - d) > 1e-6) return null;
+  const cols = (b[0].x - a[0].x) / w, rows = (b[0].z - a[0].z) / d;
+  if (Math.abs(cols - Math.round(cols)) > 1e-6 || Math.abs(rows - Math.round(rows)) > 1e-6) return null;
+  return [Math.abs(Math.round(cols)) + 1, Math.abs(Math.round(rows)) + 1];
+}
+
 /** A cell's middle. */
 export function cellCentre(block: LandBlock, col: number, row: number): Point {
   return areaPoint(areaCorners(block, col, row), .5, .5);
@@ -304,21 +316,13 @@ export function cellCentre(block: LandBlock, col: number, row: number): Point {
 export interface CellRef { block: LandBlock; col: number; row: number }
 
 /**
- * The cells from one to another along the land's own lines, as a road is laid: first along the way they differ most
- * (round the ring or out from the centre on the island city; along x or z by the lake), then across, through the
- * corner. Only the cells of the first one's district that are for sale; each once, in order from the first.
+ * The cells from one to another along the land's own lines, as a road is laid: first along x or z, whichever they
+ * differ most in, then across, through the corner. Only the cells of the first one's district that are for sale; each
+ * once, in order from the first.
  */
 export function cellsBetween(grid: LandGrid, from: CellRef, to: CellRef): CellRef[] {
   const a = cellCentre(from.block, from.col, from.row), b = cellCentre(to.block, to.col, to.row);
-  let path: Point[];
-  if (from.block.shape.kind === "ring") {
-    const ra = Math.hypot(a.x, a.z), rb = Math.hypot(b.x, b.z), aa = Math.atan2(a.z, a.x), turn = Math.atan2(Math.sin(Math.atan2(b.z, b.x) - aa), Math.cos(Math.atan2(b.z, b.x) - aa));
-    const round = Math.abs(turn) * ra >= Math.abs(rb - ra), polar = (r: number, an: number) => ({ x: Math.cos(an) * r, z: Math.sin(an) * r });
-    path = round ? [a, ...arc(ra, aa, turn, polar), polar(rb, aa + turn), b] : [a, polar(rb, aa), ...arc(rb, aa, turn, polar), b];
-  } else {
-    const corner = Math.abs(b.x - a.x) >= Math.abs(b.z - a.z) ? { x: b.x, z: a.z } : { x: a.x, z: b.z };
-    path = [a, corner, b];
-  }
+  const corner = Math.abs(b.x - a.x) >= Math.abs(b.z - a.z) ? { x: b.x, z: a.z } : { x: a.x, z: b.z }, path = [a, corner, b];
   const out: CellRef[] = [], seen = new Set<string>();
   const take = (p: Point) => {
     const at = cellUnder(grid, p);
@@ -332,10 +336,29 @@ export function cellsBetween(grid: LandGrid, from: CellRef, to: CellRef): CellRe
   }
   return out;
 }
-/** Points along an arc of radius r from angle a0 turning by `turn`, a point a unit or so apart. */
-function arc(r: number, a0: number, turn: number, polar: (r: number, a: number) => Point) {
-  const n = Math.max(1, Math.ceil(Math.abs(turn) * r)), out: Point[] = [];
-  for (let k = 1; k < n; k++) out.push(polar(r, a0 + turn * k / n));
+/**
+ * The cells between two as a rectangle along x and z, as an area of small things is laid (a road two or three cells
+ * wide, a grove), across the seams between the island city's bands too: every cell for sale of the first one's
+ * district whose middle lies within the two cells' outer edges, block by block, row by row.
+ */
+export function cellsWithin(grid: LandGrid, from: CellRef, to: CellRef): CellRef[] {
+  const out: CellRef[] = [], district = from.block.district;
+  /** Columns and rows of a block whose middles lie between lo and hi, measured from `start` in steps of `step`. */
+  const span = (lo: number, hi: number, start: number, step: number, count: number) =>
+    [Math.max(0, Math.ceil((lo - start) / step - .5 - 1e-9)), Math.min(count - 1, Math.floor((hi - start) / step - .5 + 1e-9))];
+  const add = (block: LandBlock, [c0, c1]: number[], [r0, r1]: number[]) => {
+    for (let row = r0; row <= r1; row++) for (let col = c0; col <= c1; col++) if (!block.skip.has(`${col}:${row}`)) out.push({ block, col, row });
+  };
+  const edges = (c: CellRef) => {
+    const s = c.block.shape, dx = (s.x1 - s.x0) / c.block.cols, dz = (s.z1 - s.z0) / c.block.rows;
+    return { x0: s.x0 + c.col * dx, x1: s.x0 + (c.col + 1) * dx, z0: s.z0 + c.row * dz, z1: s.z0 + (c.row + 1) * dz };
+  };
+  const e = [edges(from), edges(to)], xlo = Math.min(e[0].x0, e[1].x0), xhi = Math.max(e[0].x1, e[1].x1), zlo = Math.min(e[0].z0, e[1].z0), zhi = Math.max(e[0].z1, e[1].z1);
+  for (const block of grid.blocks) {
+    const s = block.shape;
+    if (block.district !== district || s.x1 <= xlo || s.x0 >= xhi || s.z1 <= zlo || s.z0 >= zhi) continue;
+    add(block, span(xlo, xhi, s.x0, (s.x1 - s.x0) / block.cols, block.cols), span(zlo, zhi, s.z0, (s.z1 - s.z0) / block.rows, block.rows));
+  }
   return out;
 }
 
@@ -392,15 +415,28 @@ export function clearMainland(world: WorldData) {
 /** The island city's mainland: the widest ring of land, from the canal's far bank to the horizon. */
 const mainlandOf = (world: WorldData) => world.land.annuli.reduce((best, a) => a.outer - a.inner > best.outer - best.inner ? a : best);
 
-/** Grows the grid: blocks get their number within their district and their cells, each checked against `clear`. */
+/** Grows the grid: blocks get their number within their district and their cells, each checked against `keep` and `clear`. */
 function builder(clear: (corners: Point[], centre: Point) => boolean) {
   const blocks: LandBlock[] = [], counts = [0, 0, 0, 0];
+  /** Keeps `cols` × `rows` cells of a block from (col, row) for the district's centre, its front to `side`, and returns it. */
+  const centreAt = (block: LandBlock, col: number, row: number, cols: number, rows: number, side: BlockSide): DistrictCentre => {
+    for (let c = col; c < col + cols; c++) for (let r = row; r < row + rows; r++) block.skip.add(`${c}:${r}`);
+    // The headquarters on one half, the public square on the other, both facing the front.
+    const area = areaFrame(block, col, row, cols, rows, side, true), sin = Math.sin(area.rotation), cos = Math.cos(area.rotation), half = area.width / 4;
+    const at = (lu: number) => ({ x: area.x + cos * lu, z: area.z - sin * lu });
+    return {
+      district: block.district, block: block.block, col, row, cols, rows, side, area,
+      hq: { ...at(-half), rotation: area.rotation }, square: { district: block.district, slot: 0, kind: "public", ...at(half), rotation: area.rotation },
+    };
+  };
   return {
-    blocks,
-    add(district: number, band: number, shape: BlockShape, cols: number, rows: number) {
+    blocks, centreAt,
+    /** A block; a cell is for sale if it is the block's own (`keep`) and nothing of the city stands there (`clear`). */
+    add(district: number, band: number, shape: BlockShape, cols: number, rows: number, keep: (col: number, row: number) => boolean = () => true) {
       if (cols < 1 || rows < 1) return null;
       const block: LandBlock = { district, block: ++counts[district], band, cols, rows, shape, skip: new Set() };
       for (let c = 0; c < cols; c++) for (let r = 0; r < rows; r++) {
+        if (!keep(c, r)) { block.skip.add(`${c}:${r}`); continue; }
         const corners = areaCorners(block, c, r), [first, , opposite] = corners;
         if (!clear(corners, { x: (first.x + opposite.x) / 2, z: (first.z + opposite.z) / 2 })) block.skip.add(`${c}:${r}`);
       }
@@ -411,21 +447,12 @@ function builder(clear: (corners: Point[], centre: Point) => boolean) {
     centre(block: LandBlock, side: BlockSide): DistrictCentre {
       const s = block.shape, way = wayOf(side), along = way === "row-" || way === "row+" ? "col" : "row", frontHigh = way === "row+" || way === "col+";
       // A cell's width along the front and its depth across it.
-      let width: number, depth: number;
-      if (s.kind === "ring") { width = (s.a1 - s.a0) / block.cols * (frontHigh ? s.r1 : s.r0); depth = (s.r1 - s.r0) / block.rows; }
-      else { const dx = (s.x1 - s.x0) / block.cols, dz = (s.z1 - s.z0) / block.rows; width = along === "col" ? dx : dz; depth = along === "col" ? dz : dx; }
+      const dx = (s.x1 - s.x0) / block.cols, dz = (s.z1 - s.z0) / block.rows, width = along === "col" ? dx : dz, depth = along === "col" ? dz : dx;
       const count = along === "col" ? block.cols : block.rows, deep = along === "col" ? block.rows : block.cols;
       const n = Math.min(count, Math.ceil(CENTRE_WIDTH / width - 1e-9)), m = Math.min(deep, Math.ceil(CENTRE_DEPTH / depth - 1e-9));
       const k0 = Math.floor((count - n) / 2), j0 = frontHigh ? deep - m : 0;
       const [c0, r0, nc, nr] = along === "col" ? [k0, j0, n, m] : [j0, k0, m, n];
-      for (let c = c0; c < c0 + nc; c++) for (let r = r0; r < r0 + nr; r++) block.skip.add(`${c}:${r}`);
-      // The headquarters on one half, the public square on the other, both facing the front.
-      const area = areaFrame(block, c0, r0, nc, nr, side, true), sin = Math.sin(area.rotation), cos = Math.cos(area.rotation), half = area.width / 4;
-      const at = (lu: number) => ({ x: area.x + cos * lu, z: area.z - sin * lu });
-      return {
-        district: block.district, block: block.block, col: c0, row: r0, cols: nc, rows: nr, side, area,
-        hq: { ...at(-half), rotation: area.rotation }, square: { district: block.district, slot: 0, kind: "public", ...at(half), rotation: area.rotation },
-      };
+      return centreAt(block, c0, r0, nc, nr, side);
     },
   };
 }
@@ -442,10 +469,12 @@ const near = (streets: readonly Road[], x0: number, x1: number, z0: number, z1: 
   Math.max(ax, bx) > x0 - ROAD_GAP - 1 && Math.min(ax, bx) < x1 + ROAD_GAP + 1 && Math.max(az, bz) > z0 - ROAD_GAP - 1 && Math.min(az, bz) < z1 + ROAD_GAP + 1);
 
 /**
- * The island city: bands between the canal bank, the circles where the mainland's ring roads ran and the horizon, each
- * band of each district one block. Three districts of about equal size, parted at BORDERS by a narrow gap. A cell is a
- * third of a plot of the old map each way: a band's rows and a block's columns are CELLS times as many as PLOT-wide
- * plots would be, so nine cells make up about one of those plots.
+ * The island city: a square grid of cells LAND_CELL across, as by the lake, from the canal bank to the horizon. Three
+ * districts of about equal size, parted at BORDERS by straight cuts out from the centre: their cells keep BORDER_GAP
+ * clear of a cut and step along it, as they step along the bank and the horizon. The circles where the mainland's ring
+ * roads ran part the bands, whose land costs more nearer the centre; a cell is in the band its middle lies in. Each
+ * band of each district is one block, the rectangle round its cells on the one lattice of the city, so a district's
+ * blocks overlap where its bands meet and every cell is for sale in one of them at most.
  */
 export const BORDERS = [-32.7 * DEG, 90 * DEG, -146.7 * DEG];
 function islandLand(world: WorldData): LandGrid {
@@ -460,26 +489,86 @@ function islandLand(world: WorldData): LandGrid {
   const b = builder(clear);
   // The ring roads' circles still part the bands, whose land costs more nearer the centre.
   const rings = world.spec.roadRings.filter(r => r > mainland.inner && r < mainland.outer);
-  const edges = [mainland.inner + 1.2, ...rings, mainland.outer - 1.5];
+  const edges = [mainland.inner + 1.2, ...rings, mainland.outer - 1.5], inner = edges[0], outer = edges[edges.length - 1];
   const borders = BORDERS.map(wrap).sort((p, q) => p - q), districtOf = (a: number) => {
     // District k runs counter-clockwise from BORDERS[k - 1] to BORDERS[k] (wrapping round).
     const x = wrap(a), start = [...borders].reverse().find(o => o <= x) ?? borders[borders.length - 1];
     return BORDERS.map(wrap).indexOf(start) + 1;
   };
-  for (let k = 0; k + 1 < edges.length; k++) {
-    const band = k + 1, r0 = edges[k], r1 = edges[k + 1], rm = (r0 + r1) / 2, rows = CELLS * Math.max(1, Math.round((r1 - r0) / PLOT));
-    for (let i = 0; i < borders.length; i++) {
-      const from = borders[i], to = i + 1 < borders.length ? borders[i + 1] : borders[0] + TAU;
-      const a0 = from + BORDER_GAP / rm, a1 = to - BORDER_GAP / rm, cols = CELLS * Math.max(1, Math.round((a1 - a0) * rm / PLOT));
-      b.add(districtOf((a0 + a1) / 2), band, { kind: "ring", r0, r1, a0, a1 }, cols, rows);
-    }
-  }
-  // Each district's centre: in the second band, in the middle of the district's sector, at its inner edge.
-  const centres = [1, 2, 3].flatMap(d => {
-    const block = b.blocks.find(x => x.district === d && x.band === 2);
-    return block ? [b.centre(block, "in")] : [];
+  const sectors: LandSector[] = borders.map((from, i) => {
+    const to = i + 1 < borders.length ? borders[i + 1] : borders[0] + TAU;
+    return { district: districtOf((from + to) / 2), a0: from, a1: to, r0: inner, r1: outer };
   });
-  return { city: "support", bands: edges.length - 1, blocks: b.blocks, centres };
+  /** Is an area (by its corners) on the land, and in the sector BORDER_GAP clear of both its cuts? */
+  const within = (s: LandSector, corners: Point[]) => {
+    const fx = Math.cos(s.a0), fz = Math.sin(s.a0), tx = Math.cos(s.a1), tz = Math.sin(s.a1);
+    return corners.every(p => {
+      const r = Math.hypot(p.x, p.z);
+      return r >= inner && r <= outer && fx * p.z - fz * p.x >= BORDER_GAP && p.x * tz - p.z * tx >= BORDER_GAP;
+    });
+  };
+  /** The same for a cell of the lattice from (x, z): its corners, the nearest and the farthest, decide. */
+  const cellWithin = (s: LandSector, x: number, z: number) => {
+    const fx = Math.cos(s.a0), fz = Math.sin(s.a0), tx = Math.cos(s.a1), tz = Math.sin(s.a1), X = x + LAND_CELL, Z = z + LAND_CELL;
+    const near = Math.hypot(Math.min(Math.abs(x), Math.abs(X)), Math.min(Math.abs(z), Math.abs(Z))), far = Math.hypot(Math.max(Math.abs(x), Math.abs(X)), Math.max(Math.abs(z), Math.abs(Z)));
+    if (near < inner || far > outer) return false;
+    // The cuts' lines: the corners furthest round towards them.
+    return Math.min(fx * z - fz * x, fx * Z - fz * x, fx * z - fz * X, fx * Z - fz * X) >= BORDER_GAP && Math.min(x * tz - z * tx, X * tz - z * tx, x * tz - Z * tx, X * tz - Z * tx) >= BORDER_GAP;
+  };
+  const cell = (x: number, z: number): Point[] => [{ x, z }, { x: x + LAND_CELL, z }, { x: x + LAND_CELL, z: z + LAND_CELL }, { x, z: z + LAND_CELL }];
+  const lattice = (v: number) => Math.round(v / LAND_CELL) * LAND_CELL;
+  // Each district's centre: in the second band on the middle of its sector, its front at the band's inner edge looking
+  // to the middle of the city along x or z, whichever it faces most; on the lattice, clear of the station.
+  const wide = Math.ceil(CENTRE_WIDTH / LAND_CELL - 1e-9) * LAND_CELL, deep = Math.ceil(CENTRE_DEPTH / LAND_CELL - 1e-9) * LAND_CELL;
+  const sites = sectors.map(s => {
+    const a = (s.a0 + s.a1) / 2, c = Math.cos(a), sn = Math.sin(a);
+    const side: BlockSide = Math.abs(c) > Math.abs(sn) ? (c > 0 ? "x0" : "x1") : (sn > 0 ? "z0" : "z1");
+    const w = side === "x0" || side === "x1" ? deep : wide, d = side === "x0" || side === "x1" ? wide : deep;
+    for (let r = edges[1]; r < edges[2]; r += LAND_CELL / 4) {
+      const x0 = lattice(side === "x0" ? c * r : side === "x1" ? c * r - w : c * r - w / 2), z0 = lattice(side === "z0" ? sn * r : side === "z1" ? sn * r - d : sn * r - d / 2);
+      const x1 = x0 + w, z1 = z0 + d, nearest = Math.hypot(Math.min(Math.max(0, x0), x1), Math.min(Math.max(0, z0), z1));
+      if (nearest < edges[1] || !within(s, [{ x: x0, z: z0 }, { x: x1, z: z0 }, { x: x1, z: z1 }, { x: x0, z: z1 }])) continue;
+      let free = true;
+      for (let x = x0; x < x1 && free; x += LAND_CELL) for (let z = z0; z < z1 && free; z += LAND_CELL) free = clear(cell(x, z), { x: x + LAND_CELL / 2, z: z + LAND_CELL / 2 });
+      if (free) return { side, x0, x1, z0, z1 };
+    }
+    return null;
+  });
+  const onSite = (p: Point) => sites.some(t => t && p.x > t.x0 && p.x < t.x1 && p.z > t.z0 && p.z < t.z1);
+  const centres: DistrictCentre[] = [];
+  for (let k = 0; k + 1 < edges.length; k++) {
+    const band = k + 1, r0 = edges[k], r1 = edges[k + 1];
+    sectors.forEach((s, i) => {
+      // The band's cells of the sector, on the lattice round its piece of the sector (along its arcs, a cell beyond):
+      // their middles in the band, all of them on the land and in the sector, off the centres.
+      let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+      for (let j = 0; j <= 120; j++) for (const r of [r0, r1]) {
+        const a = s.a0 + (s.a1 - s.a0) * j / 120, x = Math.cos(a) * r, z = Math.sin(a) * r;
+        x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z);
+      }
+      // A lattice square by its first corner (x, z), as a number.
+      const own = new Set<number>(), key = (x: number, z: number) => (Math.round(x / LAND_CELL) + 4096) * 8192 + Math.round(z / LAND_CELL) + 4096;
+      let bx0 = Infinity, bx1 = -Infinity, bz0 = Infinity, bz1 = -Infinity;
+      for (let x = lattice(x0) - LAND_CELL; x <= lattice(x1) + LAND_CELL; x += LAND_CELL) for (let z = lattice(z0) - LAND_CELL; z <= lattice(z1) + LAND_CELL; z += LAND_CELL) {
+        const middle = { x: x + LAND_CELL / 2, z: z + LAND_CELL / 2 }, r = Math.hypot(middle.x, middle.z);
+        if (r < r0 || r >= r1 || onSite(middle) || !cellWithin(s, x, z)) continue;
+        own.add(key(x, z));
+        bx0 = Math.min(bx0, x); bx1 = Math.max(bx1, x + LAND_CELL); bz0 = Math.min(bz0, z); bz1 = Math.max(bz1, z + LAND_CELL);
+      }
+      // The block is the rectangle round them; the second band's takes in the district's centre.
+      const site = band === 2 ? sites[i] : null;
+      if (site) { bx0 = Math.min(bx0, site.x0); bx1 = Math.max(bx1, site.x1); bz0 = Math.min(bz0, site.z0); bz1 = Math.max(bz1, site.z1); }
+      if (!(bx1 > bx0)) return;
+      const keep = (c: number, r: number) => own.has(key(bx0 + c * LAND_CELL, bz0 + r * LAND_CELL));
+      const block = b.add(s.district, band, { kind: "rect", x0: bx0, x1: bx1, z0: bz0, z1: bz1 }, Math.round((bx1 - bx0) / LAND_CELL), Math.round((bz1 - bz0) / LAND_CELL), keep);
+      if (block && site) {
+        const col = Math.round((site.x0 - bx0) / LAND_CELL), row = Math.round((site.z0 - bz0) / LAND_CELL);
+        centres.push(b.centreAt(block, col, row, Math.round((site.x1 - site.x0) / LAND_CELL), Math.round((site.z1 - site.z0) / LAND_CELL), site.side));
+      }
+    });
+  }
+  centres.sort((p, q) => p.district - q.district);
+  return { city: "support", bands: edges.length - 1, blocks: b.blocks, centres, sectors };
 }
 
 /**
@@ -489,7 +578,6 @@ function islandLand(world: WorldData): LandGrid {
  * edge of the land. Each block lies on one side of every district border, so a border runs along whole block sides,
  * where both blocks keep half the gap clear.
  */
-export const LAND_CELL = 3;
 function lakeLand(world: WorldData): LandGrid {
   const line = world.railway, square = stationSquare(world), rect = world.land.rectangle!;
   const lake = (rect.lake ?? 46) + 12, pier = rectangle(4, 48, 0, 44, 18, 0), boulevard = rectangle(0, 85, 0, 60, 10.4, 0);

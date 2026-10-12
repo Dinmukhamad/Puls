@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { cityEstate, operationKey, type DecorCatalogue, type DistrictEstate, type MyEstate, type OperationResult, type OwnObject, type PlotCatalogue, type PlotFamily, type ProjectCatalogue, type ProjectFamily, type PublicObject } from "../../api/cityEstate";
 import { PLOT_LEVELS, PROJECT_LEVELS, isDecorFamily, itemFootprint, plotFootprint, projectFootprint, type DecorFamily } from "../../city3d/world/estateGrid";
-import type { DecorTool, EstateTarget, PlotAddress } from "../../city3d/types";
+import type { DecorShape, DecorTool, EstateTarget, PlotAddress } from "../../city3d/types";
 import { plural } from "../../utils/format";
 import { DistrictSwatch } from "./DistrictSwatch";
 import { splitPlotCatalogue, readyBuildingLabel } from "./plotCatalogue";
@@ -22,10 +22,21 @@ export interface PickedPlot extends PlotAddress {
   at: { col: number; row: number; problem: string | null } | null;
 }
 /**
- * Small things being laid (one kind) or taken away (one's own; in the test city `anyone`'s): the cells chosen, whether a
- * tap draws a line from the last one.
+ * Small things being laid (one kind) or taken away (one's own; in the test city `anyone`'s): the cells chosen, and how a
+ * tap chooses them: one at a time, a line from the last one, or an area between two corners. Cells chosen on the map
+ * with Ctrl before choosing what goes on them have no `tool` yet; the tool chosen for them then is there `once`, and
+ * the dock goes back to the district when they are built.
  */
-export interface DecorChoice { tool: DecorTool; cells: PlotAddress[]; line: boolean; anyone?: boolean }
+export interface DecorChoice { tool: DecorTool | null; cells: PlotAddress[]; shape: DecorShape; anyone?: boolean; once?: boolean }
+/** The key held to choose many cells at once: Cmd on a Mac, Ctrl elsewhere (the map takes either). */
+export const MULTI_KEY = typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent) ? "⌘" : "Ctrl";
+/** How the cells are chosen at first: roads, footpaths and hedges by lines, everything else a cell at a time. */
+export const decorShape = (tool: DecorTool): DecorShape => tool === "road" || tool === "path" || tool === "hedge" ? "line" : "cell";
+const SHAPES: { value: DecorShape; label: string; hint: string }[] = [
+  { value: "cell", label: "Клетка", hint: "Каждое нажатие — одна клетка." },
+  { value: "line", label: "Линия", hint: "Каждое нажатие продолжает линию от прошлой клетки." },
+  { value: "area", label: "Область", hint: "Нажми на один угол, потом на другой — выберется прямоугольник между ними: дорога в две-три клетки шириной, роща, площадь." },
+];
 /** Build mode as the page keeps it: the city scene gets everything but `spot` and `project` (city3d/types.ts CityBuildView). */
 export interface BuildState {
   district: string; area: "plots" | "public";
@@ -91,12 +102,12 @@ export function CityEstateDock({ mine, land, build, setBuild, onClose, onFocus, 
         return;
       }
       if (operation.action === "decor" || operation.action === "undecor") {
-        const name = operation.name ?? (build.decor && build.decor.tool !== "remove" ? decor.get(build.decor.tool)?.name : undefined);
+        const tool = build.decor?.tool, name = operation.name ?? (tool && tool !== "remove" ? decor.get(tool)?.name : undefined);
         await refresh(operation.action === "decor"
           ? `Построено: ${name?.toLowerCase() ?? "мелкие постройки"} — ${cellsText(result.laid ?? 0)}${result.price ? ` · −${coins(result.price)} коинов` : ""}.`
           : `Убрано: ${cellsText(result.removed ?? 0)}${result.refunded ? ` · вернулось ${coins(result.refunded)} коинов` : ""}.`);
         if (!mounted.current) return;
-        setBuild({ ...build, decor: build.decor ? { ...build.decor, cells: [] } : null, plot: operation.name ? null : build.plot });
+        setBuild({ ...build, decor: build.decor && !build.decor.once ? { ...build.decor, cells: [] } : null, plot: operation.name ? null : build.plot });
         return;
       }
       const obj = result.object, family = obj && plots.get(obj.family as PlotFamily), name = family?.levels[(obj?.level ?? 1) - 1]?.name;
@@ -111,7 +122,12 @@ export function CityEstateDock({ mine, land, build, setBuild, onClose, onFocus, 
   });
   const pending = act.isPending;
   const place = (o: OwnObject) => { act.reset(); setNotice(null); setBuild({ ...build, area: "plots", placing: { family: o.family, rotation: 0, moving: o.id }, plot: null, spot: null, selected: null, decor: null }); };
-  const useTool = (tool: DecorTool) => { act.reset(); setNotice(null); setBuild({ ...build, area: "plots", placing: null, plot: null, spot: null, selected: null, decor: { tool, cells: [], line: tool === "road" || tool === "path" || tool === "hedge" } }); };
+  // A tool from the palette starts with no cells; one chosen for cells picked with Ctrl lays on them, once.
+  const useTool = (tool: DecorTool) => {
+    act.reset(); setNotice(null);
+    const picked = build.decor?.tool === null ? build.decor.cells : null;
+    setBuild({ ...build, area: "plots", placing: null, plot: null, spot: null, selected: null, decor: { tool, cells: picked ?? [], shape: decorShape(tool), ...(picked ? { once: true } : {}) } });
+  };
 
   let body;
   if (showComplex) body = <DistrictLandmarkCard landmark={land!.landmark!} />;
@@ -129,20 +145,22 @@ export function CityEstateDock({ mine, land, build, setBuild, onClose, onFocus, 
         act.mutate({ action: "place", run: () => cityEstate.place(obj.id, { key: keys.key({ id: obj.id, ...body }), ...body }) });
       }
     }} />;
+  else if (build.decor?.tool === null) body = <DecorSelection cells={build.decor.cells.length} catalogue={mine.decor ?? []} available={mine.available} batch={mine.decor_batch} ready={ready} message={mine.message}
+    onTool={useTool} onClear={() => { act.reset(); setBuild({ ...build, decor: null }); }} />;
   else if (build.decor) {
-    const choice = build.decor, item = choice.tool === "remove" ? null : decor.get(choice.tool) ?? null;
+    const choice = build.decor, item = !choice.tool || choice.tool === "remove" ? null : decor.get(choice.tool) ?? null;
     body = <DecorPanel choice={choice} item={item} available={mine.available} batch={mine.decor_batch} message={mine.message} ready={ready} pending={pending} error={act.error}
-      onLine={line => setBuild({ ...build, decor: { ...choice, line } })}
+      onShape={shape => setBuild({ ...build, decor: { ...choice, shape } })}
       onClear={() => { act.reset(); setBuild({ ...build, decor: { ...choice, cells: [] } }); }}
       onDone={() => { act.reset(); setBuild({ ...build, decor: null }); }}
       onConfirm={() => {
         if (!ready || pending || !choice.cells.length) return;
-        const cells = choice.cells.map(c => [c.block, c.col, c.row] as [number, number, number]);
-        if (choice.tool === "remove") {
+        const cells = choice.cells.map(c => [c.block, c.col, c.row] as [number, number, number]), family = choice.tool;
+        if (family === "remove") {
           const body = { district_id: build.district, cells };
           act.mutate({ action: "undecor", run: () => cityEstate.takeAway({ key: keys.key({ undecor: true, ...body }), ...body }) });
-        } else {
-          const body = { district_id: build.district, family: choice.tool, cells, economy_revision: mine.economy_revision };
+        } else if (family) {
+          const body = { district_id: build.district, family, cells, economy_revision: mine.economy_revision };
           act.mutate({ action: "decor", run: () => cityEstate.lay({ key: keys.key(body), ...body }) });
         }
       }} />;
@@ -228,7 +246,7 @@ function Overview({ land, ready, pending, onChooseFree }: { land: DistrictEstate
   const full = !!state && state.taken >= state.cells;
   return <>
     <section className="estate-claim"><h2 className="estate-step-title">{ready ? "Спланируй свой район" : "Как построить"}</h2>
-      <ol className="estate-steps"><li>Проложи дороги и дорожки, посади деревья, поставь фонари — ниже, в «Дорогах и благоустройстве».</li><li>Нажми на свободную клетку и выбери, что на ней построить: дом займёт 3 × 3 клетки, офис и сквер — 2 × 2. Место покажется на карте: зелёные клетки свободны, красные заняты.</li><li>Купи за коины: цена включает землю под каждой клеткой.</li></ol>
+      <ol className="estate-steps"><li>Проложи дороги и дорожки, посади деревья, поставь фонари — ниже, в «Дорогах и благоустройстве»<span className="estate-tip--mouse">, или зажми <kbd>{MULTI_KEY}</kbd> и протяни мышью по клеткам на карте, потом выбери, что на них поставить</span>.</li><li>Нажми на свободную клетку и выбери, что на ней построить: дом займёт 3 × 3 клетки, офис и сквер — 2 × 2. Место покажется на карте: зелёные клетки свободны, красные заняты.</li><li>Купи за коины: цена включает землю под каждой клеткой.</li></ol>
       {ready && <p>{full ? "Вся земля района занята. Открой свою постройку, чтобы посмотреть доступные улучшения." : "На карте свободные клетки района зелёные, занятые — серые."}</p>}
       {ready && !full && onChooseFree && <button type="button" className="city-secondary estate-choose-free" disabled={pending} onClick={onChooseFree}>Подобрать место для дома</button>}
     </section>
@@ -246,6 +264,7 @@ export function DecorPalette({ catalogue, available, ready, own, onTool }: { cat
   const free = available === null;
   return <section className="estate-section" aria-label="Дороги и благоустройство">
     <h3>Дороги и благоустройство</h3>
+    <p className="estate-tip estate-tip--mouse">Много клеток сразу: зажми <kbd>{MULTI_KEY}</kbd> и протяни мышью по карте — выберется прямоугольник, <kbd>{MULTI_KEY}</kbd> + клик добавит или уберёт клетку. Потом выбери, что на них поставить.</p>
     <p className="secondary small">Каждая вещь занимает одну клетку. Дороги и дорожки сами соединяются с соседними, деревья, фонари и скамейки ставь вдоль них. {free ? "Здесь всё бесплатно." : "Цена включает землю, своё можно убрать — коины вернутся."}</p>
     <ul className="estate-tools">{catalogue.map(c => <li key={c.family}>
       <button type="button" disabled={!ready} onClick={() => onTool(c.family)} aria-label={free ? `${c.name}, бесплатно` : `${c.name}: ${c.price} коинов за клетку`} title={c.about}>
@@ -256,17 +275,40 @@ export function DecorPalette({ catalogue, available, ready, own, onTool }: { cat
 }
 
 /**
+ * Cells chosen on the map with Ctrl (Cmd) before choosing what goes on them: how many, and every small thing with what
+ * it costs on all of them (nothing in the test city, `available` null). Choosing one lays it out on those cells, to be
+ * built with one button; a house or another building goes onto its own cells one at a time, from a tap without Ctrl.
+ */
+export function DecorSelection({ cells, catalogue, available, batch, ready, message = null, onTool, onClear }: { cells: number; catalogue: DecorCatalogue[]; available: number | null; batch: number; ready: boolean; message?: string | null; onTool: (tool: DecorFamily) => void; onClear: () => void }) {
+  const free = available === null, limit = batch || 400;
+  return <section className="estate-placing" aria-live="polite" aria-label="Выбранные клетки">
+    <div className="estate-placing__title"><span aria-hidden="true">▦</span><div><h2>Выбрано: {cellsText(cells)}</h2><small>Что поставить на все сразу?</small></div></div>
+    <ul className="estate-tools">{catalogue.map(c => {
+      const total = c.price * cells;
+      return <li key={c.family}><button type="button" disabled={!ready} onClick={() => onTool(c.family)} aria-label={free ? `${c.name} на ${cellsText(cells)}, бесплатно` : `${c.name} на ${cellsText(cells)}: ${total} коинов`} title={c.about}>
+        <span className="estate-tools__icon" aria-hidden="true">{c.icon}</span><strong>{c.name}</strong><small>{free ? "бесплатно" : `◈ ${coins(total)}${available < total ? " · не хватает" : ""}`}</small>
+      </button></li>;
+    })}</ul>
+    {cells > limit && <p className="estate-problem" role="alert">За раз можно построить не больше {limit} клеток.</p>}
+    {!ready && <p className="estate-note">{message ?? "Стройка в районе пока закрыта."}</p>}
+    <p className="secondary small"><kbd>{MULTI_KEY}</kbd> + клик добавляет или убирает клетку, <kbd>{MULTI_KEY}</kbd> + протянуть мышью — ещё прямоугольник. Дома и здания ставятся по одному: нажми на клетку без <kbd>{MULTI_KEY}</kbd>.</p>
+    <div className="estate-placing__actions"><button type="button" className="city-secondary" onClick={onClear}>Сбросить выбор</button></div>
+  </section>;
+}
+
+/**
  * Laying a small thing, or taking some away: how to choose cells, how many are chosen, what it costs (nothing in the
  * test city, `available` null).
  */
-export function DecorPanel({ choice, item, available, batch, message, ready, pending, error, onLine, onClear, onDone, onConfirm }: { choice: DecorChoice; item: DecorCatalogue | null; available: number | null; batch: number; message: string | null; ready: boolean; pending: boolean; error: Error | null; onLine: (line: boolean) => void; onClear: () => void; onDone: () => void; onConfirm: () => void }) {
+export function DecorPanel({ choice, item, available, batch, message, ready, pending, error, onShape, onClear, onDone, onConfirm }: { choice: DecorChoice; item: DecorCatalogue | null; available: number | null; batch: number; message: string | null; ready: boolean; pending: boolean; error: Error | null; onShape: (shape: DecorShape) => void; onClear: () => void; onDone: () => void; onConfirm: () => void }) {
   const free = available === null, removing = choice.tool === "remove", count = choice.cells.length, total = free ? 0 : (item?.price ?? 0) * count;
   const missing = removing || free ? 0 : total - available, limit = batch || 400, tooMany = count > limit;
   return <section className="estate-placing" aria-live="polite">
     <div className="estate-placing__title"><span aria-hidden="true">{removing ? "🧹" : item?.icon}</span><div><h2>{removing ? (choice.anyone ? "Убрать" : "Убрать своё") : item?.name}</h2><small>{removing ? (free ? "Дороги, деревья и другие мелкие постройки" : "Своё и общее района: за своё коины вернутся") : free ? "Бесплатно в тестовом городе" : `◈ ${coins(item?.price ?? 0)} за клетку · земля включена`}</small></div></div>
     {item && <p className="secondary small">{item.about}</p>}
-    <p className="secondary small">{removing ? "Выбери клетки на карте — они подсвечены жёлтым." : "Проведи по свободным клеткам левой кнопкой мыши — получится линия, или нажимай на клетки по одной."} Камера: правая кнопка мыши, колесо и WASD, на телефоне — двумя пальцами.</p>
-    <label className="estate-line"><input type="checkbox" checked={choice.line} onChange={event => onLine(event.target.checked)} /><span>Линией: каждое нажатие продолжает от прошлой клетки</span></label>
+    <p className="secondary small">{removing ? "Выбери клетки на карте — они подсвечены жёлтым. Проведи мышью — линия." : "Проведи по свободным клеткам левой кнопкой мыши — получится линия."} С зажатым <kbd>{MULTI_KEY}</kbd> протяни мышью левой или правой кнопкой — выделится прямоугольник, <kbd>{MULTI_KEY}</kbd> + клик добавит или уберёт клетку. Камера: правая кнопка мыши, колесо и WASD, на телефоне — двумя пальцами.</p>
+    <div className="estate-shape" role="radiogroup" aria-label="Как выбирать клетки">{SHAPES.map(o => <button key={o.value} type="button" role="radio" aria-checked={choice.shape === o.value} onClick={() => onShape(o.value)}>{o.label}</button>)}</div>
+    <p className="secondary small estate-shape__hint">{SHAPES.find(o => o.value === choice.shape)?.hint}</p>
     <p className={count ? "estate-ok" : "estate-note"}>{count ? `Выбрано: ${cellsText(count)}${removing || free ? "" : ` · ◈ ${coins(total)}`}` : "Клетки ещё не выбраны"}</p>
     {tooMany && <p className="estate-problem" role="alert">За раз можно выбрать не больше {limit} клеток.</p>}
     {!ready && <p className="estate-note">{message ?? "Стройка в районе пока закрыта."}</p>}

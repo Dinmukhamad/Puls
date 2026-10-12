@@ -33,6 +33,9 @@ div.c3-label{cursor:default}
 
 /* Markers over the operator's open, empty plots (systems/plots.ts): a green pin that opens the catalogue. */
 .c3-plots{position:absolute;inset:0;pointer-events:none}
+/* An area of small things being drawn: its size by the pointer. */
+.c3-area-size{position:absolute;left:0;top:0;padding:4px 9px;border-radius:9px;background:rgba(28,36,52,.88);color:#fff;font:600 12px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;white-space:nowrap;pointer-events:none;box-shadow:0 4px 12px rgba(10,20,40,.3)}
+.c3-area-size[hidden]{display:none}
 .c3-plot{position:absolute;left:0;top:0;display:flex;align-items:center;gap:6px;height:36px;padding:0 14px 0 8px;border:2px solid #fff;border-radius:18px;background:#2f9e5b;color:#fff;font:700 14px/1 system-ui,-apple-system,"Segoe UI",sans-serif;box-shadow:0 4px 14px rgba(20,40,30,.35);transform-origin:50% 100%;pointer-events:auto;cursor:pointer;white-space:nowrap;visibility:hidden;-webkit-tap-highlight-color:transparent}
 .c3-plot span{display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:rgba(255,255,255,.25);font-size:16px}
 .c3-plot small{font-size:13px;font-weight:700}

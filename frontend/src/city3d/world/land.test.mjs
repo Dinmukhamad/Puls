@@ -49,8 +49,25 @@ test('the whole city goes to three districts of about the same size, cell by cel
   const radius = c => Math.hypot(c.x, c.z), byBand = b => CELLS.support.filter(c => c.band === b).map(radius);
   for (let b = 1; b < GRIDS.support.bands; b++) assert.ok(Math.max(...byBand(b)) < Math.min(...byBand(b + 1)), `band ${b} inside band ${b + 1}`);
   for (let b = 1; b <= GRIDS.support.bands; b++) assert.deepEqual(GRIDS.support.blocks.filter(x => x.band === b).map(x => x.district).sort(), [1, 2, 3]);
-  // Its rows and columns come in threes, so the old plots' lines still run through the cells.
-  for (const b of GRIDS.support.blocks) assert.ok(b.cols % L.CELLS === 0 && b.rows % L.CELLS === 0, `${b.cols} × ${b.rows}`);
+});
+
+test('both cities\' cells are squares in straight rows: one lattice of LAND_CELL for the whole island city, each square sold once', () => {
+  for (const c of CELLS.support) {
+    const [a, b, , d] = c.corners;
+    assert.ok(Math.abs(b.x - a.x - L.LAND_CELL) < 1e-9 && Math.abs(b.z - a.z) < 1e-9 && Math.abs(d.z - a.z - L.LAND_CELL) < 1e-9 && Math.abs(d.x - a.x) < 1e-9, `cell ${c.district}:${c.block}:${c.col}:${c.row} is no square along x and z`);
+    for (const v of [a.x, a.z]) assert.ok(Math.abs(v / L.LAND_CELL - Math.round(v / L.LAND_CELL)) < 1e-9, `cell ${c.district}:${c.block}:${c.col}:${c.row} off the lattice at ${a.x}, ${a.z}`);
+  }
+  const squares = new Map();
+  for (const c of CELLS.support) {
+    const key = `${c.corners[0].x}:${c.corners[0].z}`;
+    assert.ok(!squares.has(key), `the square at ${key} is sold twice: ${squares.get(key)} and ${c.district}:${c.block}`);
+    squares.set(key, `${c.district}:${c.block}`);
+  }
+  // By the lake the cells are rectangles along x and z too, a block along a district border a little narrower.
+  for (const c of CELLS.sales) {
+    const [a, b, , d] = c.corners;
+    assert.ok(Math.abs(b.z - a.z) < 1e-9 && Math.abs(d.x - a.x) < 1e-9, `sales: cell ${c.district}:${c.block}:${c.col}:${c.row} askew`);
+  }
 });
 
 test('no cell on the railway, the station\'s square and street, the lake or a group quarter, no block over another', () => {
@@ -65,32 +82,34 @@ test('no cell on the railway, the station\'s square and street, the lake or a gr
       }
       if (city === 'sales') assert.ok(c.corners.every(p => Math.hypot(p.x, p.z) > 56), 'cell by the lake');
     }
-    // Cells of a block never overlap; blocks never do either: the same band's sectors or the rectangles stay apart.
-    const TAU = 2 * Math.PI, wrap = a => ((a % TAU) + TAU) % TAU;
-    for (const a of grid.blocks) for (const b of grid.blocks) {
+    // The lake city's blocks never overlap: its rectangles stay apart.
+    if (city === 'sales') for (const a of grid.blocks) for (const b of grid.blocks) {
       if (a === b) continue;
-      const s = a.shape, t = b.shape;
-      if (s.kind === 'ring') {
-        if (Math.min(s.r1, t.r1) - Math.max(s.r0, t.r0) <= 1e-9) continue;
-        assert.ok(wrap(t.a0 - s.a0) >= s.a1 - s.a0 - 1e-9, `${city}: blocks ${a.district}:${a.block} and ${b.district}:${b.block} overlap`);
-      } else {
-        const across = Math.min(s.x1, t.x1) - Math.max(s.x0, t.x0), down = Math.min(s.z1, t.z1) - Math.max(s.z0, t.z0);
-        assert.ok(across <= 1e-9 || down <= 1e-9, `${city}: blocks ${a.district}:${a.block} and ${b.district}:${b.block} overlap`);
-      }
+      const s = a.shape, t = b.shape, across = Math.min(s.x1, t.x1) - Math.max(s.x0, t.x0), down = Math.min(s.z1, t.z1) - Math.max(s.z0, t.z0);
+      assert.ok(across <= 1e-9 || down <= 1e-9, `${city}: blocks ${a.district}:${a.block} and ${b.district}:${b.block} overlap`);
     }
   }
-  // The island city's land is all the districts': beside the centres only the railway, the station's square and its
-  // street keep cells from sale (the group quarters that stood across the canal are gone).
-  const line = SUPPORT.railway, square = L.stationSquare(SUPPORT), grid = GRIDS.support;
+  // The island city's land is all the districts': every square of the lattice on the mainland, in a district's sector
+  // BORDER_GAP clear of its cuts, is for sale in the block of its band, but for the centres, the railway, the station's
+  // square and its street (the group quarters that stood across the canal are gone).
+  const line = SUPPORT.railway, square = L.stationSquare(SUPPORT), grid = GRIDS.support, C = L.LAND_CELL;
   const streets = SUPPORT.roads.streets.filter(([ax, az, bx, bz]) => Math.max(Math.hypot(ax, az), Math.hypot(bx, bz)) > L.WORLD_X4.bank);
-  for (const block of grid.blocks) for (const key of block.skip) {
-    const [c, r] = key.split(':').map(Number), centre = grid.centres.find(x => x.district === block.district && x.block === block.block);
-    if (centre && c >= centre.col && c < centre.col + centre.cols && r >= centre.row && r < centre.row + centre.rows) continue;
-    const corners = L.areaCorners(block, c, r), middle = L.areaPoint(corners, .5, .5);
-    const kept = [...corners, middle].some(p => L.onRailway(line, p, 1.5) || L.onSquare(line, square, p, 1.5))
-      || streets.some(road => L.segmentPolygonDistance(road, corners) < L.ROAD_GAP);
-    assert.ok(kept, `district ${block.district}, block ${block.block}: cell ${key} kept from sale for nothing`);
+  const { r0: inner, r1: outer } = grid.sectors[0], rings = SUPPORT.spec.roadRings.filter(r => r > inner && r < outer), edges = [inner, ...rings, outer];
+  let sold = 0;
+  for (let x = -Math.ceil(outer / C) * C; x < outer; x += C) for (let z = -Math.ceil(outer / C) * C; z < outer; z += C) {
+    const corners = [{ x, z }, { x: x + C, z }, { x: x + C, z: z + C }, { x, z: z + C }], middle = { x: x + C / 2, z: z + C / 2 }, r = Math.hypot(middle.x, middle.z);
+    if (corners.some(p => Math.hypot(p.x, p.z) < inner || Math.hypot(p.x, p.z) > outer)) continue;
+    const sector = grid.sectors.find(s => corners.every(p => Math.cos(s.a0) * p.z - Math.sin(s.a0) * p.x >= L.BORDER_GAP && p.x * Math.sin(s.a1) - p.z * Math.cos(s.a1) >= L.BORDER_GAP));
+    const at = L.cellAt(grid, middle), where = `the square at ${x}, ${z}`;
+    if (!sector) { assert.equal(at, null, `${where} in a cut between two districts is for sale`); continue; }
+    if (grid.centres.some(c => L.polygonsOverlap(corners.map(p => ({ x: p.x + (middle.x - p.x) * .1, z: p.z + (middle.z - p.z) * .1 })), c.area.corners))) { assert.equal(at, null, `${where} on a centre is for sale`); continue; }
+    const kept = [...corners, middle].some(p => L.onRailway(line, p, 1.5) || L.onSquare(line, square, p, 1.5)) || streets.some(road => L.segmentPolygonDistance(road, corners) < L.ROAD_GAP);
+    if (!at) { assert.ok(kept, `${where} of district ${sector.district} kept from sale for nothing`); continue; }
+    sold++;
+    assert.equal(at.block.district, sector.district, `${where} sold to another district`);
+    assert.equal(at.block.band, edges.findIndex((e, i) => r >= e && r < edges[i + 1]) + 1, `${where} in the band of another circle`);
   }
+  assert.equal(sold, CELLS.support.length, 'every cell for sale is a square of the land');
 });
 
 test('every district has its centre: the headquarters and the public square side by side at the front of a block, on no cell for sale', () => {
@@ -111,9 +130,17 @@ test('every district has its centre: the headquarters and the public square side
       for (let c = centre.col; c < centre.col + centre.cols; c++) for (let r = centre.row; r < centre.row + centre.rows; r++) for (const [u, v] of [[.5, .5], [.1, .1], [.9, .1], [.9, .9], [.1, .9]]) {
         assert.equal(L.cellAt(grid, L.areaPoint(L.areaCorners(block, c, r), u, v)), null, `${city}: a cell for sale in district ${centre.district}'s centre`);
       }
-      // It stands at the front of its block, its front towards the middle of the city.
-      const side = { in: centre.row === 0, z1: centre.row + centre.rows === block.rows, x1: centre.col + centre.cols === block.cols, x0: centre.col === 0 };
-      assert.ok(Object.values(side).some(Boolean), `${city}: district ${centre.district}'s centre is not at its block's edge`);
+      // It stands at the front of its block (on the island city at the second band's inner edge), its front towards the
+      // middle of the city.
+      if (city === 'sales') {
+        const side = { z1: centre.row + centre.rows === block.rows, x1: centre.col + centre.cols === block.cols, x0: centre.col === 0 };
+        assert.ok(Object.values(side).some(Boolean), `${city}: district ${centre.district}'s centre is not at its block's edge`);
+      } else {
+        const [a, , b] = centre.area.corners, nearest = Math.hypot(Math.min(Math.max(0, Math.min(a.x, b.x)), Math.max(a.x, b.x)), Math.min(Math.max(0, Math.min(a.z, b.z)), Math.max(a.z, b.z)));
+        const band = SUPPORT.spec.roadRings.filter(r => r > grid.sectors[0].r0).sort((p, q) => p - q)[0];
+        assert.ok(nearest >= band && nearest < band + 2 * L.LAND_CELL, `${city}: district ${centre.district}'s centre is ${nearest.toFixed(1)} from the middle, its band begins at ${band}`);
+        assert.equal(block.band, 2);
+      }
       const front = { x: centre.area.x + Math.sin(centre.area.rotation) * centre.area.depth / 2, z: centre.area.z + Math.cos(centre.area.rotation) * centre.area.depth / 2 };
       assert.ok(Math.hypot(front.x, front.z) < Math.hypot(centre.area.x, centre.area.z) - centre.area.depth / 3, `${city}: district ${centre.district}'s centre turns from the middle of the city`);
     }
@@ -147,7 +174,9 @@ test('an area of cells has one frame: its corners, its front at any side, a quar
       // Nine cells, the corners of the first and the last of them.
       assert.ok(near(corners[0], L.areaCorners(block, col, row)[0]) && near(corners[2], L.areaCorners(block, col + 2, row + 2)[2]), `${city}: block ${block.district}:${block.block}`);
       const home = L.homeSide(block, col, row, 3, 3);
-      if (block.shape.kind === 'ring') assert.equal(home, 'in', 'on the island city a building looks to the centre');
+      // A building looks to the middle of the city, along x or z, whichever it faces most.
+      const look = L.areaFrame(block, col, row, 3, 3, home), ahead = { x: Math.sin(look.rotation), z: Math.cos(look.rotation) };
+      assert.ok(-(ahead.x * look.x + ahead.z * look.z) >= Math.hypot(look.x, look.z) * Math.SQRT1_2 - 1e-9, `${city}: block ${block.district}:${block.block} looks away from the middle`);
       const sides = [0, 1, 2, 3].map(k => L.turnedSide(block, home, k));
       assert.equal(new Set(sides).size, 4, 'four turns, four sides');
       assert.equal(L.turnedSide(block, home, 4), home);
@@ -156,7 +185,7 @@ test('an area of cells has one frame: its corners, its front at any side, a quar
         const frame = L.areaFrame(block, col, row, 3, 3, side, true);
         assert.deepEqual(frame.corners, corners);
         assert.equal(frame.street, true);
-        // The front's middle lies on the side it looks to: the middle of that edge (on a ring, of its arc).
+        // The front's middle lies on the side it looks to: the middle of that edge.
         const front = { x: frame.x + Math.sin(frame.rotation) * frame.depth / 2, z: frame.z + Math.cos(frame.rotation) * frame.depth / 2 };
         const way = L.wayOf(side);
         const middle = L.areaPoint(corners, way === 'col-' ? 0 : way === 'col+' ? 1 : .5, way === 'row-' ? 0 : way === 'row+' ? 1 : .5);
@@ -173,8 +202,10 @@ test('neighbouring cells meet on their shared edge, across a block\'s edge too, 
   const opposite = { 'row-': 'row+', 'row+': 'row-', 'col-': 'col+', 'col+': 'col-' };
   for (const [city, grid] of Object.entries(GRIDS)) {
     let across = 0;
-    for (const c of CELLS[city].filter(c => c.row === 0 || c.col === 0 || c.col % 11 === 0)) {
-      const block = grid.blocks.find(b => b.district === c.district && b.block === c.block);
+    const blockOf = c => grid.blocks.find(b => b.district === c.district && b.block === c.block);
+    const edge = c => { const b = blockOf(c); return [[-1, 0], [1, 0], [0, -1], [0, 1]].some(([dc, dr]) => b.skip.has(`${c.col + dc}:${c.row + dr}`) || c.col + dc < 0 || c.row + dr < 0 || c.col + dc >= b.cols || c.row + dr >= b.rows); };
+    for (const c of CELLS[city].filter(c => c.col % 11 === 0 || edge(c))) {
+      const block = blockOf(c);
       for (const way of L.WAYS) {
         const next = L.neighbours(grid, block, c.col, c.row, way);
         let covered = 0;
@@ -195,10 +226,16 @@ test('neighbouring cells meet on their shared edge, across a block\'s edge too, 
       }
     }
     assert.ok(across > (city === 'support' ? 500 : 100), `${city}: ${across} neighbours across blocks`);
-    // A block's first column has no neighbour back a column on the island city: the next block that way is another district's.
-    for (const block of grid.blocks.filter(b => b.shape.kind === 'ring')) for (let row = 0; row < block.rows; row++) {
-      assert.deepEqual(L.neighbours(grid, block, 0, row, 'col-'), []);
-      assert.deepEqual(L.neighbours(grid, block, block.cols - 1, row, 'col+'), []);
+  }
+  // On the island city a cell where two bands meet has its neighbour in the next band's block: the square beside it.
+  const grid = GRIDS.support;
+  for (const c of CELLS.support.filter(c => c.band === 3 && c.col % 5 === 0)) {
+    const block = grid.blocks.find(b => b.district === c.district && b.block === c.block);
+    for (const way of L.WAYS) {
+      const dx = way === 'col-' ? -1 : way === 'col+' ? 1 : 0, dz = way === 'row-' ? -1 : way === 'row+' ? 1 : 0;
+      const next = L.cellAt(grid, { x: c.x + dx * L.LAND_CELL, z: c.z + dz * L.LAND_CELL }), found = L.neighbours(grid, block, c.col, c.row, way);
+      if (next && next.block.district === c.district) assert.ok(found.length === 1 && found[0].block === next.block && found[0].col === next.col && found[0].row === next.row, `${c.block}:${c.col}:${c.row} ${way}`);
+      else assert.deepEqual(found, [], `${c.block}:${c.col}:${c.row} ${way}: a neighbour where none is for sale`);
     }
   }
 });
@@ -222,6 +259,47 @@ test('a road is laid along the land\'s lines: every cell between two, through on
     const into = L.cellsBetween(grid, { block: a, col: a.cols - 1, row: 1 }, { block: b, col: 0, row: 1 });
     assert.ok(into.every(c => c.block.district === 1), `${city}: a road into the next district`);
   }
+});
+
+test('an area is the rectangle of cells between two, on the land\'s lines and across the seams of the island\'s bands', () => {
+  const key = c => `${c.block.block}:${c.col}:${c.row}`, keys = list => new Set(list.map(key));
+  for (const [city, grid] of Object.entries(GRIDS)) {
+    for (const block of grid.blocks.filter(b => b.skip.size === 0 && b.cols >= 12 && b.rows >= 6)) {
+      const ref = (col, row) => ({ block, col, row }), name = `${city}: block ${block.district}:${block.block}`;
+      // Two rows of ten: a road two cells wide, every cell once, whichever corner it starts from.
+      const strip = L.cellsWithin(grid, ref(2, 1), ref(11, 2));
+      assert.deepEqual([...keys(strip)].sort(), Array.from({ length: 20 }, (_, i) => `${block.block}:${2 + i % 10}:${1 + Math.floor(i / 10)}`).sort(), name);
+      assert.equal(strip.length, 20, name);
+      assert.deepEqual(keys(L.cellsWithin(grid, ref(11, 1), ref(2, 2))), keys(strip), `${name}: from the other corner`);
+      assert.deepEqual(keys(L.cellsWithin(grid, ref(11, 2), ref(2, 1))), keys(strip), `${name}: back to front`);
+      // One cell is an area of one; three by three is nine.
+      assert.deepEqual(L.cellsWithin(grid, ref(4, 3), ref(4, 3)).map(c => [c.col, c.row]), [[4, 3]]);
+      assert.equal(L.cellsWithin(grid, ref(5, 0), ref(7, 2)).length, 9, name);
+    }
+    // Only the first one's district, and only cells for sale: over a district's centre the centre's cells stay out.
+    const centre = grid.centres[0], home = grid.blocks.find(b => b.district === centre.district && b.block === centre.block);
+    const c0 = Math.max(0, centre.col - 2), c1 = Math.min(home.cols - 1, centre.col + centre.cols + 1), r1 = Math.min(home.rows - 1, centre.row + centre.rows);
+    const over = L.cellsWithin(grid, { block: home, col: c0, row: centre.row }, { block: home, col: c1, row: r1 });
+    assert.ok(over.length > 0 && over.every(c => !c.block.skip.has(`${c.col}:${c.row}`) && c.block.district === centre.district), `${city}: an area over the centre`);
+    assert.equal(over.length, (c1 - c0 + 1) * (r1 - centre.row + 1) - centre.cols * centre.rows, `${city}: all the rest of the rectangle`);
+    const [a, b] = [1, 2].map(d => grid.blocks.find(x => x.district === d && x.band === 2));
+    assert.ok(L.cellsWithin(grid, { block: a, col: a.cols - 1, row: 1 }, { block: b, col: 0, row: 1 }).every(c => c.block.district === 1), `${city}: into the next district`);
+  }
+  // On the island an area crosses from one band into the next: every square for sale of the district inside it, once,
+  // as many columns and rows across as the lattice has between the two.
+  const grid = GRIDS.support, C = L.LAND_CELL, mid = (grid.sectors.find(s => s.district === 1).a0 + grid.sectors.find(s => s.district === 1).a1) / 2;
+  const seam = SUPPORT.spec.roadRings.filter(r => r > grid.sectors[0].r0).sort((p, q) => p - q)[2];
+  const from = L.cellAt(grid, { x: Math.cos(mid) * (seam - 7), z: Math.sin(mid) * (seam - 7) }), to = L.cellAt(grid, { x: Math.cos(mid) * (seam + 9) + 13, z: Math.sin(mid) * (seam + 9) - 11 });
+  assert.deepEqual([from.block.band, to.block.band], [3, 4]);
+  const across = L.cellsWithin(grid, from, to), ends = [from, to].map(c => L.areaCorners(c.block, c.col, c.row));
+  const x0 = Math.min(...ends.flat().map(p => p.x)), x1 = Math.max(...ends.flat().map(p => p.x)), z0 = Math.min(...ends.flat().map(p => p.z)), z1 = Math.max(...ends.flat().map(p => p.z));
+  const inside = [];
+  for (let x = x0; x < x1; x += C) for (let z = z0; z < z1; z += C) { const at = L.cellAt(grid, { x: x + C / 2, z: z + C / 2 }); if (at && at.block.district === 1) inside.push(at); }
+  assert.deepEqual(new Set(across.map(key)), new Set(inside.map(key)), 'the squares for sale between the two');
+  assert.equal(across.length, inside.length, 'each once');
+  assert.deepEqual([...new Set(across.map(c => c.block.band))].sort(), [3, 4]);
+  assert.deepEqual(L.areaSpan(from, to), [Math.round((x1 - x0) / C), Math.round((z1 - z0) / C)], 'its size across the seam');
+  assert.deepEqual(L.areaSpan(to, from), L.areaSpan(from, to));
 });
 
 test('the island city\'s mainland is empty for the districts: no roads, houses, yards, trees, lamps, car parks or traffic', () => {
@@ -259,7 +337,9 @@ const pieceLength = b => Math.hypot(b.b.x - b.a.x, b.b.z - b.a.z);
 
 test('the districts\' borders run between their blocks: on each side the land of the district named for it', () => {
   for (const [city, grid] of Object.entries(GRIDS)) {
-    const borders = BORDERS[city], blockAt = p => grid.blocks.find(b => L.blockCell(b, p));
+    // By the lake past the gap's edge is a block of the district, on the island city a cell of it within the cells' steps.
+    const borders = BORDERS[city], blockAt = city === 'sales' ? p => grid.blocks.find(b => L.blockCell(b, p)) : p => L.cellAt(grid, p)?.block;
+    const reach = city === 'sales' ? .05 : L.LAND_CELL * Math.SQRT2 + .05;
     assert.deepEqual([...new Set(borders.map(b => [b.toward, b.away].sort().join(' and ')))].sort(), ['1 and 2', '1 and 3', '2 and 3'], `${city}: every two districts meet`);
     let both = 0, samples = 0;
     for (const b of borders) {
@@ -274,7 +354,12 @@ test('the districts\' borders run between their blocks: on each side the land of
         // The gap is no district's land; right past its edge, each side is the land of its district.
         assert.equal(side(half - .02), undefined, `${where} the gap is narrower than ${2 * half}`);
         assert.equal(side(-half + .02), undefined, `${where} the gap is narrower than ${2 * half}`);
-        const toward = side(half + .05), away = side(-half - .05);
+        for (let k = .05; k < reach; k += .5) {
+          const near = [side(half + k), side(-half - k)];
+          if (near[0]) assert.equal(near[0].district, b.toward, `${where} district ${near[0].district} on district ${b.toward}'s side`);
+          if (near[1]) assert.equal(near[1].district, b.away, `${where} district ${near[1].district} on district ${b.away}'s side`);
+        }
+        const toward = side(half + reach), away = side(-half - reach);
         if (toward) assert.equal(toward.district, b.toward, `${where} district ${toward.district} on district ${b.toward}'s side`);
         if (away) assert.equal(away.district, b.away, `${where} district ${away.district} on district ${b.away}'s side`);
         samples++; if (toward && away) both++;
@@ -298,7 +383,7 @@ test('a border keeps to the land: off the water, the railway and the station squ
   }
 });
 
-test('the island city\'s three borders run from the canal to the horizon at BORDERS, a narrow cut between the bands\' blocks', () => {
+test('the island city\'s three borders run from the canal to the horizon at BORDERS, a narrow straight cut between the districts', () => {
   const mainland = SUPPORT.land.annuli.reduce((p, q) => q.outer - q.inner > p.outer - p.inner ? q : p);
   const turn = (a, b) => Math.abs(((a - b) % (2 * Math.PI) + 3 * Math.PI) % (2 * Math.PI) - Math.PI);
   L.BORDERS.forEach((angle, i) => {
@@ -308,9 +393,8 @@ test('the island city\'s three borders run from the canal to the horizon at BORD
       assert.ok(turn(Math.atan2(b.b.z, b.b.x), angle) < .021, 'a border runs out from the centre');
       assert.deepEqual([b.away, b.toward], [(i + 2) % 3 + 1, i + 1]);
       assert.ok(b.normal.x * -Math.sin(angle) + b.normal.z * Math.cos(angle) > .99, 'the normal points counter-clockwise');
-      // The gap the grid cut between the districts, about twice BORDER_GAP; the radial cut widens outwards.
-      assert.ok(Math.min(...b.gaps) > L.BORDER_GAP && Math.max(...b.gaps) < 4 * L.BORDER_GAP, `a gap of ${b.gaps.map(g => g.toFixed(2)).join(' to ')}`);
-      assert.ok(b.gaps[1] > b.gaps[0] === Math.hypot(b.b.x, b.b.z) > Math.hypot(b.a.x, b.a.z), 'the radial cut widens outwards');
+      // The gap kept between the districts' cells, twice BORDER_GAP all along: their squares step along it.
+      assert.deepEqual(b.gaps, [2 * L.BORDER_GAP, 2 * L.BORDER_GAP]);
     }
     // From the canal to the horizon, but for the railway and its station where they cross.
     const length = ours.reduce((sum, b) => sum + pieceLength(b), 0);
