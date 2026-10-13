@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
 
-const compiled = await build({ stdin: { contents: 'export * from "./crowd.ts"; export * from "../world/generate.ts"; export * from "../world/worldSpec.ts"; export * from "../world/railway.ts"; export * from "../world/sales.ts"; export * from "../world/stationSquare.ts"; export * as THREE from "three/webgpu";', resolveDir: fileURLToPath(new URL('.', import.meta.url)) }, bundle: true, platform: 'node', format: 'esm', write: false, logLevel: 'error' });
+const compiled = await build({ stdin: { contents: 'export * from "./crowd.ts"; export { DISTRICT_FACING } from "../engine/camera.ts"; export * from "../world/generate.ts"; export * from "../world/worldSpec.ts"; export * from "../world/railway.ts"; export * from "../world/sales.ts"; export * from "../world/stationSquare.ts"; export * as THREE from "three/webgpu";', resolveDir: fileURLToPath(new URL('.', import.meta.url)) }, bundle: true, platform: 'node', format: 'esm', write: false, logLevel: 'error' });
 const city = await import(`data:text/javascript;base64,${Buffer.from(compiled.outputFiles[0].text).toString('base64')}`);
 const worlds = [city.generateWorld(city.WORLD_V1), city.generateWorld(city.WORLD_X4)];
 for (const world of worlds) test(`${world.spec.name}: walking loops stay on land, outside roads, parking and the maximum landmark footprint`, () => {
@@ -18,7 +18,7 @@ for (const world of worlds) test(`${world.spec.name}: walking loops stay on land
     assert.ok([...world.roads.streets, ...world.roads.bridges.map(b => b.road)].every(road => city.segmentDistance(p.x,p.z,road) >= 1.6));
     assert.ok(world.roads.parking.every(lot => !city.insideParking(p,lot,.25)));
     if (route.district) {
-      const d = world.districts.find(d => d.id === route.district), yaw = Math.atan2(-d.x,-d.z), dx = p.x-d.x, dz = p.z-d.z;
+      const d = world.districts.find(d => d.id === route.district), yaw = city.DISTRICT_FACING, dx = p.x-d.x, dz = p.z-d.z;
       const x = dx*Math.cos(yaw)-dz*Math.sin(yaw), z = dx*Math.sin(yaw)+dz*Math.cos(yaw);
       assert.ok(Math.abs(x) > 2.85*world.spec.districtScale+.25 || Math.abs(z) > 3*world.spec.districtScale+.25);
     }
