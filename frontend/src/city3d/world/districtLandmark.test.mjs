@@ -34,8 +34,11 @@ test('one main building is centred in each reserved district centre, and old squ
 
 test('the five centre levels grow in footprint and height while every architectural piece stays on the reserved square', () => {
   const bounds = Array.from({ length: 5 }, (_, i) => L.landmarkBounds(frame, i + 1));
-  assert.ok(bounds[0].width < 8 && bounds[0].height < 3, 'the first building is a small pavilion');
-  assert.ok(bounds[4].width > 16 && bounds[4].height > 17, 'the last is a broad flagship with a tall tower');
+  assert.ok(bounds[0].width < 9 && bounds[0].height < 6, 'the first building is a small pavilion');
+  assert.ok(bounds[4].width > 16 && bounds[4].height > 20, 'the last is a broad flagship with a tall tower');
+  const shapes = level => new Set(L.landmarkBoxes(level).map(b => b.shape ?? 'box'));
+  assert.ok(shapes(1).has('roof') && shapes(2).has('roof') && shapes(3).has('pyramid') && shapes(4).has('dome') && shapes(5).has('cone'), 'pitched roofs, a turret, a dome and a spire: every level its own building');
+  assert.ok([1, 2, 3, 4].every(level => L.landmarkBoxes(level).some(b => b.finish === 'window' && b.glow > 0)), 'stone walls have windows that light at night');
   for (let level = 1; level <= 5; level++) {
     const boxes = L.landmarkBoxes(level);
     for (const box of boxes) {
