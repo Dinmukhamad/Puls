@@ -1319,7 +1319,12 @@ async def test_small_things_are_laid_on_free_cells_of_the_district_and_paid_toge
     poor = await make_user(session, login="poor-decor", group_id=team.group_id)
     p = auth(await login(client, poor.login))
     assert (await lay(client, p, "lamp", [(FIRST, 7, 5)])).json()["code"] == "insufficient_coins"
-    assert sorted(await spent(session)) == sorted([-25, -30, -HOUSE_PRICE])
+    # An alley: a footpath with a tree on either side, at its own price a cell, its land included.
+    alley = await lay(client, me, "alley", [(FIRST, c, 5) for c in range(3)])
+    assert alley.status_code == 200, alley.text
+    assert city_estate.DECOR_PRICES["alley"] == 18
+    assert (alley.json()["laid"], alley.json()["price"]) == (3, 3 * 18)
+    assert sorted(await spent(session)) == sorted([-25, -30, -HOUSE_PRICE, -54])
 
 
 async def test_taking_small_things_away_returns_what_they_cost_and_only_ones_own(

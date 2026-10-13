@@ -12,42 +12,45 @@ export type JourneyPhase = "departing" | "tunnel" | "arriving" | null;
 export interface CityEstateView { state: CityEstates }
 /** A cell of a district's land, or the first cell of a building's place: block, column and row (world/land.ts). */
 export interface PlotAddress { block: number; col: number; row: number }
-/** The tool for small things: one kind to lay, or taking one's own away. */
-export type DecorTool = DecorFamily | "remove";
+/** What a chosen cell holds now: free land, a small thing the one choosing may take away, or something else. */
+export type CellState = "free" | "own" | "taken";
+/** A chosen cell as the map reports it: its address, its band (the price of its land) and what is on it now. */
+export interface ChosenCell extends PlotAddress { band: number; state: CellState }
 /**
- * How taps choose cells for small things: one at a time, a line from the last one, or an area — a tap on one corner
- * and a tap on the other. A drag with the mouse draws a line, or an area in the area mode or with Ctrl (Cmd) held.
+ * What a tap does with the cells (on a phone, where nothing is dragged): chooses one cell instead of the others, goes
+ * on with a line from the last cell, or takes an area — a tap on one corner and a tap on the other.
  */
-export type DecorShape = "cell" | "line" | "area";
+export type ChoiceShape = "cell" | "line" | "area";
+/**
+ * The cells chosen on the land and what the shop chose for them. A tap chooses one cell, a drag of the mouse's left
+ * button a line of them, a drag with Ctrl (Cmd) an area added to them; taps go by `shape`. A building chosen shows its
+ * cells round the one cell chosen, green where free and red where not, its front where `rotation` turns it with no road
+ * beside; a small thing shows on every `every`-th cell of the line.
+ */
+export interface CellChoice { cells: PlotAddress[]; shape: ChoiceShape; family: PlotFamily | DecorFamily | null; rotation: number; every: number }
 /**
  * Build mode in a district: its cells light up (free and taken), or for staff the cells of its public square; a
- * building from the inventory (`moving`) or a shared project being placed; the building selected; the cell picked to
- * build on, with what is chosen for it (`family`: its cells show round the cell, green where free, red where not) and
- * where a building's front looks (`rotation`, where no road decides); or small things being laid (or taken away) on
- * the cells chosen so far, taps choosing them by `shape` — or cells chosen with Ctrl before choosing what goes on
- * them (`tool` null).
+ * building from the inventory (`moving`) or a shared project being placed; the building selected; the cells chosen.
  */
 export interface CityBuildView {
   district: string; area: "plots" | "public";
   placing: { family: PlotFamily | ProjectFamily; rotation: number; moving: number | null } | null;
   selected: number | null;
-  plot: (PlotAddress & { rotation: number; family?: PlotFamily | DecorFamily | null }) | null;
-  /** `anyone`: the test city takes away whoever's small things, not only one's own. */
-  decor: { tool: DecorTool | null; cells: PlotAddress[]; shape: DecorShape; anyone?: boolean } | null;
+  choice: CellChoice | null;
 }
 /**
- * What the operator touched on district land: a cell to build on (`problem`: why nothing can go on it), where what is
- * chosen for the picked cell goes (its first cell) and why it does not fit, where the preview stands now and why it
- * does not fit, a building, a project, the public square, or the cells chosen now for small things (all of them).
+ * What the operator touched on district land: the cells chosen now (all of them, with what is on each; `update`: only
+ * what is on the same cells now, after the land changed), where the building chosen for the one cell goes (its first
+ * cell) and why it does not fit, where the preview stands now and why it does not fit, a building, a project or the
+ * public square.
  */
 export type EstatePick =
   | { kind: "public"; district: string }
-  | { kind: "plot"; district: string; block: number; col: number; row: number; band: number; problem: string | null }
-  | { kind: "footprint"; district: string; cell: PlotAddress; family: PlotFamily | DecorFamily; col: number; row: number; rotation: number; problem: string | null }
+  | { kind: "cells"; district: string; cells: ChosenCell[]; update?: boolean }
+  | { kind: "footprint"; district: string; cell: PlotAddress; family: PlotFamily; col: number; row: number; rotation: number; problem: string | null }
   | { kind: "place"; district: string; module: number; u: number; v: number; rotation: number; problem: string | null }
   | { kind: "object"; district: string; object: number }
-  | { kind: "project"; district: string; project: number }
-  | { kind: "cells"; district: string; cells: PlotAddress[] };
+  | { kind: "project"; district: string; project: number };
 /** What the camera flies to: a district's centre or public square, a plot, a building. */
 export interface EstateTarget { district: string; kind: "district" | "public" | "plot" | "object"; object?: number; plot?: PlotAddress }
 

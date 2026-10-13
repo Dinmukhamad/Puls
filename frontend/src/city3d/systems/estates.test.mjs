@@ -46,7 +46,7 @@ function setup(targetGrid = grid) {
   const ctx = { world, scene: new THREE.Scene(), renderer: { domElement: canvas }, camera, overlay: new Element(), quality: { lodDistances: [40, 100, 250] }, night: city.createNight(false), reducedMotion: true, requestShadowUpdate() {}, onFrame: () => () => {}, onCameraMove: () => () => {}, onQuality: () => () => {} };
   const estates = city.createEstates(ctx, targetGrid, pick => picks.push(pick));
   const state = (objects, sandbox = false, extra = {}) => estates.set({ state: { city: 'support', sandbox, districts: [{ id: districtId, name: 'Тестовый район', number: frame.district, objects, projects: [], land: { open_band: grid.bands }, ...extra }] } });
-  const build = placing => estates.setBuild({ district: districtId, area: 'plots', placing, selected: null, plot: null });
+  const build = placing => estates.setBuild({ district: districtId, area: 'plots', placing, selected: null, choice: null });
   const aim = (point, azimuth = frame.rotation + .55, aspect = 1, polar = .86) => {
     camera.aspect = aspect; camera.updateProjectionMatrix();
     camera.position.copy(point).add(new THREE.Vector3().setFromSpherical(new THREE.Spherical(30, polar, azimuth)));
@@ -57,10 +57,9 @@ function setup(targetGrid = grid) {
     const options = { isPrimary: true, ...screen(point), pointerType: 'mouse', pointerId: 1, button: 0 };
     for (const type of ['pointerdown', 'pointerup']) canvas.dispatchEvent(Object.assign(new Event(type), options));
   };
-  /** A drag with the mouse's left button, from one point of the ground to another. */
   /** A drag with the mouse, by default with its left button and no key held; `during` runs before it is let go. */
-  const drag = (from, to, { button = 0, ctrlKey = false, metaKey = false, during } = {}) => {
-    const base = { isPrimary: true, pointerType: 'mouse', pointerId: 1, button, ctrlKey, metaKey };
+  const drag = (from, to, { button = 0, ctrlKey = false, metaKey = false, shiftKey = false, during } = {}) => {
+    const base = { isPrimary: true, pointerType: 'mouse', pointerId: 1, button, ctrlKey, metaKey, shiftKey };
     canvas.dispatchEvent(Object.assign(new Event('pointerdown'), base, screen(from)));
     for (let k = 1; k <= 8; k++) canvas.dispatchEvent(Object.assign(new Event('pointermove'), base, { buttons: button === 2 ? 2 : 1 }, screen(from.clone().lerp(to, k / 8))));
     during?.();
@@ -203,13 +202,13 @@ test('taps in a fitted whole-district camera pick the one cell tapped, across th
   for (const number of [1, 2, 3]) {
     const id = `support-team-${number}`, own = cells.filter(c => c.district === number);
     s.estates.set({ state: { city: 'support', sandbox: false, districts: [{ id, number, name: 'Район', objects: [], projects: [], land: { open_band: 1 } }] } });
-    s.estates.setBuild({ district: id, area: 'plots', placing: null, selected: null, plot: null });
+    s.estates.setBuild({ district: id, area: 'plots', placing: null, selected: null, choice: null });
     const focus = s.estates.focus({ district: id, kind: 'district' }, 48, .86);
     rig.focusBounds(focus.bounds, focus.azimuth, .5, 0);
     assert.ok(rig.currentView().distance > 140 * world.radius / 150, 'the actual estate picker works beyond the former camera limit');
     for (const cell of [own[0], own[Math.floor(own.length / 2)], own.at(-1)]) {
       s.picks.length = 0; s.tap(new THREE.Vector3(cell.x, .2, cell.z));
-      assert.deepEqual(s.picks, [{ kind: 'plot', district: id, block: cell.block, col: cell.col, row: cell.row, band: cell.band, problem: null }]);
+      assert.deepEqual(s.picks, [{ kind: 'cells', district: id, cells: [{ block: cell.block, col: cell.col, row: cell.row, band: cell.band, state: 'free' }] }]);
     }
   }
   rig.dispose(); s.estates.dispose();
@@ -234,7 +233,7 @@ test('clicking a tall office facade selects its card before the ground behind it
   assert.ok(s.picks.every(pick => pick.kind !== 'object'), 'inventory placement keeps picking the ground');
   s.state([]); s.build(null); s.picks.length = 0;
   s.tap(new THREE.Vector3(frame.x, .2, frame.z));
-  assert.equal(s.picks.at(-1).kind, 'plot', 'ordinary free plots remain selectable');
+  assert.equal(s.picks.at(-1).kind, 'cells', 'ordinary free cells remain selectable');
   s.estates.dispose();
 });
 
@@ -283,7 +282,7 @@ test('visible house roofs and ready-house facades select the building instead of
     const free = cells.find(c => c.district === frame.district && c.block === frame.block && c.col === frame.col + 4 && c.row === frame.row + 1);
     s.aim(new THREE.Vector3(free.x, 1, free.z)); s.picks.length = 0;
     s.tap(new THREE.Vector3(free.x, .2, free.z));
-    assert.equal(s.picks.at(-1)?.kind, 'plot', 'house body bounds do not cover a neighbouring free cell');
+    assert.equal(s.picks.at(-1)?.kind, 'cells', 'house body bounds do not cover a neighbouring free cell');
   }
   s.estates.dispose(); catalogue.dispose();
 });
@@ -410,45 +409,56 @@ test('outer cells can be bought on and receive inventory even when cached state 
   s.state([], false, { land: { open_band: 1 } }); s.build(null);
   const point = new THREE.Vector3(outer.x, .2, outer.z);
   s.aim(point, outer.rotation + .55); s.tap(point);
-  assert.equal(s.picks.at(-1).kind, 'plot'); assert.equal(s.picks.at(-1).problem, null);
+  assert.equal(s.picks.at(-1).kind, 'cells'); assert.equal(s.picks.at(-1).cells[0].state, 'free');
   s.picks.length = 0; s.build({ family: 'house', rotation: 0, moving: 20 }); s.tap(point);
   assert.equal(s.picks.at(-1).kind, 'place'); assert.equal(s.picks.at(-1).problem, null);
   s.estates.dispose();
 });
 
-/** A small thing's tool on, as the page sets it: the cells chosen so far. */
-const tool = (s, decor) => s.estates.setBuild({ district: districtId, area: 'plots', placing: null, selected: null, plot: null, decor });
+/** The cells chosen as the page keeps them and sends them back, with what the shop chose for them. */
+const choosing = (s, choice = {}) => s.estates.setBuild({ district: districtId, area: 'plots', placing: null, selected: null, choice: { cells: [], shape: 'cell', family: null, rotation: 0, every: 1, ...choice } });
 const cellPoint = (col, row, block = home) => { const p = city.cellCentre(block, col, row); return new THREE.Vector3(p.x, .2, p.z); };
 const chosen = picks => picks.filter(p => p.kind === 'cells').at(-1)?.cells.map(c => [c.block, c.col, c.row]);
+const states = picks => picks.filter(p => p.kind === 'cells').at(-1)?.cells.map(c => c.state);
 
-test('a small thing\'s tool draws a line of free cells with the mouse; a tap adds a cell or takes it out again', () => {
+test('the left button chooses a line of cells, whatever stands on them; a tap chooses one, lines go on from the last cell', () => {
   const s = setup(), b = home.block;
-  // The house on the test plot and a lamp beside it take cells; a tree of a neighbour's too.
+  // The house on the test plot and a lamp of one's own beside it take cells; a tree of a neighbour's too.
   s.state([object('house')], false, { decor: { lamp: [[b, frame.col + 4, frame.row, 1]], tree: [[b, frame.col + 6, frame.row, 0]] } });
   s.aim(cellPoint(frame.col + 4, frame.row + 1), frame.rotation + .55);
-  tool(s, { tool: 'road', cells: [], shape: 'line' });
-  // A drag from the house's own cell through the lamp's and the tree's along a row and down a column: only free cells.
+  s.build(null);
+  // A drag from the house's own cell through the lamp's and the tree's along a row and down a column: all of them,
+  // each with what is on it.
   s.drag(cellPoint(frame.col + 2, frame.row), cellPoint(frame.col + 8, frame.row + 2));
   const path = city.cellsBetween(grid, { block: home, col: frame.col + 2, row: frame.row }, { block: home, col: frame.col + 8, row: frame.row + 2 });
-  const free = path.filter(c => !(c.col <= frame.col + 2 && c.row <= frame.row + 2) && !(c.row === frame.row && (c.col === frame.col + 4 || c.col === frame.col + 6)));
-  assert.ok(free.length >= 6 && free.length < path.length, `${free.length} of ${path.length}`);
-  assert.deepEqual(chosen(s.picks), free.map(c => [b, c.col, c.row]));
-  // The page keeps them; a tap on one of them takes it out, on a free one adds it, on a taken one does nothing.
+  assert.deepEqual(chosen(s.picks), path.map(c => [c.block.block, c.col, c.row]));
+  const state = c => c.col <= frame.col + 2 && c.row <= frame.row + 2 ? 'taken' : c.row === frame.row && c.col === frame.col + 4 ? 'own' : c.row === frame.row && c.col === frame.col + 6 ? 'taken' : 'free';
+  assert.deepEqual(states(s.picks), path.map(state));
+  assert.deepEqual(s.picks.at(-1).cells.map(c => c.band), path.map(c => c.block.band));
+  // The page keeps them. A new drag chooses its own line instead; with Shift, after them.
   const kept = s.picks.at(-1).cells;
-  tool(s, { tool: 'road', cells: kept, shape: 'cell' });
-  s.picks.length = 0; s.tap(cellPoint(free[0].col, free[0].row));
-  assert.deepEqual(chosen(s.picks), kept.slice(1).map(c => [b, c.col, c.row]));
+  choosing(s, { cells: kept });
+  s.picks.length = 0; s.drag(cellPoint(frame.col + 4, frame.row + 5), cellPoint(frame.col + 4, frame.row + 7));
+  assert.deepEqual(chosen(s.picks), [5, 6, 7].map(r => [b, frame.col + 4, frame.row + r]));
+  choosing(s, { cells: kept });
+  s.picks.length = 0; s.drag(cellPoint(frame.col + 4, frame.row + 5), cellPoint(frame.col + 4, frame.row + 7), { shiftKey: true });
+  assert.deepEqual(chosen(s.picks), [...kept.map(c => [c.block, c.col, c.row]), ...[5, 6, 7].map(r => [b, frame.col + 4, frame.row + r])]);
+  // A tap chooses the one cell instead.
+  choosing(s, { cells: kept });
   s.picks.length = 0; s.tap(cellPoint(frame.col + 4, frame.row + 4));
-  assert.deepEqual(chosen(s.picks), [...kept, { block: b, col: frame.col + 4, row: frame.row + 4 }].map(c => [b, c.col, c.row]));
-  s.picks.length = 0; s.tap(cellPoint(frame.col + 4, frame.row));
-  assert.deepEqual(chosen(s.picks), kept.map(c => [b, c.col, c.row]), 'the lamp\'s cell is taken');
-  // With lines on, a tap goes on from the last cell: every free cell between.
-  tool(s, { tool: 'road', cells: [], shape: 'line' });
-  s.picks.length = 0; s.tap(cellPoint(frame.col + 4, frame.row + 5)); s.tap(cellPoint(frame.col + 4, frame.row + 9));
+  assert.deepEqual(chosen(s.picks), [[b, frame.col + 4, frame.row + 4]]);
+  // Drawing lines, a tap goes on from the last cell: every cell between, the tapped one too.
+  choosing(s, { shape: 'line' });
+  s.picks.length = 0; s.tap(cellPoint(frame.col + 4, frame.row + 5));
+  choosing(s, { shape: 'line', cells: s.picks.at(-1).cells });
+  s.tap(cellPoint(frame.col + 4, frame.row + 9));
   assert.deepEqual(chosen(s.picks), [5, 6, 7, 8, 9].map(r => [b, frame.col + 4, frame.row + r]));
-  // Another district's land is never chosen, nor is anything chosen without a tool.
+  // Another district's land is never chosen; nor is anything outside build mode.
   const other = grid.blocks.find(x => x.district === 2 && x.band === 3);
+  choosing(s);
   s.picks.length = 0; s.tap(cellPoint(10, 5, other));
+  assert.equal(chosen(s.picks), undefined);
+  s.estates.setBuild(null); s.picks.length = 0; s.tap(cellPoint(frame.col + 4, frame.row + 4));
   assert.equal(chosen(s.picks), undefined);
   s.estates.dispose();
 });
@@ -456,8 +466,8 @@ test('a small thing\'s tool draws a line of free cells with the mouse; a tap add
 test('the mouse\'s other buttons and fingers keep moving the camera: only the left button draws', () => {
   const s = setup(), canvas = s.ctx.renderer.domElement, seen = [];
   s.state([]); s.aim(cellPoint(frame.col + 4, frame.row + 1), frame.rotation + .55);
-  tool(s, { tool: 'tree', cells: [], shape: 'cell' });
-  // A listener of the camera's: it hears the presses the tool does not take.
+  choosing(s, { family: 'tree' });
+  // A listener of the camera's: it hears the presses the choosing does not take.
   canvas.addEventListener('pointerdown', event => seen.push([event.pointerType, event.button]));
   const at = point => { const p = point.clone().project(s.camera); return { clientX: (p.x + 1) * 400, clientY: (1 - p.y) * 400 }; };
   for (const [pointerType, button] of [['mouse', 2], ['mouse', 1], ['touch', 0]]) {
@@ -467,7 +477,7 @@ test('the mouse\'s other buttons and fingers keep moving the camera: only the le
   }
   assert.deepEqual(seen, [['mouse', 2], ['mouse', 1], ['touch', 0]]);
   assert.equal(chosen(s.picks), undefined, 'a drag of the camera chooses nothing');
-  // The left button's press goes to the tool alone.
+  // The left button's press goes to the choosing alone.
   s.drag(cellPoint(frame.col + 4, frame.row), cellPoint(frame.col + 6, frame.row));
   assert.equal(seen.length, 3);
   assert.equal(chosen(s.picks).length, 3);
@@ -478,71 +488,71 @@ test('the mouse\'s other buttons and fingers keep moving the camera: only the le
   s.estates.dispose();
 });
 
-test('with Ctrl (or Cmd) either button draws an area: every free cell of the rectangle, its size by the pointer', () => {
+test('with Ctrl (or Cmd) either button adds an area: every cell of the rectangle, its size by the pointer', () => {
   const s = setup(), b = home.block, canvas = s.ctx.renderer.domElement, seen = [];
   // A neighbour's tree takes one cell of the area.
   s.state([], false, { decor: { tree: [[b, frame.col + 5, frame.row + 4, 0]] } });
   s.aim(cellPoint(frame.col + 6, frame.row + 4), frame.rotation + .55);
-  tool(s, { tool: 'road', cells: [], shape: 'line' });
+  choosing(s, { family: 'road' });
   canvas.addEventListener('pointerdown', event => seen.push(event.button));
   const from = { block: home, col: frame.col + 3, row: frame.row + 3 }, to = { block: home, col: frame.col + 10, row: frame.row + 4 };
-  const area = city.cellsWithin(grid, from, to).filter(c => !(c.col === frame.col + 5 && c.row === frame.row + 4));
-  assert.equal(area.length, 8 * 2 - 1);
+  const area = city.cellsWithin(grid, from, to);
+  assert.equal(area.length, 8 * 2);
   // The right button with Ctrl: a road two cells wide, the camera never hears of it.
   const label = s.ctx.overlay.children.find(c => c.className === 'c3-area-size');
   let during = null;
   s.drag(cellPoint(from.col, from.row), cellPoint(to.col, to.row), { button: 2, ctrlKey: true, during: () => { during = { hidden: label.hidden, text: label.textContent }; } });
   assert.deepEqual(seen, [], 'the camera keeps out of it');
-  assert.deepEqual(chosen(s.picks).sort(), area.map(c => [b, c.col, c.row]).sort());
+  assert.deepEqual(chosen(s.picks).sort(), area.map(c => [c.block.block, c.col, c.row]).sort());
+  assert.equal(states(s.picks).filter(x => x === 'taken').length, 1, 'the neighbour\'s tree');
   assert.deepEqual(during, { hidden: false, text: '8 × 2 · 15 клеток' }, 'eight cells along, two across, fifteen of them free');
   assert.equal(label.hidden, true, 'the size goes when the area is chosen');
-  // The left button with Cmd draws an area too, added to what is chosen; the next tap starts afresh.
-  tool(s, { tool: 'road', cells: s.picks.at(-1).cells, shape: 'line' });
+  // The left button with Cmd adds an area to what is chosen.
+  choosing(s, { family: 'road', cells: s.picks.at(-1).cells });
   s.picks.length = 0;
   s.drag(cellPoint(frame.col + 3, frame.row + 6), cellPoint(frame.col + 5, frame.row + 8), { metaKey: true });
-  assert.equal(chosen(s.picks).length, 15 + 9);
-  // Without a key the right button stays the camera's; the left one draws its line.
-  tool(s, { tool: 'tree', cells: [], shape: 'cell' }); s.picks.length = 0;
+  assert.equal(chosen(s.picks).length, 16 + 9);
+  // Without a key the right button stays the camera's.
+  choosing(s, { family: 'tree' }); s.picks.length = 0;
   s.drag(cellPoint(frame.col + 3, frame.row + 6), cellPoint(frame.col + 6, frame.row + 6), { button: 2 });
   assert.deepEqual(seen, [2]); assert.equal(chosen(s.picks), undefined);
   s.estates.dispose();
 });
 
-test('in build mode Ctrl chooses cells before any tool: an area by a drag, a cell in or out by a click; a plain tap picks one cell', () => {
+test('a click with Ctrl, Cmd or Shift takes a cell in or out; a plain drag chooses a line instead, a plain tap one cell', () => {
   const s = setup(), b = home.block, canvas = s.ctx.renderer.domElement, seen = [];
-  // A neighbour's tree takes one cell of the area.
   s.state([], false, { decor: { tree: [[b, frame.col + 5, frame.row + 4, 0]] } });
   s.aim(cellPoint(frame.col + 6, frame.row + 4), frame.rotation + .55);
   s.build(null);
   canvas.addEventListener('pointerdown', event => seen.push(event.button));
-  // Ctrl with the left button: every free cell of the rectangle; the camera never hears of it.
+  // Ctrl with the left button before anything is chosen: every cell of the rectangle.
   const from = { block: home, col: frame.col + 3, row: frame.row + 3 }, to = { block: home, col: frame.col + 6, row: frame.row + 4 };
   s.drag(cellPoint(from.col, from.row), cellPoint(to.col, to.row), { ctrlKey: true });
   assert.deepEqual(seen, []);
-  const area = city.cellsWithin(grid, from, to).filter(c => !(c.col === frame.col + 5 && c.row === frame.row + 4));
-  assert.equal(area.length, 4 * 2 - 1);
-  assert.deepEqual(chosen(s.picks).sort(), area.map(c => [b, c.col, c.row]).sort());
-  // The page keeps them, with no tool yet: a click with Ctrl (or Cmd) adds a cell, another takes it out again.
-  const keep = () => s.estates.setBuild({ district: districtId, area: 'plots', placing: null, selected: null, plot: null, decor: { tool: null, cells: s.picks.filter(p => p.kind === 'cells').at(-1).cells, shape: 'cell' } });
+  const area = city.cellsWithin(grid, from, to);
+  assert.equal(area.length, 4 * 2);
+  assert.deepEqual(chosen(s.picks).sort(), area.map(c => [c.block.block, c.col, c.row]).sort());
+  // The page keeps them: a click with Ctrl (or Cmd) adds a cell, another takes it out again; Shift does the same.
+  const keep = () => choosing(s, { cells: s.picks.filter(p => p.kind === 'cells').at(-1).cells });
   const click = (point, keys) => s.drag(point, point, keys);
   keep(); s.picks.length = 0;
   click(cellPoint(frame.col + 9, frame.row + 1), { ctrlKey: true });
-  assert.deepEqual(chosen(s.picks).sort(), [...area.map(c => [b, c.col, c.row]), [b, frame.col + 9, frame.row + 1]].sort());
+  assert.deepEqual(chosen(s.picks).sort(), [...area.map(c => [c.block.block, c.col, c.row]), [b, frame.col + 9, frame.row + 1]].sort());
   keep(); s.picks.length = 0;
   click(cellPoint(frame.col + 9, frame.row + 1), { metaKey: true });
   assert.equal(chosen(s.picks).length, area.length);
-  // A taken cell does not come in.
   keep(); s.picks.length = 0;
-  click(cellPoint(frame.col + 5, frame.row + 4), { ctrlKey: true });
-  assert.equal(chosen(s.picks).length, area.length);
-  // Without a key a drag stays the camera's, and a tap picks one cell, for a building or one small thing.
+  click(cellPoint(frame.col + 9, frame.row + 1), { shiftKey: true });
+  assert.equal(chosen(s.picks).length, area.length + 1);
+  // Without a key a drag chooses its line instead, the camera never hearing of it; a tap chooses one cell.
   keep(); s.picks.length = 0;
   s.drag(cellPoint(frame.col + 3, frame.row + 6), cellPoint(frame.col + 6, frame.row + 6));
-  assert.deepEqual(seen, [0]); assert.equal(chosen(s.picks), undefined);
+  assert.deepEqual(seen, []);
+  assert.deepEqual(chosen(s.picks), [3, 4, 5, 6].map(c => [b, frame.col + c, frame.row + 6]));
   s.tap(cellPoint(frame.col + 9, frame.row + 1));
-  assert.deepEqual(s.picks.map(p => [p.kind, p.col, p.row]), [['plot', frame.col + 9, frame.row + 1]]);
-  // Placing a building from the inventory, Ctrl does nothing to cells.
-  s.estates.setBuild({ district: districtId, area: 'plots', placing: { family: 'house', rotation: 0, moving: 7 }, selected: null, plot: null });
+  assert.deepEqual(chosen(s.picks), [[b, frame.col + 9, frame.row + 1]]);
+  // Placing a building from the inventory, nothing chooses cells.
+  s.estates.setBuild({ district: districtId, area: 'plots', placing: { family: 'house', rotation: 0, moving: 7 }, selected: null, choice: null });
   s.picks.length = 0;
   s.drag(cellPoint(from.col, from.row), cellPoint(to.col, to.row), { ctrlKey: true });
   assert.equal(chosen(s.picks), undefined);
@@ -552,25 +562,25 @@ test('in build mode Ctrl chooses cells before any tool: an area by a drag, a cel
 test('in the area mode a plain drag draws an area, and taps choose it by its two corners', () => {
   const s = setup(), b = home.block;
   s.state([]); s.aim(cellPoint(frame.col + 6, frame.row + 4), frame.rotation + .55);
-  tool(s, { tool: 'pine', cells: [], shape: 'area' });
+  choosing(s, { family: 'pine', shape: 'area' });
   s.drag(cellPoint(frame.col + 2, frame.row + 2), cellPoint(frame.col + 4, frame.row + 4));
   assert.equal(chosen(s.picks).length, 9, 'a grove of three by three');
   // Taps: the first one a corner, the second the rectangle between them; then a new corner.
-  tool(s, { tool: 'pine', cells: [], shape: 'area' }); s.picks.length = 0;
+  choosing(s, { family: 'pine', shape: 'area' }); s.picks.length = 0;
   s.tap(cellPoint(frame.col + 6, frame.row + 2));
   assert.deepEqual(chosen(s.picks), [[b, frame.col + 6, frame.row + 2]]);
-  tool(s, { tool: 'pine', cells: s.picks.at(-1).cells, shape: 'area' });
+  choosing(s, { family: 'pine', shape: 'area', cells: s.picks.at(-1).cells });
   s.tap(cellPoint(frame.col + 8, frame.row + 3));
   assert.equal(chosen(s.picks).length, 3 * 2);
-  tool(s, { tool: 'pine', cells: s.picks.at(-1).cells, shape: 'area' });
+  choosing(s, { family: 'pine', shape: 'area', cells: s.picks.at(-1).cells });
   s.tap(cellPoint(frame.col + 10, frame.row + 6));
   assert.equal(chosen(s.picks).length, 3 * 2 + 1, 'a new corner, not a rectangle from the last one');
   // A corner may lie on the district's centre: the area reaches over it and takes only the cells for sale.
   const centre = grid.centres.find(c => c.district === frame.district), block = grid.blocks.find(x => x.district === centre.district && x.block === centre.block);
-  tool(s, { tool: 'pine', cells: [], shape: 'area' }); s.picks.length = 0;
+  choosing(s, { family: 'pine', shape: 'area' }); s.picks.length = 0;
   s.aim(cellPoint(centre.col, centre.row + 2, block), centre.area.rotation + .55);
   s.tap(cellPoint(centre.col + 1, centre.row + 2, block));
-  tool(s, { tool: 'pine', cells: s.picks.at(-1)?.cells ?? [], shape: 'area' });
+  choosing(s, { family: 'pine', shape: 'area', cells: s.picks.at(-1)?.cells ?? [] });
   s.tap(cellPoint(centre.col - 2, centre.row + 3, block));
   // The squares beside the centre, whichever block of the district sells each (the island city's blocks overlap).
   const beside = [[-2, 2], [-2, 3], [-1, 2], [-1, 3]].map(([c, r]) => { const at = city.cellAt(grid, city.cellCentre(block, centre.col + c, centre.row + r)); return [at.block.block, at.col, at.row]; });
@@ -578,17 +588,18 @@ test('in the area mode a plain drag draws an area, and taps choose it by its two
   s.estates.dispose();
 });
 
-test('taking away chooses one\'s own small things only; in the test city anyone\'s', () => {
+test('the cells chosen say what is on them: one\'s own small things, in the test city anyone\'s, and what is taken', () => {
   const s = setup(), b = home.block, decor = { road: [[b, frame.col + 5, frame.row, 1], [b, frame.col + 6, frame.row, 0]], lamp: [[b, frame.col + 7, frame.row, 1]] };
   s.state([object('house')], false, { decor });
   s.aim(cellPoint(frame.col + 6, frame.row + 1), frame.rotation + .55);
-  tool(s, { tool: 'remove', cells: [], shape: 'cell' });
+  choosing(s);
   s.drag(cellPoint(frame.col + 2, frame.row), cellPoint(frame.col + 8, frame.row));
-  assert.deepEqual(chosen(s.picks), [[b, frame.col + 5, frame.row], [b, frame.col + 7, frame.row]], 'not the house, a neighbour\'s road or a free cell');
-  s.state([], true, { decor });
-  tool(s, { tool: 'remove', cells: [], shape: 'cell', anyone: true });
-  s.picks.length = 0; s.drag(cellPoint(frame.col + 2, frame.row), cellPoint(frame.col + 8, frame.row));
-  assert.deepEqual(chosen(s.picks), [5, 6, 7].map(c => [b, frame.col + c, frame.row]));
+  assert.deepEqual(states(s.picks), ['taken', 'free', 'free', 'own', 'taken', 'own', 'free'], 'the house, free cells, one\'s road, a neighbour\'s, one\'s lamp');
+  // The land changes under the cells chosen: the map tells the page what is on them now.
+  choosing(s, { cells: s.picks.at(-1).cells });
+  s.picks.length = 0; s.state([], true, { decor });
+  assert.deepEqual(states(s.picks), ['free', 'free', 'free', 'own', 'own', 'own', 'free'], 'in the test city anyone\'s small things can go');
+  assert.equal(s.picks.at(-1).update, true, 'what is on the same cells now, not a new choice: the page takes it only while they are chosen');
   s.estates.dispose();
 });
 
@@ -601,11 +612,12 @@ test('small things are drawn: the roads as one paving mesh, trees and lamps with
   assert.ok(roads && roads.geometry.index.count > 0, 'the roads\' paving');
   assert.ok(resolved.includes('tree-cone') && resolved.includes('lamp'), resolved.join(', '));
   assert.ok(s.ctx.scene.children.some(o => /^district-lamp/.test(o.name)), 'the lamp\'s light');
-  // A cell under a road is not free: the tap picks it with its problem.
+  // A cell under one's own road is chosen as one's own, under a neighbour's pine as taken.
   s.build(null); s.aim(cellPoint(frame.col + 1, frame.row + 4)); s.picks.length = 0;
   s.tap(cellPoint(frame.col + 1, frame.row + 4));
-  assert.equal(s.picks.at(-1).kind, 'plot');
-  assert.match(s.picks.at(-1).problem, /уже занята/);
+  assert.deepEqual(states(s.picks), ['own']);
+  s.tap(cellPoint(frame.col, frame.row + 4));
+  assert.deepEqual(states(s.picks), ['taken']);
   // Without the small things the paving goes.
   s.state([]);
   assert.equal(s.ctx.scene.getObjectByName('district-roads'), undefined);
@@ -622,8 +634,8 @@ test('a building looks to the road beside it: its frame turns there, and the plo
   state({ road: [0, 1, 2].map(c => [b, frame.col + c, frame.row + 3, 1]) });
   const turned = city.areaFrame(home, frame.col, frame.row, 3, 3, city.sideOf(home, 'row+'), true);
   assert.ok(Math.abs(Math.sin(front() - turned.rotation)) < 1e-9 && Math.cos(front() - turned.rotation) > 0);
-  // A house chosen for a picked cell shows an arrow on the side its front will look to.
-  s.estates.setBuild({ district: districtId, area: 'plots', placing: null, selected: null, plot: { block: b, col: frame.col + 7, row: frame.row + 1, rotation: 1, family: 'house' } });
+  // A house chosen for the cell chosen shows an arrow on the side its front will look to.
+  choosing(s, { cells: [{ block: b, col: frame.col + 7, row: frame.row + 1 }], rotation: 1, family: 'house' });
   const arrow = s.ctx.scene.getObjectByName('district-plot-front');
   assert.ok(arrow?.visible, 'the front arrow');
   const expected = city.areaFrame(home, frame.col + 6, frame.row, 3, 3, city.turnedSide(home, city.homeSide(home, frame.col + 6, frame.row, 3, 3), 1));
@@ -641,16 +653,16 @@ function shown(s) {
 }
 const YELLOW = '#ffd24a', GREEN = '#35b07a', RED = '#e0525d';
 
-test('a tap picks one cell; what is chosen for it shows its cells round it, green where free and red where not', () => {
+test('a building chosen for the one cell shows its cells round it, green where free and red where not; a small thing shows on its cells of the line', () => {
   const s = setup(), b = home.block, footprints = () => s.picks.filter(p => p.kind === 'footprint');
   // The house of the tests on its 3 × 3 cells, and a road down a column two cells off: a lane two cells wide.
   s.state([object('house')], false, { decor: { road: [0, 1, 2, 3, 4].map(r => [b, frame.col + 5, frame.row + r, 1]) } });
-  const pick = (col, row, family = null) => s.estates.setBuild({ district: districtId, area: 'plots', placing: null, selected: null, plot: { block: b, col, row, rotation: 0, family } });
+  const pick = (col, row, family = null) => choosing(s, { cells: [{ block: b, col, row }], family });
   // The cell alone: yellow, nothing to report.
   pick(frame.col + 4, frame.row + 1);
   assert.deepEqual(shown(s), [YELLOW]);
   assert.equal(footprints().length, 0);
-  // A square fits in the lane, on the picked cell and the one beside it, off the road.
+  // A square fits in the lane, on the cell and the one beside it, off the road.
   pick(frame.col + 4, frame.row + 1, 'square');
   assert.deepEqual(footprints().at(-1), { kind: 'footprint', district: districtId, cell: { block: b, col: frame.col + 4, row: frame.row + 1 }, family: 'square', col: frame.col + 3, row: frame.row + 1, rotation: 0, problem: null });
   assert.deepEqual(shown(s), [GREEN, GREEN, GREEN, GREEN, YELLOW]);
@@ -662,20 +674,25 @@ test('a tap picks one cell; what is chosen for it shows its cells round it, gree
   const colours = shown(s);
   assert.equal(colours.length, 10); assert.equal(colours.at(-1), YELLOW);
   assert.equal(colours.filter(c => c === RED).length, 3); assert.equal(colours.filter(c => c === GREEN).length, 6);
-  // Picked further on, past the road, the house fits round the cell, and the map says where it goes.
+  // Chosen further on, past the road, the house fits round the cell, and the map says where it goes.
   pick(frame.col + 8, frame.row + 1, 'house');
   assert.deepEqual([footprints().at(-1).col, footprints().at(-1).row, footprints().at(-1).problem], [frame.col + 7, frame.row, null]);
   // Next to the road it moves off it rather than onto it.
   pick(frame.col + 6, frame.row + 1, 'house');
   assert.deepEqual([footprints().at(-1).col, footprints().at(-1).problem], [frame.col + 6, null]);
-  // A small thing on the road's cell: that one cell, red.
-  pick(frame.col + 5, frame.row + 1, 'lamp');
-  assert.match(footprints().at(-1).problem, /уже занята/);
-  assert.deepEqual(shown(s), [RED, YELLOW]);
-  // The same choice again reports nothing new.
+  // The same choice again reports nothing new; a building on several cells chosen shows no place.
   const count = footprints().length;
-  pick(frame.col + 5, frame.row + 1, 'lamp');
+  pick(frame.col + 6, frame.row + 1, 'house');
   assert.equal(footprints().length, count);
+  choosing(s, { cells: [6, 7, 8].map(c => ({ block: b, col: frame.col + c, row: frame.row + 6 })), family: 'house' });
+  assert.equal(footprints().length, count); assert.deepEqual(shown(s), [YELLOW, YELLOW, YELLOW]);
+  // A small thing: green on the free cells of the line, red on the house's and the road's; on every second cell, the others faint.
+  const across = [1, 2, 3, 4, 5].map(c => ({ block: b, col: frame.col + c, row: frame.row + 2 }));
+  choosing(s, { cells: across, family: 'lamp' });
+  assert.deepEqual(shown(s), [RED, RED, GREEN, GREEN, RED]);
+  choosing(s, { cells: across, family: 'lamp', every: 2 });
+  assert.deepEqual(shown(s), [RED, YELLOW, GREEN, YELLOW, RED]);
+  assert.equal(footprints().length, count, 'a small thing reports no place of its own');
   s.estates.setBuild(null); assert.deepEqual(shown(s), []);
   s.estates.dispose();
 });

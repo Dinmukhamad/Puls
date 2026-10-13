@@ -13,11 +13,17 @@ const module = { exports: {} };
 new Function("require", "module", "exports", built.outputFiles[0].text)(require, module, module.exports);
 const { CityEstateDock } = module.exports;
 const noop = () => {};
-const catalogue = [{ family: "square", name: "Сквер", icon: "🌳", ready: false, size: [1, 1], squares: null, levels: [{ level: 1, name: "Сквер", about: "Зелёный сквер", price: 20 }] }];
+const catalogue = [
+  { family: "square", name: "Сквер", icon: "🌳", ready: false, size: [2, 2], squares: null, levels: [{ level: 1, name: "Сквер", about: "Зелёный сквер", price: 20 }] },
+  { family: "house", name: "Дом", icon: "🏡", ready: false, size: [3, 3], squares: null, levels: [{ level: 1, name: "Одноэтажный дом", about: "Небольшой дом", price: 120 }, { level: 2, name: "Двухэтажный дом", about: "Второй этаж", price: 180 }] },
+];
 const land = { id: "support-team-1", name: "Район команды", number: 1, mine: true, managed: false, construction: true, land: { cells: 12, taken: 0, built: 0, open_band: 1, bands: [{ band: 1, cells: 12, taken: 0 }] }, projects: [], objects: [], version: 1 };
 const decor = [{ family: "road", name: "Дорога", icon: "🛣️", about: "Клетка дороги.", price: 5 }, { family: "lamp", name: "Фонарь", icon: "💡", about: "Вечером зажигается.", price: 15 }];
 const mine = { status: "ready", message: null, district: { id: land.id, name: land.name, city: "support" }, objects: [], catalogue, projects: [], land_prices: [100], economy_revision: 1, balance: 200, available: 200, legacy: { count: 0, paid: 0 }, managed: [] };
-const overview = { district: land.id, area: "plots", placing: null, selected: null, plot: null, spot: null, project: false };
+const overview = { district: land.id, area: "plots", placing: null, selected: null, choice: null, spot: null, project: false };
+/** Cells chosen on the map, free unless said, with what the shop chose for them. */
+const cellsAt = (states, row = 0) => states.map((state, col) => ({ block: 1, col, row, band: 1, state }));
+const choice = (patch = {}) => ({ cells: [], shape: "cell", family: null, rotation: 0, every: 1, at: null, ...patch });
 function render(patch = {}) {
   const client = new QueryClient();
   const html = renderToStaticMarkup(React.createElement(QueryClientProvider, { client }, React.createElement(CityEstateDock, { mine, land, build: overview, setBuild: noop, onClose: noop, onFocus: noop, onChooseFree: noop, ...patch })));
@@ -25,26 +31,26 @@ function render(patch = {}) {
   return html;
 }
 
-test("ready overview directs operators to any visible free cell and keeps automatic selection as an optional fallback", () => {
-  const html = render();
-  assert.match(html, /<h2 class="estate-step-title">Спланируй свой район<\/h2>/);
-  assert.match(html, /Нажми на свободную клетку и выбери, что на ней построить: дом займёт 3 × 3 клетки, офис и сквер — 2 × 2\. Место покажется на карте: зелёные клетки свободны, красные заняты/);
-  assert.match(html, /На карте свободные клетки района зелёные, занятые — серые/);
+test("the shop opens on choosing cells on the map, its tabs, and an automatic choice for a house as a fallback", () => {
+  const html = render({ mine: { ...mine, decor } });
+  assert.match(html, /Выбери место на карте: нажми на клетку или проведи по клеткам левой кнопкой мыши — получится линия\. Камера: правая кнопка мыши, колесо и WASD, на телефоне — двумя пальцами\./);
+  // With the mouse, Ctrl adds areas and cells; on a phone the taps go as «Клетка / Линия / Область» says.
+  assert.match(html, /<p class="estate-tip estate-tip--mouse"><kbd>Ctrl<\/kbd> \+ протянуть мышью — добавить прямоугольник: дорогу в две-три клетки шириной, рощу; <kbd>Ctrl<\/kbd> \+ клик — добавить или убрать клетку; <kbd>Shift<\/kbd> \+ протянуть — добавить ещё линию\.<\/p>/);
+  assert.match(html, /<div class="estate-shape" role="radiogroup" aria-label="Что делает нажатие"><button type="button" role="radio" aria-checked="true">Клетка<\/button><button type="button" role="radio" aria-checked="false">Линия<\/button><button type="button" role="radio" aria-checked="false">Область<\/button><\/div>/);
+  assert.match(html, /<p class="secondary small estate-shape__hint">Нажатие выбирает одну клетку\.<\/p>/);
+  const areas = render({ mine: { ...mine, decor }, build: { ...overview, choice: choice({ shape: "area" }) } });
+  assert.match(areas, /aria-checked="true">Область<\/button>/);
+  assert.match(areas, /Нажми на один угол, потом на другой — добавится прямоугольник между ними: дорога в две-три клетки шириной, роща, площадь\./);
   assert.match(html, /<button type="button" class="city-secondary estate-choose-free">Подобрать место для дома<\/button>/);
-  const steps = html.match(/<ol class="estate-steps">(.*?)<\/ol>/s)?.[1];
-  assert.equal((steps?.match(/<li>/g) ?? []).length, 3);
+  // Seven tabs, houses first; each thing with a picture of its model, loaded when it shows, its size and price.
+  const tabs = html.match(/<div class="estate-shop__tabs" role="tablist"[^>]*>(.*?)<\/div>/s)?.[1] ?? "";
+  assert.deepEqual([...tabs.matchAll(/<\/span>([^<]+)<\/button>/g)].map(m => m[1]), ["Дома", "Офисы", "Скверы", "Дороги", "Деревья", "Фонари и скамейки", "Кусты и клумбы"]);
+  assert.match(tabs, /aria-selected="true"><span aria-hidden="true">🏡<\/span>Дома/);
+  assert.match(html, /<img src="\/city\/shop\/v1\/house\.webp" alt="" loading="lazy" decoding="async" width="160" height="120"\/><strong>Дом<\/strong><small>3 × 3 клетки · от ◈ 1\s020<\/small><small>растёт до 2 ступеней<\/small>/);
+  assert.doesNotMatch(html, /Убрать своё|Выбрано:|class="city-action"/);
   const manual = render({ onChooseFree: undefined });
-  assert.match(manual, /Нажми на свободную клетку/);
-  assert.match(manual, /свободные клетки района зелёные/);
+  assert.match(manual, /Выбери место на карте/);
   assert.doesNotMatch(manual, /estate-choose-free/);
-  // The small things, a tool each with its price a cell; none to take away yet.
-  const tools = render({ mine: { ...mine, decor } });
-  assert.match(tools, /<section class="estate-section" aria-label="Дороги и благоустройство"><h3>Дороги и благоустройство<\/h3>/);
-  assert.match(tools, /aria-label="Дорога: 5 коинов за клетку"[^>]*><span class="estate-tools__icon" aria-hidden="true">🛣️<\/span><strong>Дорога<\/strong><small>◈ 5<\/small>/);
-  assert.match(tools, /aria-label="Фонарь: 15 коинов за клетку"/);
-  assert.doesNotMatch(tools, /Убрать своё/);
-  const own = render({ mine: { ...mine, decor }, land: { ...land, decor: { road: [[1, 0, 0, 1], [1, 1, 0, 1], [1, 2, 0, 0]], lamp: [[1, 3, 1, 1]] } } });
-  assert.match(own, />Убрать своё · 3 клетки<\/button>/);
 });
 
 test("map and district loading keep the dock visible without instructing operators to click unavailable cells", () => {
@@ -79,8 +85,8 @@ test("map and land recover independently and ready data restores direct map guid
   assert.match(failed, /Повторить загрузку земли/);
   assert.equal((failed.match(/role="alert"/g) ?? []).length, 2);
   const recovered = render({ mapStatus: "ready", loadingLand: false, landError: null });
-  assert.match(recovered, /Нажми на свободную клетку/);
-  assert.match(recovered, /свободные клетки района зелёные/);
+  assert.match(recovered, /Выбери место на карте/);
+  assert.match(recovered, /role="tablist"/);
   assert.doesNotMatch(recovered, /Загружаем карту|Повторить загрузку/);
 });
 
@@ -93,36 +99,39 @@ test("closed construction cannot select a purchase plot, and full land explains 
   assert.match(full, /Вся земля района занята\. Открой свою постройку/);
 });
 
-test("a picked cell offers everything with its cells and price; the chosen one shows on the map and buys only when it fits", () => {
-  const cell = { block: 1, col: 4, row: 2, band: 1, problem: null, rotation: 0, family: null, at: null }, rich = { ...mine, available: 1000, decor };
-  const html = render({ mine: rich, build: { ...overview, plot: cell } });
-  assert.match(html, /<h2>Клетка выбрана<\/h2><small>Зона 1 · земля ◈ 100 за клетку<\/small>/);
-  assert.match(html, /место покажется на карте вокруг выбранной клетки — зелёные клетки свободны, красные заняты/);
-  // A square takes 2 × 2 cells: four cells of land and the square; a road one cell, its land in its price.
-  assert.match(html, /<strong>Сквер<\/strong><small>2 × 2 клетки · ◈ 420<\/small>/);
-  assert.match(html, /<strong>Дорога<\/strong><small>1 клетка · ◈ 5<\/small>/);
-  assert.match(html, /aria-label="Сквер: 2 × 2 клетки, ◈ 420\. Показать место на карте">Выбрать<\/button>/);
+test("a building goes round the one cell chosen: its price with the land, its place on the map, bought only when it fits", () => {
+  const one = cellsAt(["free"]), rich = { ...mine, available: 2000, decor };
+  const html = render({ mine: rich, build: { ...overview, choice: choice({ cells: one }) } });
+  assert.match(html, /<strong>Выбрано: 1 клетка<\/strong><small>свободно 1<\/small>/);
+  assert.match(html, />Сбросить выбор<\/button>/);
+  // The price on the cell's land: nine cells of it under a house and the house.
+  assert.match(html, /<strong>Дом<\/strong><small>3 × 3 клетки · ◈ 1\s020<\/small>/);
   assert.doesNotMatch(html, /Купить ·|estate-choose-free/);
-  // Chosen: while the map works out where it goes, nothing to buy yet.
-  const waiting = render({ mine: rich, build: { ...overview, plot: { ...cell, family: "square" } } });
-  assert.match(waiting, /class="estate-catalogue__chosen"/);
+  // A square chosen: its tab, and while the map works out where it goes, nothing to buy yet.
+  const waiting = render({ mine: rich, build: { ...overview, choice: choice({ cells: one, family: "square" }) } });
+  assert.match(waiting, /aria-selected="true"><span aria-hidden="true">🌳<\/span>Скверы/);
+  assert.match(waiting, /aria-pressed="true" title="Зелёный сквер"/);
   assert.match(waiting, /Показываем место на карте…/);
   assert.match(waiting, /Земля 4 × ◈ 100 = ◈ 400 \+ сквер ◈ 20/);
   assert.match(waiting, /disabled="">Купить · ◈ 420<\/button>/);
+  assert.match(waiting, /Четыре своих сквера вплотную квадратом \(4 × 4 клетки\) сами станут парком/);
   // It fits: bought at once with the price on the button.
-  const fits = render({ mine: rich, build: { ...overview, plot: { ...cell, family: "square", at: { col: 3, row: 2, problem: null } } } });
+  const fits = render({ mine: rich, build: { ...overview, choice: choice({ cells: one, family: "square", at: { col: 0, row: 0, problem: null } }) } });
   assert.match(fits, /Место свободно: клетки на карте зелёные\./);
   assert.match(fits, /<button type="button" class="city-action">Купить · ◈ 420<\/button>/);
   // It does not: the map's reason, and no purchase.
-  const blocked = render({ mine: rich, build: { ...overview, plot: { ...cell, family: "square", at: { col: 3, row: 2, problem: "Не помещается: 2 клетки из 4 заняты — они красные на карте." } } } });
+  const blocked = render({ mine: rich, build: { ...overview, choice: choice({ cells: one, family: "square", at: { col: 0, row: 0, problem: "Не помещается: 2 клетки из 4 заняты — они красные на карте." } }) } });
   assert.match(blocked, /role="alert">Не помещается: 2 клетки из 4 заняты — они красные на карте\./);
   assert.match(blocked, /disabled="">Купить · ◈ 420<\/button>/);
-  // Not enough coins; a taken cell says so.
-  const poor = render({ build: { ...overview, plot: { ...cell, family: "square", at: { col: 3, row: 2, problem: null } } } });
+  // Not enough coins; several cells chosen for a building; a house turns its front.
+  const poor = render({ build: { ...overview, choice: choice({ cells: one, family: "square", at: { col: 0, row: 0, problem: null } }) } });
   assert.match(poor, /disabled="">Не хватает 220<\/button>/);
-  const taken = render({ mine: rich, build: { ...overview, plot: { ...cell, problem: "Эта клетка уже занята" } } });
-  assert.match(taken, /<h2>Клетка занята<\/h2>/);
-  assert.match(taken, /Эта клетка уже занята\./);
+  const many = render({ mine: rich, build: { ...overview, choice: choice({ cells: cellsAt(["free", "free"]), family: "house" }) } });
+  assert.match(many, /Для здания нужна одна клетка: нажми на неё на карте\. Сейчас выбрано 2 клетки\./);
+  assert.match(many, /<strong>Дом<\/strong><small>3 × 3 клетки · от ◈ 1\s020<\/small>/);
+  assert.doesNotMatch(many, /Повернуть фасад/);
+  const house = render({ mine: rich, build: { ...overview, choice: choice({ cells: one, family: "house", at: { col: 0, row: 0, problem: null } }) } });
+  assert.match(house, />Повернуть фасад<\/button><button type="button" class="city-action">Купить · ◈ 1\s020<\/button>/);
 });
 
 test("automatic purchase selection does not appear during inventory placement, project placement, or an owned building card", () => {
@@ -139,72 +148,46 @@ test("transfer to another ready district disables purchases and automatic select
   const transferred = { ...mine, district: { id: "sales-team-2", name: "Новый район", city: "sales" } };
   const oldOverview = render({ mine: transferred });
   assert.doesNotMatch(oldOverview, /estate-choose-free/);
-  const oldPlot = render({ mine: { ...transferred, available: 1000 }, build: { ...overview, plot: { block: 1, col: 0, row: 0, band: 1, problem: null, rotation: 0, family: "square", at: { col: 0, row: 0, problem: null } } } });
+  const oldPlot = render({ mine: { ...transferred, available: 1000 }, build: { ...overview, choice: choice({ cells: cellsAt(["free"]), family: "square", at: { col: 0, row: 0, problem: null } }) } });
   const buy = oldPlot.match(/<button type="button" class="city-action"[^>]*>Купить · ◈ 420<\/button>/)?.[0];
   assert.ok(buy, "the chosen building still displays its price while the previous dock is being closed");
   assert.match(buy, /disabled=""/);
 });
 
-test("cells chosen with Ctrl before a tool: every small thing priced for all of them, a hint where the palette is", () => {
-  const cells = [{ block: 1, col: 0, row: 0 }, { block: 1, col: 1, row: 0 }, { block: 1, col: 2, row: 0 }];
-  const base = { mine: { ...mine, decor, decor_batch: 400 } }, chosen = { ...overview, decor: { tool: null, cells, shape: "cell" } };
-  // The overview tells how to choose many cells at once, beside the palette and in its first step.
-  const start = render(base);
-  assert.match(start, /<p class="estate-tip estate-tip--mouse">Много клеток сразу: зажми <kbd>Ctrl<\/kbd> и протяни мышью по карте — выберется прямоугольник, <kbd>Ctrl<\/kbd> \+ клик добавит или уберёт клетку\. Потом выбери, что на них поставить\.<\/p>/);
-  assert.match(start, /<li>Проложи дороги и дорожки, посади деревья, поставь фонари — ниже, в «Дорогах и благоустройстве»<span class="estate-tip--mouse">, или зажми <kbd>Ctrl<\/kbd> и протяни мышью по клеткам на карте, потом выбери, что на них поставить<\/span>\.<\/li>/);
-  const html = render({ ...base, build: chosen });
-  assert.match(html, /<h2>Выбрано: 3 клетки<\/h2><small>Что поставить на все сразу\?<\/small>/);
-  // Each small thing at its price for all three cells, land included; nothing is bought until one is chosen.
-  assert.match(html, /aria-label="Дорога на 3 клетки: 15 коинов"[^>]*>.*?<strong>Дорога<\/strong><small>◈ 15<\/small>/);
-  assert.match(html, /aria-label="Фонарь на 3 клетки: 45 коинов"[^>]*>.*?<strong>Фонарь<\/strong><small>◈ 45<\/small>/);
-  assert.doesNotMatch(html, /class="city-action"|Спланируй свой район|Показать район на карте/);
-  assert.match(html, />Сбросить выбор<\/button>/);
-  assert.match(html, /Дома и здания ставятся по одному: нажми на клетку без <kbd>Ctrl<\/kbd>\./);
-  // What one cannot pay for says so; too many cells for one go too; a closed district chooses nothing.
-  const poor = render({ mine: { ...base.mine, available: 20 }, build: chosen });
-  assert.match(poor, /<small>◈ 15<\/small>/);
-  assert.match(poor, /<small>◈ 45 · не хватает<\/small>/);
-  const many = render({ mine: { ...base.mine, decor_batch: 2 }, build: chosen });
-  assert.match(many, /role="alert">За раз можно построить не больше 2 клеток\./);
-  const closed = render({ mine: { ...base.mine, status: "closed", message: "Стройка в районе пока закрыта." }, build: chosen });
-  assert.equal((closed.match(/<button type="button" disabled=""/g) ?? []).length, decor.length);
-  assert.match(closed, /<p class="estate-note">Стройка в районе пока закрыта\.<\/p>/);
-});
-
-test("laying small things: the cells chosen, what they cost with the land, and only what one can pay for", () => {
-  const cells = [{ block: 1, col: 0, row: 0 }, { block: 1, col: 1, row: 0 }, { block: 1, col: 2, row: 0 }];
-  const road = { tool: "road", cells, shape: "line" }, base = { mine: { ...mine, decor, decor_batch: 400 } };
-  const html = render({ ...base, build: { ...overview, decor: road } });
-  assert.match(html, /<h2>Дорога<\/h2><small>◈ 5 за клетку · земля включена<\/small>/);
-  // How taps choose cells: one at a time, by lines (a road's way at first) or by areas; Ctrl with the mouse draws an area.
-  assert.match(html, /<div class="estate-shape" role="radiogroup" aria-label="Как выбирать клетки"><button type="button" role="radio" aria-checked="false">Клетка<\/button><button type="button" role="radio" aria-checked="true">Линия<\/button><button type="button" role="radio" aria-checked="false">Область<\/button><\/div>/);
-  assert.match(html, /Каждое нажатие продолжает линию от прошлой клетки\./);
-  assert.match(html, /С зажатым <kbd>Ctrl<\/kbd> протяни мышью левой или правой кнопкой — выделится прямоугольник, <kbd>Ctrl<\/kbd> \+ клик добавит или уберёт клетку\./);
-  const grove = render({ ...base, build: { ...overview, decor: { tool: "road", cells, shape: "area" } } });
-  assert.match(grove, /aria-checked="true">Область<\/button>/);
-  assert.match(grove, /Нажми на один угол, потом на другой — выберется прямоугольник между ними: дорога в две-три клетки шириной, роща, площадь\./);
-  assert.match(html, /<p class="estate-ok">Выбрано: 3 клетки · ◈ 15<\/p>/);
-  assert.match(html, /<button type="button" class="city-action">Построить · ◈ 15<\/button>/);
-  assert.match(html, />Сбросить выбор<\/button>/);
-  // While choosing, the dock offers no other building and no camera jump to the whole district.
-  assert.doesNotMatch(html, /Показать район на карте|estate-choose-free|Спланируй свой район/);
-  const none = render({ ...base, build: { ...overview, decor: { ...road, cells: [] } } });
-  assert.match(none, /Клетки ещё не выбраны/);
-  assert.match(none, /disabled="">Построить · ◈ 0<\/button>/);
+test("small things go on the free cells of the line chosen, lamps and trees also on every second or third; one's own go away", () => {
+  const line = cellsAt(["free", "free", "free"]), base = { mine: { ...mine, decor, decor_batch: 400 } };
+  const html = render({ ...base, build: { ...overview, choice: choice({ cells: line, family: "road" }) } });
+  assert.match(html, /aria-selected="true"><span aria-hidden="true">🛣️<\/span>Дороги/);
+  assert.match(html, /<h3>Дорога<\/h3><small>◈ 5 за клетку · земля включена<\/small>/);
+  assert.match(html, /<strong>Выбрано: 3 клетки<\/strong><small>свободно 3<\/small>/);
+  assert.match(html, /<p class="estate-ok">Встанет на 3 клетки<\/p>/);
+  assert.match(html, /<button type="button" class="city-action">Купить · ◈ 15<\/button>/);
+  assert.doesNotMatch(html, /Через одну/, "a road goes on every cell");
+  // Nothing chosen yet: how to choose, nothing to buy.
+  const none = render({ ...base, build: { ...overview, choice: choice({ family: "road" }) } });
+  assert.match(none, /Выбери клетки на карте: проведи по ним левой кнопкой мыши или нажми на клетку\./);
+  assert.match(none, /disabled="">Купить · ◈ 0<\/button>/);
   assert.doesNotMatch(none, /Сбросить выбор/);
-  const poor = render({ mine: { ...base.mine, available: 12 }, build: { ...overview, decor: road } });
+  // A lamp on every second cell of five, one of its cells taken.
+  const lamps = render({ ...base, build: { ...overview, choice: choice({ cells: cellsAt(["free", "free", "taken", "free", "free"]), family: "lamp", every: 2 }) } });
+  assert.match(lamps, /role="group" aria-label="Как часто ставить вдоль линии"><button type="button" aria-pressed="false">На каждую клетку<\/button><button type="button" aria-pressed="true">Через одну<\/button><button type="button" aria-pressed="false">Через две<\/button>/);
+  assert.match(lamps, /<p class="estate-ok">Встанет на 2 клетки · 1 занята — на неё не ставится<\/p>/);
+  const one = render({ ...base, build: { ...overview, choice: choice({ cells: cellsAt(["free", "taken", "taken"]), family: "road" }) } });
+  assert.match(one, /<p class="estate-ok">Встанет на 1 клетку · 2 заняты — на них не ставится<\/p>/);
+  assert.match(lamps, /Купить · ◈ 30<\/button>/);
+  const poor = render({ mine: { ...base.mine, available: 12 }, build: { ...overview, choice: choice({ cells: line, family: "road" }) } });
   assert.match(poor, /disabled="">Не хватает 3<\/button>/);
-  const many = render({ mine: { ...base.mine, decor_batch: 2 }, build: { ...overview, decor: road } });
-  assert.match(many, /role="alert">За раз можно выбрать не больше 2 клеток\./);
-  assert.match(many, /disabled="">Построить · ◈ 15<\/button>/);
-  // Taking away: one's own only, the coins come back.
-  const away = render({ ...base, build: { ...overview, decor: { tool: "remove", cells: cells.slice(0, 2), shape: "cell" } } });
-  assert.match(away, /<h2>Убрать своё<\/h2><small>Своё и общее района: за своё коины вернутся<\/small>/);
-  assert.match(away, /Выбрано: 2 клетки<\/p>/);
-  assert.match(away, /<button type="button" class="city-action">Убрать выбранное<\/button>/);
-  assert.match(away, /Убрать можно своё и общее района — то, что осталось от операторов, перешедших в другой район\./);
+  const many = render({ mine: { ...base.mine, decor_batch: 2 }, build: { ...overview, choice: choice({ cells: line, family: "road" }) } });
+  assert.match(many, /role="alert">За раз можно поставить не больше 2 клеток\./);
+  assert.match(many, /disabled="">Купить · ◈ 15<\/button>/);
+  const full = render({ ...base, build: { ...overview, choice: choice({ cells: cellsAt(["taken", "own"]), family: "road" }) } });
+  assert.match(full, /role="alert">На выбранных клетках нет свободного места\./);
+  // One's own small things on the cells chosen go away, the coins come back.
+  const away = render({ ...base, build: { ...overview, choice: choice({ cells: cellsAt(["own", "free", "own", "taken"]) }) } });
+  assert.match(away, /<strong>Выбрано: 4 клетки<\/strong><small>свободно 1 · своё 2 · занято 1<\/small>/);
+  assert.match(away, /<button type="button" class="city-secondary">Убрать своё · 2 клетки<\/button>/);
   // A closed district shows why and lays nothing.
-  const closed = render({ mine: { ...base.mine, status: "closed", message: "Стройка в районе пока закрыта." }, build: { ...overview, decor: road } });
+  const closed = render({ mine: { ...base.mine, status: "closed", message: "Стройка в районе пока закрыта." }, build: { ...overview, choice: choice({ cells: line, family: "road" }) } });
   assert.match(closed, /Стройка в районе пока закрыта\./);
-  assert.match(closed, /disabled="">Построить · ◈ 15<\/button>/);
+  assert.match(closed, /disabled="">Купить · ◈ 15<\/button>/);
 });

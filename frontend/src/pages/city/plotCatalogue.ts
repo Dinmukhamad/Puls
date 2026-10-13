@@ -33,7 +33,7 @@ export const plotEconomyName = (family: string) => isOfficeBuilding(family) ? `�
 export const readyBuildingLabel = (family: string) => isOfficeBuilding(family) ? "офисное здание" : "готовый дом";
 
 const DECOR_NAMES: Record<string, string> = {
-  road: "🛣️ Дорога", path: "🚶 Пешеходная дорожка", tree: "🌳 Клён", pine: "🌲 Ель", birch: "🌿 Берёза", oak: "🍂 Дуб",
+  road: "🛣️ Дорога", path: "🚶 Пешеходная дорожка", alley: "🍃 Аллея", tree: "🌳 Клён", pine: "🌲 Ель", birch: "🌿 Берёза", oak: "🍂 Дуб",
   lamp: "💡 Фонарь", bench: "🪑 Скамейка", bush: "🌱 Куст", flowers: "🌷 Клумба", hedge: "🟩 Живая изгородь",
 };
 /** A small thing's name with its sign, for the economy's prices. */

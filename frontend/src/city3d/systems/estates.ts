@@ -2,13 +2,14 @@
  * Team district land in one city (docs/CITY_ESTATES.md): the small cells of its three districts (world/land.ts),
  * every district's centre with its main building, and what the server reports standing on them: buildings on cells
  * of their own size (a house 3 × 3, a square or an office 2 × 2, parks 4 × 4 and 6 × 4), and the small things
- * operators lay a cell at a time, roads, footpaths, hedges, trees, lamps, benches, bushes and flowerbeds
- * (world/decor.ts). Normal exploration shows the land as it is built. Only in build mode does the
- * operator's own grid of cells appear, thin white lines between them, free cells lit grass and taken ones grey: a tap
- * picks one cell (yellow) or a building, and what is chosen to build there shows its cells round it, green where they
- * are free and red where they are not; a building from the inventory follows the pointer the same way, and with a small
- * thing's tool a drag (or taps) chooses the cells to lay it on or to take it from. Staff place a shared project on the
- * cells of an old public square. Buildings and small things go through instance pools of their own, so a purchase
+ * operators lay a cell at a time, roads, footpaths, alleys, hedges, trees, lamps, benches, bushes and flowerbeds
+ * (world/decor.ts). Normal exploration shows the land as it is built. Only in build mode does the operator's own grid
+ * of cells appear, thin white lines between them, free cells lit grass and taken ones grey. There the cells are chosen
+ * first: a tap chooses one cell (yellow) or opens a building, a drag of the mouse's left button chooses a line of
+ * cells, Ctrl (Cmd) with either button adds an area and a click with it a cell in or out; on a phone taps go by the
+ * shape the page asks for. What the shop chose for them shows on them: a building's cells round the one cell, a small
+ * thing on the cells of the line it goes on, green where free and red where not. A building from the inventory follows
+ * the pointer the same way. Staff place a shared project on the cells of an old public square. Buildings and small things go through instance pools of their own, so a purchase
  * rebuilds only these copies, not the city; the server checks everything again.
  */
 import * as THREE from "three/webgpu";
@@ -30,7 +31,7 @@ import { OFFICE_BUILDINGS, isOfficeBuilding, officeBuildingScale, officeBuilding
 import { districtMainFrame, districtMainLayout, landmarkHeight, landmarkBounds, landmarkRayDistance } from "../world/districtLandmark";
 import { districtGarden, type Garden } from "../world/districtGarden";
 import type { Placement, Surface } from "../world/types";
-import type { CityBuildView, CityEstateView, EstatePick, EstateTarget, PlotAddress } from "../types";
+import type { CellState, ChosenCell, CityBuildView, CityEstateView, EstatePick, EstateTarget, PlotAddress } from "../types";
 import type { DistrictEstate, PublicObject } from "../../api/cityEstate";
 import { plural } from "../../utils/format";
 
@@ -39,8 +40,8 @@ const SIGN_REACH = 230;
 /** The square's invitation belongs to a close district view, rather than the whole-city skyline. */
 const SQUARE_SIGN_REACH = 85;
 const OK = new THREE.Color("#35b07a"), BAD = new THREE.Color("#e0525d"), TAKE = new THREE.Color("#f0a23a"), PICKED = new THREE.Color("#ffd24a");
-/** In build mode: a free cell (grass, lit up a little), a taken one (grey), one's own small thing while taking them away. */
-const FOR_SALE = new THREE.Color("#a6d47a"), TAKEN = new THREE.Color("#a3a8a0"), OWN_DECOR = new THREE.Color("#f2c46d");
+/** In build mode: a free cell (grass, lit up a little), a taken one (grey). */
+const FOR_SALE = new THREE.Color("#a6d47a"), TAKEN = new THREE.Color("#a3a8a0");
 /** The lines between the cells: white, this much of a cell's side on each side of a line. */
 const LINE = new THREE.Color("#ffffff"), LINE_WIDTH = .02;
 /**
@@ -49,7 +50,7 @@ const LINE = new THREE.Color("#ffffff"), LINE_WIDTH = .02;
  * road or a footpath are left out, their paving showing instead.
  */
 const PLOT_Y = .23, INSET = .1;
-const PAVED: readonly DecorFamily[] = ["road", "path"];
+const PAVED: readonly DecorFamily[] = ["road", "path", "alley"];
 /** Chosen cells and the cell under the mouse: over the roads and the yards, under the buildings. */
 const PICK_Y = .25;
 
@@ -203,18 +204,17 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
     for (const key of decor.keys()) out.add(key);
     return out;
   }
-  /** The own district's grid appears only while choosing land: free cells, taken ones, one's own small things when taking them away. */
+  /** The own district's grid appears only while choosing land: free cells and taken ones; a paved cell shows its paving. */
   function recolour() {
     const colour = ground.mesh.geometry.getAttribute("color") as THREE.BufferAttribute, c = new THREE.Color();
-    const own = build?.area === "plots" ? numberOf(build.district) : 0, removing = build?.decor?.tool === "remove";
+    const own = build?.area === "plots" ? numberOf(build.district) : 0;
     ground.show(active ? own : 0);
     if (!own || !active) return;
     for (const block of grid.blocks) if (block.district === own) for (let col = 0; col < block.cols; col++) for (let row = 0; row < block.rows; row++) {
       const key = decorKey(block.district, block.block, col, row), slot = ground.slots.get(key);
       if (slot === undefined) continue;
-      // One's own small things light up while taking them away, a paved one too; otherwise its paving shows.
-      const away = removing && (build?.decor?.anyone ? decor.has(key) : decor.get(key)?.mine), paved = !away && PAVED.includes(decor.get(key)?.family as DecorFamily);
-      c.copy(away ? OWN_DECOR : taken.has(key) ? TAKEN : FOR_SALE);
+      const paved = PAVED.includes(decor.get(key)?.family as DecorFamily);
+      c.copy(taken.has(key) ? TAKEN : FOR_SALE);
       for (let k = 0; k < 4; k++) colour.setXYZW(slot + k, c.r, c.g, c.b, paved ? 0 : 1);
     }
     colour.needsUpdate = true;
@@ -350,25 +350,26 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
     return { block, col: at.col, row: at.row, w, h, blocked: at.blocked, problem: at.fits ? null : plotProblem(block, at.col, at.row, w, h) };
   }
   type Place = ReturnType<typeof placeFor>;
-  /** The cell picked to build on, and the cells of what is chosen for it (none yet: the cell alone). */
-  function plotPlace(): (Place & { cell: { col: number; row: number }; family: PlotFamily | DecorFamily | null }) | null {
-    const plot = build?.area === "plots" && !build.placing && !build.decor ? build.plot : null;
-    const block = plot ? blockOf(numberOf(build!.district), plot.block) : undefined;
-    if (!plot || !block) return null;
-    const [w, h] = plot.family ? itemFootprint(plot.family, plot.rotation) : [1, 1];
-    return { ...placeFor(block, plot.col, plot.row, w, h), cell: { col: plot.col, row: plot.row }, family: plot.family ?? null };
+  /** A building chosen for the one cell chosen: its cells round the cell, where they fit best. */
+  function plotPlace(): (Place & { cell: { col: number; row: number }; family: PlotFamily }) | null {
+    const choice = build?.area === "plots" && !build.placing ? build.choice : null;
+    const family = choice?.family && !isDecorFamily(choice.family) ? choice.family : null, cell = choice?.cells.length === 1 ? choice.cells[0] : null;
+    const block = cell ? blockOf(numberOf(build!.district), cell.block) : undefined;
+    if (!choice || !family || !cell || !block) return null;
+    const [w, h] = itemFootprint(family, choice.rotation);
+    return { ...placeFor(block, cell.col, cell.row, w, h), cell: { col: cell.col, row: cell.row }, family };
   }
   /** The inventory's building following the pointer, its cells on the land. */
   let ghostPlace: Place | null = null;
-  /** Tells the page where what is chosen for the picked cell goes and why it does not fit, once per change. */
+  /** Tells the page where the building chosen for the cell goes and why it does not fit, once per change. */
   let reportedPlot = "";
   function reportPlot() {
-    const place = plotPlace(), plot = build?.plot;
-    if (!place?.family || !plot || !build) return;
-    const key = `${build.district}:${plot.block}:${plot.col}:${plot.row}:${place.family}:${plot.rotation}:${place.col}:${place.row}:${place.problem}`;
+    const place = plotPlace(), choice = build?.choice;
+    if (!place || !choice || !build) return;
+    const key = `${build.district}:${place.block.block}:${place.cell.col}:${place.cell.row}:${place.family}:${choice.rotation}:${place.col}:${place.row}:${place.problem}`;
     if (key === reportedPlot) return;
     reportedPlot = key;
-    onPick({ kind: "footprint", district: build.district, cell: { block: plot.block, col: plot.col, row: plot.row }, family: place.family, col: place.col, row: place.row, rotation: plot.rotation, problem: place.problem });
+    onPick({ kind: "footprint", district: build.district, cell: { block: place.block.block, col: place.cell.col, row: place.cell.row }, family: place.family, col: place.col, row: place.row, rotation: choice.rotation, problem: place.problem });
   }
   function showGhost(target: { module: number; u: number; v: number } | null, draw = true) {
     ghostPlace = null;
@@ -404,10 +405,10 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
     const id = build?.selected, district = view?.state.districts.find(d => d.objects.some(o => o.id === id));
     const obj = district?.objects.find(o => o.id === id), place = district && obj ? placeOf(district, obj) : null;
     if (place) { box(selection, place, 1.6); return; }
-    // A building chosen for the picked cell: where its front will look, on its cells.
+    // A building chosen for the cell: where its front will look, on its cells.
     const picked = plotPlace();
-    if (!picked?.family || isDecorFamily(picked.family) || isPark(picked.family) || picked.family === "square") return;
-    const facing = buildingFacing(grid, decor, picked.block, picked.col, picked.row, picked.w, picked.h, build!.plot!.rotation);
+    if (!picked || isPark(picked.family) || picked.family === "square") return;
+    const facing = buildingFacing(grid, decor, picked.block, picked.col, picked.row, picked.w, picked.h, build!.choice!.rotation);
     const frame = areaFrame(picked.block, picked.col, picked.row, picked.w, picked.h, facing.side);
     front.position.set(frame.x + Math.sin(frame.rotation) * (frame.depth / 2 - .9), PICK_Y + .02, frame.z + Math.cos(frame.rotation) * (frame.depth / 2 - .9));
     front.rotation.set(0, frame.rotation, 0); front.visible = true;
@@ -422,25 +423,37 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
     cells.visible = points.length > 0;
   }
 
-  // ---- small things: the cells chosen, a stroke being drawn (a line or an area), the cell under the mouse ----
-  /** A stroke being drawn: `held` with Ctrl (Cmd), when a click without moving takes a cell in or out. */
-  let stroke: { from: CellRef; cells: CellRef[]; pointer: number; x: number; y: number; moved: boolean; area: boolean; held: boolean } | null = null, hoverCell: CellRef | null = null, last: CellRef | null = null, tool = "";
-  /** A small thing's tool is in hand: its cells are chosen on the map (without one, only with Ctrl, before choosing it). */
-  const withTool = () => !!build?.decor && build.decor.tool !== null;
+  // ---- the cells chosen: a stroke being drawn (a line or an area), the cell under the mouse, where taps go on from ----
+  /**
+   * A stroke being drawn: an `area` or a line; `add`: after the cells chosen (Ctrl, Cmd or Shift held), when a click
+   * without moving takes a cell in or out.
+   */
+  let stroke: { from: CellRef; cells: CellRef[]; pointer: number; x: number; y: number; moved: boolean; area: boolean; add: boolean } | null = null;
+  /** `last`: where the next tap's line or area goes on from (the last cell added, or an area's first corner). */
+  let hoverCell: CellRef | null = null, last: CellRef | null = null, lineDistrict = "";
+  /** The cells just reported, shown until the page sends them back (so a drag's line does not flicker). */
+  let reportedList: CellRef[] | null = null, reportedCells = "";
   const refOf = (a: PlotAddress): CellRef | null => { const block = build ? blockOf(numberOf(build.district), a.block) : undefined; return block ? { block, col: a.col, row: a.row } : null; };
   const keyOf = (c: CellRef) => decorKey(c.block.district, c.block.block, c.col, c.row);
-  /**
-   * Can the current tool take this cell: a free cell of one's district to lay on (with no tool yet too), one's own
-   * small thing to take away.
-   */
-  function fits(c: CellRef) {
-    if (!build || build.area !== "plots" || c.block.district !== numberOf(build.district) || c.block.skip.has(`${c.col}:${c.row}`)) return false;
-    return build.decor?.tool === "remove" ? (build.decor.anyone ? decor.has(keyOf(c)) : !!decor.get(keyOf(c))?.mine) : !taken.has(keyOf(c));
+  const chosenNow = () => reportedList ?? (build?.choice?.cells ?? []).map(refOf).filter((c): c is CellRef => !!c);
+  /** A cell of the own district for sale: one that can be chosen. */
+  const forSale = (c: CellRef) => !!build && c.block.district === numberOf(build.district) && !c.block.skip.has(`${c.col}:${c.row}`);
+  /** What stands on a cell for the one choosing: free land, a small thing they may take away (in the test city anyone's), or something else. */
+  function stateAt(c: CellRef): CellState {
+    const key = keyOf(c), there = decor.get(key);
+    if (there && (view?.state.sandbox || there.mine)) return "own";
+    return taken.has(key) ? "taken" : "free";
   }
+  const chosenCell = (c: CellRef): ChosenCell => ({ block: c.block.block, col: c.col, row: c.row, band: c.block.band, state: stateAt(c) });
+  /** How taps choose cells, as the page asks. */
+  const shape = () => build?.choice?.shape ?? "cell";
+  /** Taps go on from the last cell: a line from it, or an area to the corner waiting. */
+  const goingOn = () => !!(build?.area === "plots" && !build.placing && shape() !== "cell" && last);
   /**
-   * The cells the operator works with over the grid: for small things the cells chosen and the one under the mouse;
-   * for building, the cell picked (yellow) and the cells of what is chosen for it, green where free and red where not;
-   * for the inventory's building, its cells under the pointer the same way.
+   * The cells the operator works with over the grid. The cells chosen, yellow (a small thing of one's own on them
+   * orange, something else red); with a small thing chosen for them, green on the cells it goes on where free and red
+   * where taken; with a building chosen for the one cell, its cells round it, green where free and red where not. The
+   * corner an area waits on, the cell under the mouse; the inventory's building's cells under the pointer.
    */
   function showCells() {
     if (chosen) { ctx.scene.remove(chosen); chosen.geometry.dispose(); chosen = null; }
@@ -455,54 +468,70 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
         if (c >= 0 && r >= 0 && c < place.block.cols && r < place.block.rows) cell(place.block, c, r, blocked.has(`${c}:${r}`) ? BAD : OK);
       }
     };
-    if (build.decor || stroke) {
-      const colour = build.decor?.tool === "remove" ? TAKE : OK;
-      // The corner an area waits on after its first tap shows too.
-      const corner = build.decor?.shape === "area" && last && !stroke ? [last] : [];
-      const list = [...(build.decor?.cells ?? []).map(refOf).filter((c): c is CellRef => !!c), ...(stroke?.cells ?? []), ...corner];
-      const done = new Set<string>();
-      for (const c of list) {
-        const key = keyOf(c);
-        if (done.has(key)) continue;
-        done.add(key);
-        cell(c.block, c.col, c.row, fits(c) ? colour : BAD, .18);
-      }
-      if (hoverCell && !done.has(keyOf(hoverCell))) cell(hoverCell.block, hoverCell.col, hoverCell.row, fits(hoverCell) ? colour : BAD, .3);
-    } else if (build.placing) {
+    if (build.placing) {
       if (ghostPlace) footprint(ghostPlace);
-    } else {
-      const picked = plotPlace();
-      if (hoverCell && !(picked && hoverCell.block === picked.block && hoverCell.col === picked.cell.col && hoverCell.row === picked.cell.row)) cell(hoverCell.block, hoverCell.col, hoverCell.row, HOVER, .3);
+    } else if (build.area === "plots") {
+      const choice = build.choice, picked = stroke ? null : plotPlace(), small = choice?.family && isDecorFamily(choice.family), every = Math.max(1, choice?.every ?? 1);
+      const corner = shape() === "area" && last && !stroke ? [last] : [];
+      const list = stroke ? stroke.add ? [...chosenNow(), ...stroke.cells] : stroke.cells : [...chosenNow(), ...corner], done = new Set<string>();
       if (picked) {
-        if (picked.family) footprint(picked);
-        // The cell picked: all yellow alone, a yellow middle over the cells of what is chosen.
-        cell(picked.block, picked.cell.col, picked.cell.row, PICKED, picked.family ? .9 : .08);
-      }
+        footprint(picked);
+        // The cell chosen: a yellow middle over the building's cells.
+        cell(picked.block, picked.cell.col, picked.cell.row, PICKED, .9);
+        done.add(keyOf({ block: picked.block, col: picked.cell.col, row: picked.cell.row }));
+      } else list.forEach(c => {
+        const key = keyOf(c);
+        if (done.has(key) || !forSale(c)) return;
+        const index = done.size, state = stateAt(c); done.add(key);
+        // A small thing on every `every`-th cell of the line; the cells between stay faintly chosen.
+        if (small) cell(c.block, c.col, c.row, index % every ? PICKED : state === "free" ? OK : BAD, index % every ? .34 : .18);
+        else cell(c.block, c.col, c.row, state === "free" ? PICKED : state === "own" ? TAKE : BAD, .18);
+      });
+      if (hoverCell && !done.has(keyOf(hoverCell))) cell(hoverCell.block, hoverCell.col, hoverCell.row, HOVER, .3);
     }
     if (!quads.length) return;
     chosen = flatMesh(quads, pickMaterial, "district-chosen-cells"); chosen.renderOrder = 4;
     ctx.scene.add(chosen);
   }
   /**
-   * Reports the cells chosen now: the ones chosen before with `add` added (or, for a tap on one of them, taken out).
-   * `from` is where the next tap's line or area starts: the last cell added, or nowhere once an area is done.
+   * Reports the cells chosen now: `add` instead of the ones before (`replace`), after them (`extend`), or a click's cell
+   * in or out (`toggle`). `from` is where the next tap's line or area goes on from: the last cell added, or nowhere once
+   * an area is done.
    */
-  function choose(add: CellRef[], toggle: boolean, from: CellRef | null = add.length ? add[add.length - 1] : last) {
-    if (!build) return;
-    const now = (build.decor?.cells ?? []).map(refOf).filter((c): c is CellRef => !!c), keys = new Set(now.map(keyOf));
-    let next = now;
-    if (toggle && add.length === 1 && keys.has(keyOf(add[0]))) next = now.filter(c => keyOf(c) !== keyOf(add[0]));
-    else for (const c of add) if (fits(c) && !keys.has(keyOf(c))) { next = [...next, c]; keys.add(keyOf(c)); }
+  function choose(add: CellRef[], mode: "replace" | "extend" | "toggle", from: CellRef | null = add.length ? add[add.length - 1] : last) {
+    if (!build || build.area !== "plots" || build.placing) return;
+    const own = add.filter(forSale), before = mode === "replace" ? [] : chosenNow(), keys = new Set(before.map(keyOf));
+    let next = before;
+    if (mode === "toggle" && own.length === 1 && keys.has(keyOf(own[0]))) next = before.filter(c => keyOf(c) !== keyOf(own[0]));
+    else for (const c of own) if (!keys.has(keyOf(c))) { next = [...next, c]; keys.add(keyOf(c)); }
     last = from;
-    onPick({ kind: "cells", district: build.district, cells: next.map(c => ({ block: c.block.block, col: c.col, row: c.row })) });
+    reportedList = next;
+    report(next);
+    showCells();
   }
-  /** While an area is drawn: its size by the pointer, in cells across and along when it lies in one block, and how many it takes. */
+  function report(list: CellRef[]) {
+    if (!build) return;
+    const cells = list.map(chosenCell);
+    reportedCells = `${build.district}:${JSON.stringify(cells)}`;
+    onPick({ kind: "cells", district: build.district, cells });
+  }
+  /** What the chosen cells hold, told again when it changes (the land changed, or the page chose a cell itself). */
+  function reportCells() {
+    const choice = build?.area === "plots" && !build.placing ? build.choice : null;
+    if (!build || !choice?.cells.length) { reportedCells = ""; return; }
+    const cells = choice.cells.map(refOf).filter((c): c is CellRef => !!c).map(chosenCell);
+    const key = `${build.district}:${JSON.stringify(cells)}`;
+    if (key === reportedCells) return;
+    reportedCells = key;
+    onPick({ kind: "cells", district: build.district, cells, update: true });
+  }
+  /** While an area is drawn: its size by the pointer, in cells across and along when it lies in one block, and how many of them are free. */
   const sizeLabel = document.createElement("div");
   sizeLabel.className = "c3-area-size"; sizeLabel.setAttribute("aria-hidden", "true"); sizeLabel.hidden = true;
   function showSize(event: { clientX: number; clientY: number } | null) {
     if (!event || !stroke?.area || !stroke.moved) { sizeLabel.hidden = true; return; }
     const end = stroke.cells.length ? stroke.cells : [stroke.from], to = hoverEnd ?? stroke.from;
-    const count = end.filter(fits).length, span = areaSpan(stroke.from, to);
+    const count = end.filter(c => forSale(c) && stateAt(c) === "free").length, span = areaSpan(stroke.from, to);
     const across = span ? `${span[0]} × ${span[1]} · ` : "";
     sizeLabel.textContent = `${across}${count} ${plural(count, "клетка", "клетки", "клеток")}`;
     // Beside the pointer, on its left in the right half of the map, where the dock may cover it.
@@ -526,9 +555,10 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
 
   function refreshBuild() {
     if (!active) { cells.visible = ghost.visible = selection.visible = front.visible = false; showCells(); return; }
-    const nextTool = build?.decor ? `${build.district}:${build.decor.tool}:${build.decor.shape}` : "";
-    if (nextTool !== tool) { tool = nextTool; last = null; stroke = null; sizeLabel.hidden = true; }
-    refreshCells(); showSelection(); reported = ""; showGhost(pinned, false); showCells(); reportPlot();
+    // Lines and areas go on only in the district they were started in.
+    const district = build?.area === "plots" ? build.district : "";
+    if (district !== lineDistrict) { lineDistrict = district; last = null; stroke = null; sizeLabel.hidden = true; }
+    refreshCells(); showSelection(); reported = ""; showGhost(pinned, false); showCells(); reportPlot(); reportCells();
   }
 
   // ---- the community square and projects still collecting ----
@@ -583,7 +613,7 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
     for (const [id, item] of signs) {
       scratch.copy(item.point).applyMatrix4(ctx.camera.matrixWorldInverse);
       const depth = -scratch.z; scratch.applyMatrix4(ctx.camera.projectionMatrix);
-      const hidden = ((id.startsWith("public-") || id.startsWith("main-")) && (!!build?.placing || !!build?.decor)) || depth < ctx.camera.near || ctx.camera.position.distanceTo(item.point) > item.reach || Math.abs(scratch.x) > 1.1 || Math.abs(scratch.y) > 1.1;
+      const hidden = ((id.startsWith("public-") || id.startsWith("main-")) && (!!build?.placing || !!build?.choice?.cells.length)) || depth < ctx.camera.near || ctx.camera.position.distanceTo(item.point) > item.reach || Math.abs(scratch.x) > 1.1 || Math.abs(scratch.y) > 1.1;
       item.el.style.visibility = hidden ? "hidden" : "visible";
       if (hidden) continue;
       const scale = THREE.MathUtils.clamp(focal / depth * .07, .55, 1);
@@ -691,21 +721,22 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
     }
     return off;
   }
-  function pick(p: { x: number; z: number }, area = build?.decor?.shape === "area") {
+  /** A tap on the ground: pins the preview, goes on with a line or an area, opens a building or the square, or chooses the cell. */
+  function pick(p: { x: number; z: number }) {
     if (build?.placing) {
       const target = previewAt(p);
       if (target) { pinned = target; reported = ""; showGhost(target); }
       return;
     }
-    if (withTool()) {
+    const area = shape() === "area";
+    if (goingOn()) {
+      // Drawing lines, every cell from the last one to it; drawing areas, every cell of the rectangle between the corner
+      // waiting and this one, after which the next tap starts a new area. Whatever stands on the cells.
       const at = area ? cornerAt(p) : ownCellAt(p);
-      if (!at) return;
-      // A tap: one cell; drawing lines, every cell from the last one to it; drawing areas, the first tap a corner and the
-      // second every cell of the rectangle between them, after which the next tap starts a new one.
-      const from = last && last.block.district === at.block.district ? last : null;
-      if (area) { if (from) choose(cellsWithin(grid, from, at), false, null); else choose([at], true, at); }
-      else if (build?.decor?.shape === "line" && from) choose(cellsBetween(grid, from, at), false);
-      else choose([at], true);
+      if (!at || !last) return;
+      if (last.block.district !== at.block.district) choose([at], "extend", at);
+      else if (area) choose(cellsWithin(grid, last, at), "extend", null);
+      else choose(cellsBetween(grid, last, at), "extend");
       return;
     }
     const found = objectAt(p);
@@ -724,70 +755,72 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
       return;
     }
     if (build?.area !== "plots") return;
-    const at = cellUnder(grid, p);
-    if (!at || at.block.district !== numberOf(build.district)) return;
-    // One cell: what is chosen to build on it shows its own cells round it.
-    onPick({ kind: "plot", district: build.district, block: at.block.block, col: at.col, row: at.row, band: at.block.band, problem: plotProblem(at.block, at.col, at.row, 1, 1) });
+    const at = area ? cornerAt(p) : ownCellAt(p);
+    // One cell instead of the ones chosen; drawing lines or areas, their first cell or corner, after the ones chosen.
+    if (at) { if (shape() === "cell") choose([at], "replace"); else choose([at], "extend", at); }
+  }
+  /** A tap at a point of the screen: a building's body first (its roof may stand over another cell), then the ground. */
+  function tapAt(clientX: number, clientY: number) {
+    const ray = rayAt(clientX, clientY);
+    if (!ray) return;
+    if (!build?.placing && !goingOn()) {
+      const found = buildingAtRay(ray);
+      if (found) { onPick(found); return; }
+    }
+    if (ray.intersectPlane(plane, hit)) pick({ x: hit.x, z: hit.z });
   }
   let down: { x: number; y: number; time: number } | null = null, pressed = 0, frame = 0, hover: { x: number; y: number } | null = null;
   /**
-   * On the land, with Ctrl or Cmd held, either mouse button draws an area of cells (a road two or three cells wide, a
-   * grove) and a click takes one cell in or out, with a small thing's tool or before choosing one; with a tool the left
-   * button alone draws a line (an area in the area mode). The camera keeps the right button, the wheel and the keys.
+   * On the own land the mouse's left button chooses cells: a drag a line of them (an area in the area mode), instead of
+   * the ones chosen; with Shift after them. With Ctrl or Cmd held either button draws an area after them (a road two or
+   * three cells wide, a grove), and a click takes one cell in or out. The camera keeps the right button, the wheel and
+   * the keys.
    */
   const onPress = (event: PointerEvent) => {
     const held = event.ctrlKey || event.metaKey;
     if (!build || build.area !== "plots" || build.placing || !active || event.pointerType !== "mouse") return;
-    if (!(held ? event.button === 0 || event.button === 2 : withTool() && event.button === 0)) return;
-    const area = held || build.decor?.shape === "area", p = groundAt(event.clientX, event.clientY), at = p && (area ? cornerAt(p) : ownCellAt(p));
+    if (!(event.button === 0 || (held && event.button === 2))) return;
+    const area = held || shape() === "area", p = groundAt(event.clientX, event.clientY), at = p && (area ? cornerAt(p) : ownCellAt(p));
     if (!at) return;
     event.stopImmediatePropagation(); event.preventDefault();
     try { canvas.setPointerCapture(event.pointerId); } catch { /* A synthetic pointer. */ }
-    stroke = { from: at, cells: [at], pointer: event.pointerId, x: event.clientX, y: event.clientY, moved: false, area, held };
+    stroke = { from: at, cells: [at], pointer: event.pointerId, x: event.clientX, y: event.clientY, moved: false, area, add: held || event.shiftKey };
     hoverEnd = at;
-    showCells();
   };
   const onDown = (event: PointerEvent) => { if (event.isPrimary) { pressed = 1; down = { x: event.clientX, y: event.clientY, time: performance.now() }; } else { pressed++; down = null; } };
   const onUp = (event: PointerEvent) => {
     if (stroke && event.pointerId === stroke.pointer) {
       const done = stroke; stroke = null; hoverEnd = null; sizeLabel.hidden = true;
       try { canvas.releasePointerCapture(event.pointerId); } catch { /* Already released. */ }
-      // A drag chooses its whole line or area; a click with Ctrl takes one cell in or out; a click is a tap: one cell,
-      // a line from the last one, an area's corner.
-      const p = done.moved ? null : groundAt(event.clientX, event.clientY), at = done.held && p ? ownCellAt(p) : null;
-      if (done.moved) choose(done.cells, false, done.area ? null : undefined);
-      else if (done.held) { if (at) choose([at], true, at); else showCells(); }
-      else if (p) pick(p, done.area); else showCells();
+      // A drag chooses its whole line or area; a click with Ctrl, Cmd or Shift takes one cell in or out; a click is a tap.
+      if (done.moved) choose(done.cells, done.add ? "extend" : "replace", done.area ? null : undefined);
+      else if (done.add) { const p = groundAt(event.clientX, event.clientY), at = p && ownCellAt(p); if (at) choose([at], "toggle", at); else showCells(); }
+      else { tapAt(event.clientX, event.clientY); showCells(); }
       return;
     }
     pressed = Math.max(0, pressed - 1);
     const tap = down && pressed === 0 && Math.hypot(event.clientX - down.x, event.clientY - down.y) < TAP_DISTANCE && performance.now() - down.time < TAP_TIME;
     if (pressed === 0) down = null;
     if (!tap || !active) return;
-    const ray = rayAt(event.clientX, event.clientY);
-    if (!ray) return;
-    if (!build?.placing && !withTool()) {
-      const found = buildingAtRay(ray);
-      if (found) { onPick(found); return; }
-    }
-    if (ray.intersectPlane(plane, hit)) pick({ x: hit.x, z: hit.z });
+    tapAt(event.clientX, event.clientY);
   };
   const onMove = (event: PointerEvent) => {
     if (stroke && event.pointerId === stroke.pointer) {
       if (Math.hypot(event.clientX - stroke.x, event.clientY - stroke.y) >= TAP_DISTANCE) stroke.moved = true;
+      if (!stroke.moved) return;
       const p = groundAt(event.clientX, event.clientY), at = p && (stroke.area ? cornerAt(p) : ownCellAt(p));
       if (at) { hoverEnd = at; stroke.cells = stroke.area ? cellsWithin(grid, stroke.from, at) : cellsBetween(grid, stroke.from, at); showCells(); }
       showSize(event);
       return;
     }
-    if ((!build?.placing && !build?.decor && build?.area !== "plots") || event.pointerType !== "mouse" || event.buttons || !active) return;
+    if ((!build?.placing && build?.area !== "plots") || event.pointerType !== "mouse" || event.buttons || !active) return;
     hover = { x: event.clientX, y: event.clientY };
     if (!frame) frame = requestAnimationFrame(() => {
       frame = 0;
       if (!hover) return;
       const p = groundAt(hover.x, hover.y);
       if (build?.placing) { const target = p && previewAt(p); if (target) { pinned = target; showGhost(target); } return; }
-      if (build?.decor || build?.area === "plots") {
+      if (build?.area === "plots") {
         const at = p ? ownCellAt(p) : null;
         if ((at && hoverCell && keyOf(at) === keyOf(hoverCell)) || (!at && !hoverCell)) return;
         hoverCell = at; showCells();
@@ -831,8 +864,8 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
     setBuild(next) {
       const same = build && next && build.district === next.district && build.area === next.area && build.placing?.family === next.placing?.family && build.placing?.moving === next.placing?.moving;
       // Cleared or laid: a line or an area starts afresh from the next tap.
-      if (build?.decor?.cells.length && !next?.decor?.cells.length) last = null;
-      build = next; if (!same) pinned = null;
+      if (build?.choice?.cells.length && !next?.choice?.cells.length) last = null;
+      build = next; reportedList = null; if (!same) pinned = null;
       if (!next || next.area !== "plots" || next.placing) hoverCell = null;
       recolour(); refreshBuild(); place();
     },
