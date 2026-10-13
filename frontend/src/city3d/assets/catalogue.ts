@@ -19,7 +19,7 @@ import { OFFICE_FLOOR, OFFICE_FLOORS, SECTION_FLOORS, SECTION_WIDTH } from "../w
 import { FINISHES, HOUSE_SCALE, READY_HOUSES, houseModelName } from "../world/familyHouses";
 import { OFFICE_BUILDINGS, OFFICE_SCALE, officeModelName, officeVariant } from "../world/officeBuildings";
 import { LANDMARK_LEVELS, LANDMARK_SIDE, landmarkLevel } from "../world/districtLandmark";
-import { landmarkGeometry } from "./districtLandmark";
+import { LANDMARK_GLOW, landmarkGeometry } from "./districtLandmark";
 
 /** One detail level. `matrix` places it inside the model and `colors` tint its parts (the proxy box). */
 export interface LodLevel { parts: ModelPart[]; matrix?: THREE.Matrix4; colors?: THREE.Color[] }
@@ -227,6 +227,9 @@ export function createCatalogue(models: Map<string, Model>, night: Night = creat
   const glassTowers = OFFICE_FLOORS.map(floors => add({ id: `office-${floors}`, lods: [officePart(officeGeometry(floors, 2)), officePart(officeGeometry(floors, 1)), plainOffice], bounds: unitBox.clone(), base: new THREE.Matrix4(), tints: officeTints, tintStep: 3 }));
   // One model per community-centre level. All distances retain its wings and stepped crown; each level has only two parts.
   const landmarkShell = own(new THREE.MeshStandardNodeMaterial({ vertexColors: true, roughness: .72, metalness: .04 }));
+  // The windows of its walls light one by one at night, most of them; everything else stays dark.
+  const landmarkGlow = attribute(LANDMARK_GLOW, "float");
+  landmarkShell.emissiveNode = windowLight(landmarkGlow, float(.9)).mul(step(.001, landmarkGlow)).mul(stagger(landmarkGlow, nightLevel));
   const landmarkPart = (level: number, detail: 0 | 1 | 2): LodLevel => {
     const geometry = landmarkGeometry(level, detail);
     return { parts: [{ geometry: own(geometry.shell), material: landmarkShell, castShadow: true },
