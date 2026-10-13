@@ -82,6 +82,47 @@ test('a road two or three cells wide is one piece of asphalt, with the pavement 
   }
 });
 
+test('a road three cells wide has a lane to each row: dashes between them, edge lines, kerbs and zebras at its ends', () => {
+  for (const [city, grid] of Object.entries(GRIDS)) {
+    const { block, b, C, R } = windowOf(grid);
+    const cells = [];
+    for (let c = 4; c < 12; c++) for (let r = 5; r < 8; r++) cells.push(['road', b, C(c), R(r)]);
+    const layout = D.decorLayout(grid, mapOf(1, cells)), marks = layout.ground.filter(q => q.colour === MARK);
+    const middle = q => ({ x: q.points.reduce((s, p) => s + p.x, 0) / 4, z: q.points.reduce((s, p) => s + p.z, 0) / 4 });
+    // Dashes on the two edges between the three lanes, one to a cell.
+    for (const r of [5, 6]) {
+      const dashes = marks.filter(q => [...Array(8).keys()].some(k => { const corners = D.areaCorners(block, C(4 + k), R(r)); return near(middle(q), D.areaPoint(corners, .45, 1), 1e-6); }));
+      assert.equal(dashes.length, 8, `${city}: a dash in every cell between rows ${r} and ${r + 1}`);
+    }
+    // A solid line along either outer edge, a cell long each; zebra bars across both ends.
+    const inRow = (q, r) => { const at = D.cellAt(grid, middle(q)); return at && at.row === R(r); };
+    assert.ok(marks.filter(q => inRow(q, 5)).length >= 8 && marks.filter(q => inRow(q, 7)).length >= 8, `${city}: edge lines`);
+    const ends = c => marks.filter(q => { const at = D.cellAt(grid, middle(q)); return at && at.col === C(c); }).length;
+    assert.ok(ends(4) >= 3 * 3 && ends(11) >= 3 * 3, `${city}: a zebra crossing at each end`);
+    assert.ok(layout.ground.some(q => q.colour === '#c4bfb2'), 'a kerb along the asphalt');
+    // A road a cell wide keeps its plain lane mark.
+    const single = D.decorLayout(grid, mapOf(1, [4, 5, 6].map(c => ['road', b, C(c), R(5)])));
+    assert.equal(single.ground.filter(q => q.colour === MARK).length, 1);
+  }
+});
+
+test('a footpath three cells wide is a paved square: tile joints, a border, benches by its edges and planters down the middle', () => {
+  for (const [city, grid] of Object.entries(GRIDS)) {
+    const { b, C, R } = windowOf(grid);
+    const cells = [];
+    for (let c = 4; c < 13; c++) for (let r = 5; r < 8; r++) cells.push(['path', b, C(c), R(r)]);
+    const layout = D.decorLayout(grid, mapOf(1, cells)), at = p => D.cellAt(grid, p);
+    assert.ok(layout.ground.filter(q => q.colour === '#c9bda5').length >= cells.length * 4, `${city}: tile joints a unit apart`);
+    assert.ok(layout.ground.some(q => q.colour === '#baac90'), `${city}: a border`);
+    const benches = layout.placements.filter(p => p.kind === 'bench').map(at), planters = layout.placements.filter(p => p.kind === 'planter').map(at);
+    assert.deepEqual(benches.map(x => x.row).sort(), [R(5), R(5), R(5), R(7), R(7), R(7)].sort(), `${city}: benches by the outer edges, every third cell`);
+    assert.ok(planters.length >= 2 && planters.every(x => x.row === R(6)), `${city}: planters down the middle`);
+    // Two cells wide: joints and border, no planters.
+    const two = D.decorLayout(grid, mapOf(1, cells.filter(([, , , r]) => r !== R(7))));
+    assert.equal(two.placements.filter(p => p.kind === 'planter').length, 0);
+  }
+});
+
 test('a road keeps on across the seam between two bands of the island city', () => {
   const grid = GRIDS.support, inner = grid.blocks.find(b => b.district === 1 && b.band === 3), outer = grid.blocks.find(b => b.district === 1 && b.band === 4);
   const opposite = { 'row-': 'row+', 'row+': 'row-', 'col-': 'col+', 'col+': 'col-' };
@@ -148,11 +189,17 @@ test('an alley is a gravel path with trees where nothing it joins lies beside it
     }
     // A corner has its trees on the two sides it does not turn to; the end of a line and one on its own run straight.
     assert.deepEqual([trees(9, 5).length, trees(8, 5).length, trees(15, 9).length], [2, 2, 2]);
-    // Two cells wide: trees along its outer edges only.
-    assert.deepEqual([[12, 1], [13, 1], [14, 1], [12, 2], [13, 2], [14, 2]].map(([c, r]) => trees(c, r).length), [2, 1, 2, 2, 1, 2]);
-    // Its gravel: a square in each cell and an arm to each neighbour it joins (and the corners inside the wide one).
+    // Two cells wide it is a boulevard: its outer rows of trees as on a line, a row between its two walks but where a
+    // path crosses (the second cell), and a bench by either outer edge at the third.
+    const between = [12, 13, 14].map(c => D.areaPoint(D.areaCorners(block, C(c), R(1)), .5, 1));
+    const on = p => layout.placements.some(q => q.kind === 'tree-round' && near(q, p, 1e-6));
+    assert.deepEqual(between.map(on), [true, false, true], `${city}: trees between the walks`);
+    const outer = (c, r) => trees(c, r).filter(p => !between.some(b => near(p, b, 1e-6))).length;
+    assert.deepEqual([[12, 1], [13, 1], [14, 1], [12, 2], [13, 2], [14, 2]].map(([c, r]) => outer(c, r)), [2, 1, 2, 2, 1, 2]);
+    assert.deepEqual(layout.placements.filter(p => p.kind === 'bench').map(p => at(p)).map(x => [x.col - C(0), x.row - R(0)]).sort(), [[14, 1], [14, 2]]);
+    // Its gravel: a square in each cell and an arm to each neighbour it joins, across the boulevard only where it crosses.
     const arms = alleys.reduce((n, [c, r]) => n + D.joins(grid, map, block, C(c), R(r), 'alley').length, 0);
-    assert.ok(layout.ground.filter(q => q.colour === GRAVEL).length >= alleys.length + arms);
+    assert.ok(layout.ground.filter(q => q.colour === GRAVEL).length >= alleys.length + arms - 4);
     // The lamp beside it stands at its edge, toward it.
     const lamp = layout.lamps[0], centre = D.areaPoint(D.areaCorners(block, C(5), R(4)), .5, .5);
     assert.deepEqual([at(lamp).col, at(lamp).row], [C(5), R(4)]);

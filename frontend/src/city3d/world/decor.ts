@@ -48,6 +48,8 @@ export interface DecorLayout { ground: GroundQuad[]; placements: Placement[]; la
 const TOP = .2;
 const PAVEMENT = { y: TOP + .009, colour: "#ddd6c4" }, ASPHALT = { y: TOP + .015, colour: "#6d7385" }, MARK = { y: TOP + .021, colour: "#f7f3e8" };
 const FOOTPATH = { y: TOP + .013, colour: "#d7ccb6" }, GRAVEL = { y: TOP + .013, colour: "#cbb994" };
+/** On wide areas: the kerb along a road's asphalt, a footpath square's tile joints and its border. */
+const KERB = { y: TOP + .018, colour: "#c4bfb2" }, JOINT = { y: TOP + .016, colour: "#c9bda5" }, BORDER = { y: TOP + .016, colour: "#baac90" };
 /** Half the width of a road's asphalt and of a footpath, in units; a cell is about three across. */
 const ROAD_HALF = 1.05, PATH_HALF = .55;
 const TREES: Partial<Record<DecorFamily, [PlacementKind, number]>> = { tree: ["tree-round", 1.35], pine: ["tree-cone", 1.25], birch: ["tree-birch", 1.25], oak: ["tree-oak", 1.15] };
@@ -64,7 +66,8 @@ function jitter(block: LandBlock, col: number, row: number, salt: number) {
  * asphalt in the middle and an arm out to every road beside it, so the cells read as one street; a lane mark runs down
  * a straight piece. A footpath is a narrower strip the same way, and an alley a gravel one with trees beside it. Arms
  * that cross into the next band of the island city meet its cells where their edges overlap, so a road keeps on across
- * the seam.
+ * the seam. Laid two or three cells wide they become more: a road with a lane to each row of cells, a boulevard, a
+ * paved square (areaPlace).
  */
 export function decorLayout(grid: LandGrid, map: DecorMap): DecorLayout {
   const ground: GroundQuad[] = [], placements: Placement[] = [], lamps: Placement[] = [];
@@ -75,9 +78,16 @@ export function decorLayout(grid: LandGrid, map: DecorMap): DecorLayout {
     const corners = areaCorners(block, col, row), centre = areaPoint(corners, .5, .5), links = joins(grid, map, block, col, row, at.family);
     if (at.family === "road" || at.family === "path" || at.family === "alley") {
       const half = at.family === "road" ? ROAD_HALF : PATH_HALF, surface = at.family === "road" ? ASPHALT : at.family === "alley" ? GRAVEL : FOOTPATH;
+      const area = areaPlace(grid, map, block, col, row, at.family), wide = area.width >= 2;
       if (at.family === "road") ground.push({ points: corners, ...PAVEMENT });
-      paving(ground, corners, links, half, surface, inside(grid, map, block, links, at.family));
-      if (at.family === "road") lane(ground, corners, links);
+      if (at.family === "alley" && wide && area.along) {
+        // A boulevard: a walk down each row of cells, crossing to the next only every fourth cell, grass between.
+        const { lo, hi } = sidesOf(area.along), cross = area.at % 4 === 1;
+        paving(ground, corners, links.filter(l => cross || (l.way !== lo && l.way !== hi)), half, surface);
+        boulevard(placements, block, col, row, corners, links, area, cross);
+      } else paving(ground, corners, links, half, surface, inside(grid, map, block, links, at.family));
+      if (at.family === "road") { lane(ground, corners, links); if (wide) roadMarks(ground, corners, links, area); }
+      if (at.family === "path" && wide) pathSquare(ground, placements, block, col, row, corners, links, area);
       if (at.family === "alley") alleyTrees(placements, block, col, row, corners, links);
       continue;
     }
@@ -102,6 +112,116 @@ export function decorLayout(grid: LandGrid, map: DecorMap): DecorLayout {
     }
   }
   return { ground, placements, lamps };
+}
+
+/** Where a cell lies in an area of its kind: the way the area runs, how wide it is across that and where in it the cell is. */
+interface AreaPlace { along: "col" | "row" | null; width: number; across: number; at: number }
+type CellAt = { block: LandBlock; col: number; row: number };
+/**
+ * A cell's place in the area of its kind it belongs to. The area runs along the longer of the two runs of that kind
+ * through the cell; `width` counts the rows of it side by side across that, each running along too (a road turning a
+ * corner is no wider for it), `across` is the cell's place among them and `at` its place along. A square has no way
+ * it runs, and is wide only where four cells of the kind meet.
+ */
+function areaPlace(grid: LandGrid, map: DecorMap, block: LandBlock, col: number, row: number, family: DecorFamily): AreaPlace {
+  const step = (at: CellAt, way: Way): CellAt | undefined => neighbours(grid, at.block, at.col, at.row, way).find(nb => map.get(decorKey(block.district, nb.block.block, nb.col, nb.row))?.family === family);
+  const count = (way: Way, along?: readonly [Way, Way]) => {
+    let n = 0, at: CellAt = { block, col, row };
+    for (let next = step(at, way); next && n < 24 && (!along || step(next, along[0]) || step(next, along[1])); next = step(at, way)) { n++; at = next; }
+    return n;
+  };
+  const cols = [count("col-"), count("col+")], rows = [count("row-"), count("row+")], colRun = cols[0] + 1 + cols[1], rowRun = rows[0] + 1 + rows[1];
+  if (colRun > rowRun) { const lo = count("row-", ["col-", "col+"]); return { along: "col", width: lo + 1 + count("row+", ["col-", "col+"]), across: lo, at: cols[0] }; }
+  if (rowRun > colRun) { const lo = count("col-", ["row-", "row+"]); return { along: "row", width: lo + 1 + count("col+", ["row-", "row+"]), across: lo, at: rows[0] }; }
+  const here: CellAt = { block, col, row }, square = (["col-", "col+"] as const).some(c => (["row-", "row+"] as const).some(r => { const a = step(here, c); return !!a && !!step(here, r) && !!step(a, r); }));
+  return { along: null, width: square ? colRun : 1, across: cols[0], at: rows[0] };
+}
+/** The ways out of a cell for an area running along `along`: back and ahead along it, lo and hi across it. */
+const sidesOf = (along: "col" | "row") => along === "col" ? { back: "col-", ahead: "col+", lo: "row-", hi: "row+" } as const : { back: "row-", ahead: "row+", lo: "col-", hi: "col+" } as const;
+/**
+ * A cell's own frame for an area running along `along`: `at(u, v)` with u along the area and v across it, each 0…1
+ * over the cell (beyond, into the next cell); `units` turns world units into fractions of the cell along and across.
+ */
+function frameOf(corners: Point[], along: "col" | "row") {
+  const at = (u: number, v: number) => along === "col" ? areaPoint(corners, u, v) : areaPoint(corners, v, u);
+  const length = (a: Point, b: Point) => Math.hypot(b.x - a.x, b.z - a.z) || 1;
+  const lu = length(at(0, .5), at(1, .5)), lv = length(at(.5, 0), at(.5, 1));
+  return { at, u: (units: number) => units / lu, v: (units: number) => units / lv, lu, lv };
+}
+/** The part of a cell its paving covers in that frame: to the edge on a side it joins, else to its middle strip. */
+function pavedSpan(frame: ReturnType<typeof frameOf>, ways: Set<Way>, sides: ReturnType<typeof sidesOf>, half: number) {
+  const hu = Math.min(.48, half / frame.lu), hv = Math.min(.48, half / frame.lv);
+  return { u0: ways.has(sides.back) ? 0 : .5 - hu, u1: ways.has(sides.ahead) ? 1 : .5 + hu, v0: ways.has(sides.lo) ? 0 : .5 - hv, v1: ways.has(sides.hi) ? 1 : .5 + hv };
+}
+
+/**
+ * The marks of a road two or three cells wide, a lane to each row of cells: dashes between the lanes, a solid line
+ * along each edge inside the kerb, a zebra crossing at each end, and the kerb round the asphalt. A square of road has
+ * its kerb only.
+ */
+function roadMarks(ground: GroundQuad[], corners: Point[], links: { way: Way; to: Neighbour }[], area: AreaPlace) {
+  const along = area.along ?? "col", sides = sidesOf(along), f = frameOf(corners, along), ways = new Set(links.map(l => l.way));
+  const { u0, u1, v0, v1 } = pavedSpan(f, ways, sides, ROAD_HALF);
+  const quad = (a: number, b: number, c: number, d: number, surface: { y: number; colour: string }) => ground.push({ points: [f.at(a, c), f.at(b, c), f.at(b, d), f.at(a, d)], ...surface });
+  const kerb = f.v(.05), kerbU = f.u(.05);
+  if (!ways.has(sides.lo)) quad(u0, u1, v0 - kerb, v0 + kerb, KERB);
+  if (!ways.has(sides.hi)) quad(u0, u1, v1 - kerb, v1 + kerb, KERB);
+  if (!ways.has(sides.back)) quad(u0 - kerbU, u0 + kerbU, v0, v1, KERB);
+  if (!ways.has(sides.ahead)) quad(u1 - kerbU, u1 + kerbU, v0, v1, KERB);
+  if (!area.along) return;
+  if (ways.has(sides.hi)) quad(.2, .7, 1 - f.v(.06), 1 + f.v(.06), MARK);
+  if (!ways.has(sides.lo)) quad(u0, u1, v0 + f.v(.22), v0 + f.v(.3), MARK);
+  if (!ways.has(sides.hi)) quad(u0, u1, v1 - f.v(.3), v1 - f.v(.22), MARK);
+  for (const [end, from, step] of [[sides.back, u0, 1], [sides.ahead, u1, -1]] as const) {
+    if (ways.has(end)) continue;
+    const a = from + step * f.u(.3), b = from + step * f.u(1.1);
+    for (let v = v0 + f.v(.4); v + f.v(.3) <= v1 - f.v(.3); v += f.v(.6)) quad(Math.min(a, b), Math.max(a, b), v, v + f.v(.3), MARK);
+  }
+}
+
+/**
+ * A footpath square (two or three cells wide): its paving laid in tiles a unit across, a darker border round its
+ * edge, a bench facing in every third cell along its edges and a planter now and then down its middle.
+ */
+function pathSquare(ground: GroundQuad[], placements: Placement[], block: LandBlock, col: number, row: number, corners: Point[], links: { way: Way; to: Neighbour }[], area: AreaPlace) {
+  const along = area.along ?? "col", sides = sidesOf(along), f = frameOf(corners, along), ways = new Set(links.map(l => l.way));
+  const { u0, u1, v0, v1 } = pavedSpan(f, ways, sides, PATH_HALF);
+  const quad = (a: number, b: number, c: number, d: number, surface: { y: number; colour: string }) => ground.push({ points: [f.at(a, c), f.at(b, c), f.at(b, d), f.at(a, d)], ...surface });
+  const ju = f.u(.025), jv = f.v(.025), band = .22;
+  for (const u of [0, 1 / 3, 2 / 3]) if (u > u0 || (u === 0 && ways.has(sides.back))) quad(u - ju, u + ju, v0, v1, JOINT);
+  for (const v of [0, 1 / 3, 2 / 3]) if (v > v0 || (v === 0 && ways.has(sides.lo))) quad(u0, u1, v - jv, v + jv, JOINT);
+  if (!ways.has(sides.lo)) quad(u0, u1, v0, v0 + f.v(band), BORDER);
+  if (!ways.has(sides.hi)) quad(u0, u1, v1 - f.v(band), v1, BORDER);
+  if (!ways.has(sides.back)) quad(u0, u0 + f.u(band), v0, v1, BORDER);
+  if (!ways.has(sides.ahead)) quad(u1 - f.u(band), u1, v0, v1, BORDER);
+  // A bench on the grass by an outer edge, facing in; a planter down the middle of a square three cells wide.
+  for (const [side, v] of [[sides.lo, .2], [sides.hi, .8]] as const) {
+    if (ways.has(side) || area.at % 3 !== 1) continue;
+    const p = f.at(.5, v), q = f.at(.5, .5);
+    placements.push({ kind: "bench", variant: 0, x: p.x, z: p.z, rotation: Math.atan2(q.x - p.x, q.z - p.z), scale: 1.05, width: .9 });
+  }
+  if (area.width >= 3 && area.across === Math.floor(area.width / 2) && area.at % 4 === 2) {
+    const p = f.at(.5, .5);
+    placements.push({ kind: "planter", variant: col * 5 + row, x: p.x, z: p.z, rotation: jitter(block, col, row, 13) * 6.28, scale: 1.2, width: 0 });
+  }
+}
+
+/**
+ * A boulevard's trees and benches (an alley two or three cells wide): a row of trees on the grass between two walks,
+ * not where a path crosses, and benches on the grass by its outer edges facing in. Its outer rows of trees are the
+ * alley's own (alleyTrees).
+ */
+function boulevard(placements: Placement[], block: LandBlock, col: number, row: number, corners: Point[], links: { way: Way; to: Neighbour }[], area: AreaPlace, cross: boolean) {
+  const along = area.along ?? "col", sides = sidesOf(along), f = frameOf(corners, along), ways = new Set(links.map(l => l.way));
+  if (ways.has(sides.hi) && !cross) {
+    const p = f.at(.5, 1);
+    placements.push({ kind: "tree-round", variant: col * 17 + row * 3, x: p.x, z: p.z, rotation: jitter(block, col, row, 21) * 6.28, scale: 1.05 + jitter(block, col, row, 22) * .15, width: 0 });
+  }
+  for (const [side, v] of [[sides.lo, .2], [sides.hi, .8]] as const) {
+    if (ways.has(side) || area.at % 3 !== 2) continue;
+    const p = f.at(.15, v), q = f.at(.15, .5);
+    placements.push({ kind: "bench", variant: 0, x: p.x, z: p.z, rotation: Math.atan2(q.x - p.x, q.z - p.z), scale: 1.05, width: .9 });
+  }
 }
 
 /**
@@ -150,7 +270,8 @@ function paving(ground: GroundQuad[], corners: Point[], links: { way: Way; to: N
 /**
  * An alley's trees, on the sides of its cell where nothing it joins lies beside it: along a line of alley, one on
  * either side of the path, so the line has two rows of trees; an alley two or three cells wide has them along its
- * outer edges only. A cell on its own or at the end of a line runs straight, its trees on either side.
+ * outer edges (the boulevard plants the rows between its walks). A cell on its own or at the end of a line runs
+ * straight, its trees on either side.
  */
 function alleyTrees(placements: Placement[], block: LandBlock, col: number, row: number, corners: Point[], links: { way: Way; to: Neighbour }[]) {
   const ways = new Set(links.map(l => l.way));
