@@ -18,7 +18,8 @@ import { FLEET_TOUR, callTour } from "./dispatch/dispatchTours";
 import { fleetLink, parseRoute, routePath } from "./dispatch/fleetNav";
 import { preserveScenarioContext } from "../api/scenarios";
 import { ScenarioPracticePanel } from "./scenarios/ScenarioPracticePanel";
-import { OKTELL_QUERY, type OktellScreen } from "../api/oktell";
+import { OKTELL_QUERY, oktell as oktellApi, type OktellScreen } from "../api/oktell";
+import { OKTELL_TOUR } from "./oktell/oktellTour";
 import "./crm/coach.css";
 import { CrmDrivers, type DriverScreen } from "./crm/drivers/CrmDrivers";
 import { driverName, fromFleet, parkLabel, type TrainingDriver } from "./crm/drivers/driverData";
@@ -67,6 +68,8 @@ export function WorkSitesPage() {
   const oktellScreen = (["cabinet", "phone", "messages", "journal"].includes(params.get("oscreen") ?? "") ? params.get("oscreen") : "cabinet") as OktellScreen;
   const [oktellVisited, setOktellOpened] = useState(site === "oktell");
   const oktellOpened = oktellVisited || site === "oktell";
+  // The workspace's own query fetches; this one only learns that Oktell is on screen for Pulsar.
+  const oktellLoaded = !!useQuery({ queryKey: [...OKTELL_QUERY, user?.id], queryFn: ({ signal }) => oktellApi.state(signal), enabled: false }).data;
   const fleetRoute = parseRoute(params.get("fleet")), fleetPark = params.get("fpark") ?? DEFAULT_PARK;
   const [fleetVisited, setFleetOpened] = useState(site === "dispatch");
   // Browser «Back» can return to the dispatch tab after a reload, so the address alone mounts it too.
@@ -124,7 +127,7 @@ export function WorkSitesPage() {
   }
   function create(initial?: CrmAppeal) { if (dirty && !window.confirm("Открыть новую форму? Несохранённые изменения будут потеряны.")) return; setCopy(initial); setFormKey(k => k + 1); setForward(""); go("view=create", true); }
   // Pulsar walks each participant through a section once; the help button replays the tour.
-  const seenKey = (tour: string) => tour === "appeals" ? `crm-guide:${user?.id}` : tour === "drivers" ? `crm-guide-drivers:${user?.id}` : tour === "fleet" ? `dispatch-guide:${user?.id}` : Object.values(SECTION_TOURS).includes(tour as CoachTourId) ? `crm-guide-${tour}:${user?.id}` : "";
+  const seenKey = (tour: string) => tour === "appeals" ? `crm-guide:${user?.id}` : tour === "drivers" ? `crm-guide-drivers:${user?.id}` : tour === "fleet" ? `dispatch-guide:${user?.id}` : tour === "oktell" ? `oktell-guide:${user?.id}` : Object.values(SECTION_TOURS).includes(tour as CoachTourId) ? `crm-guide-${tour}:${user?.id}` : "";
   // «Помощь Пульсара» replays the tour of the screen the operator is on.
   const helpTour: CoachTourId = SECTION_TOURS[view] ?? (view === "drivers" ? "drivers" : "appeals");
   function startCoach(tour: CoachTourId) {
@@ -152,13 +155,19 @@ export function WorkSitesPage() {
     let seen = true; try { seen = !!localStorage.getItem(seenKey("fleet")); } catch { /* Without storage the tour stays manual. */ }
     if (!seen) { const timer = window.setTimeout(() => startFleetTour("fleet"), 700); return () => window.clearTimeout(timer); }
   }, [fleetQuery.data, site, scenarioAttemptId]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The first visit to Oktell walks through it once; «Помощь Пульсара» replays the walk.
+  useEffect(() => {
+    if (scenarioAttemptId || site !== "oktell" || !oktellLoaded || coach) return;
+    let seen = true; try { seen = !!localStorage.getItem(seenKey("oktell")); } catch { /* Without storage the tour stays manual. */ }
+    if (!seen) { const timer = window.setTimeout(() => setCoach({ id: "oktell", steps: OKTELL_TOUR }), 700); return () => window.clearTimeout(timer); }
+  }, [oktellLoaded, site, scenarioAttemptId]); // eslint-disable-line react-hooks/exhaustive-deps
   const exit = () => { if (!dirty || window.confirm("В обращении есть несохранённые изменения. Покинуть форму?")) navigate(scenarioAttemptId ? `/training/scenarios/attempts/${encodeURIComponent(scenarioAttemptId)}` : `/training/city?district=${site}`); };
   // On a driver's page the address is the link operators copy into CRM: its ID finds the same account there.
   const fleetDriver = fleetRoute.page === "driver" ? fleetQuery.data?.drivers.find(d => d.id === fleetRoute.id) : undefined;
   const fleetDriverLink = fleetDriver && fleetLink(fleetDriver, fleetQuery.data?.parks.find(p => p.id === fleetDriver.park));
   const fleetAddress = fleetDriverLink ? fleetDriverLink.replace("https://", "") : `fleet.training / ${routePath(fleetRoute).replace(/\//g, " / ")} · ${fleetPark}`;
   return <div className={`work-sites${coach ? " is-coaching" : ""}`} data-site={site} ref={shell}>
-    <header className="work-sites-heading"><button onClick={exit}>{scenarioAttemptId ? "← К сценарию" : "← Мой город"}</button><h1>Рабочие сайты</h1><span className="work-sites-training">Учебная среда</span>{site !== "oktell" && <button className="work-sites-guide-button" onClick={() => site === "dispatch" ? startFleetTour("fleet") : startCoach(helpTour)}>✦ {guide.text("Помощь Пульсара")}</button>}</header>
+    <header className="work-sites-heading"><button onClick={exit}>{scenarioAttemptId ? "← К сценарию" : "← Мой город"}</button><h1>Рабочие сайты</h1><span className="work-sites-training">Учебная среда</span><button className="work-sites-guide-button" onClick={() => site === "oktell" ? setCoach({ id: "oktell", steps: OKTELL_TOUR }) : site === "dispatch" ? startFleetTour("fleet") : startCoach(helpTour)}>✦ {guide.text("Помощь Пульсара")}</button></header>
     {scenarioAttemptId && <div hidden={site === "oktell"}><ScenarioPracticePanel attemptId={scenarioAttemptId} appealId={id || undefined} onFleet={attempt => { setFleetOpened(true); setCoach(null); goFleet(`driver/${attempt.driver.id}`, attempt.driver.park_id); }} onCreate={() => create()} /></div>}
     <div className="work-browser"><nav className="work-browser-tabs" aria-label="Рабочие сайты"><button className={site === "crm" ? "is-active" : ""} aria-current={site === "crm" ? "page" : undefined} onClick={() => openSite("crm")}> <span className="crm-favicon">i</span> CRM-система {site === "crm" && <span className="work-tab-dot" />}</button><button className={site === "dispatch" ? "is-active" : ""} aria-current={site === "dispatch" ? "page" : undefined} data-coach="site-dispatch" onClick={() => openSite("dispatch")}><span className="fleet-favicon" aria-hidden="true">✕</span> Диспетчерская {site === "dispatch" && <span className="work-tab-dot" />}</button><button className={site === "oktell" ? "is-active" : ""} aria-current={site === "oktell" ? "page" : undefined} onClick={() => openSite("oktell")}><span className="oktell-favicon" aria-hidden="true">🎧</span> Oktell {site === "oktell" && <span className="work-tab-dot" />}</button><button disabled title="Новые рабочие сайты появятся позже">＋ Другие сайты</button></nav>
     {site === "oktell" ? <div className="work-browser-address"><button aria-label="К кабинету Oktell" disabled={oktellScreen === "cabinet"} onClick={() => goOktell("cabinet")}>←</button><button aria-label="Обновить Oktell" onClick={() => { client.invalidateQueries({ queryKey: OKTELL_QUERY }); }}>⟳</button><div className="work-address-text"><span aria-hidden="true">▣</span><span>oktell.training / {({ cabinet: "кабинет", phone: "телефон", messages: "сообщения", journal: "журнал" })[oktellScreen]}</span><small>Учебная копия</small></div><button aria-label="Развернуть окно" onClick={() => { const action = document.fullscreenElement ? document.exitFullscreen() : shell.current?.requestFullscreen(); action?.catch(() => undefined); }}>⛶</button></div>

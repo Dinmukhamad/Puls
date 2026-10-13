@@ -56,6 +56,13 @@ class CallStartInput(RequestInput):
     contact_id: str = Field(min_length=1, max_length=40)
 
 
+class DialInput(RequestInput):
+    """Digits typed into «имя или номер»: the service explains a wrong park code or number."""
+
+    action: Literal["dial"]
+    number: str = Field(min_length=1, max_length=24)
+
+
 class MessageInput(RequestInput):
     action: Literal["message"]
     contact_id: str = Field(min_length=1, max_length=40)
@@ -84,6 +91,7 @@ ActionInput = Annotated[
     | PauseInput
     | PhoneSettingsInput
     | CallStartInput
+    | DialInput
     | MessageInput
     | CallCommentInput,
     Field(discriminator="action"),
