@@ -127,6 +127,39 @@ test('a footpath meets roads and other paths, a hedge closes with hedges, a road
   }
 });
 
+test('an alley is a gravel path with trees where nothing it joins lies beside it; it joins alleys, footpaths and roads', () => {
+  const GRAVEL = '#cbb994';
+  for (const [city, grid] of Object.entries(GRIDS)) {
+    const { block, b, C, R } = windowOf(grid), cell = ([family, c, r]) => [family, b, C(c), R(r)];
+    // Down a column from a road into a footpath; a line along a row turning a corner; one on its own; one two cells wide.
+    const alleys = [[4, 3], [4, 4], [4, 5], [8, 5], [9, 5], [9, 6], [15, 9], [12, 1], [13, 1], [14, 1], [12, 2], [13, 2], [14, 2]];
+    const map = mapOf(1, [['road', 4, 2], ...alleys.map(([c, r]) => ['alley', c, r]), ['path', 4, 6], ['lamp', 5, 4]].map(cell));
+    assert.deepEqual(D.joins(grid, map, block, C(4), R(3), 'alley').map(l => l.way).sort(), ['row+', 'row-'], `${city}: it runs into the road`);
+    assert.deepEqual(D.joins(grid, map, block, C(4), R(6), 'path').map(l => l.way), ['row-'], 'a footpath runs into an alley');
+    assert.deepEqual(D.joins(grid, map, block, C(4), R(2), 'road').map(l => l.way), [], 'a road does not run into an alley');
+    const layout = D.decorLayout(grid, map), at = p => D.cellAt(grid, p);
+    const trees = (c, r) => layout.placements.filter(p => { const x = at(p); return p.kind === 'tree-round' && x && x.col === C(c) && x.row === R(r); });
+    // Along a line: one tree on either side of the path, across the middle of the cell.
+    for (const r of [3, 4, 5]) {
+      const pair = trees(4, r), corners = D.areaCorners(block, C(4), R(r)), middle = D.areaPoint(corners, .5, .5);
+      assert.equal(pair.length, 2, `${city}: two trees on 4:${r}`);
+      assert.ok(pair.every(p => Math.hypot(p.x - middle.x, p.z - middle.z) > .55), `${city}: off the path`);
+      assert.ok(near(middleOf(pair[0], pair[1]), middle, 1e-6), 'on either side of the middle');
+    }
+    // A corner has its trees on the two sides it does not turn to; the end of a line and one on its own run straight.
+    assert.deepEqual([trees(9, 5).length, trees(8, 5).length, trees(15, 9).length], [2, 2, 2]);
+    // Two cells wide: trees along its outer edges only.
+    assert.deepEqual([[12, 1], [13, 1], [14, 1], [12, 2], [13, 2], [14, 2]].map(([c, r]) => trees(c, r).length), [2, 1, 2, 2, 1, 2]);
+    // Its gravel: a square in each cell and an arm to each neighbour it joins (and the corners inside the wide one).
+    const arms = alleys.reduce((n, [c, r]) => n + D.joins(grid, map, block, C(c), R(r), 'alley').length, 0);
+    assert.ok(layout.ground.filter(q => q.colour === GRAVEL).length >= alleys.length + arms);
+    // The lamp beside it stands at its edge, toward it.
+    const lamp = layout.lamps[0], centre = D.areaPoint(D.areaCorners(block, C(5), R(4)), .5, .5);
+    assert.deepEqual([at(lamp).col, at(lamp).row], [C(5), R(4)]);
+    assert.ok(Math.hypot(lamp.x - centre.x, lamp.z - centre.z) > .5, 'the lamp stands toward the alley');
+  }
+});
+
 test('trees, bushes and flowerbeds stand in their own cells; a lamp by its road lights, a bench faces the road', () => {
   for (const grid of Object.values(GRIDS)) {
     const { block, b, C, R } = windowOf(grid);

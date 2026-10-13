@@ -3,7 +3,8 @@ import { cityEstate, citySandbox } from "../../api/cityEstate";
 import { CityWorldPanel, CityJourney } from "./CityWorldPanel";
 import { CityEstateDock, type BuildState, type EstateTarget } from "./CityEstateDock";
 import { CitySandboxDock } from "./CitySandboxDock";
-import type { CityEstateView, EstatePick, JourneyPhase } from "../../city3d/types";
+import type { CityEstateView, EstatePick, JourneyPhase, PlotAddress } from "../../city3d/types";
+import { NO_CHOICE, spacing } from "./cellChoice";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -110,10 +111,11 @@ export function CityPage() {
     return views;
   }, [sandboxOn, department, sandboxLand.data, supportLand.data, salesLand.data]);
   const [building, setBuilding] = useState<BuildState | null>(null), [estateFocus, setEstateFocus] = useState<EstateTarget & { at: number }>();
-  const buildPlot = building?.plot;
-  const buildView = useMemo(() => building && { district: building.district, area: building.area, placing: building.placing, selected: building.selected, plot: buildPlot ? { block: buildPlot.block, col: buildPlot.col, row: buildPlot.row, rotation: buildPlot.rotation, family: buildPlot.family } : null, decor: building.decor ?? null },
-    // The map's own report of where the chosen thing goes (`at`) changes nothing it shows.
-    [building?.district, building?.area, building?.placing, building?.selected, buildPlot?.block, buildPlot?.col, buildPlot?.row, buildPlot?.rotation, buildPlot?.family, !!buildPlot, building?.decor]); // eslint-disable-line react-hooks/exhaustive-deps
+  const choice = building?.choice, every = choice ? spacing(choice) : 1;
+  const buildView = useMemo(() => building && { district: building.district, area: building.area, placing: building.placing, selected: building.selected,
+    choice: choice ? { cells: choice.cells, shape: choice.shape, family: choice.family, rotation: choice.rotation, every } : null },
+    // The map's own report of where the building goes (`at`) changes nothing it shows.
+    [building?.district, building?.area, building?.placing, building?.selected, choice?.cells, choice?.shape, choice?.family, choice?.rotation, every, !!choice]); // eslint-disable-line react-hooks/exhaustive-deps
   const focusLand = (target: EstateTarget) => setEstateFocus({ ...target, at: Date.now() });
   const landOf = (district: string) => (district.startsWith("sales-") ? salesLand.data : supportLand.data)?.districts.find(d => d.id === district) ?? null;
   const homeEstate = estateQuery.data?.district;
@@ -125,8 +127,8 @@ export function CityPage() {
     if (!homeEstate || !suggestedPlot || building?.district !== homeEstate.id || estateQuery.data?.status !== "ready") return;
     // The middle cell of the free 3 × 3, with a house chosen: the map shows the house on all nine.
     const middle = { block: suggestedPlot.block, col: suggestedPlot.col + 1, row: suggestedPlot.row + 1 };
-    setBuilding({ ...building, area: "plots", placing: null, selected: null, spot: null, project: false, decor: null,
-      plot: { ...middle, band: suggestedPlot.band, problem: null, rotation: 0, family: "house", at: null } });
+    setBuilding({ ...building, area: "plots", placing: null, selected: null, spot: null, project: false,
+      choice: { ...(building.choice ?? NO_CHOICE), cells: [{ ...middle, band: suggestedPlot.band, state: "free" }], family: "house", at: null } });
     focusLand({ district: homeEstate.id, kind: "plot", plot: middle });
   }
   useEffect(() => {
@@ -138,32 +140,24 @@ export function CityPage() {
     if (pick.kind === "public") { setBuilding(null); setWorldSelected(pick.district); focusLand({ district: pick.district, kind: "public" }); return; }
     if (pick.kind === "place") setBuilding(b => b && { ...b, spot: { module: pick.module, u: pick.u, v: pick.v, rotation: pick.rotation, problem: pick.problem } });
     else if (pick.kind === "cells") setBuilding(b => {
-      if (!b || b.district !== pick.district) return b;
-      // Cells chosen with Ctrl before a tool: they wait for what goes on them; none left, the dock goes back.
-      if (!b.decor || b.decor.tool === null) return pick.cells.length ? { ...b, plot: null, selected: null, decor: { tool: null, cells: pick.cells, shape: "cell", ...(b.decor?.anyone || sandboxOn ? { anyone: true } : {}) } } : { ...b, decor: null };
-      return { ...b, decor: { ...b.decor, cells: pick.cells } };
+      if (!b || b.district !== pick.district || b.area !== "plots") return b;
+      // New cells keep what the shop chose, so the same thing can be tried place after place; the one same cell keeps
+      // where its building goes.
+      const before = b.choice ?? NO_CHOICE, one = (cells: readonly PlotAddress[]) => cells.length === 1 ? cells[0] : null;
+      // What is on the cells now, after the land changed: only while they are still the ones chosen (not once laid on).
+      if (pick.update && (pick.cells.length !== before.cells.length || pick.cells.some((c, i) => c.block !== before.cells[i].block || c.col !== before.cells[i].col || c.row !== before.cells[i].row))) return b;
+      const was = one(before.cells), now = one(pick.cells), same = !!was && !!now && was.block === now.block && was.col === now.col && was.row === now.row;
+      return { ...b, selected: null, choice: { ...before, cells: pick.cells, at: same ? before.at : null } };
     });
-    else if (pick.kind === "plot") {
-      if (building?.district !== pick.district) return;
-      // Another cell keeps what is chosen, so the same building can be tried cell after cell; the same cell keeps all.
-      setBuilding(b => {
-        if (!b) return b;
-        const same = b.plot && b.plot.block === pick.block && b.plot.col === pick.col && b.plot.row === pick.row;
-        const plot = same ? { ...b.plot!, band: pick.band, problem: pick.problem }
-          : { block: pick.block, col: pick.col, row: pick.row, band: pick.band, problem: pick.problem, rotation: b.plot?.rotation ?? 0, family: b.plot?.family ?? null, at: null };
-        // A tap without Ctrl leaves the cells chosen with it for this one cell.
-        return { ...b, plot, selected: null, decor: b.decor?.tool === null ? null : b.decor };
-      });
-      focusLand({ district: pick.district, kind: "plot", plot: { block: pick.block, col: pick.col, row: pick.row } });
-    }
     else if (pick.kind === "footprint") setBuilding(b => {
-      const plot = b?.plot;
-      if (!b || !plot || b.district !== pick.district || plot.family !== pick.family || plot.rotation !== pick.rotation || plot.block !== pick.cell.block || plot.col !== pick.cell.col || plot.row !== pick.cell.row) return b;
-      return { ...b, plot: { ...plot, at: { col: pick.col, row: pick.row, problem: pick.problem } } };
+      const choice = b?.choice, cell = choice?.cells.length === 1 ? choice.cells[0] : null;
+      if (!b || !choice || !cell || b.district !== pick.district || choice.family !== pick.family || choice.rotation !== pick.rotation || cell.block !== pick.cell.block || cell.col !== pick.cell.col || cell.row !== pick.cell.row) return b;
+      return { ...b, choice: { ...choice, at: { col: pick.col, row: pick.row, problem: pick.problem } } };
     });
     else if (pick.kind === "project") setWorldSelected(pick.district);
     else if (pick.kind === "object") {
-      setBuilding(b => ({ district: pick.district, area: b?.district === pick.district ? b.area : "plots", placing: null, selected: pick.object, plot: null, spot: null, project: b?.district === pick.district ? b.project : false }));
+      setBuilding(b => ({ district: pick.district, area: b?.district === pick.district ? b.area : "plots", placing: null, selected: pick.object, spot: null, project: b?.district === pick.district ? b.project : false,
+        choice: b?.district === pick.district && b.choice ? { ...b.choice, cells: [], at: null } : null }));
       focusLand({ district: pick.district, kind: "object", object: pick.object });
     }
   }
@@ -177,14 +171,14 @@ export function CityPage() {
     next.set("city", home.city);
     setParams(next);
     setWorldSelected(null); toolbar.setActive(null);
-    setBuilding({ district: home.id, area: "plots", placing: null, selected: null, plot: null, spot: null, project: false });
+    setBuilding({ district: home.id, area: "plots", placing: null, selected: null, choice: null, spot: null, project: false });
     focusLand({ district: home.id, kind: "district" });
     void estateQuery.refetch();
     void (home.city === "sales" ? salesLand : supportLand).refetch();
   }
   /** The test city's dock on a district, on its plots or on its square with the shared projects. */
   function openSandbox(district: string, square = false) {
-    setBuilding({ district, area: square ? "public" : "plots", placing: null, selected: null, plot: null, spot: null, project: square });
+    setBuilding({ district, area: square ? "public" : "plots", placing: null, selected: null, choice: null, spot: null, project: square });
     focusLand({ district, kind: square ? "public" : "district" });
   }
   function toggleSandbox() {
@@ -196,7 +190,7 @@ export function CityPage() {
   }
   useEffect(() => {
     // After a trip to the other city the test city's dock follows to its first district.
-    if (sandboxOn) setBuilding(b => b && !b.district.startsWith(`${department}-`) ? { district: `${department}-team-1`, area: "plots", placing: null, selected: null, plot: null, spot: null, project: false } : b);
+    if (sandboxOn) setBuilding(b => b && !b.district.startsWith(`${department}-`) ? { district: `${department}-team-1`, area: "plots", placing: null, selected: null, choice: null, spot: null, project: false } : b);
   }, [sandboxOn, department]);
   useEffect(() => {
     if (!building) return;
@@ -204,7 +198,8 @@ export function CityPage() {
     const key = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || event.defaultPrevented || document.querySelector(".sheet-overlay, [role=dialog][aria-modal=true]")) return;
       event.preventDefault();
-      setBuilding(b => b && (b.placing ? { ...b, placing: null, spot: null, area: b.project ? "public" : "plots" } : b.decor ? { ...b, decor: null } : b.plot || b.selected !== null ? { ...b, plot: null, selected: null } : null));
+      setBuilding(b => b && (b.placing ? { ...b, placing: null, spot: null, area: b.project ? "public" : "plots" }
+        : b.choice?.cells.length ? { ...b, choice: { ...b.choice, cells: [], at: null } } : b.selected !== null ? { ...b, selected: null } : b.choice?.family ? { ...b, choice: null } : null));
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
@@ -355,7 +350,7 @@ export function CityPage() {
     </CityPeekPanel>}
     {worldQuery.data && <CityWorldPanel world={worldQuery.data} current={department} selected={worldSelected} onPick={pickWorld} onClose={() => setWorldSelected(null)} ready={mapStatus === "ready"} onVisit={visit} onTravel={id => { setDestination(id); setWorldAction({ kind: "travel", target: id, at: Date.now() }); }}
       estates={department === "sales" ? salesLand.data : supportLand.data} mine={mineEstate} onMyEstate={canOpenBuild ? openBuild : undefined}
-      onOpenProject={district => { setBuilding({ district, area: "public", placing: null, selected: null, plot: null, spot: null, project: true }); focusLand({ district, kind: "public" }); }} />}
+      onOpenProject={district => { setBuilding({ district, area: "public", placing: null, selected: null, choice: null, spot: null, project: true }); focusLand({ district, kind: "public" }); }} />}
     {building && mineEstate && !sandboxOn && <CityEstateDock mine={mineEstate} land={buildingLand} build={building} setBuild={setBuilding} onClose={() => setBuilding(null)} onFocus={focusLand} onChooseFree={mapStatus === "ready" && !buildingLandQuery.isError && suggestedPlot && building.district === homeEstate?.id ? chooseFreePlot : undefined} mapStatus={mapStatus} loadingLand={!buildingLand && !buildingLandQuery.isError} landError={buildingLandQuery.isError ? buildingLandQuery.error : null} onRetryLand={reloadBuildLand} onRetryMap={retryMap} />}
     {building && sandboxOn && <CitySandboxDock city={department} state={sandboxLand.data?.city === department ? sandboxLand.data : undefined} mine={mineEstate} build={building} setBuild={setBuilding} onClose={() => setBuilding(null)} onFocus={focusLand} />}
     <CityJourney phase={journey} destination={worldQuery.data?.cities.find(c => c.id === destination)?.name ?? destination} onSkip={() => setWorldAction({ kind: "skip", target: destination, at: Date.now() })} />

@@ -3,8 +3,9 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { citySandbox, type CityEstates, type DistrictEstate, type MyEstate, type PlotCatalogue, type PlotFamily, type ProjectCatalogue, type ProjectFamily, type PublicObject, type SandboxResult } from "../../api/cityEstate";
 import type { DepartmentId } from "../../api/cityWorld";
 import { isDecorFamily, projectFootprint } from "../../city3d/world/estateGrid";
-import { CellCard, DecorPalette, DecorPanel, DecorSelection, decorShape, type BuildState, type EstateTarget } from "./CityEstateDock";
-import type { DecorTool } from "../../city3d/types";
+import type { BuildState, EstateTarget } from "./CityEstateDock";
+import { CellShop } from "./CityShop";
+import { decorSpots, ownCells, type Choice } from "./cellChoice";
 import { DistrictSwatch } from "./DistrictSwatch";
 import { isOfficeBuilding } from "../../city3d/world/officeBuildings";
 import { DistrictBuildProgress } from "./DistrictBuildProgress";
@@ -18,10 +19,10 @@ interface Step { run: () => Promise<SandboxResult>; text: (result: SandboxResult
 
 /**
  * The administrators' test city beside the map (api/cityEstate.ts citySandbox): the same three districts, land and
- * rules as the real city, kept apart from it. A tap picks a cell, and a square, a house, an office or a small thing
- * chosen for it is built for free on its own cells round it (a house 3 × 3, a square or an office 2 × 2, a small thing
- * the one cell); roads, trees, lamps and the other small things are also laid and taken away many at a time, as in the
- * city, for free; a tap on a building opens its card, where its stage goes up or down or the building goes away.
+ * rules as the real city, kept apart from it. The same shop as in the city (CityShop.tsx), for free: cells chosen on
+ * the map (a tap one, a drag a line), then a square, a house or an office round the one cell, or roads, trees, lamps
+ * and the other small things on the cells of the line; anyone's small things on the chosen cells go away. A tap on a
+ * building opens its card, where its stage goes up or down or the building goes away.
  * All land is open; the main building's level is set by hand, preserved shared projects are built or cancelled at
  * once, and the test city can be cleared.
  */
@@ -47,15 +48,33 @@ export function CitySandboxDock({ city, state, mine, build, setBuild, onClose, o
   const run = (step: Step) => { setNotice(null); act.mutate(step); };
   const pending = act.isPending, error = act.error;
   const go = (next: Partial<BuildState>) => { act.reset(); setNotice(null); setBuild({ ...build, ...next }); };
-  const area = (square: boolean) => { go({ area: square ? "public" : "plots", project: square, placing: null, spot: null, plot: null, selected: null, decor: null }); onFocus({ district: build.district, kind: square ? "public" : "district" }); };
-  const switchTo = (district: string) => { go({ district, placing: null, spot: null, plot: null, selected: null, decor: null }); onFocus({ district, kind: build.project ? "public" : "district" }); };
-  // A tool from the palette starts with no cells; one chosen for cells picked with Ctrl lays on them, once.
-  const useTool = (tool: DecorTool) => {
-    const picked = build.decor?.tool === null ? build.decor.cells : null;
-    go({ area: "plots", project: false, placing: null, spot: null, plot: null, selected: null, decor: { tool, cells: picked ?? [], shape: decorShape(tool), anyone: true, ...(picked ? { once: true } : {}) } });
-  };
+  const area = (square: boolean) => { go({ area: square ? "public" : "plots", project: square, placing: null, spot: null, selected: null, choice: null }); onFocus({ district: build.district, kind: square ? "public" : "district" }); };
+  const switchTo = (district: string) => { go({ district, placing: null, spot: null, selected: null, choice: null }); onFocus({ district, kind: build.project ? "public" : "district" }); };
   const decorCatalogue = mine?.decor ?? [], decorItems = new Map(decorCatalogue.map(c => [c.family, c]));
-  const decorCount = Object.values(land?.decor ?? {}).reduce((n, cells) => n + (cells?.length ?? 0), 0);
+  /** The cells chosen are spent: the next thing goes on new ones, the thing chosen in the shop stays. */
+  const spent = (): Choice | null => build.choice && { ...build.choice, cells: [], at: null };
+  /** Builds what the shop chose, for free: a building round the one cell chosen, or a small thing on the free cells of the line. */
+  const buy = () => {
+    const choice = build.choice, family = choice?.family;
+    if (pending || !choice || !family) return;
+    if (isDecorFamily(family)) {
+      const cells = decorSpots(choice).free.map(c => [c.block, c.col, c.row] as [number, number, number]);
+      if (cells.length) run({ run: () => citySandbox.lay({ district_id: build.district, family, cells }), text: r => `Поставлено: ${decorItems.get(family)?.name.toLowerCase() ?? "мелкие постройки"} — клеток: ${r.laid ?? 0}.`, next: () => ({ ...build, choice: spent() }) });
+      return;
+    }
+    const cell = choice.cells.length === 1 ? choice.cells[0] : null, at = choice.at, name = plots.get(family)?.levels[0].name ?? "постройка";
+    if (!cell || !at || at.problem) return;
+    run({
+      run: () => citySandbox.build({ district_id: build.district, family, block: cell.block, col: at.col, row: at.row, rotation: choice.rotation }),
+      text: r => r.merged ? r.object?.family === "bigpark" ? "Шесть скверов стали большим парком!" : "Четыре сквера стали парком!" : `Построено: ${name}`,
+      next: r => ({ ...build, choice: spent(), selected: r.object?.id ?? null }),
+    });
+  };
+  /** Takes away the small things on the cells chosen, anyone's. */
+  const takeAway = () => {
+    const cells = ownCells(build.choice).map(c => [c.block, c.col, c.row] as [number, number, number]);
+    if (!pending && cells.length) run({ run: () => citySandbox.takeAway({ district_id: build.district, cells }), text: r => `Убрано клеток: ${r.removed ?? 0}.`, next: () => ({ ...build, choice: spent() }) });
+  };
   const setDistrict = (body: { landmark_level: number }, text: string) => run({ run: () => citySandbox.district(build.district, body), text: () => text });
   const nameOf = (o: PublicObject) => (o.owner === "district" ? projects.get(o.family as ProjectFamily) : plots.get(o.family as PlotFamily))?.levels[o.level - 1]?.name ?? o.family;
   const mainBuilding = land?.landmark && <>
@@ -74,21 +93,6 @@ export function CitySandboxDock({ city, state, mine, build, setBuild, onClose, o
     {mainBuilding}
     {error && <p className="city-error" role="alert">{error.message}</p>}
   </>;
-  else if (build.decor?.tool === null) body = <DecorSelection cells={build.decor.cells.length} catalogue={decorCatalogue} available={null} batch={mine.decor_batch} ready
-    onTool={useTool} onClear={() => go({ decor: null })} />;
-  else if (build.decor) {
-    const choice = build.decor, item = !choice.tool || choice.tool === "remove" ? null : decorItems.get(choice.tool) ?? null;
-    body = <DecorPanel choice={choice} item={item} available={null} batch={mine.decor_batch} message={null} ready pending={pending} error={error}
-      onShape={shape => go({ decor: { ...choice, shape } })}
-      onClear={() => go({ decor: { ...choice, cells: [] } })}
-      onDone={() => go({ decor: null })}
-      onConfirm={() => {
-        const cells = choice.cells.map(c => [c.block, c.col, c.row] as [number, number, number]);
-        const after = () => ({ ...build, decor: choice.once ? null : { ...choice, cells: [] } });
-        if (choice.tool === "remove") run({ run: () => citySandbox.takeAway({ district_id: build.district, cells }), text: r => `Убрано клеток: ${r.removed ?? 0}.`, next: after });
-        else if (choice.tool) run({ run: () => citySandbox.lay({ district_id: build.district, family: choice.tool as Exclude<DecorTool, "remove">, cells }), text: r => `Поставлено: ${item?.name.toLowerCase() ?? ""} — клеток: ${r.laid ?? 0}.`, next: after });
-      }} />;
-  }
   else if (build.placing) {
     const family = build.placing.family as ProjectFamily, item = projects.get(family), spot = build.spot, size = projectFootprint(family, build.placing.rotation);
     body = <section className="estate-placing" aria-live="polite">
@@ -136,44 +140,21 @@ export function CitySandboxDock({ city, state, mine, build, setBuild, onClose, o
           <span className="estate-catalogue__text"><strong>{c.name}</strong><small>{cellText(projectFootprint(c.family, 0))} · {c.project === "main" ? "основной" : "малый"} · {c.levels.length} {c.levels.length === 1 ? "ступень" : c.levels.length < 5 ? "ступени" : "ступеней"}</small></span>
           <button type="button" className="city-action" disabled={busy.has(c.project)} onClick={() => go({ area: "public", placing: { family: c.family, rotation: 0, moving: null }, spot: null, selected: null })}>{busy.has(c.project) ? "Уже открыт" : "Выбрать место"}</button></li>)}</ul></section>
     </>;
-  } else if (build.plot) {
-    const plot = build.plot;
-    body = <CellCard plot={plot} land={0} plots={mine.catalogue} decor={decorCatalogue} available={null} message={null} ready pending={pending} error={error} free
-      onChoose={family => go({ plot: { ...plot, family, at: null } })}
-      onTurn={() => go({ plot: { ...plot, rotation: (plot.rotation + 1) % 4 } })}
-      onBuy={() => {
-        const family = plot.family, at = plot.at;
-        if (pending || !family || !at || at.problem) return;
-        if (isDecorFamily(family)) run({
-          run: () => citySandbox.lay({ district_id: build.district, family, cells: [[plot.block, at.col, at.row]] }),
-          text: () => `Поставлено: ${decorItems.get(family)?.name.toLowerCase() ?? "мелкая постройка"}.`,
-          next: () => ({ ...build, plot: null }),
-        });
-        else {
-          const name = plots.get(family)?.levels[0].name ?? "постройка";
-          run({
-            run: () => citySandbox.build({ district_id: build.district, family, block: plot.block, col: at.col, row: at.row, rotation: plot.rotation }),
-            text: r => r.merged ? r.object?.family === "bigpark" ? "Шесть скверов стали большим парком!" : "Четыре сквера стали парком!" : `Построено: ${name}`,
-            next: r => ({ ...build, plot: null, selected: r.object?.id ?? null }),
-          });
-        }
-      }}
-      onBack={() => go({ plot: null })} />;
   } else {
     const listed = [...land.objects].sort((a, b) => Number(a.owner === "district") - Number(b.owner === "district") || a.id - b.id);
     body = <>
-      <section className="estate-claim"><strong>Проверь стройку на карте</strong><p>Нажми на клетку и выбери, что на ней построить: дом займёт 3 × 3 клетки, офис и сквер — 2 × 2, дорога или дерево — одну. Дороги и деревья можно проложить и линией — ниже. Здесь всё бесплатно. Нажми на постройку, чтобы изменить её уровень или убрать.</p></section>
-      {error && <p className="city-error" role="alert">{error.message}</p>}
-      <DecorPalette catalogue={decorCatalogue} available={null} ready own={decorCount} onTool={useTool} />
+      <CellShop choice={build.choice} plots={mine.catalogue} decor={decorCatalogue} landPrices={[]} available={null} batch={mine.decor_batch} ready message={null} pending={pending} error={error} free
+        onChoice={choice => go({ choice })} onBuy={buy} onRemove={takeAway} />
+      <p className="secondary small">Нажми на постройку на карте, чтобы изменить её уровень или убрать.</p>
       <DistrictBuildProgress land={land.land} />
       {land.landmark && <><DistrictLandmarkCard landmark={land.landmark} compact /><button type="button" className="city-secondary" onClick={() => area(true)}>Проверить уровни главного здания →</button></>}
       <section className="estate-section"><h3>Постройки района · {listed.length}</h3>
         {listed.length ? <ul className="estate-list">{listed.map(o => { const c = o.owner === "district" ? projects.get(o.family as ProjectFamily) : plots.get(o.family as PlotFamily); return <li key={o.id}><span aria-hidden="true">{c?.icon}</span>
           <span><strong>{nameOf(o)}</strong><small>{c?.name}{(c?.levels.length ?? 1) > 1 ? ` · ступень ${o.level} из ${c!.levels.length}` : ""}{o.owner === "district" ? " · на площади" : ""}</small></span>
-          <button type="button" className="city-secondary" onClick={() => { go({ selected: o.id, plot: null, area: o.owner === "district" ? "public" : "plots", project: false }); onFocus({ district: build.district, kind: "object", object: o.id }); }}>Открыть</button></li>; })}</ul>
+          <button type="button" className="city-secondary" onClick={() => { go({ selected: o.id, choice: spent(), area: o.owner === "district" ? "public" : "plots", project: false }); onFocus({ district: build.district, kind: "object", object: o.id }); }}>Открыть</button></li>; })}</ul>
           : <p className="secondary small">Пока пусто.</p>}</section>
       <button type="button" className="city-secondary sandbox-reset" disabled={pending} onClick={() => {
-        if (window.confirm("Очистить тестовый город? Все его постройки, дороги, деревья и проекты исчезнут, главные здания вернутся к первому уровню. Вся земля останется открытой. Настоящий город не изменится.")) run({ run: () => citySandbox.reset(city), text: () => "Тестовый город очищен.", next: () => ({ ...build, plot: null, selected: null, placing: null, spot: null, decor: null }) });
+        if (window.confirm("Очистить тестовый город? Все его постройки, дороги, деревья и проекты исчезнут, главные здания вернутся к первому уровню. Вся земля останется открытой. Настоящий город не изменится.")) run({ run: () => citySandbox.reset(city), text: () => "Тестовый город очищен.", next: () => ({ ...build, choice: null, selected: null, placing: null, spot: null }) });
       }}>Очистить тестовый город</button>
     </>;
   }
@@ -192,7 +173,7 @@ export function CitySandboxDock({ city, state, mine, build, setBuild, onClose, o
       </div>
       {notice && <p className="estate-ok" role="status">{notice}</p>}
       {body}
-      {!build.placing && !build.decor && <button type="button" className="city-secondary" onClick={() => onFocus({ district: build.district, kind: publicMode ? "public" : "district" })}>{publicMode ? activeComplex ? "Показать главное здание" : "Показать здание и проекты" : "Показать район на карте"}</button>}
+      {!build.placing && <button type="button" className="city-secondary" onClick={() => onFocus({ district: build.district, kind: publicMode ? "public" : "district" })}>{publicMode ? activeComplex ? "Показать главное здание" : "Показать здание и проекты" : "Показать район на карте"}</button>}
       <p className="city-fine">Тестовый город отдельный: операторы и сотрудники его не видят, коины не списываются, настоящие районы не меняются.</p>
     </div>
   </aside>;

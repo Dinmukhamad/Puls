@@ -234,8 +234,9 @@ PLOT_PRICES = {
 #: has the first three): a house on 3 × 3 cells pays nine of them, a square or an office four.
 LAND_PRICES = [7, 5, 4, 2, 1]
 
-#: The small things operators lay a cell at a time to shape their district: roads and footpaths that
-#: join their neighbours, trees, lamps that light the night, benches, bushes, flowerbeds and hedges.
+#: The small things operators lay a cell at a time to shape their district: roads, footpaths and
+#: alleys that join their neighbours, trees, lamps that light the night, benches, bushes, flowerbeds
+#: and hedges.
 #: Their price includes the cell's land; whoever laid one may take it away for its coins back.
 DECOR_FAMILIES = {
     "road": {
@@ -247,6 +248,12 @@ DECOR_FAMILIES = {
         "name": "Пешеходная дорожка",
         "icon": "🚶",
         "about": "Мощёная дорожка через газон: соединяется с дорожками и дорогами рядом.",
+    },
+    "alley": {
+        "name": "Аллея",
+        "icon": "🍃",
+        "about": "Дорожка с деревьями по краям: клетки аллеи соединяются между собой, с дорожками "
+        "и дорогами рядом.",
     },
     "tree": {"name": "Клён", "icon": "🌳", "about": "Лиственное дерево с круглой кроной."},
     "pine": {"name": "Ель", "icon": "🌲", "about": "Стройная вечнозелёная ель."},
@@ -266,6 +273,7 @@ DECOR_FAMILIES = {
 DECOR_PRICES = {
     "road": 5,
     "path": 3,
+    "alley": 18,
     "tree": 10,
     "pine": 10,
     "birch": 10,

@@ -3,7 +3,7 @@
  * enough for any page: no world generation, no three.js. The districts' land is small cells (world/land.ts):
  * what operators build stands on cells of its own size wherever it fits, a house or a ready house
  * (world/familyHouses.ts) on 3 × 3, a square or an office tower on 2 × 2, parks on the cells of the squares they
- * gathered from (4 × 4, 6 × 4); the small things, roads, footpaths, trees, lamps and the rest, take a cell each. What
+ * gathered from (4 × 4, 6 × 4); the small things, roads, footpaths, alleys, trees, lamps and the rest, take a cell each. What
  * a district built together stands on cells of its old public square, a module of MODULE_CELLS × MODULE_CELLS.
  */
 import type { ReadyHouse } from "./familyHouses";
@@ -11,8 +11,8 @@ import type { OfficeBuilding } from "./officeBuildings";
 
 export type PlotFamily = "square" | "house" | ReadyHouse | OfficeBuilding | "park" | "bigpark";
 /** The small things operators lay a cell at a time, as the server's DECOR_FAMILIES. */
-export type DecorFamily = "road" | "path" | "tree" | "pine" | "birch" | "oak" | "lamp" | "bench" | "bush" | "flowers" | "hedge";
-export const DECOR_FAMILIES: readonly DecorFamily[] = ["road", "path", "tree", "pine", "birch", "oak", "lamp", "bench", "bush", "flowers", "hedge"];
+export type DecorFamily = "road" | "path" | "alley" | "tree" | "pine" | "birch" | "oak" | "lamp" | "bench" | "bush" | "flowers" | "hedge";
+export const DECOR_FAMILIES: readonly DecorFamily[] = ["road", "path", "alley", "tree", "pine", "birch", "oak", "lamp", "bench", "bush", "flowers", "hedge"];
 export const isDecorFamily = (family: string): family is DecorFamily => (DECOR_FAMILIES as readonly string[]).includes(family);
 export type ProjectFamily = "square" | "gazebo" | "fountain" | "sports" | "park";
 

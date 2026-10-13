@@ -29,7 +29,7 @@ const mine = { status: "ready", message: null, district: { id: district.id, city
   projects: [{ family: "fountain", name: "Площадь с фонтаном", icon: "⛲", size: [2, 2], project: "main", levels: [{ level: 1, name: "Фонтан", about: "Фонтан", cost: 1000 }] }],
   land_prices: [200, 150], economy_revision: 1, balance: 900, available: 850, legacy: { count: 0, paid: 0 }, managed: [district.id] };
 const team = { id: district.id, name: district.name, supervisor: "Гаухар", mine: true };
-const personal = { district: district.id, area: "plots", placing: null, selected: null, plot: null, spot: null, project: false };
+const personal = { district: district.id, area: "plots", placing: null, selected: null, choice: null, spot: null, project: false };
 const publicMode = { ...personal, area: "public", project: true };
 const noop = () => {};
 const dockProps = { mine, land: district, build: personal, setBuild: noop, onClose: noop, onFocus: noop };
@@ -117,11 +117,12 @@ test("sandbox public mode changes complex levels and keeps personal house buying
   assert.doesNotMatch(html, /Открыть проект|Общие проекты на площади|Выбрать место|Ступень штаба|Этап застройки/);
   const maximum = render(CitySandboxDock, { ...base, state: { ...base.state, districts: [{ ...district, landmark: { ...landmark, level: 5, next: null } }] }, build: publicMode });
   assert.match(maximum, /disabled=""[^>]+aria-label="Уровень главного здания: больше"/);
-  const selected = render(CitySandboxDock, { ...base, build: { ...personal, plot: { block: 1, col: 0, row: 0, band: 1, problem: null, rotation: 0, family: null, at: null } } });
-  assert.match(selected, /aria-label="Небольшой дом: 3 × 3 клетки, бесплатно\. Показать место на карте">Выбрать/);
-  assert.match(selected, /Зона 1 · в тестовом городе всё бесплатно/);
+  const cell = (block, band) => ({ block, col: 1, row: 1, band, state: "free" });
+  const selected = render(CitySandboxDock, { ...base, build: { ...personal, choice: { cells: [cell(1, 1)], shape: "cell", family: null, rotation: 0, every: 1, at: null } } });
+  assert.match(selected, /aria-label="Дом: 3 × 3 клетки, бесплатно"/);
+  assert.match(selected, /<strong>Выбрано: 1 клетка<\/strong>/);
   assert.doesNotMatch(selected, /aria-label="Уровень главного здания"/);
-  const outer = render(CitySandboxDock, { ...base, build: { ...personal, plot: { block: 5, col: 1, row: 1, band: 2, problem: null, rotation: 0, family: "house", at: { col: 0, row: 0, problem: null } } } });
+  const outer = render(CitySandboxDock, { ...base, build: { ...personal, choice: { cells: [cell(5, 2)], shape: "cell", family: "house", rotation: 0, every: 1, at: { col: 0, row: 0, problem: null } } } });
   assert.match(outer, /<button type="button" class="city-action">Построить бесплатно<\/button>/);
   assert.doesNotMatch(outer, /Открыть этап|Этап застройки|Проверка этапов/);
   const overview = render(CitySandboxDock, { ...base, build: personal });

@@ -26,7 +26,7 @@ const district = { id: "support-team-1", name: "Район 1", number: 1, constr
 const team = { id: district.id, name: district.name, supervisor: "Гаухар", mine: true };
 const catalogue = [{ family: "house", name: "Дом", icon: "🏡", size: [1, 1], squares: null, ready: false, levels: [{ level: 1, name: "Небольшой дом", about: "Дом для начала стройки", price: 300 }] }];
 const mine = { status: "ready", message: null, district: { id: district.id, city: "support", name: district.name }, objects: [], catalogue, projects: [], land_prices: [200, 150, 100], economy_revision: 1, balance: 900, available: 850, legacy: { count: 0, paid: 0 }, managed: [] };
-const buildState = { district: district.id, area: "plots", placing: null, selected: null, plot: null, spot: null, project: false };
+const buildState = { district: district.id, area: "plots", placing: null, selected: null, choice: null, spot: null, project: false };
 const noop = () => {};
 function render(Component, props) {
   const client = new QueryClient();
@@ -74,12 +74,13 @@ test("district card distinguishes personal ownership and shared projects without
 });
 
 test("purchase shows full land plus building price and respects spendable coins", () => {
-  // A house on 3 × 3 cells of the second zone: nine cells of land at 15 and the house.
-  const selected = { ...buildState, plot: { block: 4, col: 1, row: 1, band: 2, problem: null, rotation: 0, family: "house", at: { col: 0, row: 0, problem: null } } };
+  // A house on 3 × 3 cells round a cell of the second zone: nine cells of land at 15 and the house.
+  const choice = band => ({ cells: [{ block: 4, col: 1, row: 1, band, state: "free" }], shape: "cell", family: "house", rotation: 0, every: 1, at: { col: 0, row: 0, problem: null } });
+  const selected = { ...buildState, choice: choice(2) };
   const prices = { ...mine, land_prices: [20, 15, 10] };
   const html = render(CityEstateDock, { ...dockProps, mine: prices, build: selected });
-  assert.match(html, /<h2>Клетка выбрана<\/h2><small>Зона 2 · земля ◈ 15 за клетку<\/small>/);
-  assert.match(html, /<strong>Небольшой дом<\/strong><small>3 × 3 клетки · ◈ 435<\/small>/);
+  assert.match(html, /<strong>Выбрано: 1 клетка<\/strong>/);
+  assert.match(html, /<strong>Дом<\/strong><small>3 × 3 клетки · ◈ 435<\/small>/);
   assert.match(html, /Земля 9 × ◈ 15 = ◈ 135 \+ дом ◈ 300/);
   assert.match(html, /<button type="button" class="city-action">Купить · ◈ 435<\/button>/);
   // The front looks to a road beside the house, or where the operator turns it.
@@ -87,24 +88,21 @@ test("purchase shows full land plus building price and respects spendable coins"
   assert.doesNotMatch(html, /пояс|Квартал/);
   const insufficient = render(CityEstateDock, { ...dockProps, mine: { ...prices, available: 400 }, build: selected });
   assert.match(insufficient, /disabled="">Не хватает 35<\/button>/);
-  const outer = render(CityEstateDock, { ...dockProps, mine: prices, build: { ...selected, plot: { ...selected.plot, band: 3 } } });
+  const outer = render(CityEstateDock, { ...dockProps, mine: prices, build: { ...selected, choice: choice(3) } });
   assert.match(outer, />Купить · ◈ 390</);
   assert.doesNotMatch(outer, /До расширения|Откроется позже|Этап застройки/);
-  const occupied = render(CityEstateDock, { ...dockProps, mine: prices, build: { ...selected, plot: { ...selected.plot, band: 3, at: { col: 0, row: 0, problem: "Не помещается: 3 клетки из 9 заняты — они красные на карте." } } } });
+  const occupied = render(CityEstateDock, { ...dockProps, mine: prices, build: { ...selected, choice: { ...choice(3), at: { col: 0, row: 0, problem: "Не помещается: 3 клетки из 9 заняты — они красные на карте." } } } });
   assert.match(occupied, /role="alert">Не помещается: 3 клетки из 9 заняты/);
   assert.match(occupied, /disabled="">Купить · ◈ 390<\/button>/);
 });
 
-test("building overview gives three short steps and one district progress bar", () => {
+test("building opens on the shop with one district progress bar", () => {
   const html = render(CityEstateDock, dockProps);
-  // Three steps, the first with how to choose many cells with Ctrl (for the mouse only).
-  assert.match(html, /<ol class="estate-steps"><li>[^<]+<span class="estate-tip--mouse">[^<]+<kbd>Ctrl<\/kbd>[^<]+<\/span>\.<\/li><li>[^<]+<\/li><li>[^<]+<\/li><\/ol>/);
+  assert.match(html, /<section class="estate-shop" aria-label="Магазин района">/);
   assert.match(html, /Можно потратить <strong>◈ 850<\/strong>/);
   assert.match(html, /Весь район открыт/);
   assert.match(html, /Свободно 59 клеток/);
   assert.match(html, /застройте ещё 14 клеток/);
-  // Roads, trees and lamps come before the houses.
-  assert.match(html, /<li>Проложи дороги и дорожки, посади деревья, поставь фонари — ниже, в «Дорогах и благоустройстве»<span/);
   assert.equal((html.match(/role="progressbar"/g) ?? []).length, 1);
-  assert.doesNotMatch(html, /Пояса района|Пояс \d|estate-bands|Этап застройки|70 %/);
+  assert.doesNotMatch(html, /Пояса района|Пояс \d|estate-bands|Этап застройки|70 %|estate-steps|Дорогах и благоустройстве/);
 });

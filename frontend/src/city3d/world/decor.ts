@@ -1,7 +1,7 @@
 /**
  * The small things operators lay on their district's cells (docs/CITY_ESTATES.md, «Мелкие постройки»), one to a
- * cell: roads and footpaths that join their neighbours into streets, corners and crossings, hedges that close into a
- * fence, and trees, lamps, benches, bushes and flowerbeds. A building turns its front to a road beside it. Pure
+ * cell: roads, footpaths and alleys that join their neighbours into streets, corners and crossings, hedges that close
+ * into a fence, and trees, lamps, benches, bushes and flowerbeds. A building turns its front to a road beside it. Pure
  * data, no three.js: the paving as coloured quads for one mesh, everything else as placements for the instance
  * pools, the same pieces the yards and parks are made of.
  */
@@ -24,9 +24,9 @@ export function decorMap(districts: readonly { number: number; decor?: Partial<R
   return map;
 }
 
-/** Which kinds a kind runs into: a footpath meets a road, a road only roads, a hedge closes with hedges. */
-const JOINS: Partial<Record<DecorFamily, readonly DecorFamily[]>> = { road: ["road"], path: ["path", "road"], hedge: ["hedge"] };
-const ROADLIKE: readonly DecorFamily[] = ["road", "path"];
+/** Which kinds a kind runs into: a footpath or an alley meets the other and a road, a road only roads, a hedge closes with hedges. */
+const JOINS: Partial<Record<DecorFamily, readonly DecorFamily[]>> = { road: ["road"], path: ["path", "alley", "road"], alley: ["alley", "path", "road"], hedge: ["hedge"] };
+const ROADLIKE: readonly DecorFamily[] = ["road", "path", "alley"];
 
 /** The neighbours a cell's small thing joins, way by way. */
 export function joins(grid: LandGrid, map: DecorMap, block: LandBlock, col: number, row: number, family: DecorFamily): { way: Way; to: Neighbour }[] {
@@ -47,7 +47,7 @@ export interface DecorLayout { ground: GroundQuad[]; placements: Placement[]; la
 /** Land top (render/terrain.ts TOP); the paving lies a little over the grass and the yards' lawns, under the district borders. */
 const TOP = .2;
 const PAVEMENT = { y: TOP + .009, colour: "#ddd6c4" }, ASPHALT = { y: TOP + .015, colour: "#6d7385" }, MARK = { y: TOP + .021, colour: "#f7f3e8" };
-const FOOTPATH = { y: TOP + .013, colour: "#d7ccb6" };
+const FOOTPATH = { y: TOP + .013, colour: "#d7ccb6" }, GRAVEL = { y: TOP + .013, colour: "#cbb994" };
 /** Half the width of a road's asphalt and of a footpath, in units; a cell is about three across. */
 const ROAD_HALF = 1.05, PATH_HALF = .55;
 const TREES: Partial<Record<DecorFamily, [PlacementKind, number]>> = { tree: ["tree-round", 1.35], pine: ["tree-cone", 1.25], birch: ["tree-birch", 1.25], oak: ["tree-oak", 1.15] };
@@ -62,8 +62,9 @@ function jitter(block: LandBlock, col: number, row: number, salt: number) {
 /**
  * The paving, pieces and lamps of every small thing on the map. A road is a light pavement over its cell with the
  * asphalt in the middle and an arm out to every road beside it, so the cells read as one street; a lane mark runs down
- * a straight piece. A footpath is a narrower strip the same way. Arms that cross into the next band of the island city
- * meet its cells where their edges overlap, so a road keeps on across the seam.
+ * a straight piece. A footpath is a narrower strip the same way, and an alley a gravel one with trees beside it. Arms
+ * that cross into the next band of the island city meet its cells where their edges overlap, so a road keeps on across
+ * the seam.
  */
 export function decorLayout(grid: LandGrid, map: DecorMap): DecorLayout {
   const ground: GroundQuad[] = [], placements: Placement[] = [], lamps: Placement[] = [];
@@ -72,11 +73,12 @@ export function decorLayout(grid: LandGrid, map: DecorMap): DecorLayout {
     const [district, blockNumber, col, row] = key.split(":").map(Number), block = blocks.get(`${district}:${blockNumber}`);
     if (!block || col >= block.cols || row >= block.rows) continue;
     const corners = areaCorners(block, col, row), centre = areaPoint(corners, .5, .5), links = joins(grid, map, block, col, row, at.family);
-    if (at.family === "road" || at.family === "path") {
-      const half = at.family === "road" ? ROAD_HALF : PATH_HALF, surface = at.family === "road" ? ASPHALT : FOOTPATH;
+    if (at.family === "road" || at.family === "path" || at.family === "alley") {
+      const half = at.family === "road" ? ROAD_HALF : PATH_HALF, surface = at.family === "road" ? ASPHALT : at.family === "alley" ? GRAVEL : FOOTPATH;
       if (at.family === "road") ground.push({ points: corners, ...PAVEMENT });
       paving(ground, corners, links, half, surface, inside(grid, map, block, links, at.family));
       if (at.family === "road") lane(ground, corners, links);
+      if (at.family === "alley") alleyTrees(placements, block, col, row, corners, links);
       continue;
     }
     // Where the nearest road or footpath beside the cell is, for a lamp at its edge and a bench facing it.
@@ -143,6 +145,20 @@ function paving(ground: GroundQuad[], corners: Point[], links: { way: Way; to: N
     const [s0, s1] = along === "col-" ? [0, .5 - hs] : [.5 + hs, 1], [t0, t1] = across === "row-" ? [0, .5 - ht] : [.5 + ht, 1];
     ground.push({ points: [P(s0, t0), P(s1, t0), P(s1, t1), P(s0, t1)], ...surface });
   }
+}
+
+/**
+ * An alley's trees, on the sides of its cell where nothing it joins lies beside it: along a line of alley, one on
+ * either side of the path, so the line has two rows of trees; an alley two or three cells wide has them along its
+ * outer edges only. A cell on its own or at the end of a line runs straight, its trees on either side.
+ */
+function alleyTrees(placements: Placement[], block: LandBlock, col: number, row: number, corners: Point[], links: { way: Way; to: Neighbour }[]) {
+  const ways = new Set(links.map(l => l.way));
+  const ends: readonly Way[] = ways.size <= 1 ? ([...ways][0] ?? "row-").startsWith("row") ? ["col-", "col+"] : ["row-", "row+"] : WAYS.filter(w => !ways.has(w));
+  ends.forEach((way, k) => {
+    const [s, t] = way === "col-" ? [.17, .5] : way === "col+" ? [.83, .5] : way === "row-" ? [.5, .17] : [.5, .83], p = areaPoint(corners, s, t);
+    placements.push({ kind: "tree-round", variant: col * 13 + row * 7 + k, x: p.x, z: p.z, rotation: jitter(block, col, row, 7 + k) * 6.28, scale: .95 + jitter(block, col, row, 11 + k) * .15, width: 0 });
+  });
 }
 
 /** A lane mark down a straight piece of road: a cell joining roads on two opposite sides only. */

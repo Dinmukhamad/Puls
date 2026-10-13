@@ -403,7 +403,7 @@ function startupFixture(t) {
     frame() { state.render(1 / 60, 1000); },
   };
 }
-const startupBuild = district => ({ district, area: 'plots', placing: null, selected: null, plot: null });
+const startupBuild = district => ({ district, area: 'plots', placing: null, selected: null, choice: null });
 
 test('the real city startup replays only the latest estate focus after state and growth are ready', async t => {
   const s = startupFixture(t), first = { district: 'support-team-1', kind: 'district' }, latest = { district: 'support-team-2', kind: 'district' };
