@@ -1,6 +1,7 @@
 """Oktell actions are isolated, validated and safe to retry; rewards are server facts."""
 
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -9,7 +10,7 @@ from sqlalchemy import select
 from app.models.access import AccessRule
 from app.models.enums import Role
 from app.models.oktell import OktellEvent
-from app.services.oktell import apply, build, initial, mission_facts
+from app.services.oktell import apply, build, fold, initial, mission_facts
 from tests.conftest import auth, login, login_with_work_sites, make_user
 
 pytestmark = pytest.mark.asyncio
@@ -344,3 +345,132 @@ async def test_current_pause_timer_resets_while_break_total_accumulates(operator
     apply(workspace, "reset", {}, str(uuid4()), at(41))
     reset = build(workspace, operator, at(45))
     assert reset["pause_seconds"] == reset["metrics"]["break_seconds"] == 0
+
+
+async def test_driver_is_called_back_through_park_code_only_in_callback_status(client, operator):
+    headers = auth(await login_with_work_sites(client, operator.login))
+    await prepare(client, headers)
+    blocked = await act(client, headers, "dial", number="088077075053636")
+    assert blocked.status_code == 400 and "«Перезвон»" in blocked.json()["detail"]
+    await accepted(client, headers, "pause", reason="break")
+    on_break = await act(client, headers, "dial", number="088077075053636")
+    assert on_break.status_code == 400 and "«Перерыв»" in on_break.json()["detail"]
+    await accepted(client, headers, "resume")
+    await accepted(client, headers, "pause", reason="callback")
+    for number, hint in [
+        ("+77075053636", "без «+»"),
+        ("0880+77075053636", "без «+»"),
+        ("77075053636", "код таксопарка"),
+        ("87075053636", "код таксопарка"),
+        ("0880", "номер водителя с 7"),
+        ("088087075053636", "начинается с 7"),
+        ("08807075053636", "11 цифр"),
+        ("0880 7707 505 36 3", "11 цифр"),
+        ("0880 водитель", "цифрами"),
+    ]:
+        response = await act(client, headers, "dial", number=number)
+        assert response.status_code == 400, number
+        assert hint in response.json()["detail"], (number, response.json())
+    calling = await accepted(client, headers, "dial", number=" 0880 7 707 505 36 36 ")
+    call = calling["active_call"]
+    assert call["number"] == "088077075053636" and call["name"] == "Водитель · iTaxi"
+    assert call["department"] == "iTaxi" and calling["pause_reason"] == "callback"
+    assert (await act(client, headers, "resume")).status_code == 400
+    ended = await accepted(client, headers, "call_end")
+    assert ended["logged_in"] and ended["pause_reason"] == "callback"
+    assert ended["calls"][0]["number"] == "088077075053636"
+    assert ended["calls"][0]["department"] == "iTaxi"
+    assert ended["park_codes"] == {"0880": "iTaxi"} and ended["callback_limit_seconds"] == 180
+    # A mode chosen in the status menu returns from the pause; manual mode dials without one.
+    manual = await accepted(client, headers, "center_mode", mode="manual")
+    assert manual["pause_reason"] is None and manual["center_mode"] == "manual"
+    await accepted(client, headers, "dial", number="088077012345678")
+    assert (await accepted(client, headers, "call_end"))["metrics"]["calls"] == 2
+    await accepted(client, headers, "phone_settings", web_phone=False, auto_answer=False)
+    no_phone = await act(client, headers, "dial", number="088077012345678")
+    assert no_phone.status_code == 400 and "веб-телефон" in no_phone.json()["detail"]
+
+
+async def test_callback_over_three_minutes_ends_the_oktell_session(client, operator, session):
+    headers = auth(await login_with_work_sites(client, operator.login))
+    await prepare(client, headers)
+    await accepted(client, headers, "pause", reason="callback")
+    pause = await session.scalar(select(OktellEvent).where(OktellEvent.kind == "pause"))
+    pause.created_at = datetime.now(UTC) - timedelta(seconds=181)
+    await session.commit()
+    expelled = (await client.get(BASE, headers=headers)).json()
+    assert not expelled["logged_in"] and not expelled["center_joined"]
+    assert expelled["pause_reason"] is None and expelled["notice"]["kind"] == "callback_timeout"
+    late = await act(client, headers, "resume")
+    assert late.status_code == 400 and "войдите" in late.json()["detail"]
+    again = await accepted(client, headers, "login", login="6600", password="training")
+    assert again["logged_in"] and again["notice"] is None and not again["center_joined"]
+
+
+async def test_callback_limit_waits_for_the_call_and_counts_busy_time_once(operator):
+    workspace = initial()
+    started = datetime(2026, 10, 13, 9, tzinfo=UTC)
+
+    def at(seconds):
+        return started + timedelta(seconds=seconds)
+
+    apply(workspace, "login", {"login": "6600"}, str(uuid4()), at(0))
+    apply(workspace, "join", {}, str(uuid4()), at(0))
+    apply(workspace, "phone_settings", {"web_phone": True, "auto_answer": True}, "s", at(0))
+    apply(workspace, "pause", {"reason": "callback"}, str(uuid4()), at(10))
+    assert build(workspace, operator, at(189))["logged_in"]
+    expelled = build(workspace, operator, at(191))
+    assert not expelled["logged_in"] and expelled["notice"]["at"] == at(190).isoformat()
+    assert expelled["metrics"]["center_seconds"] == 190
+    assert expelled["metrics"]["busy_seconds"] == 180 and expelled["pause_seconds"] == 0
+    # The call in «Перезвон» is never cut: the session ends as soon as it finishes.
+    apply(workspace, "dial", {"number": "088077075053636"}, "call", at(100))
+    talking = build(workspace, operator, at(250))
+    assert talking["logged_in"] and talking["active_call"]["id"] == "call"
+    assert talking["metrics"]["busy_seconds"] == 240 and talking["metrics"]["talk_seconds"] == 150
+    apply(workspace, "call_end", {}, str(uuid4()), at(300))
+    ended = build(workspace, operator, at(320))
+    assert not ended["logged_in"] and ended["notice"]["at"] == at(300).isoformat()
+    assert ended["calls"][0]["duration_seconds"] == 200
+    assert ended["metrics"]["busy_seconds"] == 290 and ended["metrics"]["talk_seconds"] == 200
+
+
+def event(kind, seconds, **payload):
+    """A stored action, `seconds` after the start of a training session."""
+    return SimpleNamespace(
+        kind=kind,
+        payload=payload,
+        request_id=str(uuid4()),
+        created_at=datetime(2026, 10, 12, 9, tzinfo=UTC) + timedelta(seconds=seconds),
+        completed=[],
+    )
+
+
+async def test_actions_after_a_forced_logout_are_left_out_of_the_workspace(operator):
+    # Accepted before the limit existed: the message came after «Перезвон» ran out.
+    workspace = fold(
+        [
+            event("login", 0, login="6600"),
+            event("join", 0),
+            event("pause", 10, reason="callback"),
+            event("message", 600, contact_id="supervisor", text="Готов"),
+            event("login", 700, login="6600"),
+        ]
+    )
+    assert workspace["logged_in"] and workspace["messages"] == []
+    assert workspace["notice"] is None and not workspace["center_joined"]
+    assert workspace["metrics"]["center_seconds"] == 190
+
+
+async def test_an_accepted_call_keeps_its_digits_when_park_codes_change(operator):
+    workspace = fold(
+        [
+            event("login", 0, login="6600"),
+            event("join", 0),
+            event("phone_settings", 0, web_phone=True, auto_answer=True),
+            event("pause", 5, reason="callback"),
+            event("dial", 10, number="099977075053636"),
+        ]
+    )
+    assert workspace["active_call"]["number"] == "099977075053636"
+    assert workspace["active_call"]["department"] == "таксопарк"

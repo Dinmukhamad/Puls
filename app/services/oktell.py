@@ -1,12 +1,14 @@
 """A simulated phone workspace built only from each learner's accepted events.
 
-The document supplies interface examples, not production phone credentials or operational
-policy. Calls and messages here stay in this database; this service has no telephony client.
-Exercise completion is derived by the server and survives resetting the practice workspace.
+The document supplies interface examples, not production phone credentials. The team's rules
+are enforced here: a driver is called back through the park's code in «Перезвон», and more than
+three minutes in that status ends the session. Calls and messages here stay in this database;
+this service has no telephony client. Exercise completion is derived by the server and survives
+resetting the practice workspace.
 """
 
 from copy import deepcopy
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -44,10 +46,41 @@ CONTACTS = (
         "name": "Марат Исаев",
         "number": "6604",
         "department": "Обучение",
-        "status": "offline",
+        "status": "paused",
+    },
+    {
+        "id": "operator-03",
+        "name": "Ерлан Жаксылыков",
+        "number": "6605",
+        "department": "Операторы",
+        "status": "busy",
+    },
+    {
+        "id": "operator-04",
+        "name": "Мадина Ким",
+        "number": "6606",
+        "department": "Операторы",
+        "status": "available",
+    },
+    {
+        "id": "operator-05",
+        "name": "Руслан Тлеубаев",
+        "number": "6607",
+        "department": "Операторы",
+        "status": "paused",
     },
 )
 CONTACT_BY_ID = {item["id"]: item for item in CONTACTS}
+# A driver is dialled through his park's line: its code, then his number from 7 without «+».
+PARK_CODES = {"0880": "iTaxi"}
+# The team's rule: «Перезвон» for longer than this ends the operator's Oktell session.
+CALLBACK_LIMIT_SECONDS = 180
+PAUSE_TITLES = {
+    "technical": "Тех.причина",
+    "callback": "Перезвон",
+    "training": "Тренинг",
+    "break": "Перерыв",
+}
 EXERCISES = (
     {
         "id": "oktell_ready",
@@ -99,6 +132,7 @@ def initial() -> dict:
         "web_phone": False,
         "auto_answer": False,
         "active_call": None,
+        "notice": None,
         "calls": [],
         "messages": [],
         "completed": [],
@@ -125,6 +159,7 @@ def apply(workspace: dict, kind: str, payload: dict, request_id: str, when: date
         workspace["completed"] = completed
     elif kind == "login":
         workspace["logged_in"] = True
+        workspace["notice"] = None
     elif kind == "logout":
         close_center(workspace, when)
         workspace["logged_in"] = False
@@ -138,7 +173,10 @@ def apply(workspace: dict, kind: str, payload: dict, request_id: str, when: date
         workspace["office_status"] = payload["status"]
         workspace["forward_number"] = payload.get("number") or ""
     elif kind == "center_mode":
+        # Choosing a mode in the status menu also ends a pause: the operator is back at work.
         workspace["center_mode"] = payload["mode"]
+        if workspace["pause_reason"]:
+            resume(workspace, when)
     elif kind == "phone_settings":
         workspace.update(web_phone=payload["web_phone"], auto_answer=payload["auto_answer"])
     elif kind == "pause":
@@ -146,8 +184,7 @@ def apply(workspace: dict, kind: str, payload: dict, request_id: str, when: date
         workspace["_pause_since"] = when
         workspace["_break_cycle"] = 1 if payload["reason"] == "break" else 0
     elif kind == "resume":
-        workspace["_break_cycle"] = 2 if workspace["pause_reason"] == "break" else 0
-        close_pause(workspace, when)
+        resume(workspace, when)
     elif kind == "call_start":
         contact = CONTACT_BY_ID[payload["contact_id"]]
         workspace["active_call"] = {
@@ -155,6 +192,20 @@ def apply(workspace: dict, kind: str, payload: dict, request_id: str, when: date
             "contact_id": contact["id"],
             "number": contact["number"],
             "name": contact["name"],
+            "department": contact["department"],
+            "started_at": when.isoformat(),
+        }
+    elif kind == "dial":
+        try:
+            line = driver_line(payload["number"])
+        except DomainError:  # Park codes may change later; an accepted call keeps its digits.
+            line = {"number": payload["number"], "park": "таксопарк"}
+        workspace["active_call"] = {
+            "id": request_id,
+            "contact_id": "",
+            "number": line["number"],
+            "name": f"Водитель · {line['park']}",
+            "department": line["park"],
             "started_at": when.isoformat(),
         }
     elif kind == "call_end":
@@ -164,7 +215,6 @@ def apply(workspace: dict, kind: str, payload: dict, request_id: str, when: date
             0,
             {
                 **call,
-                "department": CONTACT_BY_ID[call["contact_id"]]["department"],
                 "direction": "outbound",
                 "status": "completed",
                 "finished_at": when.isoformat(),
@@ -175,9 +225,15 @@ def apply(workspace: dict, kind: str, payload: dict, request_id: str, when: date
         )
         workspace["active_call"] = None
         workspace["metrics"]["talk_seconds"] += seconds
-        workspace["metrics"]["busy_seconds"] += seconds
+        # A call made in a pause is already busy time: the pause counts it when it closes.
+        if not workspace["pause_reason"]:
+            workspace["metrics"]["busy_seconds"] += seconds
         workspace["metrics"]["calls"] += 1
         workspace["metrics"]["successful"] += 1
+        # A call in «Перезвон» is never cut off; past the limit the session ends as it finishes.
+        deadline = callback_deadline(workspace)
+        if deadline and when >= deadline:
+            expel(workspace, when)
     elif kind == "call_comment":
         call = next(item for item in workspace["calls"] if item["id"] == payload["call_id"])
         call.update(comment=payload["comment"], tags=payload["tags"])
@@ -192,6 +248,50 @@ def apply(workspace: dict, kind: str, payload: dict, request_id: str, when: date
                 "sent_at": when.isoformat(),
             }
         )
+
+
+def driver_line(number: str) -> dict:
+    """The dialled digits as the park's code and the driver's 11 digits, or why they are wrong."""
+    digits = "".join(number.split()).replace("-", "")
+    if "+" in digits:
+        raise DomainError("Номер набирается без «+»: код таксопарка, затем номер водителя с 7")
+    if not digits.isdigit():
+        raise DomainError("Наберите цифрами код таксопарка, затем номер водителя с 7")
+    code, phone = digits[:4], digits[4:]
+    park = PARK_CODES.get(code)
+    if park is None:
+        raise DomainError("Сначала наберите код таксопарка: для iTaxi это 0880")
+    if not phone:
+        raise DomainError("После кода таксопарка наберите номер водителя с 7")
+    if not phone.startswith("7"):
+        raise DomainError("После кода таксопарка номер водителя начинается с 7, без «+» и без 8")
+    if len(phone) != 11:
+        raise DomainError("В номере водителя 11 цифр с 7 в начале, например 77075053636")
+    return {"code": code, "park": park, "phone": phone, "number": code + phone}
+
+
+def resume(workspace: dict, when: datetime) -> None:
+    workspace["_break_cycle"] = 2 if workspace["pause_reason"] == "break" else 0
+    close_pause(workspace, when)
+
+
+def callback_deadline(workspace: dict) -> datetime | None:
+    if workspace["pause_reason"] != "callback" or workspace["_pause_since"] is None:
+        return None
+    return workspace["_pause_since"] + timedelta(seconds=CALLBACK_LIMIT_SECONDS)
+
+
+def expel(workspace: dict, when: datetime) -> None:
+    """Oktell ends the session: the operator leaves the call-centre and has to log in again."""
+    close_center(workspace, when)
+    workspace.update(logged_in=False, notice={"kind": "callback_timeout", "at": when.isoformat()})
+
+
+def advance(workspace: dict, until: datetime) -> None:
+    """Rules that act with time alone: «Перезвон» past its limit, unless a call is still going."""
+    deadline = callback_deadline(workspace)
+    if deadline and not workspace["active_call"] and until >= deadline:
+        expel(workspace, deadline)
 
 
 def close_pause(workspace: dict, when: datetime) -> None:
@@ -211,13 +311,18 @@ def close_center(workspace: dict, when: datetime) -> None:
 def fold(events: list[OktellEvent]) -> dict:
     workspace = initial()
     for event in events:
-        apply(workspace, event.kind, event.payload, event.request_id, aware(event.created_at))
+        when = aware(event.created_at)
+        advance(workspace, when)
+        # An action accepted before the time limit existed cannot follow its forced logout.
+        if workspace["logged_in"] or event.kind in ("login", "reset"):
+            apply(workspace, event.kind, event.payload, event.request_id, when)
         workspace["completed"] = list(dict.fromkeys([*workspace["completed"], *event.completed]))
     return workspace
 
 
 def build(workspace: dict, user, now: datetime) -> dict:
     result = deepcopy(workspace)
+    advance(result, now)
     metrics = result["metrics"]
     metrics["center_seconds"] += elapsed(result["_center_since"], now)
     pause_seconds = elapsed(result["_pause_since"], now)
@@ -228,12 +333,15 @@ def build(workspace: dict, user, now: datetime) -> dict:
     if result["active_call"]:
         live_seconds = elapsed(datetime.fromisoformat(result["active_call"]["started_at"]), now)
         metrics["talk_seconds"] += live_seconds
-        metrics["busy_seconds"] += live_seconds
+        if not result["pause_reason"]:
+            metrics["busy_seconds"] += live_seconds
     for key in ("_center_since", "_pause_since", "_break_cycle"):
         result.pop(key)
     result["operator"] = {"name": user.full_name, "login": user.login, "number": DEMO_LOGIN}
     result["demo_credentials"] = {"login": DEMO_LOGIN, "password": DEMO_PASSWORD}
     result["contacts"] = deepcopy(CONTACTS)
+    result["park_codes"] = dict(PARK_CODES)
+    result["callback_limit_seconds"] = CALLBACK_LIMIT_SECONDS
     result["exercises"] = [
         {**item, "done": item["id"] in result["completed"]} for item in EXERCISES
     ]
@@ -262,13 +370,17 @@ def validate(workspace: dict, kind: str, payload: dict) -> None:
     if not workspace["logged_in"]:
         raise DomainError("Сначала войдите в учебный Oktell")
     if (
-        kind in ("leave", "logout", "pause", "office_status", "center_mode", "phone_settings")
+        kind
+        in ("leave", "logout", "pause", "resume", "office_status", "center_mode", "phone_settings")
         and workspace["active_call"]
     ):
         raise DomainError("Сначала завершите учебный звонок")
     if kind == "join" and workspace["center_joined"]:
         raise DomainError("Вы уже в call-центре")
-    if kind in ("leave", "pause", "resume", "call_start") and not workspace["center_joined"]:
+    if (
+        kind in ("leave", "pause", "resume", "call_start", "dial")
+        and not workspace["center_joined"]
+    ):
         raise DomainError("Сначала войдите в call-центр")
     if kind == "pause" and workspace["pause_reason"]:
         raise DomainError("Сначала вернитесь к работе из текущей паузы")
@@ -291,6 +403,23 @@ def validate(workspace: dict, kind: str, payload: dict) -> None:
             raise DomainError("Включите веб-телефон для учебного звонка")
         if CONTACT_BY_ID[payload["contact_id"]]["status"] != "available":
             raise DomainError("Учебный контакт сейчас недоступен. Выберите коллегу на связи")
+    if kind == "dial":
+        if workspace["active_call"]:
+            raise DomainError("Учебный звонок уже идёт")
+        if not workspace["web_phone"]:
+            raise DomainError("Включите веб-телефон в меню статусов")
+        pause = workspace["pause_reason"]
+        if pause and pause != "callback":
+            raise DomainError(
+                f"Сейчас пауза «{PAUSE_TITLES[pause]}». Вернитесь к работе "
+                "и для звонка водителю поставьте «Перезвон»"
+            )
+        if not pause and workspace["center_mode"] != "manual":
+            raise DomainError(
+                "Чтобы перезвонить водителю, сначала поставьте статус «Перезвон»: "
+                "тогда вам не будут поступать звонки"
+            )
+        driver_line(payload["number"])
     if kind == "call_end" and not workspace["active_call"]:
         raise DomainError("Нет активного учебного звонка")
     if kind == "call_comment" and not any(
@@ -329,6 +458,7 @@ async def act(session, user, body) -> dict:
     existing = next((event for event in events if event.request_id == request_id), None)
     if existing is None:
         before, now = fold(events), datetime.now(UTC)
+        advance(before, now)
         validate(before, kind, payload)
         after = deepcopy(before)
         apply(after, kind, payload, request_id, now)

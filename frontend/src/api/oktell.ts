@@ -6,7 +6,8 @@ export type OfficeStatus = "available" | "forward" | "dnd";
 export type PauseReason = "technical" | "callback" | "training" | "break";
 export interface OktellContact {
   id: string; name: string; number: string; department: string;
-  status: "available" | "busy" | "offline";
+  /** Free colleagues are black in the phone, those on a call red, those in a pause faded. */
+  status: "available" | "busy" | "paused";
 }
 export interface OktellCall {
   id: string; contact_id: string; number: string; name: string; department: string;
@@ -21,7 +22,12 @@ export interface OktellState {
   logged_in: boolean; center_joined: boolean; office_status: OfficeStatus;
   center_mode: "automatic" | "manual"; pause_reason: PauseReason | null; pause_seconds: number;
   forward_number: string; web_phone: boolean; auto_answer: boolean;
-  active_call: { id: string; contact_id: string; number: string; name: string; started_at: string } | null;
+  active_call: { id: string; contact_id: string; number: string; name: string; department: string; started_at: string } | null;
+  /** Set when Oktell ended the session by itself: «Перезвон» lasted longer than its limit. */
+  notice: { kind: "callback_timeout"; at: string } | null;
+  /** Codes dialled before a driver's number, e.g. 0880 for iTaxi. */
+  park_codes: Record<string, string>;
+  callback_limit_seconds: number;
   contacts: OktellContact[]; calls: OktellCall[]; messages: OktellMessage[];
   completed: string[]; exercises: OktellExercise[];
   metrics: { center_seconds: number; break_seconds: number; talk_seconds: number; busy_seconds: number; calls: number; successful: number };
@@ -34,6 +40,7 @@ export type OktellAction =
   | { action: "pause"; reason: PauseReason }
   | { action: "phone_settings"; web_phone: boolean; auto_answer: boolean }
   | { action: "call_start"; contact_id: string }
+  | { action: "dial"; number: string }
   | { action: "message"; contact_id: string; text: string }
   | { action: "call_comment"; call_id: string; comment: string; tags: string[] };
 export type OktellCommand = OktellAction & { request_id: string };
