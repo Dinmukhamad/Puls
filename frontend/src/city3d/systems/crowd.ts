@@ -6,7 +6,7 @@ import type { CityContext } from '../engine/context';
 import { COPY_STRIDE, copyMatrices, copyMesh, copyTints } from '../render/copies';
 import { insideParking, segmentDistance } from '../world/generate';
 import type { Point, Route, WorldData } from '../world/types';
-import { districtFacing } from '../engine/camera';
+import { DISTRICT_FACING } from '../engine/camera';
 
 const TAU = Math.PI * 2;
 const PERSON_SCALE = .75;
@@ -30,13 +30,14 @@ function clearOfLandmark(p: Point, world: WorldData, margin: number) {
   for (const d of world.districts) {
     const dx = p.x - d.x, dz = p.z - d.z;
     if (Math.hypot(dx, dz) > world.spec.islet + margin) continue;
-    const yaw = districtFacing(d.x, d.z), c = Math.cos(yaw), s = Math.sin(yaw);
+    const c = Math.cos(DISTRICT_FACING), s = Math.sin(DISTRICT_FACING);
     const x = dx * c - dz * s, z = dx * s + dz * c;
     // Landmark base is 5.7 by 5.3, with front steps reaching local z=3.
     if (Math.abs(x) < 2.9 * world.spec.districtScale + margin && Math.abs(z) < 3 * world.spec.districtScale + margin) return false;
     // Keep the approach from the radial bridge empty even where WorldData's
     // road segments end at the island edge (a future entrance must stay clear).
-    if (Math.abs(x) < 1.35 + margin) return false;
+    const r = Math.hypot(d.x, d.z) || 1;
+    if (Math.abs(dx * d.z - dz * d.x) / r < 1.35 + margin) return false;
   }
   return true;
 }

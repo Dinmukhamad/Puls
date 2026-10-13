@@ -51,14 +51,21 @@ const KEYS: Record<string, KeyAction> = {
 const SHIFT_KEYS: Record<string, KeyAction> = { ArrowLeft: "turnLeft", ArrowRight: "turnRight", ArrowUp: "raise", ArrowDown: "lower" };
 const RESET_KEYS = new Set(["Digit0", "Numpad0", "Home"]);
 
-/** The yaw that turns a district's landmark at (x, z) so its front (+z) faces out to the city, away from the plaza. */
-export function districtFacing(x: number, z: number) {
-  return Math.atan2(x, z);
-}
+/**
+ * The yaw of every island landmark: all stand the same way, their fronts (+z) turned to −z, so the default view sees
+ * every front three-quarter on whatever direction its bridge comes from.
+ */
+export const DISTRICT_FACING = Math.PI;
 
-/** Three-quarter entrance view from the city side: the plaza stays beside the landmark, never on its sightline. */
+/**
+ * A landmark's front three-quarter on: 30° to one side, or further round where the plaza (and the assistant on it)
+ * would stand on the sightline.
+ */
 export function districtFocusView(x: number, z: number, distance = 52): CityView {
-  return { target: [x, 2.5, z], azimuth: districtFacing(x, z) + 1, polar: .92, distance: clamp(distance, 38, 60) };
+  const plaza = Math.atan2(-x, -z), sides = [.52, -.52, .9, -.9].map(turn => DISTRICT_FACING + turn);
+  const clear = (azimuth: number) => Math.abs(Math.sin(azimuth - plaza));
+  const azimuth = sides.find(a => clear(a) >= .6) ?? sides.reduce((best, a) => clear(a) > clear(best) ? a : best);
+  return { target: [x, 2.5, z], azimuth, polar: .92, distance: clamp(distance, 38, 60) };
 }
 
 /**

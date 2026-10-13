@@ -1,7 +1,7 @@
 /**
- * District landmarks (TZ §5.5), stage 1: the procedural buildings of assets/landmarks.ts
- * stand on their islands until the Blender models of stage 3 replace them. Five stages by completed
- * missions; the reserved "future-*" islands share one instanced construction site. A ring inside the island
+ * District landmarks (TZ §5.5): a building of its own for each of five stages by completed missions
+ * (assets/landmarkModels.ts), all standing the same way, their fronts to the default view
+ * (engine/camera.ts DISTRICT_FACING); the reserved "future-*" islands share one instanced construction site. A ring inside the island
  * lights up on hover and pulses while selected; invisible cylinders take the picking rays; a district that
  * levelled up grows in under a burst of confetti.
  *
@@ -17,7 +17,7 @@ import type { DistrictId } from "../../api/city";
 import { createArchitecture } from "../assets/landmarks";
 import { districtLevel } from "../../pages/city/cityLevels";
 import type { CityContext } from "../engine/context";
-import { districtFacing } from "../engine/camera";
+import { DISTRICT_FACING } from "../engine/camera";
 
 /** Top of the land, as in the old city. */
 export const GROUND = .2;
@@ -33,7 +33,7 @@ const WINDOW_EMISSION = "#ffd9a0", WINDOW_INTENSITY = .85;
 type GlazingMaterial = THREE.MeshStandardMaterial | THREE.MeshStandardNodeMaterial;
 type Level = CityContext["night"]["level"];
 
-/** Floodlights in a landmark's frame, world units from its centre (+z faces out to the city, the plot is ±5 × ±4.6): two flank the entrance, one lights each side. */
+/** Floodlights in a landmark's frame, world units from its centre (+z is its front, the plot is ±5 × ±4.6): two flank the entrance, one lights each side. */
 const FLOODLIGHTS: [number, number][] = [[-2.5, 5.55], [2.5, 5.55], [-5.85, -.9], [5.85, -.9]];
 const FLOOD = "#ffc88a", FIXTURE_GLOW = 2.4, POOL_STRENGTH = .6;
 /** The uplight on the walls: strongest at the plinth, half as strong WASH_HEIGHT × ln 2 higher up. */
@@ -114,7 +114,6 @@ export function createDistricts(ctx: CityContext, { levels, grown = [] }: Distri
   let disposed = false;
   const ringGeometry = new THREE.TorusGeometry(spec.islet - .19, .11, 8, 96);
   const hitGeometry = new THREE.CylinderGeometry(1, 1, 1, 12), hitMaterial = new THREE.MeshBasicNodeMaterial();
-  const facing = districtFacing;
   type District = CityContext["world"]["districts"][number];
 
   function buildLandmark(d: District, stage: number, waitForGrowth: boolean) {
@@ -126,7 +125,7 @@ export function createDistricts(ctx: CityContext, { levels, grown = [] }: Distri
       const material = mesh.material as THREE.MeshStandardMaterial;
       if (isLandmarkGlass(material)) registerGlazing(material);
     });
-    group.position.set(d.x, GROUND, d.z); group.scale.setScalar(scale); group.rotation.y = facing(d.x, d.z);
+    group.position.set(d.x, GROUND, d.z); group.scale.setScalar(scale); group.rotation.y = DISTRICT_FACING;
     group.userData.district = d.id; root.add(group); landmarks.set(d.id, group); stages.set(d.id, stage);
     const top = height * scale, hit = hits.get(d.id)!;
     hit.scale.set(spec.islet, top, spec.islet); hit.position.set(d.x, GROUND + top / 2, d.z);
@@ -152,7 +151,7 @@ export function createDistricts(ctx: CityContext, { levels, grown = [] }: Distri
 
   const futures = ctx.world.districts.filter(d => isFutureDistrict(d.id));
   const site = futures.length ? constructionSite(futures.map(d => new THREE.Matrix4().compose(
-    new THREE.Vector3(d.x, GROUND, d.z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), facing(d.x, d.z)), new THREE.Vector3(scale, scale, scale)))) : null;
+    new THREE.Vector3(d.x, GROUND, d.z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), DISTRICT_FACING), new THREE.Vector3(scale, scale, scale)))) : null;
   if (site) { finish(site.mesh.material as THREE.MeshStandardNodeMaterial); root.add(site.mesh); }
 
   for (const d of ctx.world.districts) {
@@ -167,7 +166,7 @@ export function createDistricts(ctx: CityContext, { levels, grown = [] }: Distri
   }
 
   batches.flush();
-  const lights = nightLights(ctx, ctx.world.districts.map(d => ({ x: d.x, z: d.z, facing: facing(d.x, d.z) })));
+  const lights = nightLights(ctx, ctx.world.districts);
 
   let selected: string | null = null, hovered: string | null = null;
   const offFrame = ctx.onFrame((dt, now) => {
@@ -334,7 +333,7 @@ function uplight(level: Level) {
  * Glowing fixtures (floodlights, the pedestal's and the plaza's small lights) and the warm pools they cast,
  * as two additive InstancedMeshes; like the street lamps' pools they take no fog colour but fade with it.
  */
-function nightLights(ctx: CityContext, islands: { x: number; z: number; facing: number }[]) {
+function nightLights(ctx: CityContext, islands: readonly { x: number; z: number }[]) {
   const level = ctx.night.level, fog = ctx.scene.fog instanceof THREE.Fog ? ctx.scene.fog : null;
   const clear = fog ? rangeFogFactor(float(fog.near), float(fog.far)).oneMinus() : float(1);
   const glowMaterial = () => new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false });
@@ -352,11 +351,11 @@ function nightLights(ctx: CityContext, islands: { x: number; z: number; facing: 
   const at = (x: number, y: number, z: number, sx: number, sy: number, sz: number, angle = 0) =>
     new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), turn.setFromAxisAngle(up, angle), new THREE.Vector3(sx, sy, sz));
   for (const island of islands) for (const [lx, lz] of FLOODLIGHTS) {
-    spot.set(lx, 0, lz).applyAxisAngle(up, island.facing);
+    spot.set(lx, 0, lz).applyAxisAngle(up, DISTRICT_FACING);
     fixtures.push(at(island.x + spot.x, GROUND + .08, island.z + spot.z, .2, .12, .2));
     // A pool along the wall it lights, wider than deep; the plinth hides the part that reaches under it.
     const front = Math.abs(lz) > Math.abs(lx);
-    pools.push([at(island.x + spot.x * .96, GROUND + .015, island.z + spot.z * .96, front ? 2.6 : 1.7, 1, front ? 1.7 : 2.6, island.facing), 1]);
+    pools.push([at(island.x + spot.x * .96, GROUND + .015, island.z + spot.z * .96, front ? 2.6 : 1.7, 1, front ? 1.7 : 2.6, DISTRICT_FACING), 1]);
   }
   for (let i = 0; i < PEDESTAL_LIGHTS; i++) {
     const a = i / PEDESTAL_LIGHTS * Math.PI * 2;
@@ -408,7 +407,7 @@ function constructionSite(matrices: THREE.Matrix4[]) {
     for (const x of [-1.7, 1.7]) box(.05, .05, 2.66, STEEL, x, y, -.3);
   }
   for (const y of [.98, 1.68]) box(3.4, .04, .42, WOOD, 0, y, 1.2);
-  // Tower crane behind the building; its jib reaches over it towards the plaza side.
+  // Tower crane behind the building; its jib reaches back over it.
   const cx = 1.95, cz = -1.95;
   box(.6, .14, .6, INK, cx, .34, cz); box(.22, 4.4, .22, CRANE, cx, 2.6, cz); box(.34, .3, .34, INK, cx, 4.62, cz + .2);
   box(3.9, .14, .18, CRANE, cx - 1.75, 4.88, cz); box(1.2, .14, .18, CRANE, cx + .75, 4.88, cz); box(.4, .34, .3, INK, cx + 1.15, 4.66, cz);

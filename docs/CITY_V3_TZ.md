@@ -303,6 +303,8 @@ interface DistrictSlot { id: DistrictId | string; angleDeg: number; islet: numbe
 - Стадии из `cityLevels.ts` сохраняются. Анимация роста сохраняется: здание
   «поднимается» и сыплется конфетти.
 - Точка крепления подписи (`label_anchor`) задаётся пустышкой в Blender.
+- **Сделано 13.10.2026 (2.24.43), без Blender:** 6 районов × 5 уровней = 30 процедурных моделей
+  (`assets/landmarkModels.ts`, описание — `docs/CITY_MISSIONS.md`); подпись ставится над верхом модели.
 
 ### 5.6. Персонажи и транспорт
 - **Помощник:** оставить нынешние модели Quaternius
