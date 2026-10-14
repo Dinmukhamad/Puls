@@ -15,7 +15,7 @@ const MISSIONS: Record<string, string> = { dispatch_driver: "Найти води
  */
 export function DispatchDock({ feedback, onFeedback, onGo, onTour, onCrm }: {
   feedback: FleetFeedback | null; onFeedback: (value: FleetFeedback | null) => void;
-  onGo: (path: string, park: string) => void; onTour: (tour: string) => void; onCrm: () => void;
+  onGo: (path: string, park: string) => void; onTour: (tour: string) => void; onCrm: (call: string) => void;
 }) {
   const guide = useGuide(), client = useQueryClient();
   const query = useQuery({ queryKey: FLEET_QUERY, queryFn: api.state });
@@ -53,7 +53,7 @@ export function DispatchDock({ feedback, onFeedback, onGo, onTour, onCrm }: {
     </header>
     <div className="pulsar-dock-scroll" ref={scroll}>
       {!state ? <p className="pulsar-muted">{query.isError ? query.error.message : "Загружаем звонки…"}</p>
-        : call ? <CallView key={call.id} call={call} state={state} updatedAt={query.dataUpdatedAt} busy={busy} error={error} feedback={recent} onBack={() => { setActive(null); onFeedback(null); }} onTour={() => onTour(`call:${call.id}`)} onGo={onGo} onCrm={onCrm}
+        : call ? <CallView key={call.id} call={call} state={state} updatedAt={query.dataUpdatedAt} busy={busy} error={error} feedback={recent} onBack={() => { setActive(null); onFeedback(null); }} onTour={() => onTour(`call:${call.id}`)} onGo={onGo} onCrm={() => onCrm(call.id)}
           onCode={() => void send(() => api.code(call.driver))} onAnswer={option => void send(() => api.answer(call.id, option))} />
         : <CallList calls={calls} onOpen={id => { setActive(id); onFeedback(null); }} />}
     </div>

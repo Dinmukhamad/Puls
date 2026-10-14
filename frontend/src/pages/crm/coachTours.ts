@@ -1,4 +1,6 @@
 /** Guided tours: Pulsar flies to each target, points at it and explains it in a speech bubble. */
+import type { CopyKind } from "./accountData";
+
 export interface CoachStep {
   /** CSS selector of the element Pulsar points at. */
   target: string;
@@ -20,6 +22,10 @@ export interface CoachStep {
   allow?: string;
   /** Something Pulsar hands over inside his bubble, rendered by the page that runs the tour. */
   slot?: string;
+  /** «Дальше» appears only once this selector is on screen; unlike `advanceWhen` the step does not move on by itself. */
+  doneWhen?: string;
+  /** What is wrong with the operator's input, said in the bubble while its selector is on screen; the first match wins. */
+  mistakes?: { when: string; text: string }[];
 }
 export type CoachTourId = "appeals" | "drivers" | "promoConnect" | "promoRegistry" | "promoBackdated" | "promoConditions" | "registration" | "edo" | "edoProvider" | "edoDashboard" | "providerDashboard";
 type Side = "right" | "left" | "below" | "above";
@@ -53,42 +59,108 @@ const level = (n: number) => `[data-coach=category-${n}]`;
 /** The next category level appeared, or the chosen one was the last. */
 const chosen = (n: number) => `${level(n + 1)}, ${DONE}`;
 
+const SITE = (site: "crm" | "dispatch") => `.work-sites[data-site=${site}]`;
+/** What the operator copied last, recognised against the account the appeal is about. */
+const COPIED = (what: CopyKind) => `.work-sites[data-copied=${what}]`;
+const ANY = ".fleet-driver[data-driver]";
+/** The chosen request asks for the account link in its comment; the comment already has it. */
+const LINK = ".work-sites[data-link=need]", LINKED = "[data-coach=comment][data-link=ok]";
+const LINKED_COMMENT = { doneWhen: LINKED, mistakes: [{ when: "[data-coach=comment][data-link=missing]", text: "В комментарии нет ссылки на аккаунт этого водителя: вставь её Ctrl+V." }] };
+/** The step is also skipped while `done` is on screen: the appeal already holds what this trip is for. */
+const unless = (done: string) => (step: CoachStep): CoachStep => ({ ...step, skipWhen: step.skipWhen ? `${step.skipWhen}, ${done}` : done });
+const toSite = (site: "crm" | "dispatch", title: string, text: string): CoachStep =>
+  ({ target: `[data-coach=site-${site}]`, skipWhen: SITE(site), advanceWhen: SITE(site), action: "Нажми", title, text });
+const paste = (field: string, title: string, text: string, mistakes: CoachStep["mistakes"]): CoachStep =>
+  ({ target: `[data-coach=${field}]`, advanceWhen: `[data-coach=${field}][data-match=true]`, action: "Вставь", title, text, mistakes });
+
+/** How the tour reaches the driver's account: `open` walks to it, `account` finds it on the page. */
+export interface AccountWalk { open: CoachStep[]; account: string }
+/** Without a call or a scenario the operator opens the account of whichever driver turned to him. */
+export const ANY_ACCOUNT: AccountWalk = { account: ANY, open: [
+  { target: "[data-coach=rail-people]", skipWhen: `${ANY}, .fleet[data-page=contractors]`, advanceWhen: "[data-coach=menu-contractors], .fleet[data-page=contractors]", action: "Нажми", title: "Исполнители", text: "Водители — в меню «Исполнители» слева. Открой его." },
+  { target: "[data-coach=menu-contractors]", skipWhen: `${ANY}, .fleet[data-page=contractors]`, advanceWhen: ".fleet[data-page=contractors]", action: "Нажми", title: "Список водителей", text: "Нажми «Исполнители» — откроется список водителей парка." },
+  { target: "[data-coach=drivers-table]", skipWhen: `${ANY}, [data-coach=preview]`, advanceWhen: "[data-coach=preview]", action: "Выбери", title: "Водитель", text: "Нажми на водителя, который обратился: справа откроется его короткая карточка." },
+  { target: "[data-coach=preview-name]", skipWhen: ANY, advanceWhen: ANY, action: "Нажми", title: "Аккаунт водителя", text: "Нажми на имя водителя — откроется его аккаунт." },
+] };
+
+/** One piece of the driver's data: to his account, copy it there, back to CRM, paste it and let Pulsar check it. */
+function trip(walk: AccountWalk, field: string, [title, text]: [string, string], copy: CoachStep[], into: CoachStep): CoachStep[] {
+  return [toSite("dispatch", title, text), ...walk.open, ...copy, toSite("crm", "Назад в CRM", "Вернись во вкладку «CRM-система»: форма обращения ждёт там.")]
+    .map(unless(`[data-coach=${field}][data-match=true]`)).concat(into);
+}
+
+/** Phone, ВУ and ID are never typed from memory: each comes from the account and is checked against it. */
+function driverData(walk: AccountWalk): CoachStep[] {
+  const details: CoachStep = { target: "[data-coach=tab-details]", skipWhen: `${walk.account} [data-coach=driver-phone]`, advanceWhen: `${walk.account} [data-coach=driver-phone]`, action: "Нажми", title: "Детали", text: "Телефон и В/У — во вкладке «Детали» аккаунта. Открой её." };
+  const other = (what: string) => `${what} не совпадает с аккаунтом водителя. Нажми «← Назад» и скопируй заново.`;
+  return [
+    ...trip(walk, "phone", ["Данные водителя", "Телефон, В/У и ID берём из аккаунта водителя. Открой вкладку «Диспетчерская» — форма обращения сохранится."], [details,
+      { target: `${walk.account} [data-coach=driver-phone]`, advanceWhen: COPIED("phone"), action: "Скопируй", title: "Скопируй телефон", text: "Нажми ⧉ рядом с номером — он скопируется. Можно и выделить номер и нажать Ctrl+C." }],
+    paste("phone", "Телефон водителя", "Нажми на «Номер телефона» и вставь номер: Ctrl+V. Я сверю его с аккаунтом водителя.", [{ when: "[data-coach=phone][data-match=false]", text: other("Номер") }])),
+    ...trip(walk, "license_number", ["Теперь В/У", "Номер В/У тоже берём из аккаунта. Вернись во вкладку «Диспетчерская»."], [details,
+      { target: `${walk.account} [data-coach=driver-license]`, advanceWhen: COPIED("license"), action: "Скопируй", title: "Скопируй В/У", text: "Нажми ⧉ рядом с «Серия и номер ВУ» или выдели номер и нажми Ctrl+C." }],
+    paste("license_number", "Номер В/У", "Вставь номер в поле «Номер В/У»: Ctrl+V. Я сверю его с аккаунтом водителя.", [{ when: "[data-coach=license_number][data-match=false]", text: other("Номер В/У") }])),
+    ...trip(walk, "driver_id", ["Теперь ID водителя", "ID водителя — в ссылке на его аккаунт. Вернись во вкладку «Диспетчерская»."], [
+      { target: "[data-coach=fleet-address-id]", advanceWhen: COPIED("id"), action: "Скопируй", title: "ID в адресной строке", text: "ID — часть адреса после «contractors/». Выдели его двойным щелчком (на телефоне — долгим нажатием) и скопируй: Ctrl+C.", mistakes: [{ when: COPIED("link"), text: "Скопирована вся ссылка, а нужен только ID: дважды щёлкни по нему в адресе." }] }],
+    paste("driver_id", "ID водителя", "Вставь ID в поле «ID водителя»: Ctrl+V. Я сверю его с аккаунтом водителя.", [{ when: "[data-coach=driver_id][data-match=link]", text: "Здесь вся ссылка. Оставь только ID — часть после «contractors/»." }, { when: "[data-coach=driver_id][data-match=false]", text: other("ID") }])),
+  ];
+}
+
+/** A request names the account in its comment: the link is copied with ⧉ in the address bar. */
+function linkTrip(walk: AccountWalk): CoachStep[] {
+  return [
+    toSite("dispatch", "Ссылка на аккаунт", "Для этого запроса нужна ссылка на аккаунт водителя. Вернись во вкладку «Диспетчерская»."),
+    ...walk.open,
+    { target: "[data-coach=copy-link]", advanceWhen: COPIED("link"), action: "Нажми", title: "Скопируй ссылку", text: "Кнопка ⧉ справа в адресной строке копирует ссылку на аккаунт водителя целиком." },
+    toSite("crm", "Назад в CRM", "Вернись во вкладку «CRM-система» и вставь ссылку в комментарий."),
+  ].map(unless(LINKED)).map(step => ({ ...step, when: step.when ? `${LINK} ${step.when}` : LINK }));
+}
+
+const APPEAL_START: CoachStep[] = [
+  { target: "[data-coach=create]", skipWhen: "[data-coach=channel]", advanceWhen: "[data-coach=channel]", action: "Нажми сюда", title: "Привет! Я Пульсар 👋", text: "Покажу, как оформить обращение водителя. Начнём с кнопки «Создать обращение»." },
+  { target: "[data-coach=channel]", action: "Выбери", title: "Откуда обращение?", text: "Выбери, как связался водитель: позвонил или написал в чат." }
+];
+const APPEAL_CATEGORIES: CoachStep[] = [
+  { target: "[data-coach=park]", advanceWhen: "[data-coach=city]", action: "Выбери", title: "Таксопарк", text: "Выбери таксопарк водителя. Сразу после этого появится поле «Город»." },
+  { target: "[data-coach=city]", advanceWhen: "[data-coach=city][data-filled=true]", action: "Выбери", title: "Город", text: "Теперь выбери город, в котором работает водитель." },
+  { target: level(1), advanceWhen: chosen(1), action: "Выбери", title: "Категория 1 — кто обратился", text: "Если звонит или пишет водитель, выбери «Водитель». Для пассажира, Яндекса или постороннего звонка — свой пункт." },
+  // Driver branch: type, then what the driver needs.
+  { target: level(2), when: `${DRIVER} ${level(2)}`, advanceWhen: chosen(2), action: "Выбери", title: "Категория 2 — тип водителя", text: "Обычный водитель или самозанятый? Тип виден в учётной записи водителя: «Физлицо» или «СМЗ»." },
+  { target: level(3), when: `${DRIVER} ${level(3)}`, advanceWhen: chosen(3), action: "Выбери", title: "Категория 3 — что нужно водителю", text: "«Консультация» — ты сам ответил на вопросы, и всё. «Запрос» — задачу надо передать отделу: смена авто, номера, лимит. «Жалоба/Благодарность» — отзыв о чьей-то работе." },
+  { target: level(4), when: choice(3, "Консультация"), advanceWhen: DONE, action: "Выбери", title: "Консультация", text: "Выбери тему, по которой ты объяснял: тарифы, баланс, фотоконтроль и т. д. Консультация значит, что ты всё рассказал сам — отдел не нужен." },
+  { target: level(4), when: choice(3, "Запрос"), advanceWhen: chosen(4), action: "Выбери", title: "Запрос — кому передаём", text: "«Таксопарк» — наши отделы: смена авто, номера, лимит, вывод денег. «Яндекс» — если ты уже создал тикет в поддержку Яндекса в диспетчерской." },
+  { target: level(5), when: choice(4, "Таксопарк"), advanceWhen: chosen(5), action: "Выбери", title: "Отдел", text: "«Обработка запросов/ООЗ» — смена автомобиля, номера, снятие лимита, условия работы. «Запросы по Такси.Про» — вывод денег, пополнение Каспи, вход в приложение." },
+  { target: level(6), when: `${DRIVER} ${level(6)}`, advanceWhen: DONE, action: "Выбери", title: "Что именно сделать", text: "Выбери конкретную задачу, например «Смена номера» или «Смена автомобиля». От неё зависит, что писать и прикладывать." },
+  { target: level(4), when: choice(3, "Жалоба/Благодарность"), advanceWhen: chosen(4), action: "Выбери", title: "Жалоба или благодарность", text: "Выбери, что это: жалоба или благодарность. Дальше укажешь, на кого: сотрудник ОТП, ОП, Регионы, таксопарк или Яндекс." },
+  { target: level(5), when: choice(4, "Жалоба"), advanceWhen: DONE, action: "Выбери", title: "На кого жалоба", text: "Выбери отдел или компанию. Для сотрудника ОТП, ОП или Регионов появится поле для его имени." },
+  { target: level(5), when: choice(4, "Благодарность"), advanceWhen: DONE, action: "Выбери", title: "Кого благодарят", text: "Выбери отдел или компанию. Для сотрудника ОТП, ОП или Регионов появится поле для его имени." },
+  // Other callers: walk to the last level without driver-specific advice.
+  { target: level(2), when: `${CAT}:not([data-root="Водитель"]) ${level(2)}`, advanceWhen: DONE, allow: CAT, action: "Выбери", title: "Уточни причину", text: "Выбирай следующие категории по порядку, пока не дойдёшь до последней. Серые варианты недоступны." },
+  // Any branch without its own steps is finished here: the whole category block is open.
+  { target: CAT, when: `${CAT}:not([data-complete=true])`, advanceWhen: DONE, action: "Выбери", title: "Доведи категорию до конца", text: "Выбери оставшиеся категории по порядку, пока не дойдёшь до последней. Без неё обращение не сохранится." },
+  { target: "[data-coach=context-help]", when: DONE, title: "Моя подсказка", text: "Для выбранной категории я показываю инструкцию: что проверить и что приложить. Прочитай её перед тем, как заполнять комментарий." },
+  { target: "[data-coach=extra-field]", when: "[data-coach=extra-field]", allow: "[data-coach=extra-field]", action: "Заполни", title: "Дополнительные поля", text: "Этой категории нужны отдельные поля: имя сотрудника, транзакция или новые условия. Заполни их." }
+];
+const APPEAL_END: CoachStep[] = [
+  // The comment and files come last and depend on the chosen category.
+  { target: "[data-coach=comment]", when: `${FORM}[data-rules~=phone_change]`, action: "Напиши", title: "Смена номера: комментарий", text: "Напиши старый номер, новый номер и ссылку на аккаунт водителя из диспетчерской. Без ссылки отдел не найдёт водителя.", ...LINKED_COMMENT },
+  { target: "[data-coach=files]", when: `${FORM}[data-rules~=phone_change]`, action: "Приложи", title: "Смена номера: скриншоты", text: "Скриншоты обязательны: Октелл и диспетчерская, номер водителя должен быть виден на обоих. Вставь их Ctrl+V или перетащи." },
+  { target: "[data-coach=comment]", when: `${FORM}[data-leaf="Смена автомобиля"]`, action: "Напиши", title: "Смена автомобиля: комментарий", text: "Ссылка на аккаунт водителя и данные новой машины: марка, модель, год, цвет и госномер. Фото техпаспорта приложи файлом.", ...LINKED_COMMENT },
+  { target: "[data-coach=comment]", when: `${FORM}[data-rules~=account_link]:not([data-rules~=phone_change]):not([data-leaf="Смена автомобиля"])`, action: "Напиши", title: "Комментарий к запросу", text: "Обязательно вставь ссылку на аккаунт водителя из диспетчерской и коротко напиши, что нужно сделать.", ...LINKED_COMMENT },
+  { target: "[data-coach=comment]", when: `${FORM}[data-rules~=description]:not([data-rules~=account_link])`, action: "Опиши", title: "Опиши ситуацию", text: "Подробно: что произошло, когда и с кем. Если это запрос в Яндекс — укажи номер тикета." },
+  { target: "[data-coach=comment]", when: `${FORM}[data-path*="/ Консультация /"]`, action: "Напиши", title: "Комментарий", text: "Коротко запиши, о чём спрашивал водитель и что ты ему ответил." },
+  { target: "[data-coach=comment]", when: `${FORM}[data-rules=""]:not([data-path*="/ Консультация /"])`, action: "Напиши", title: "Комментарий", text: "Если нужно, коротко опиши обращение своими словами." },
+  { target: "[data-coach=files]", when: `${FORM}[data-rules~=image]:not([data-rules~=phone_change])`, action: "Приложи", title: "Скриншот обязателен", text: "Для этой категории нужен скриншот. Нажми Ctrl+V, выбери файл или перетащи его сюда." },
+  { target: "[data-coach=save]", waitClick: true, untilGone: true, action: "Проверь и нажми", title: "Финиш! 🎉", text: "Проверь данные и нажми «Сохранить». Обращение увидят все участники. Ты справился!" }
+];
+
+/** The appeal from the first button to «Сохранить»; the driver's data come from the account `walk` reaches. */
+export function appealTour(walk: AccountWalk = ANY_ACCOUNT): CoachStep[] {
+  return [...APPEAL_START, ...driverData(walk), ...APPEAL_CATEGORIES, ...linkTrip(walk), ...APPEAL_END];
+}
+
 export const COACH_TOURS: Record<CoachTourId, CoachStep[]> = {
-  appeals: [
-    { target: "[data-coach=create]", skipWhen: "[data-coach=channel]", advanceWhen: "[data-coach=channel]", action: "Нажми сюда", title: "Привет! Я Пульсар 👋", text: "Покажу, как оформить обращение водителя. Начнём с кнопки «Создать обращение»." },
-    { target: "[data-coach=channel]", action: "Выбери", title: "Откуда обращение?", text: "Выбери, как связался водитель: позвонил или написал в чат." },
-    { target: "[data-coach=phone]", action: "Заполни", title: "Телефон водителя", text: "Впиши номер, с которого водитель звонит или пишет. По нему его найдут." },
-    { target: "[data-coach=license_number]", action: "Заполни", title: "Номер В/У", text: "Номер водительского удостоверения возьми из диспетчерской. ID водителя можно не заполнять." },
-    { target: "[data-coach=park]", advanceWhen: "[data-coach=city]", action: "Выбери", title: "Таксопарк", text: "Выбери таксопарк водителя. Сразу после этого появится поле «Город»." },
-    { target: "[data-coach=city]", advanceWhen: "[data-coach=city][data-filled=true]", action: "Выбери", title: "Город", text: "Теперь выбери город, в котором работает водитель." },
-    { target: level(1), advanceWhen: chosen(1), action: "Выбери", title: "Категория 1 — кто обратился", text: "Если звонит или пишет водитель, выбери «Водитель». Для пассажира, Яндекса или постороннего звонка — свой пункт." },
-    // Driver branch: type, then what the driver needs.
-    { target: level(2), when: `${DRIVER} ${level(2)}`, advanceWhen: chosen(2), action: "Выбери", title: "Категория 2 — тип водителя", text: "Обычный водитель или самозанятый? Тип виден в учётной записи водителя: «Физлицо» или «СМЗ»." },
-    { target: level(3), when: `${DRIVER} ${level(3)}`, advanceWhen: chosen(3), action: "Выбери", title: "Категория 3 — что нужно водителю", text: "«Консультация» — ты сам ответил на вопросы, и всё. «Запрос» — задачу надо передать отделу: смена авто, номера, лимит. «Жалоба/Благодарность» — отзыв о чьей-то работе." },
-    { target: level(4), when: choice(3, "Консультация"), advanceWhen: DONE, action: "Выбери", title: "Консультация", text: "Выбери тему, по которой ты объяснял: тарифы, баланс, фотоконтроль и т. д. Консультация значит, что ты всё рассказал сам — отдел не нужен." },
-    { target: level(4), when: choice(3, "Запрос"), advanceWhen: chosen(4), action: "Выбери", title: "Запрос — кому передаём", text: "«Таксопарк» — наши отделы: смена авто, номера, лимит, вывод денег. «Яндекс» — если ты уже создал тикет в поддержку Яндекса в диспетчерской." },
-    { target: level(5), when: choice(4, "Таксопарк"), advanceWhen: chosen(5), action: "Выбери", title: "Отдел", text: "«Обработка запросов/ООЗ» — смена автомобиля, номера, снятие лимита, условия работы. «Запросы по Такси.Про» — вывод денег, пополнение Каспи, вход в приложение." },
-    { target: level(6), when: `${DRIVER} ${level(6)}`, advanceWhen: DONE, action: "Выбери", title: "Что именно сделать", text: "Выбери конкретную задачу, например «Смена номера» или «Смена автомобиля». От неё зависит, что писать и прикладывать." },
-    { target: level(4), when: choice(3, "Жалоба/Благодарность"), advanceWhen: chosen(4), action: "Выбери", title: "Жалоба или благодарность", text: "Выбери, что это: жалоба или благодарность. Дальше укажешь, на кого: сотрудник ОТП, ОП, Регионы, таксопарк или Яндекс." },
-    { target: level(5), when: choice(4, "Жалоба"), advanceWhen: DONE, action: "Выбери", title: "На кого жалоба", text: "Выбери отдел или компанию. Для сотрудника ОТП, ОП или Регионов появится поле для его имени." },
-    { target: level(5), when: choice(4, "Благодарность"), advanceWhen: DONE, action: "Выбери", title: "Кого благодарят", text: "Выбери отдел или компанию. Для сотрудника ОТП, ОП или Регионов появится поле для его имени." },
-    // Other callers: walk to the last level without driver-specific advice.
-    { target: level(2), when: `${CAT}:not([data-root="Водитель"]) ${level(2)}`, advanceWhen: DONE, allow: CAT, action: "Выбери", title: "Уточни причину", text: "Выбирай следующие категории по порядку, пока не дойдёшь до последней. Серые варианты недоступны." },
-    // Any branch without its own steps is finished here: the whole category block is open.
-    { target: CAT, when: `${CAT}:not([data-complete=true])`, advanceWhen: DONE, action: "Выбери", title: "Доведи категорию до конца", text: "Выбери оставшиеся категории по порядку, пока не дойдёшь до последней. Без неё обращение не сохранится." },
-    { target: "[data-coach=context-help]", when: DONE, title: "Моя подсказка", text: "Для выбранной категории я показываю инструкцию: что проверить и что приложить. Прочитай её перед тем, как заполнять комментарий." },
-    { target: "[data-coach=extra-field]", when: "[data-coach=extra-field]", allow: "[data-coach=extra-field]", action: "Заполни", title: "Дополнительные поля", text: "Этой категории нужны отдельные поля: имя сотрудника, транзакция или новые условия. Заполни их." },
-    // The comment and files come last and depend on the chosen category.
-    { target: "[data-coach=comment]", when: `${FORM}[data-rules~=phone_change]`, action: "Напиши", title: "Смена номера: комментарий", text: "Напиши старый номер, новый номер и ссылку на аккаунт водителя из диспетчерской. Без ссылки отдел не найдёт водителя." },
-    { target: "[data-coach=files]", when: `${FORM}[data-rules~=phone_change]`, action: "Приложи", title: "Смена номера: скриншоты", text: "Скриншоты обязательны: Октелл и диспетчерская, номер водителя должен быть виден на обоих. Вставь их Ctrl+V или перетащи." },
-    { target: "[data-coach=comment]", when: `${FORM}[data-leaf="Смена автомобиля"]`, action: "Напиши", title: "Смена автомобиля: комментарий", text: "Ссылка на аккаунт водителя и данные новой машины: марка, модель, год, цвет и госномер. Фото техпаспорта приложи файлом." },
-    { target: "[data-coach=comment]", when: `${FORM}[data-rules~=account_link]:not([data-rules~=phone_change]):not([data-leaf="Смена автомобиля"])`, action: "Напиши", title: "Комментарий к запросу", text: "Обязательно вставь ссылку на аккаунт водителя из диспетчерской и коротко напиши, что нужно сделать." },
-    { target: "[data-coach=comment]", when: `${FORM}[data-rules~=description]:not([data-rules~=account_link])`, action: "Опиши", title: "Опиши ситуацию", text: "Подробно: что произошло, когда и с кем. Если это запрос в Яндекс — укажи номер тикета." },
-    { target: "[data-coach=comment]", when: `${FORM}[data-path*="/ Консультация /"]`, action: "Напиши", title: "Комментарий", text: "Коротко запиши, о чём спрашивал водитель и что ты ему ответил." },
-    { target: "[data-coach=comment]", when: `${FORM}[data-rules=""]:not([data-path*="/ Консультация /"])`, action: "Напиши", title: "Комментарий", text: "Если нужно, коротко опиши обращение своими словами." },
-    { target: "[data-coach=files]", when: `${FORM}[data-rules~=image]:not([data-rules~=phone_change])`, action: "Приложи", title: "Скриншот обязателен", text: "Для этой категории нужен скриншот. Нажми Ctrl+V, выбери файл или перетащи его сюда." },
-    { target: "[data-coach=save]", waitClick: true, untilGone: true, action: "Проверь и нажми", title: "Финиш! 🎉", text: "Проверь данные и нажми «Сохранить». Обращение увидят все участники. Ты справился!" },
-  ],
+  appeals: appealTour(),
   drivers: [
     // List: find the driver and read the row.
     { target: "[data-coach=drv-search]", action: "Вставь ссылку", title: "Поиск водителя", text: "Вставь ссылку на водителя из Диспетчерской или его ID. Я сам достану ID из части между «/contractors/» и «/details». Искать можно и по ФИО, телефону, госномеру." },

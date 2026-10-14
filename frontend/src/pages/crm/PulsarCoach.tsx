@@ -19,7 +19,7 @@ export function PulsarCoach({ steps, onClose, extra }: { steps: CoachStep[]; onC
   const guide = useGuide();
   const [index, setIndex] = useState(0), [missing, setMissing] = useState(false), [flying, setFlying] = useState(true);
   // «done»: the step's action is already done (the operator came back to it), so «Дальше» may move on.
-  const [done, setDone] = useState(false), [nudge, setNudge] = useState(0), [top, setTop] = useState(false);
+  const [done, setDone] = useState(false), [nudge, setNudge] = useState(0), [top, setTop] = useState(false), [mistake, setMistake] = useState("");
   const mascotRef = useRef<HTMLDivElement>(null), bubbleRef = useRef<HTMLDivElement>(null), handRef = useRef<HTMLDivElement>(null), spotRef = useRef<HTMLDivElement>(null), rootRef = useRef<HTMLDivElement>(null);
   const step = steps[index], last = index === steps.length - 1;
   // Steps that do not apply are skipped in the direction the operator is moving.
@@ -59,8 +59,8 @@ export function PulsarCoach({ steps, onClose, extra }: { steps: CoachStep[]; onC
     let frame = 0, found: Element | null = null, started = performance.now(), arrived = false;
     // Coming back to an action that is already done shows it with «Дальше»; going forward skips it.
     const returning = direction.current < 0;
-    let armed = !returning, ready = returning && !!step.waitClick, raised = false, couldBack = false;
-    setMissing(false); setFlying(true); setNudge(0); setDone(ready); setTop(false); setCanBack(false); lit.current = null; pressed.current = null; arrivedRef.current = false;
+    let armed = !returning, ready = returning && !!step.waitClick, raised = false, couldBack = false, said = "";
+    setMissing(false); setFlying(true); setNudge(0); setDone(ready); setMistake(""); setTop(false); setCanBack(false); lit.current = null; pressed.current = null; arrivedRef.current = false;
     const landed = window.setTimeout(() => setFlying(false), 350);
     const small = window.innerWidth < 700, mascot = small ? 76 : 108;
     const tick = () => {
@@ -75,6 +75,9 @@ export function PulsarCoach({ steps, onClose, extra }: { steps: CoachStep[]; onC
         if (!now) armed = true;
         if (now !== ready) { ready = now; setDone(now); }
       }
+      if (step.doneWhen) { const now = !!shown(step.doneWhen); if (now !== ready) { ready = now; setDone(now); } }
+      const wrong = step.mistakes?.find(m => shown(m.when))?.text ?? "";
+      if (wrong !== said) { said = wrong; setMistake(wrong); }
       found = lit.current = shown(step.target);
       // A save went through: its button is gone (or the form was opened anew).
       if (pressed.current && found !== pressed.current) { forward(); return; }
@@ -114,7 +117,7 @@ export function PulsarCoach({ steps, onClose, extra }: { steps: CoachStep[]; onC
 
   if (!step) return null;
   // A step that asks to press or choose something waits for the operator: nobody does it for him.
-  const waiting = !missing && !done && (!!step.advanceWhen || !!step.waitClick);
+  const waiting = !missing && !done && (!!step.advanceWhen || !!step.waitClick || !!step.doneWhen);
   return <div ref={rootRef} className="coach" data-flying={flying} data-missing={missing} data-nudge={nudge ? (nudge % 2 ? "a" : "b") : undefined}>
     <div ref={spotRef} className="coach-spot" aria-hidden="true" />
     <div ref={handRef} className="coach-hand" aria-hidden="true"><span>👈</span>{step.action && <small>{step.action}</small>}</div>
@@ -124,6 +127,7 @@ export function PulsarCoach({ steps, onClose, extra }: { steps: CoachStep[]; onC
       <strong>{guide.text(step.title)}</strong>
       <p>{missing ? "Этого элемента сейчас нет на экране. Нажми «Дальше», и я покажу следующее." : guide.text(step.text)}</p>
       {!missing && extra?.(step)}
+      {!missing && mistake && <p className="coach-mistake" role="alert">{guide.text(mistake)}</p>}
       {nudge > 0 && <p className="coach-lock">Пока идёт подсказка, работает только {step.action ? "выделенное место" : "моё окошко: прочитай и нажми «Дальше»"}. Выйти из подсказки{" "}— ✕.</p>}
       <div className="coach-actions">
         <button className="coach-back" disabled={!canBack} onClick={() => back()}>← Назад</button>

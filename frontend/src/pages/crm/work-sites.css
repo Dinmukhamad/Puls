@@ -159,3 +159,5 @@
 /* Search button matches the 33px filter controls next to it. */
 .crm-filters .crm-secondary { height:33px; padding-block:0; }
 @media(max-width:700px) { .crm-pagination button { min-width:40px; min-height:40px; } .work-browser-address>button { width:40px; height:40px; } }
+/* On a phone a driver's link takes its own row under the buttons and wraps: the ID in it stays readable and can be copied. */
+@media(max-width:700px) { .work-browser-address:has([data-coach=fleet-address-id]) { flex-wrap:wrap; } .work-browser-address:has([data-coach=fleet-address-id]) .work-address-text { order:1; flex-basis:100%; border-radius:14px; } .work-address-text>span:has(>[data-coach=fleet-address-id]) { white-space:normal; overflow-wrap:anywhere; } }

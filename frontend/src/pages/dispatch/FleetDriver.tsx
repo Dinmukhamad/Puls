@@ -1,6 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { fleet as api, type FleetDriver } from "../../api/dispatch";
 import { PhotoThumb, type PhotoKind } from "../DriverPhotoArt";
+import { copyText } from "../crm/accountData";
 import { Avatar, Drawer, FleetHead, Icon, Modal, useFleet } from "./FleetUi";
 import { DRIVER_TABS, STATUS, dayDate, duration, fullName, money, orderTransactions, shortDate, type DriverTab } from "./fleetNav";
 
@@ -60,6 +61,16 @@ function Field({ label, children, hint }: { label: string; children: ReactNode; 
 }
 const Fixed = ({ value, date = false }: { value: string; date?: boolean }) => <input className="fleet-input" value={value || (date ? "дд.мм.гггг" : "")} readOnly disabled aria-readonly="true" />;
 
+/** Data operators carry over into CRM: the field can be selected, and ⧉ copies it whole. */
+function CopyField({ value, coach, what }: { value: string; coach: string; what: string }) {
+  const [done, setDone] = useState(false);
+  return <div className="fleet-copy" data-coach={coach}>
+    <input className="fleet-input" value={value} readOnly aria-readonly="true" aria-label={what} />
+    <button type="button" className={done ? "is-done" : undefined} aria-label={done ? "Скопировано" : `Скопировать ${what}`} title="Скопировать"
+      onClick={() => void copyText(value).then(ok => { if (!ok) return; setDone(true); window.setTimeout(() => setDone(false), 2000); })}>{done ? "✓" : "⧉"}</button>
+  </div>;
+}
+
 function DetailsTab({ d }: { d: FleetDriver }) {
   const { state, run } = useFleet();
   const [provider, setProvider] = useState(d.provider), [busy, setBusy] = useState(false), [error, setError] = useState("");
@@ -74,7 +85,7 @@ function DetailsTab({ d }: { d: FleetDriver }) {
     <div className="fleet-form-grid">
       <div>
         <Field label="Фамилия"><Fixed value={d.last_name} /></Field><Field label="Имя"><Fixed value={d.first_name} /></Field><Field label="Отчество"><Fixed value={d.middle_name || "-"} /></Field>
-        <Field label="Телефон"><Fixed value={d.phone} /></Field><Field label="Адрес"><Fixed value={d.address || "Укажите адрес"} /></Field>
+        <Field label="Телефон"><CopyField value={d.phone} coach="driver-phone" what="телефон" /></Field><Field label="Адрес"><Fixed value={d.address || "Укажите адрес"} /></Field>
         <Field label="ИИН" hint={<small className="fleet-field-hint">Есть у самозанятых и ИП</small>}><Fixed value={d.iin} /></Field>
         <Field label="Источник"><Fixed value={d.source} /></Field><Field label="Статус"><Fixed value={d.works ? "Работает" : "Не работает"} /></Field>
         <Field label="Провайдер ЭДО"><select className="fleet-input fleet-select" data-coach="provider" data-value={provider} value={provider} onChange={e => setProvider(e.target.value)} aria-label="Провайдер ЭДО">{state.catalog.providers.map(p => <option key={p}>{p}</option>)}</select></Field>
@@ -82,7 +93,7 @@ function DetailsTab({ d }: { d: FleetDriver }) {
       </div>
       <div>
         <Field label="Водительский стаж с"><Fixed value={dayDate(d.experience_since)} date /></Field>
-        <Field label="Серия и номер ВУ" hint={<small className="fleet-field-hint fleet-link-like">Проверить водителя</small>}><input className="fleet-input" data-coach="license" value={d.license} readOnly aria-readonly="true" /></Field>
+        <Field label="Серия и номер ВУ" hint={<small className="fleet-field-hint fleet-link-like">Проверить водителя</small>}><CopyField value={d.license} coach="driver-license" what="номер ВУ" /></Field>
         <Field label="Страна выдачи ВУ"><Fixed value={d.license_country} /></Field><Field label="Дата выдачи ВУ"><Fixed value={dayDate(d.license_issued)} date /></Field>
         <Field label="Действует до"><Fixed value={dayDate(d.license_expires)} date /></Field>
       </div>

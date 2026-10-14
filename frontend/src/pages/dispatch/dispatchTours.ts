@@ -1,5 +1,5 @@
 /** Pulsar's walks through the training «Диспетчерская»: the tour of the cabinet and «Покажи, как» for every call. */
-import type { CoachStep } from "../crm/coachTours";
+import type { AccountWalk, CoachStep } from "../crm/coachTours";
 import type { FleetCall, FleetDriver, FleetPark } from "../../api/dispatch";
 
 const PAGE = (page: string) => `.fleet[data-page=${page}]`;
@@ -61,6 +61,11 @@ const limit: CoachStep[] = [
   { target: "[data-coach=order-tariff]", when: PAGE("order"), title: "Тариф заказа", text: "Не «Межгород» — лимит снимает отдел ООЗ по запросу из CRM. «Межгород» — такой лимит ООЗ не снимает." },
   { target: "[data-coach=order-transactions]", when: PAGE("order"), title: "Транзакции", text: "«Транзакции» показывают все операции именно по этому заказу. Нажми «Готово» и ответь водителю в моей панели." },
 ];
+
+/** The appeal tour's way to a call's or a scenario's driver: his park, the search and his own account. */
+export function driverAccount(driver: FleetDriver, park: FleetPark): AccountWalk {
+  return { account: DRIVER(driver.id), open: [...parkSteps(park), ...findSteps(driver, `фамилию «${driver.last_name}»`, "Нажми на этого водителя в результатах.")] };
+}
 
 /** «Покажи, как» for one call; targets use the call's own park and driver. */
 export function callTour(call: FleetCall, driver: FleetDriver, park: FleetPark): CoachStep[] {
