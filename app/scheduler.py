@@ -12,10 +12,12 @@ from datetime import date, timedelta
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 
 from app.core.config import settings
 from app.db.session import SessionLocal
 from app.models.enums import WeekStatus
+from app.services import city_seasons
 from app.services import telemetry as telemetry_service
 from app.services import weekly as weekly_service
 
@@ -25,6 +27,7 @@ _scheduler: AsyncIOScheduler | None = None
 
 WEEKLY_JOB_ID = "weekly_close"
 TELEMETRY_JOB_ID = "city_telemetry_purge"
+SEASON_JOB_ID = "city_season_close"
 
 
 async def close_previous_week() -> weekly_service.WeekCloseReport | None:
@@ -61,6 +64,14 @@ async def purge_city_telemetry() -> int:
     return removed
 
 
+async def close_city_season() -> None:
+    """Every few minutes: ends the city's season once its scheduled date has come."""
+    async with SessionLocal() as session:
+        season = await city_seasons.close_due(session)
+    if season is not None:
+        logger.info("Сезон города %s завершён по расписанию", season.number)
+
+
 def start_scheduler() -> AsyncIOScheduler | None:
     """Запускает планировщик, если он включён в конфигурации."""
     global _scheduler
@@ -90,6 +101,14 @@ def start_scheduler() -> AsyncIOScheduler | None:
         id=TELEMETRY_JOB_ID,
         replace_existing=True,
         misfire_grace_time=3600,
+        coalesce=True,
+    )
+    _scheduler.add_job(
+        close_city_season,
+        IntervalTrigger(minutes=5, timezone=settings.TIMEZONE),
+        id=SEASON_JOB_ID,
+        replace_existing=True,
+        misfire_grace_time=600,
         coalesce=True,
     )
     _scheduler.start()

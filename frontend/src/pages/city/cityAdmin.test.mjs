@@ -46,6 +46,10 @@ const fixtures = {
     { id: "support-team-1", city: "support", name: "Район 1", construction: true, operators: 6, builders: 2, land: { cells: 10635, taken: 36, built: 27, open_band: 1, bands: [] }, buildings: 4, open_projects: 1, landmark_level: 1, hq_level: 1, built_projects: 0 },
     { id: "sales-team-1", city: "sales", name: "Район продаж", construction: false, operators: 0, builders: 0, land: null, buildings: 0, open_projects: 0, landmark_level: 1, hq_level: 1, built_projects: 0 },
   ] },
+  "city-seasons": { current: { number: 3, started_at: "2026-10-01T04:00:00Z", period: "month", period_name: "Месяц", ends_at: "2026-11-01T04:00:00Z", warning: false, revision: 4 }, history: [
+    { id: 2, number: 2, started_at: "2026-09-01T04:00:00Z", ended_at: "2026-10-01T04:00:00Z", days: 30, period: "month", period_name: "Месяц", scheduled: true, ended_by: null, visible_until: null, totals: { buildings: 34, small: 210, builders: 12, cities: {}, districts: [], mine: null } },
+    { id: 1, number: 1, started_at: "2026-08-10T04:00:00Z", ended_at: "2026-09-01T04:00:00Z", days: 22, period: null, period_name: null, scheduled: false, ended_by: "Руководитель ТП", visible_until: null, totals: { buildings: 1, small: 0, builders: 1, cities: {}, districts: [], mine: null } },
+  ], resets: 2, can_manage: true, visible_days: 5, warn_days: 3, periods: [{ id: "week", name: "Неделя" }, { id: "2weeks", name: "2 недели" }, { id: "month", name: "Месяц" }, { id: "2months", name: "2 месяца" }, { id: "3months", name: "3 месяца" }] },
   "city-settings": { revision: 2, missions: {
     welcome: { title: "Твой город начинается здесь", description: "Познакомься с картой.", pulsar: "Начни путь.", target: 1, xp: 25, coins: 0, enabled: true, prerequisite: null },
     crm: { title: "Первое обращение", description: "Создай обращение в CRM.", pulsar: "Открой CRM.", target: 2, xp: 40, coins: 10, enabled: false, prerequisite: "welcome" },
@@ -85,7 +89,7 @@ test("the page uses the site's head and one segmented row of sections that follo
   assert.match(html, /<div class="page-head"><div><h1 class="page-title">Управление городом<\/h1><p class="page-subtitle">/);
   assert.match(html, /<div class="page-head__actions"><a href="\/training\/city" class="btn btn--secondary btn--m">Открыть город<\/a><\/div>/);
   assert.match(html, /<div class="city-admin-tabs"><div class="segmented" role="radiogroup" aria-label="Разделы управления городом">/);
-  assert.equal((html.match(/role="radio"/g) ?? []).length, 6);
+  assert.equal((html.match(/role="radio"/g) ?? []).length, 7);
   assert.doesNotMatch(html, /Города групп/);
   assert.match(html, /<button type="button" role="radio" aria-checked="true" tabindex="0" class="segmented__item is-active">Экономика игры<\/button>/);
   assert.doesNotMatch(html, /city-page|city-heading|city-eyebrow|aria-pressed|city-action|city-secondary/);
@@ -117,6 +121,22 @@ test("district construction is a table on a wide screen and a list of cards on a
   assert.match(html, /36 \/ 10635<\/td><td class="num">10599<\/td>/);
   assert.match(html, /<ul class="card-list"><li class="list-card">/);
   assert.equal((html.match(/class="kpi kpi--/g) ?? []).length, 4);
+});
+
+test("seasons: one schedule, a guarded reset and every past season with its dates and 3D links", () => {
+  const html = page("seasons");
+  assert.match(html, /aria-checked="true"[^>]*>Сезоны и история</);
+  assert.equal((html.match(/class="kpi kpi--/g) ?? []).length, 3);
+  assert.match(html, /Город сбрасывался<\/span>.*2 раза/s);
+  assert.match(html, /<h2 class="card__title">Расписание<\/h2><p class="card__subtitle">Одно для Техподдержки и ОП<\/p>/);
+  assert.match(html, /role="combobox"[^>]*aria-label="Как часто сбрасывать город"/);
+  assert.match(html, /<input class="input" type="datetime-local" required="" value="2026-11-01T\d\d:00"\/>/);
+  assert.match(html, /Город будет сбрасываться раз в месяц\. За 3 дня до сброса операторы видят предупреждение\./);
+  assert.match(html, /<button type="button" class="btn btn--destructive btn--m">Сбросить город сейчас<\/button>/);
+  assert.match(html, /<td><strong>Сезон 2<\/strong><\/td>.*<span class="badge badge--neutral">По расписанию<\/span>.*34 здания · 210 клеток благоустройства · строили 12 человек/s);
+  assert.match(html, /<span class="badge badge--warning">Руководитель ТП<\/span>/);
+  assert.match(html, /<a href="\/training\/city\?city=support&amp;history=2">Техподдержка<\/a> · <a href="\/training\/city\?city=sales&amp;history=2">ОП<\/a>/);
+  assert.match(html, /<td class="num">30 дней<\/td>/);
 });
 
 test("operators get a search, a legend and a mission scale in rows of one list", () => {

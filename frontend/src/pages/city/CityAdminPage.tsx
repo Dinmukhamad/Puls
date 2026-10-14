@@ -1,4 +1,5 @@
 import { CityWorldEditor } from "./CityWorldEditor";
+import { CitySeasonsAdmin } from "./CitySeasonsAdmin";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -15,8 +16,8 @@ import { decorEconomyName, estateRows, plotEconomyName } from "./plotCatalogue";
 
 /** Dispatch calls cannot exceed the server's curriculum. */
 const DISPATCH_TARGETS: Record<string, number> = { dispatch_driver: 2, dispatch_car: 1, dispatch_inventory: 1, dispatch_support: 1, dispatch_limit: 3 };
-type CityAdminTab = "participants" | "economy" | "situations" | "settings" | "world" | "estates";
-const CITY_ADMIN_TABS: CityAdminTab[] = ["participants", "economy", "situations", "settings", "world", "estates"];
+type CityAdminTab = "participants" | "economy" | "situations" | "settings" | "world" | "estates" | "seasons";
+const CITY_ADMIN_TABS: CityAdminTab[] = ["participants", "economy", "situations", "settings", "world", "estates", "seasons"];
 
 export function CityAdminPage() {
   const { user } = useAuth();
@@ -26,7 +27,7 @@ export function CityAdminPage() {
   const tab: CityAdminTab = requested && CITY_ADMIN_TABS.includes(requested) ? requested : ["head", "admin"].includes(user?.role ?? "") ? "world" : "participants";
   const settings = useQuery({ queryKey:["city-settings"], queryFn:city.settings, enabled:tab === "settings", refetchOnWindowFocus:false });
   const tabs: { value: CityAdminTab; label: string }[] = [
-    { value: "world", label: "Города и районы" }, { value: "estates", label: "Стройка районов" }, { value: "participants", label: "Прогресс операторов" },
+    { value: "world", label: "Города и районы" }, { value: "estates", label: "Стройка районов" }, { value: "seasons", label: "Сезоны и история" }, { value: "participants", label: "Прогресс операторов" },
     { value: "situations", label: "Ситуации дня" }, { value: "economy", label: "Экономика игры" },
     { value: "settings", label: canEdit ? "Настроить миссии" : "Условия миссий" },
   ];
@@ -38,7 +39,7 @@ export function CityAdminPage() {
   return <div className="stack city-admin">
     <div className="page-head"><div><h1 className="page-title">Управление городом</h1><p className="page-subtitle">Назначайте команды районов, настраивайте миссии и следите за прогрессом.</p></div><div className="page-head__actions"><Link className="btn btn--secondary btn--m" to="/training/city">Открыть город</Link></div></div>
     <div className="city-admin-tabs" ref={tabRow}><SegmentedControl label="Разделы управления городом" options={tabs} value={tab} onChange={select} /></div>
-    {tab==='world'?<CityWorldEditor isHead={user?.role === "head"} />:tab==='estates'?<Estates />:tab==='participants'?<Participants />:tab==='economy'?<Economy />:tab==='situations'?<Situations />:settings.data?<MissionEditor initial={settings.data} canEdit={canEdit} />:settings.isError?<ErrorState error={settings.error} onRetry={()=>settings.refetch()} />:<Skeleton height={350} />}
+    {tab==='world'?<CityWorldEditor isHead={user?.role === "head"} />:tab==='estates'?<Estates />:tab==='seasons'?<CitySeasonsAdmin />:tab==='participants'?<Participants />:tab==='economy'?<Economy />:tab==='situations'?<Situations />:settings.data?<MissionEditor initial={settings.data} canEdit={canEdit} />:settings.isError?<ErrorState error={settings.error} onRetry={()=>settings.refetch()} />:<Skeleton height={350} />}
   </div>;
 }
 

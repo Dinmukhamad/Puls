@@ -17,6 +17,7 @@ from app.api.v1 import (
     city,
     city_estate,
     city_sandbox,
+    city_seasons,
     crm,
     dispatch,
     driver,
@@ -39,6 +40,7 @@ api_router = APIRouter()
 api_router.include_router(city.router)
 api_router.include_router(city_estate.router)
 api_router.include_router(city_sandbox.router)
+api_router.include_router(city_seasons.router)
 api_router.include_router(work_sites_access.router)
 api_router.include_router(crm.router)
 api_router.include_router(dispatch.router)

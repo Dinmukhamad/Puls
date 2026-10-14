@@ -506,6 +506,10 @@ async def stored_result(session, user_id, key, print_):
 
 async def operation(session, user, key, kind, request, perform):
     """Runs `perform` once per key under the actor's lock: a repeat returns the first result."""
+    from app.services.city_seasons import ensure
+
+    # A season the schedule has ended goes first: nothing is built into a season that is over.
+    await ensure(session)
     print_ = fingerprint(kind, request)
     if (done := await stored_result(session, user.id, key, print_)) is not None:
         return done
@@ -750,8 +754,11 @@ def land_view(district_id, counts):
 
 async def city_state(session, user, city_id):
     """What anyone may see of a city's districts: buildings and goals, never prices or names."""
+    from app.services.city_seasons import ensure
+
     if city_id not in ("support", "sales"):
         raise NotFoundError("Город не найден")
+    await ensure(session)
     all_districts = await world_districts(session)
     districts = {k: d for k, d in all_districts.items() if d["city"] == city_id}
     team = await members(session, districts)
@@ -915,6 +922,9 @@ def project_view(project, mine, *, small, exact):
 
 async def estate(session, user):
     """The operator's buildings and inventory, the catalogue and land prices of this revision."""
+    from app.services.city_seasons import ensure
+
+    await ensure(session)
     districts = await world_districts(session)
     if await needs_reconcile(session, user, districts):
         await lock_user(session, user.id)
