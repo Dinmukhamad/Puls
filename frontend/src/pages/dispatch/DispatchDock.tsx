@@ -21,7 +21,7 @@ export function DispatchDock({ feedback, onFeedback, onGo, onTour, onCrm }: {
   const query = useQuery({ queryKey: FLEET_QUERY, queryFn: api.state });
   const [active, setActive] = useState<string | null>(null), [open, setOpen] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState("");
   const [cheer, setCheer] = useState<FleetCall | null>(null);
-  const solvedBefore = useRef<Set<string> | null>(null);
+  const solvedBefore = useRef<Set<string> | null>(null), scroll = useRef<HTMLDivElement>(null);
   const state = query.data, calls = state?.calls ?? [], call = calls.find(c => c.id === active);
   // A call that became solved since the last answer from the server gets its own celebration.
   useEffect(() => {
@@ -31,7 +31,8 @@ export function DispatchDock({ feedback, onFeedback, onGo, onTour, onCrm }: {
     solvedBefore.current = solved;
     if (fresh) { setCheer(fresh); setActive(fresh.id); setOpen(true); }
   }, [state]);
-  useEffect(() => { setError(""); setCheer(c => c?.id === active ? c : null); }, [active]);
+  // A call opens at its top, where «Покажи, как» is, however far the list was scrolled.
+  useEffect(() => { setError(""); setCheer(c => c?.id === active ? c : null); if (scroll.current) scroll.current.scrollTop = 0; }, [active]);
   async function send(action: () => ReturnType<typeof api.code>) {
     setBusy(true); setError("");
     try { const response = await action(); client.setQueryData(FLEET_QUERY, response.state); client.invalidateQueries({ queryKey: ["city"] }); onFeedback({ ...response.result, at: Date.now() }); }
@@ -50,7 +51,7 @@ export function DispatchDock({ feedback, onFeedback, onGo, onTour, onCrm }: {
         <div className="pulsar-bubble" aria-live="polite"><p className="pulsar-speech">{bubble.label}</p><strong>{bubble.text}</strong></div>
       </div>
     </header>
-    <div className="pulsar-dock-scroll">
+    <div className="pulsar-dock-scroll" ref={scroll}>
       {!state ? <p className="pulsar-muted">{query.isError ? query.error.message : "Загружаем звонки…"}</p>
         : call ? <CallView key={call.id} call={call} state={state} updatedAt={query.dataUpdatedAt} busy={busy} error={error} feedback={recent} onBack={() => { setActive(null); onFeedback(null); }} onTour={() => onTour(`call:${call.id}`)} onGo={onGo} onCrm={onCrm}
           onCode={() => void send(() => api.code(call.driver))} onAnswer={option => void send(() => api.answer(call.id, option))} />
@@ -98,7 +99,10 @@ function CallView({ call, state, updatedAt, busy, error, feedback, onBack, onTou
   return <div className="fleet-call-view" data-call={call.id}>
     <button className="pulsar-text-button" onClick={onBack}>← Все звонки</button>
     <div className={`fleet-call-card is-${call.state}`}><small>☎ Звонит {call.driver_name}{park ? ` · ${park.name}, ${park.city}` : ""}</small><p>«{call.speech}»</p></div>
-    {call.state === "solved" ? <div className="fleet-call-done" role="status"><strong>✓ Звонок решён</strong><p>{call.done}</p></div> : <p className="pulsar-body">{call.goal}</p>}
+    {call.state === "solved" ? <div className="fleet-call-done" role="status"><strong>✓ Звонок решён</strong><p>{call.done}</p></div> : <>
+      <p className="pulsar-body">{call.goal}</p>
+      <div className="fleet-call-actions"><button className="crm-primary" onClick={onTour}>👉 Покажи, как</button><button className="crm-secondary" onClick={() => onGo("contractors", call.park)}>Открыть парк водителя</button></div>
+    </>}
     {call.state === "crm" && <div className="fleet-call-crm" data-coach="dock-crm"><strong>Осталось: запрос в CRM</strong><p>{call.done}</p>
       <p className="pulsar-muted">Категория: Водитель → … → Запрос → Таксопарк → Обработка запросов/ООЗ → Снятие лимита. В комментарии — ссылка на аккаунт.</p>
       <div className="fleet-call-actions"><button className="crm-secondary" onClick={() => { if (!driver) return; void navigator.clipboard?.writeText(fleetLink(driver, park)).then(() => setCopied(true), () => setCopied(false)); }}>{copied ? "Ссылка скопирована ✓" : "Скопировать ссылку на аккаунт"}</button><button className="crm-primary" onClick={onCrm}>Открыть CRM →</button></div>
@@ -109,13 +113,10 @@ function CallView({ call, state, updatedAt, busy, error, feedback, onBack, onTou
       {feedback?.correct === false && feedback.text && <p className="fleet-answer-hint" role="alert">{feedback.text}</p>}</div>}
     {feedback?.checks && call.id === "support" && <ul className="fleet-checks-list" aria-label="Проверка обращения">{feedback.checks.map(c => <li key={c.label} className={c.ok ? "is-ok" : "is-bad"}>{c.ok ? "✓" : "✕"} {c.label}</li>)}</ul>}
     {error && <p className="fleet-answer-hint" role="alert">{error}</p>}
-    {call.state !== "solved" && <>
-      <div className={`pulsar-checklist${ticks.length === call.steps.length ? " is-finished" : ""}`}>
-        <div className="pulsar-checklist-heading"><strong>Что сделать</strong><span>{ticks.length} из {call.steps.length}</span></div>
-        {call.steps.map((text, i) => <label key={i} className={ticks.includes(i) ? "is-done" : ""}><input type="checkbox" checked={ticks.includes(i)} onChange={() => setTicks(t => t.includes(i) ? t.filter(n => n !== i) : [...t, i])} /><span>{ticks.includes(i) ? "✓" : i + 1}</span><p>{text}</p></label>)}
-      </div>
-      <div className="fleet-call-actions"><button className="crm-primary" onClick={onTour}>👉 Покажи, как</button><button className="crm-secondary" onClick={() => onGo("contractors", call.park)}>Открыть парк водителя</button></div>
-    </>}
+    {call.state !== "solved" && <div className={`pulsar-checklist${ticks.length === call.steps.length ? " is-finished" : ""}`}>
+      <div className="pulsar-checklist-heading"><strong>Что сделать</strong><span>{ticks.length} из {call.steps.length}</span></div>
+      {call.steps.map((text, i) => <label key={i} className={ticks.includes(i) ? "is-done" : ""}><input type="checkbox" checked={ticks.includes(i)} onChange={() => setTicks(t => t.includes(i) ? t.filter(n => n !== i) : [...t, i])} /><span>{ticks.includes(i) ? "✓" : i + 1}</span><p>{text}</p></label>)}
+    </div>}
   </div>;
 }
 
