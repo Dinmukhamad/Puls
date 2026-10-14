@@ -362,6 +362,9 @@ for _index, _driver in enumerate(DRIVERS):
     _driver["crm_id"] = _driver["crm_id"] or 11046000 + _index
     _driver["driver_no"] = _driver["driver_no"] or 1_540_000 + _index * 37
 DRIVER_KEYS = {d["key"]: d for d in DRIVERS}
+# The driver Pulsar hands over for CRM practice without a call. No call or scenario uses him,
+# so a practice request about him never counts for a call.
+CRM_TEST_DRIVER = "akhmetov"
 
 # Orders that the withdrawal-limit calls are about. Their tariff decides the answer.
 SCENARIO_ORDERS = {

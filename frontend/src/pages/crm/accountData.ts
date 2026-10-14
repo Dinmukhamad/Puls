@@ -1,6 +1,7 @@
 /**
- * The driver's data an appeal carries over from his account in the Диспетчерская: what the
- * operator copied there and whether the appeal's fields hold this account's phone, ВУ, ID and link.
+ * The driver's data an appeal carries: what the operator copied and whether the appeal's fields
+ * hold the phone, ВУ, ID and link of its account. Without a call the appeal has two accounts:
+ * Pulsar's test driver and the account open in the Диспетчерская.
  */
 export interface AccountData { id: string; phone: string; license: string }
 export type CopyKind = "phone" | "license" | "id" | "link";
@@ -17,8 +18,8 @@ const samePhone = (value: string, phone: string) => {
   return typed.length >= 10 && typed.length <= 12 && typed.slice(-10) === digits(phone).slice(-10);
 };
 
-/** What a copied piece of text is for the account; "" when it is none of its data. */
-export function copyKind(text: string, account: AccountData): CopyKind | "" {
+/** What a copied piece of text is for one account; "" when it is none of its data. */
+function kindFor(text: string, account: AccountData): CopyKind | "" {
   const value = text.trim(), id = account.id.toLowerCase();
   if (!value) return "";
   if (value.toLowerCase() === id) return "id";
@@ -27,23 +28,34 @@ export function copyKind(text: string, account: AccountData): CopyKind | "" {
   return account.license && plainLicense(value) === plainLicense(account.license) ? "license" : "";
 }
 
-/**
- * How a field of the appeal holds the account's data: "true", "false" when it holds something
- * else, "" while empty. «ID водителя» with the whole link in it is "link".
- */
-export function fieldMatch(field: "phone" | "license_number" | "driver_id", value: string, account?: AccountData) {
-  const typed = value.trim();
-  if (!typed || !account) return "";
+/** What a copied piece of text is for the appeal's accounts; "" when it is none of their data. */
+export function copyKind(text: string, accounts: AccountData[]): CopyKind | "" {
+  for (const account of accounts) { const kind = kindFor(text, account); if (kind) return kind; }
+  return "";
+}
+
+function matchFor(field: "phone" | "license_number" | "driver_id", typed: string, account: AccountData) {
   if (field === "phone") return String(samePhone(typed, account.phone));
   if (field === "license_number") return String(plainLicense(typed) === plainLicense(account.license));
   const id = account.id.toLowerCase();
   return typed.toLowerCase() === id ? "true" : typed.toLowerCase().includes(id) ? "link" : "false";
 }
 
-/** A request's comment names the account by its link: "ok", "missing", or "" while it is empty. */
-export function linkMatch(comment: string, account?: AccountData) {
-  if (!comment.trim() || !account) return "";
-  return comment.toLowerCase().includes(account.id.toLowerCase()) ? "ok" : "missing";
+/**
+ * How a field of the appeal holds one of the accounts' data: "true", "false" when it holds
+ * something else, "" while empty. «ID водителя» with the whole link in it is "link".
+ */
+export function fieldMatch(field: "phone" | "license_number" | "driver_id", value: string, accounts: AccountData[] = []) {
+  const typed = value.trim();
+  if (!typed || !accounts.length) return "";
+  const found = accounts.map(account => matchFor(field, typed, account));
+  return found.includes("true") ? "true" : found.includes("link") ? "link" : "false";
+}
+
+/** A request's comment names an account by its link: "ok", "missing", or "" while it is empty. */
+export function linkMatch(comment: string, accounts: AccountData[] = []) {
+  if (!comment.trim() || !accounts.length) return "";
+  return accounts.some(account => comment.toLowerCase().includes(account.id.toLowerCase())) ? "ok" : "missing";
 }
 
 /** Copies the way the operator would and tells the work sites what was copied. */

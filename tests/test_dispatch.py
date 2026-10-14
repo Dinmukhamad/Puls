@@ -279,6 +279,40 @@ async def test_limit_answers_and_the_ooz_case_waits_for_a_crm_request(client, op
     assert call(state, "limit_duration")["state"] == "solved"
 
 
+async def test_crm_practice_driver_counts_for_no_call(client, operator, session):
+    headers = auth(await work_login(client, operator.login))
+    state = (await client.get(BASE, headers=headers)).json()
+    # Pulsar hands this driver over for appeals without a call: he is in the fleet, no call is his.
+    practice = driver(state, "akhmetov")
+    assert state["test_driver"] == practice["id"]
+    assert all(c["driver"] != practice["id"] for c in state["calls"])
+    await act(client, headers, "/calls/limit_duration/answer", option="ooz")
+    session.add(
+        CrmAppeal(
+            request_id=str(uuid4()),
+            author_id=operator.id,
+            author_name="Operator",
+            channel="Звонок",
+            phone=practice["phone"],
+            license_number=practice["license"],
+            driver_id=practice["id"],
+            contacted_at=utcnow(),
+            park="iTaxi",
+            city="Караганда",
+            category_ids=sorted(limit_categories())[:1],
+            category_labels=[],
+            details={},
+            comment=f"https://fleet.yandex.kz/contractors/{practice['id']}/details",
+            is_ticket=True,
+            status="new",
+        )
+    )
+    await session.commit()
+    after = (await client.get(BASE, headers=headers)).json()
+    # A practice «Снятие лимита» about him leaves the call that waits for its own request.
+    assert call(after, "limit_duration")["state"] == "crm"
+
+
 async def test_reset_restores_the_cabinet_but_keeps_solved_calls_and_owners_apart(
     client, operator, session
 ):

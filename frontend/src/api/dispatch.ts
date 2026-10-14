@@ -45,6 +45,8 @@ export interface FleetState {
   now: string; login: string; parks: FleetPark[]; drivers: FleetDriver[]; rules: { name: string; count: number; default: boolean }[];
   antifraud: AntifraudRow[]; antifraud_rules: string[]; inventory: { stock: Record<InventoryType, number>; log: InventoryRow[] };
   tickets: FleetTicket[]; calls: FleetCall[];
+  /** The driver Pulsar hands over for CRM practice without a call. */
+  test_driver: string;
   catalog: { tariffs: string[]; providers: string[]; inventory: Record<InventoryType, string>; themes: Record<string, string[]> };
   revision: number;
 }

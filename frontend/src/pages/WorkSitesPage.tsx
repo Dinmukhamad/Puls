@@ -12,7 +12,7 @@ import { useGuide } from "../guide";
 import { PulsarCoach } from "./crm/PulsarCoach";
 import { appealTour, COACH_TOURS, type CoachStep, type CoachTourId } from "./crm/coachTours";
 import { COPY_EVENT, copyKind, copyText, selectedText, type AccountData, type CopyKind } from "./crm/accountData";
-import { fleet as fleetApi, type FleetResponse, type FleetState } from "../api/dispatch";
+import { fleet as fleetApi, type FleetDriver, type FleetPark, type FleetResponse, type FleetState } from "../api/dispatch";
 import { DEFAULT_PARK, DispatchSite, FLEET_QUERY } from "./dispatch/DispatchSite";
 import { CoachCourierCode, DispatchDock, type FleetFeedback } from "./dispatch/DispatchDock";
 import { FLEET_TOUR, callTour, driverAccount } from "./dispatch/dispatchTours";
@@ -86,9 +86,9 @@ export function WorkSitesPage() {
   const [crmCall, setCrmCall] = useState<string | null>(null);
   // What the operator copied last, recognised against the appeal's account: Pulsar waits for the right piece.
   const [copiedKind, setCopiedKind] = useState<CopyKind | "">("");
-  const appealAccountRef = useRef<AccountData | undefined>(undefined);
+  const appealAccountsRef = useRef<AccountData[]>([]);
   useEffect(() => {
-    const seen = (text: string) => setCopiedKind(appealAccountRef.current ? copyKind(text, appealAccountRef.current) : "");
+    const seen = (text: string) => setCopiedKind(copyKind(text, appealAccountsRef.current));
     const keys = () => seen(selectedText()), button = (event: Event) => seen((event as CustomEvent<string>).detail);
     // A paste uses the copy up: going back for the same piece asks for a fresh copy.
     const pasted = () => setCopiedKind("");
@@ -184,12 +184,16 @@ export function WorkSitesPage() {
   // On a driver's page the address is the link operators copy into CRM: its ID finds the same account there.
   const fleetDriver = fleetRoute.page === "driver" ? fleetQuery.data?.drivers.find(d => d.id === fleetRoute.id) : undefined;
   const fleetDriverLink = fleetDriver && fleetLink(fleetDriver, fleetQuery.data?.parks.find(p => p.id === fleetDriver.park));
-  // The appeal is about the driver of the call or the scenario; otherwise about the account open in the Диспетчерская.
+  // The appeal is about the driver of the call or the scenario. Without one Pulsar hands over his
+  // test driver's data, and the account open in the Диспетчерская counts too.
   const targetId = fleetQuery.data?.calls.find(c => c.id === crmCall && c.state === "crm")?.driver ?? scenarioDriver?.id;
-  const appealTarget = targetId ? fleetQuery.data?.drivers.find(d => d.id === targetId) : undefined, appealDriver = appealTarget ?? fleetDriver;
+  const appealTarget = targetId ? fleetQuery.data?.drivers.find(d => d.id === targetId) : undefined;
   const appealPark = appealTarget && fleetQuery.data?.parks.find(p => p.id === appealTarget.park);
-  const appealAccount: AccountData | undefined = appealDriver && { id: appealDriver.id, phone: appealDriver.phone, license: appealDriver.license };
-  appealAccountRef.current = appealAccount;
+  const testDriver = fleetQuery.data?.drivers.find(d => d.id === fleetQuery.data?.test_driver);
+  const testPark = testDriver && fleetQuery.data?.parks.find(p => p.id === testDriver.park);
+  const appealAccounts: AccountData[] = (appealTarget ? [appealTarget] : [testDriver, fleetDriver])
+    .filter((d): d is FleetDriver => !!d).map(d => ({ id: d.id, phone: d.phone, license: d.license }));
+  appealAccountsRef.current = appealAccounts;
   const needsLink = view === "create" && !!catalog.data && categoryRules(catalog.data.categories, selection).has("account_link");
   /** The appeal tour walks to the driver's account in the Диспетчерская and back, so it lives on both tabs. */
   function tourOf(tour: CoachTourId) {
@@ -211,12 +215,29 @@ export function WorkSitesPage() {
     {notice && <div className="crm-notice" role="status">✓ {notice}<button aria-label="Закрыть уведомление" onClick={() => setNotice("")}>×</button></div>}
     {catalog.isPending && <div className="crm-empty" role="status">Открываем CRM…</div>}{catalog.isError && <div className="crm-empty" role="alert"><p>{catalog.error.message}</p><button className="crm-secondary" onClick={() => catalog.refetch()}>Повторить</button></div>}
     {sectionView ? sections.state ? <SectionPage view={view} params={params} state={sections.state} update={sections.update} drivers={drivers} save={saveFleet} parks={fleetParks} employee={user?.full_name ?? "Оператор"} notify={setNotice} openDriver={driver => openDriver(driver)} go={query => go(query)} /> : <FleetLoading query={fleetQuery} />
-    : catalog.data && (view === "create" ? <CrmAppealForm key={`${formKey}:${scenarioAttemptId ?? ""}`} catalog={catalog.data} initial={copy} scenarioAttemptId={scenarioAttemptId} account={appealAccount} onDirty={setFormDirty} onCategoryChange={updateSelection} onRequestHelp={() => setHelpRequest(n => n + 1)} onSaved={(appeal, duplicate) => { client.invalidateQueries({ queryKey: ["crm-appeals"] }); client.invalidateQueries({ queryKey: FLEET_QUERY }); client.setQueryData(["crm-appeal", appeal.id], appeal); setDirty(false); if (duplicate) { setCopy(appeal); setFormKey(k => k + 1); } else go(`appeal=${appeal.id}`, true); setNotice(`Обращение #${appeal.id} сохранено и доступно всем участникам.${duplicate ? " Открыта копия; вложения нужно добавить заново." : ""}`); }} /> : view === "drivers" ? fleetQuery.data ? <CrmDrivers key={`${driverId ?? "list"}:${driverScreen ?? ""}`} drivers={drivers} save={saveFleet} rules={fleetQuery.data.rules.map(r => r.name)} tariffs={fleetQuery.data.catalog.tariffs} openFleet={openFleetDriver} open={openDriver} notify={setNotice} driverId={driverId} screen={driverScreen} onReset={async () => { try { await saveFleet(fleetApi.reset); setNotice("Учебные водители возвращены в исходное состояние — и в CRM, и в Диспетчерской."); } catch (e) { setNotice((e as Error).message); } }} /> : <FleetLoading query={fleetQuery} /> : view === "categories" && editor ? <CrmCategories nodes={catalog.data.categories} /> : id > 0 ? <CrmAppealDetail id={id} editor={editor} onDuplicate={create} /> : <CrmAppealList catalog={catalog.data} onOpen={appeal => go(`appeal=${appeal}`)} onCreate={() => create()} />)}
+    : catalog.data && (view === "create" ? <CrmAppealForm key={`${formKey}:${scenarioAttemptId ?? ""}`} catalog={catalog.data} initial={copy} scenarioAttemptId={scenarioAttemptId} accounts={appealAccounts} onDirty={setFormDirty} onCategoryChange={updateSelection} onRequestHelp={() => setHelpRequest(n => n + 1)} onSaved={(appeal, duplicate) => { client.invalidateQueries({ queryKey: ["crm-appeals"] }); client.invalidateQueries({ queryKey: FLEET_QUERY }); client.setQueryData(["crm-appeal", appeal.id], appeal); setDirty(false); if (duplicate) { setCopy(appeal); setFormKey(k => k + 1); } else go(`appeal=${appeal.id}`, true); setNotice(`Обращение #${appeal.id} сохранено и доступно всем участникам.${duplicate ? " Открыта копия; вложения нужно добавить заново." : ""}`); }} /> : view === "drivers" ? fleetQuery.data ? <CrmDrivers key={`${driverId ?? "list"}:${driverScreen ?? ""}`} drivers={drivers} save={saveFleet} rules={fleetQuery.data.rules.map(r => r.name)} tariffs={fleetQuery.data.catalog.tariffs} openFleet={openFleetDriver} open={openDriver} notify={setNotice} driverId={driverId} screen={driverScreen} onReset={async () => { try { await saveFleet(fleetApi.reset); setNotice("Учебные водители возвращены в исходное состояние — и в CRM, и в Диспетчерской."); } catch (e) { setNotice((e as Error).message); } }} /> : <FleetLoading query={fleetQuery} /> : view === "categories" && editor ? <CrmCategories nodes={catalog.data.categories} /> : id > 0 ? <CrmAppealDetail id={id} editor={editor} onDuplicate={create} /> : <CrmAppealList catalog={catalog.data} onOpen={appeal => go(`appeal=${appeal}`)} onCreate={() => create()} />)}
     <footer className="crm-bottom-note">Учебная CRM · Практика работы с обращениями</footer></main></div></div></div>
     {site === "crm" ? (!scenarioAttemptId || helpRequest > 0) && <PulsarGuide catalog={catalog.data} screen={pulsarScreen} categoryIds={selection} step={null} editor={instructionEditor} openRequest={helpRequest} onStart={() => startCoach(helpTour)} onClose={() => {}} onPrevious={() => {}} onNext={() => {}} />
       : site === "dispatch" && !scenarioAttemptId && <DispatchDock feedback={fleetFeedback} onFeedback={setFleetFeedback} onGo={(path, park) => goFleet(path, park)} onTour={tour => startFleetTour(tour)} onCrm={callId => { setCrmCall(callId); setCoach(null); if (view === "create") openSite("crm"); else create(); }} />}
-    {coach && <PulsarCoach key={coach.id} steps={coach.steps} onClose={endCoach} extra={step => step.slot === "courier-code" && coach.id.startsWith("call:") ? <CoachCourierCode callId={coach.id.slice(5)} feedback={fleetFeedback} onFeedback={setFleetFeedback} /> : null} />}
+    {coach && <PulsarCoach key={coach.id} steps={coach.steps} onClose={endCoach} extra={step => step.slot === "courier-code" && coach.id.startsWith("call:") ? <CoachCourierCode callId={coach.id.slice(5)} feedback={fleetFeedback} onFeedback={setFleetFeedback} />
+      : step.slot?.startsWith("test-") && testDriver ? <TestData key={step.slot} slot={step.slot} driver={testDriver} park={testPark} /> : null} />}
   </div>;
+}
+
+const TEST_DATA: Record<string, [string, (driver: FleetDriver, park?: FleetPark) => string]> = {
+  "test-phone": ["Тестовый телефон", driver => driver.phone],
+  "test-license": ["Тестовый номер В/У", driver => driver.license],
+  "test-id": ["Тестовый ID водителя", driver => driver.id],
+  "test-link": ["Ссылка на аккаунт тестового водителя", (driver, park) => fleetLink(driver, park)],
+};
+
+/** Pulsar hands over his test driver's data in the bubble: ⧉ puts it on the clipboard for CRM. */
+function TestData({ slot, driver, park }: { slot: string; driver: FleetDriver; park?: FleetPark }) {
+  const [done, setDone] = useState(false);
+  const [label, read] = TEST_DATA[slot] ?? TEST_DATA["test-phone"], value = read(driver, park);
+  return <div className="coach-test-data"><span><small>{label}</small><code>{value}</code></span>
+    <button type="button" className={done ? "is-done" : undefined} aria-label={done ? "Скопировано" : `Скопировать: ${label}`} title="Скопировать"
+      onClick={() => void copyText(value).then(ok => { if (!ok) return; setDone(true); window.setTimeout(() => setDone(false), 2000); })}>{done ? "✓" : "⧉"}</button></div>;
 }
 
 /** The account's address with its ID on its own: operators copy the ID from here into CRM. */
