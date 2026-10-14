@@ -181,7 +181,7 @@ test("a shared toolbar receives each whole panel in its slot and keeps it there 
 test("panels use stable logical slots so DOM keyboard order matches visual toolbar order", () => {
   const html = renderToStaticMarkup(React.createElement(CityToolbar));
   assert.match(html, /role="toolbar" aria-label="Панели города"/);
-  assert.deepEqual([...html.matchAll(/data-city-panel="([^"]+)"/g)].map(match => match[1]), ["level", "cities", "build", "missions", "quests", "skills", "tools"]);
+  assert.deepEqual([...html.matchAll(/data-city-panel="([^"]+)"/g)].map(match => match[1]), ["level", "cities", "build", "missions", "quests", "skills", "tools", "history"]);
 });
 
 test("Escape closes the popup and gives focus back to its button", (t) => {

@@ -1,0 +1,42 @@
+/* The city's seasons: the toolbar's countdown, the past city's banner and the history sheet. */
+.city-toolbar .city-toolbar-button[data-tone="warn"] .city-peek__trigger { background: color-mix(in srgb, #f2a93b 22%, transparent); }
+.city-toolbar .city-toolbar-button[data-tone="warn"] .city-peek__label { color: #8a5300; }
+.city-history-banner {
+  position: fixed; left: var(--city-left); right: var(--city-free-right); bottom: calc(var(--city-free-bottom) + 6px); z-index: 22;
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px 14px;
+  width: max-content; max-width: calc(100vw - var(--city-left) - var(--city-free-right) - 24px); margin-inline: auto;
+  padding: 9px 16px; border-radius: 999px; border: 1px solid color-mix(in srgb, #b07a2a 40%, var(--separator));
+  font-size: 13px; line-height: 1.4; text-align: center;
+}
+.city-history-banner button { border: 0; background: none; padding: 0; color: var(--text-primary); font: inherit; font-weight: 650; text-decoration: underline; cursor: pointer; }
+.city-history { display: grid; gap: 14px; }
+.city-history p { margin: 0; }
+.city-history__about { color: var(--text-secondary); font-size: 13.5px; line-height: 1.5; }
+.city-history__viewing, .city-history__warning { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 10px 14px; border-radius: 14px; font-size: 13.5px; line-height: 1.45; }
+.city-history__viewing > button { margin-left: auto; }
+.city-history__viewing { background: color-mix(in srgb, #b07a2a 12%, var(--surface-primary)); }
+.city-history__warning { background: color-mix(in srgb, #f2a93b 18%, var(--surface-primary)); color: #6b4300; font-weight: 600; }
+.city-history__list { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
+.city-history__season { display: grid; gap: 8px; padding: 14px 16px; border: 1px solid var(--separator); border-radius: 18px; background: var(--surface-primary); }
+.city-history__season > header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; }
+.city-history__season > header > div { display: grid; gap: 2px; }
+.city-history__season > header strong { font-size: 16px; }
+.city-history__season > header span { color: var(--text-secondary); font-size: 13px; }
+.city-history__shown { padding: 6px 12px; border-radius: 12px; background: color-mix(in srgb, #b07a2a 14%, var(--surface-primary)); font-size: 12.5px; font-weight: 650; }
+.city-history__totals { font-size: 14px; font-weight: 600; }
+.city-history__meta { color: var(--text-secondary); font-size: 12.5px; }
+.city-history__mine { padding: 8px 12px; border-radius: 12px; background: color-mix(in srgb, #4a8f5c 12%, var(--surface-primary)); font-size: 13px; }
+.city-history__districts { display: grid; gap: 8px; margin: 2px 0 0; padding: 10px 0 0; border-top: 1px solid var(--separator); list-style: none; }
+.city-history__districts li { display: grid; gap: 2px; font-size: 13px; }
+.city-history__districts li > span { color: var(--text-secondary); }
+.city-history__top { font-size: 12.5px; }
+.city-history__empty { color: var(--text-secondary); }
+@media (max-width: 700px) {
+  .city-history-banner { border-radius: 18px; }
+  .city-history__view { width: 100%; }
+  .city-history__viewing > button { margin-left: 0; }
+}
+/* Dark theme: the amber words stay readable on the dark sheet. */
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .city-history__warning { color: #ffd28a; } :root:not([data-theme="light"]) .city-toolbar .city-toolbar-button[data-tone="warn"] .city-peek__label { color: #ffc56b; } }
+:root[data-theme="dark"] .city-history__warning { color: #ffd28a; }
+:root[data-theme="dark"] .city-toolbar .city-toolbar-button[data-tone="warn"] .city-peek__label { color: #ffc56b; }

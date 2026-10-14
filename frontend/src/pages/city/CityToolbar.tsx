@@ -2,8 +2,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import type { Dispatch, ReactNode, SetStateAction } from "react";
 import { createPortal } from "react-dom";
 
-export type CityToolbarSlot = "level" | "cities" | "build" | "missions" | "quests" | "skills" | "tools";
-const slots: readonly CityToolbarSlot[] = ["level", "cities", "build", "missions", "quests", "skills", "tools"];
+export type CityToolbarSlot = "level" | "cities" | "build" | "missions" | "quests" | "skills" | "tools" | "history";
+const slots: readonly CityToolbarSlot[] = ["level", "cities", "build", "missions", "quests", "skills", "tools", "history"];
 
 /** The toolbar's one open popup, named by its slot; null when every popup is closed. */
 export type CityToolbarState = { active: CityToolbarSlot | null; setActive: Dispatch<SetStateAction<CityToolbarSlot | null>> };
@@ -73,9 +73,9 @@ export function CityToolbar() {
 }
 
 /** A toolbar entry that acts at once instead of opening a popup, drawn like the panels' buttons in its own slot. */
-export function CityToolbarButton({ slot, label, compactLabel, icon, onClick }: { slot: CityToolbarSlot; label: string; compactLabel: string; icon: ReactNode; onClick: () => void }) {
+export function CityToolbarButton({ slot, label, compactLabel, icon, onClick, tone }: { slot: CityToolbarSlot; label: string; compactLabel: string; icon: ReactNode; onClick: () => void; tone?: "warn" }) {
   const toolbar = useContext(CityToolbarContext);
-  const button = <div className="city-peek city-peek--labelled city-toolbar-button">
+  const button = <div className="city-peek city-peek--labelled city-toolbar-button" data-tone={tone}>
     <button type="button" className="city-peek__trigger glass glass--regular" aria-label={label} title={label} onClick={() => { toolbar?.setActive(null); onClick(); }}>
       <span className="city-peek__icon" aria-hidden="true">{icon}</span>
       <span className="city-peek__label" aria-hidden="true">{compactLabel}</span>

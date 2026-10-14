@@ -21,6 +21,7 @@ from app.models.city_estate import (
     CityOperation,
     CityProject,
 )
+from app.models.city_season import CitySeason
 from app.models.coin import CoinTransaction
 from app.models.contest import (
     ContestWeek,
@@ -77,6 +78,7 @@ __all__ = [
     "CityPerfReport",
     "CityProject",
     "CityQuest",
+    "CitySeason",
     "CitySettings",
     "CitySituations",
     "CityWorld",
