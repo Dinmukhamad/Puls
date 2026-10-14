@@ -30,6 +30,7 @@ from app.services.dispatch_data import (
     BLOCKED,
     CALL_IDS,
     CALLS,
+    CRM_TEST_DRIVER,
     DRIVER_KEYS,
     DRIVERS,
     INVENTORY,
@@ -552,6 +553,7 @@ def build(events: list[DispatchEvent], *, user, now: datetime, utc_now: datetime
         "inventory": {"stock": cabinet["stock"], "log": log},
         "tickets": tickets,
         "calls": calls,
+        "test_driver": DRIVER_KEYS[CRM_TEST_DRIVER]["id"],
         "catalog": {
             "tariffs": TARIFFS,
             "providers": PROVIDERS,

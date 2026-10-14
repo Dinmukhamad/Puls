@@ -47,8 +47,11 @@ test('the drivers tour walks through the card, the car editor and the cash limit
   assert.ok(COACH_TOURS.appeals.at(-1).waitClick && COACH_TOURS.appeals.at(-1).untilGone, 'the appeal tour ends when the appeal is saved');
 });
 
-test('the appeal takes phone, ВУ and ID from the driver account and Pulsar checks each one', () => {
-  const steps = COACH_TOURS.appeals, at = (target) => steps.findIndex((step) => step.target === target);
+// A call's driver: the walk to his account, as the Диспетчерская tours build it.
+const walk = { account: '.fleet-driver[data-driver="abenov-id"]', open: [{ target: '[data-coach=fleet-search]', advanceWhen: '[data-coach=search-input]', action: 'Нажми', title: 'Поиск', text: 'Нажми на лупу рядом с парком.' }] };
+
+test('a call driver\'s appeal takes phone, ВУ and ID from his account and Pulsar checks each one', () => {
+  const steps = appealTour(walk), at = (target) => steps.findIndex((step) => step.target === target);
   const fields = [['phone', 'phone'], ['license_number', 'license'], ['driver_id', 'id']];
   let previous = at('[data-coach=channel]');
   for (const [field, copied] of fields) {
@@ -67,17 +70,21 @@ test('the appeal takes phone, ВУ and ID from the driver account and Pulsar che
     previous = paste;
   }
   assert.ok(previous < at('[data-coach=park]'), 'the driver data come before the park');
+  // The walk is used before every copy, and the copies come from that account only.
+  assert.equal(steps.filter((s) => s.target === walk.open[0].target).length, 4);
+  assert.ok(steps.some((s) => s.target === `${walk.account} [data-coach=driver-phone]`));
+  assert.ok(steps.some((s) => s.target === `${walk.account} [data-coach=driver-license]`));
   // The ID comes from the address bar, not a field of the account.
   assert.ok(steps.some((s) => s.target === '[data-coach=fleet-address-id]' && s.advanceWhen === '.work-sites[data-copied=id]'));
 });
 
-test('a request copies the account link before its comment and waits for it there', () => {
-  const steps = COACH_TOURS.appeals;
+test('a call driver\'s request copies the account link before its comment and waits for it there', () => {
+  const steps = appealTour(walk);
   const copyLink = steps.findIndex((s) => s.target === '[data-coach=copy-link]');
   const firstComment = steps.findIndex((s) => s.target === '[data-coach=comment]');
   assert.ok(copyLink > 0 && copyLink < firstComment);
   // The trip runs only for a request that needs the link, and not once the comment has it.
-  for (const step of steps.slice(copyLink - 1, copyLink + 2)) {
+  for (const step of [steps[copyLink - 2], steps[copyLink], steps[copyLink + 1]]) {
     assert.ok(step.when?.startsWith('.work-sites[data-link=need]'), step.title);
     assert.ok(step.skipWhen?.includes('[data-coach=comment][data-link=ok]'), step.title);
   }
@@ -85,13 +92,19 @@ test('a request copies the account link before its comment and waits for it ther
   assert.deepEqual(linked, ['Смена номера: комментарий', 'Смена автомобиля: комментарий', 'Комментарий к запросу']);
 });
 
-test('a call driver\'s appeal walks to that very account', () => {
-  const account = '.fleet-driver[data-driver="abenov-id"]';
-  const open = { target: '[data-coach=fleet-search]', advanceWhen: '[data-coach=search-input]', action: 'Нажми', title: 'Поиск', text: 'Нажми на лупу рядом с парком.' };
-  const steps = appealTour({ account, open: [open] });
-  // The walk is used before every copy, and the copies come from that account only.
-  assert.equal(steps.filter((s) => s.target === open.target).length, 4);
-  assert.ok(steps.some((s) => s.target === `${account} [data-coach=driver-phone]`));
-  assert.ok(steps.some((s) => s.target === `${account} [data-coach=driver-license]`));
-  assert.ok(!steps.some((s) => s.target.startsWith('.fleet-driver[data-driver] ')));
+test('without a call Pulsar hands over test data and checks the fields, with no trip', () => {
+  const steps = COACH_TOURS.appeals;
+  // The first visit and «Помощь Пульсара» stay in CRM: no tab is switched.
+  assert.ok(!steps.some((s) => s.target.startsWith('[data-coach=site-')));
+  for (const [field, slot] of [['phone', 'test-phone'], ['license_number', 'test-license'], ['driver_id', 'test-id']]) {
+    const step = steps.find((s) => s.target === `[data-coach=${field}]`);
+    assert.equal(step.slot, slot);
+    // Without the data the step waits, so «Сохранить» never meets empty required fields.
+    assert.equal(step.advanceWhen, `[data-coach=${field}][data-match=true]`);
+    assert.ok(step.mistakes.length);
+  }
+  // A request's comment gets the test driver's link in the bubble and waits for it.
+  const linked = steps.filter((s) => s.doneWhen === '[data-coach=comment][data-link=ok]');
+  assert.equal(linked.length, 3);
+  assert.ok(linked.every((s) => s.slot === 'test-link'));
 });

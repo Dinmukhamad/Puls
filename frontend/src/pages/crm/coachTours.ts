@@ -62,7 +62,6 @@ const chosen = (n: number) => `${level(n + 1)}, ${DONE}`;
 const SITE = (site: "crm" | "dispatch") => `.work-sites[data-site=${site}]`;
 /** What the operator copied last, recognised against the account the appeal is about. */
 const COPIED = (what: CopyKind) => `.work-sites[data-copied=${what}]`;
-const ANY = ".fleet-driver[data-driver]";
 /** The chosen request asks for the account link in its comment; the comment already has it. */
 const LINK = ".work-sites[data-link=need]", LINKED = "[data-coach=comment][data-link=ok]";
 const LINKED_COMMENT = { doneWhen: LINKED, mistakes: [{ when: "[data-coach=comment][data-link=missing]", text: "В комментарии нет ссылки на аккаунт этого водителя: вставь её Ctrl+V." }] };
@@ -75,14 +74,6 @@ const paste = (field: string, title: string, text: string, mistakes: CoachStep["
 
 /** How the tour reaches the driver's account: `open` walks to it, `account` finds it on the page. */
 export interface AccountWalk { open: CoachStep[]; account: string }
-/** Without a call or a scenario the operator opens the account of whichever driver turned to him. */
-export const ANY_ACCOUNT: AccountWalk = { account: ANY, open: [
-  { target: "[data-coach=rail-people]", skipWhen: `${ANY}, .fleet[data-page=contractors]`, advanceWhen: "[data-coach=menu-contractors], .fleet[data-page=contractors]", action: "Нажми", title: "Исполнители", text: "Водители — в меню «Исполнители» слева. Открой его." },
-  { target: "[data-coach=menu-contractors]", skipWhen: `${ANY}, .fleet[data-page=contractors]`, advanceWhen: ".fleet[data-page=contractors]", action: "Нажми", title: "Список водителей", text: "Нажми «Исполнители» — откроется список водителей парка." },
-  { target: "[data-coach=drivers-table]", skipWhen: `${ANY}, [data-coach=preview]`, advanceWhen: "[data-coach=preview]", action: "Выбери", title: "Водитель", text: "Нажми на водителя, который обратился: справа откроется его короткая карточка." },
-  { target: "[data-coach=preview-name]", skipWhen: ANY, advanceWhen: ANY, action: "Нажми", title: "Аккаунт водителя", text: "Нажми на имя водителя — откроется его аккаунт." },
-] };
-
 /** One piece of the driver's data: to his account, copy it there, back to CRM, paste it and let Pulsar check it. */
 function trip(walk: AccountWalk, field: string, [title, text]: [string, string], copy: CoachStep[], into: CoachStep): CoachStep[] {
   return [toSite("dispatch", title, text), ...walk.open, ...copy, toSite("crm", "Назад в CRM", "Вернись во вкладку «CRM-система»: форма обращения ждёт там.")]
@@ -103,6 +94,16 @@ function driverData(walk: AccountWalk): CoachStep[] {
     ...trip(walk, "driver_id", ["Теперь ID водителя", "ID водителя — в ссылке на его аккаунт. Вернись во вкладку «Диспетчерская»."], [
       { target: "[data-coach=fleet-address-id]", advanceWhen: COPIED("id"), action: "Скопируй", title: "ID в адресной строке", text: "ID — часть адреса после «contractors/». Выдели его двойным щелчком (на телефоне — долгим нажатием) и скопируй: Ctrl+C.", mistakes: [{ when: COPIED("link"), text: "Скопирована вся ссылка, а нужен только ID: дважды щёлкни по нему в адресе." }] }],
     paste("driver_id", "ID водителя", "Вставь ID в поле «ID водителя»: Ctrl+V. Я сверю его с аккаунтом водителя.", [{ when: "[data-coach=driver_id][data-match=link]", text: "Здесь вся ссылка. Оставь только ID — часть после «contractors/»." }, { when: "[data-coach=driver_id][data-match=false]", text: other("ID") }])),
+  ];
+}
+
+/** Without a call or a scenario there is no real driver: Pulsar hands over a test driver's data in his bubble. */
+function testData(): CoachStep[] {
+  const other = (what: string) => `${what} не совпадает с тестовыми данными. Скопируй его в моём окошке ещё раз.`;
+  return [
+    { ...paste("phone", "Телефон водителя", "В работе номер берут у водителя или из его аккаунта. Для обучения скопируй тестовый ⧉ в моём окошке и вставь сюда: Ctrl+V.", [{ when: "[data-coach=phone][data-match=false]", text: other("Номер") }]), slot: "test-phone" },
+    { ...paste("license_number", "Номер В/У", "Номер В/У берут из аккаунта водителя. Тестовый — в моём окошке: скопируй ⧉ и вставь сюда.", [{ when: "[data-coach=license_number][data-match=false]", text: other("Номер В/У") }]), slot: "test-license" },
+    { ...paste("driver_id", "ID водителя", "ID водителя — в ссылке на его аккаунт. Тестовый ID — в моём окошке: скопируй ⧉ и вставь сюда.", [{ when: "[data-coach=driver_id][data-match=link]", text: "Здесь вся ссылка. Оставь только ID — часть после «contractors/»." }, { when: "[data-coach=driver_id][data-match=false]", text: other("ID") }]), slot: "test-id" },
   ];
 }
 
@@ -154,9 +155,13 @@ const APPEAL_END: CoachStep[] = [
   { target: "[data-coach=save]", waitClick: true, untilGone: true, action: "Проверь и нажми", title: "Финиш! 🎉", text: "Проверь данные и нажми «Сохранить». Обращение увидят все участники. Ты справился!" }
 ];
 
-/** The appeal from the first button to «Сохранить»; the driver's data come from the account `walk` reaches. */
-export function appealTour(walk: AccountWalk = ANY_ACCOUNT): CoachStep[] {
-  return [...APPEAL_START, ...driverData(walk), ...APPEAL_CATEGORIES, ...linkTrip(walk), ...APPEAL_END];
+/**
+ * The appeal from the first button to «Сохранить». A call's or a scenario's driver: his data come
+ * from the account `walk` reaches. Without one Pulsar hands over his test driver's data and link.
+ */
+export function appealTour(walk?: AccountWalk): CoachStep[] {
+  if (walk) return [...APPEAL_START, ...driverData(walk), ...APPEAL_CATEGORIES, ...linkTrip(walk), ...APPEAL_END];
+  return [...APPEAL_START, ...testData(), ...APPEAL_CATEGORIES, ...APPEAL_END.map(step => step.doneWhen === LINKED ? { ...step, slot: "test-link" } : step)];
 }
 
 export const COACH_TOURS: Record<CoachTourId, CoachStep[]> = {
