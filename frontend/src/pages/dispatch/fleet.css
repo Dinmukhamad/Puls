@@ -186,6 +186,11 @@ button.fleet-chip:not(:disabled):hover { background:#faf9f7; }
 .fleet-field { display:grid; grid-template-columns:170px minmax(0,1fr); align-items:center; gap:14px; margin-bottom:10px; }
 .fleet-field>span { font-size:12.5px; font-weight:500; }
 .fleet-field-hint { display:block; font-size:12px; color:var(--f-muted); margin-top:4px; }
+.fleet-copy { display:flex; align-items:center; gap:6px; }
+.work-sites .fleet .fleet-copy>.fleet-input { flex:1; min-width:0; color:var(--f-ink)!important; }
+.fleet-copy>button { flex-shrink:0; width:38px; height:38px; border:0; border-radius:12px; background:#f2f1ee; color:#5f5c57; font-size:17px; cursor:pointer; }
+.fleet-copy>button:hover { background:#e7e5e0; color:#21201c; }
+.fleet-copy>button.is-done { color:#2e9e67; }
 .work-sites .fleet .fleet-input { width:100%; min-height:38px!important; border:0!important; border-radius:12px!important; background:#f2f1ee!important; color:#8a8782!important; padding:8px 12px!important; font-size:14px; }
 .work-sites .fleet .fleet-select { color:var(--f-ink)!important; background:#f2f1ee url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='m6 9 6 6 6-6' fill='none' stroke='%2321201f' stroke-width='2'/%3E%3C/svg%3E") no-repeat right 10px center/16px!important; appearance:none; cursor:pointer; outline:2px solid #e0ddd8; }
 .work-sites .fleet .fleet-select:hover { outline-color:#c9c5bf; }
