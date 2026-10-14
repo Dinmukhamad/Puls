@@ -11,7 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.deps import supervised_group_ids, visible_users_filter
+from app.core.deps import managed_operators_filter, supervised_group_ids
 from app.core.errors import DomainError, PermissionDeniedError
 from app.models.coin import CoinTransaction
 from app.models.contest import (
@@ -150,7 +150,9 @@ async def report(
         )
         if group is None or not allowed:
             raise PermissionDeniedError("Группа недоступна для вашей роли")
-    visibility = User.id == actor.id if own else await visible_users_filter(session, actor)
+    # Directory visibility is broader than access to an operator's analytics:
+    # supervisors may only aggregate operators from the groups they supervise.
+    visibility = User.id == actor.id if own else await managed_operators_filter(session, actor)
     conditions = [visibility, User.role == Role.OPERATOR, User.is_active.is_(True)]
     if group_id is not None:
         conditions.append(User.group_id == group_id)
