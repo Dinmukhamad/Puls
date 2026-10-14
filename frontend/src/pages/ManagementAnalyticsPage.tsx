@@ -87,6 +87,7 @@ export function ManagementAnalyticsPage() {
   const onGroup = (id: number | null) => update({ group_id: id === null ? undefined : String(id), unassigned: id === null ? '1' : undefined, operators: undefined, search: undefined, status: undefined, page: undefined, tab: 'operators' });
   const selectedOperators = [...new Set((params.get('operators') ?? '').split(',').map(Number).filter(id => id > 0))];
   const today = todayDateKey();
+  const hasGroupFilter = head || (report.groups.data?.length ?? 0) > 1 || !!report.filters.group_id;
   const labels = (r: AnalyticsOut) => r.trend.map(t => r.grain === 'week' ? `${t.starts_on.slice(8)}.${t.starts_on.slice(5, 7)}` : t.label);
 
   const fourWeeks = <>
@@ -98,10 +99,17 @@ export function ManagementAnalyticsPage() {
   return <div className="stack analytics-page analytics-lead management-analytics">
     <header className="page-head ma-heading"><div><p className="analytics-eyebrow">ПУЛЬС КОМАНДЫ</p><h1 className="page-title">{head ? 'Аналитика руководителя' : 'Аналитика супервайзера'}</h1><p className="page-subtitle">{head ? 'Все команды, динамика результатов и точки внимания.' : 'Результаты вашей команды и операторы, которым нужна поддержка.'}</p></div><div className="ma-heading-actions"><span className="ma-scope">{head ? 'Все операторы · все группы' : 'Только мои операторы'}</span><Button size="s" disabled={data.isFetching || report.weekly.isFetching} onClick={() => { void data.refetch(); if (report.mode === 'range') void report.weekly.refetch(); void report.groups.refetch(); }}>{data.isFetching || report.weekly.isFetching ? 'Обновляем…' : 'Обновить'}</Button></div></header>
 
-    <GlassSurface className="ma-filters" variant="regular">
-      <div className="ma-period-control"><span className="field__label">Период</span><DateRangePicker value={report.range} onChange={next => report.setRange(next, 'range')} presets={['this-week', 'last-week', 'this-month', 'last-month']} /><div className="ma-period-buttons"><Button size="s" variant={report.mode === 'weeks' ? 'primary' : 'secondary'} onClick={() => report.setRange(weekWindow(report.range.date_to), 'weeks')}>4 недели</Button><Button size="s" variant="plain" onClick={() => report.setRange(completedWeekWindow(today), 'weeks')}>Последние 4 недели</Button></div></div>
-      {(head || (report.groups.data?.length ?? 0) > 1 || report.filters.group_id) && <label className="field ma-group-filter"><span className="field__label">{head ? 'Группа' : 'Мои группы'}</span><Select aria-label={head ? 'Группа' : 'Мои группы'} value={report.filters.group_id ?? ''} options={[{ value: '', label: head ? 'Все группы' : 'Все мои группы' }, ...(report.groups.data ?? []).map(g => ({ value: g.id, label: g.name }))]} onChange={id => update({ group_id: id, operators: undefined, unassigned: undefined, search: undefined, status: undefined, page: undefined })} /></label>}
+    <GlassSurface className={`ma-filters${hasGroupFilter ? '' : ' ma-filters--single-group'}`} variant="regular">
+      <div className="field ma-period-control">
+        <span className="field__label">Период</span>
+        <DateRangePicker value={report.range} onChange={next => report.setRange(next, 'range')} presets={['this-week', 'last-week', 'this-month', 'last-month']} />
+      </div>
+      {hasGroupFilter && <label className="field ma-group-filter"><span className="field__label">{head ? 'Группа' : 'Мои группы'}</span><Select aria-label={head ? 'Группа' : 'Мои группы'} value={report.filters.group_id ?? ''} options={[{ value: '', label: head ? 'Все группы' : 'Все мои группы' }, ...(report.groups.data ?? []).map(g => ({ value: g.id, label: g.name }))]} onChange={id => update({ group_id: id, operators: undefined, unassigned: undefined, search: undefined, status: undefined, page: undefined })} /></label>}
       <label className="field ma-metric-filter"><span className="field__label">Показатель для сравнения</span><Select aria-label="Показатель для сравнения" value={selectableMetrics.length ? metric?.code ?? '' : ''} options={selectableMetrics.length ? selectableMetrics.map(m => ({ value: m.code, label: m.title })) : [{ value: '', label: category ? 'Показателей категории пока нет' : 'Показателей пока нет' }]} onChange={onMetric} /></label>
+      <div className="ma-period-buttons">
+        <Button title="Четыре недели до конца выбранного периода" aria-pressed={report.mode === 'weeks'} variant={report.mode === 'weeks' ? 'primary' : 'secondary'} onClick={() => report.setRange(weekWindow(report.range.date_to), 'weeks')}>4 недели</Button>
+        <Button onClick={() => report.setRange(completedWeekWindow(today), 'weeks')}>Последние 4 недели</Button>
+      </div>
     </GlassSurface>
     {report.groups.isError && <p className="analytics-muted" role="status">Не удалось загрузить группы. <button className="analytics-text-button" onClick={() => void report.groups.refetch()}>Повторить</button></p>}
     {data.isLoading && <KPISkeleton count={4} />}

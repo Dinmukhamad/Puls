@@ -3,13 +3,12 @@
 .ma-heading .page-title { letter-spacing: -.04em; }
 .ma-heading-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
 .ma-scope { padding: 10px 14px; border: 1px solid var(--border-strong); border-radius: 12px; font-size: 12px; background: var(--surface-primary); }
-.ma-filters { padding: 20px; border-radius: 20px; display: flex; flex-wrap: wrap; align-items: flex-end; gap: 18px; }
-.ma-period-control { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; flex: 1 1 440px; min-width: 0; }
-.ma-period-control > .field__label { width: 100%; }
-.ma-period-control .date-range-picker { flex: 1 1 260px; min-width: 0; }
-.ma-period-buttons { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
-.ma-group-filter { flex: 0 1 190px; min-width: 160px; }
-.ma-metric-filter { flex: 0 1 230px; min-width: 190px; }
+.ma-filters { padding: 20px; border-radius: 20px; display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, .8fr) minmax(0, 1fr); align-items: start; gap: 14px 18px; }
+.ma-filters--single-group { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); }
+.ma-filters > .field { display: grid; gap: 8px; min-width: 0; margin: 0; }
+.ma-filters .field__label { margin: 0; min-height: 18px; line-height: 18px; }
+.ma-filters :is(.date-range-picker__trigger, .puls-select__trigger, .btn) { height: 44px; min-height: 44px; }
+.ma-period-buttons { grid-column: 1 / -1; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .ma-reading { display: flex; gap: 16px; align-items: center; justify-content: space-between; }
 .ma-reading > span:first-child { display: grid; gap: 6px; }
 .ma-reading b { font-size: 14px; }
@@ -38,6 +37,6 @@
 .management-analytics .analytics-row-filters { align-items: flex-end; }
 .management-analytics .analytics-section-heading { gap: 14px; flex-wrap: wrap; }
 .management-analytics .analytics-section-heading p { margin-bottom: 0; }
-.management-analytics button > svg { vertical-align: middle; flex-shrink: 0; margin-left: 5px; }
-@media (max-width: 1100px) { .ma-heading-actions { justify-content: flex-start; } .ma-heading { flex-wrap: wrap; } .ma-pulse { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ma-group-filter, .ma-metric-filter { flex: 1 1 190px; } }
-@media (max-width: 767px) { .management-analytics { gap: 18px; } .ma-filters { padding: 16px; gap: 14px; } .ma-reading { flex-direction: column; align-items: flex-start; gap: 10px; } .ma-shortcuts, .ma-overview-bottom { grid-template-columns: 1fr; } .ma-pulse { gap: 10px; } .ma-pulse-card { padding: 16px; gap: 14px; border-radius: 16px; } .ma-pulse-card > strong { font-size: 32px; } .ma-pulse-card > span { align-items: flex-start; } .ma-pulse-card > span i { display: none; } .ma-period-buttons { width: 100%; } .ma-period-control { flex-basis: 100%; } .ma-heading .page-title { font-size: 27px; } .ma-heading-actions { width: 100%; justify-content: space-between; } }
+.management-analytics :is(.analytics-person-name, .analytics-week-metric, .analytics-group-summary button) > svg { vertical-align: middle; margin-left: 5px; }
+@media (max-width: 1100px) { .ma-heading-actions { justify-content: flex-start; } .ma-heading { flex-wrap: wrap; } .ma-pulse { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ma-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ma-filters:not(.ma-filters--single-group) > .ma-period-control { grid-column: 1 / -1; } }
+@media (max-width: 767px) { .management-analytics { gap: 18px; } .ma-filters { padding: 16px; gap: 14px; grid-template-columns: minmax(0, 1fr); } .ma-filters :is(.date-range-picker__trigger, .puls-select__trigger, .btn) { height: 50px; min-height: 50px; } .ma-reading { flex-direction: column; align-items: flex-start; gap: 10px; } .ma-shortcuts, .ma-overview-bottom { grid-template-columns: 1fr; } .ma-pulse { gap: 10px; } .ma-pulse-card { padding: 16px; gap: 14px; border-radius: 16px; } .ma-pulse-card > strong { font-size: 32px; } .ma-pulse-card > span { align-items: flex-start; } .ma-pulse-card > span i { display: none; } .ma-heading .page-title { font-size: 27px; } .ma-heading-actions { width: 100%; justify-content: space-between; } }
