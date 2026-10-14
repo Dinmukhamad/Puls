@@ -1,6 +1,7 @@
 import { useId } from 'react';
 import type { AnalyticsOut, MetricSummary } from '../api/analytics';
 import { Chart } from '../components/Chart';
+import { ArrowUpRightIcon } from '../components/icons';
 import { Card, EmptyState } from '../components/ui';
 import { assess, description, gapText, metricValue, shortNumber, periodCaption, STATE_LABEL, type OperatorInsight, type OperatorState } from './analyticsInsights';
 
@@ -57,7 +58,7 @@ export function MetricCards({ report, selected, onSelect }: { report: AnalyticsO
     const signal = assess(metric.value, metric).signal;
     const affected = report.operators.filter(p => assess(p.values[metric.code], metric).issue).length;
     return <button className={`analytics-metric-card analytics-signal--${signal}`} key={metric.code} aria-pressed={selected === metric.code} onClick={() => onSelect(metric.code)}>
-      <span className="analytics-metric-card__heading">{metric.title}<span aria-hidden="true">↗</span></span><span className="analytics-metric-card__description">{description(metric)}</span>
+      <span className="analytics-metric-card__heading">{metric.title}<ArrowUpRightIcon size={16} /></span><span className="analytics-metric-card__description">{description(metric)}</span>
       <div className="analytics-metric-card__reading"><strong>{metricValue(metric.value, metric)}</strong><small>в среднем по команде</small></div>
       <GoalBar value={metric.value} metric={metric} /><Sparkline values={metric.trend ?? []} />
       <span className="analytics-metric-card__footer"><b>{metric.reported ? `${affected} из ${metric.reported} требуют внимания` : 'Нет наблюдений'}</b><small>Без данных: {metric.total - metric.reported}</small></span>
@@ -90,8 +91,8 @@ export function PriorityList({ people, onOpen, onAll }: { people: OperatorInsigh
   return <Card title="С кем стоит разобраться в первую очередь" subtitle="Причины внимания видны сразу" action={<button className="btn btn--plain" onClick={onAll}>Все операторы →</button>}>
     {priority.length ? <div className="analytics-priority-list">{priority.map(p => <button key={p.row.user_id} onClick={() => onOpen(p.row.user_id)} className="analytics-priority">
       <span className={`analytics-person-avatar analytics-signal--${p.state === 'critical' ? 'critical' : 'watch'}`}>{p.row.full_name.split(' ').slice(0, 2).map(s => s[0]).join('')}</span>
-      <span><strong>{p.row.full_name}</strong><small>{p.row.group_name ?? 'Без группы'}</small><span className="analytics-reasons">{p.issues.slice(0, 2).map(c => <span key={c.metric.code} className={`analytics-signal--${c.signal}`}>{c.metric.title}: {gapText(c.value, c.metric)}</span>)}</span></span><b aria-hidden="true">↗</b>
-    </button>)}</div> : <EmptyState title="По загруженным данным отклонений нет" hint={people.some(p => p.state === 'missing' || p.state === 'partial') ? 'Часть показателей отсутствует — для полного вывода загрузите данные.' : 'Все доступные цели выполнены.'} />}
+      <span><strong>{p.row.full_name}</strong><small>{p.row.group_name ?? 'Без группы'}</small><span className="analytics-reasons">{p.issues.slice(0, 2).map(c => <span key={c.metric.code} className={`analytics-signal--${c.signal}`}>{c.metric.title}: {gapText(c.value, c.metric)}</span>)}</span></span><ArrowUpRightIcon size={16} />
+    </button>)}</div> : <EmptyState title={people.length ? 'По загруженным данным отклонений нет' : 'Нет операторов для проверки'} hint={!people.length ? 'Приоритеты появятся после добавления операторов в вашу команду.' : people.some(p => p.state === 'missing' || p.state === 'partial') ? 'Часть показателей отсутствует — для полного вывода загрузите данные.' : 'Все доступные цели выполнены.'} />}
   </Card>;
 }
 
