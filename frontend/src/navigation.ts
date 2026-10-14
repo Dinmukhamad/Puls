@@ -34,7 +34,10 @@ const team = (admin = false, supervisor = false) => section("team", "Коман�
   tab("/admin/operators", "Показатели сотрудников"),
 ]);
 const analytics = (supervisor = false) => section("analytics", "Аналитика", TrophyIcon, [
-  tab("/analytics?tab=summary", "Обзор команды"), tab("/analytics?tab=operators", "Операторы"), tab("/analytics?tab=quality", "Все показатели"),
+  tab("/analytics?tab=summary", "Обзор"), tab("/analytics?tab=weeks", "4 недели"),
+  ...(!supervisor ? [tab("/analytics?tab=groups", "Группы")] : []),
+  tab("/analytics?tab=quality", "Качество"), tab("/analytics?tab=productivity", "Производительность"),
+  tab("/analytics?tab=discipline", "Дисциплина"), tab("/analytics?tab=operators", "Операторы"),
   ...(supervisor ? [tab("/admin/periods", "Периоды"), tab("/admin/settings", "Правила и показатели")] : []),
 ]);
 const performance = (admin = false) => section("performance", "Показатели", InboxIcon, [
@@ -226,7 +229,7 @@ export function subsectionDestination(link: SectionTab, pathname: string, search
   const source = new URLSearchParams(search); const destination = new URLSearchParams(targetSearch ?? "");
   const shared: Record<string, string[]> = {
     "/rating": ["week", "count", "search"],
-    "/analytics": ["week_id", "grain", "from", "to", "group_id", "metric", "operators", "compare", "group_compare", "search", "status"],
+    "/analytics": ["window", "view", "unassigned", "week_id", "grain", "from", "to", "group_id", "metric", "operators", "compare", "group_compare", "search", "status"],
   };
   for (const key of shared[pathname] ?? []) if (source.has(key) && !destination.has(key)) destination.set(key, source.get(key)!);
   const query = destination.toString(); return `${targetPath}${query ? `?${query}` : ""}`;

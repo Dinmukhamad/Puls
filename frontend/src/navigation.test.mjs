@@ -7,6 +7,21 @@ import { build } from "esbuild";
 const built = await build({ entryPoints: [fileURLToPath(new URL("./navigation.ts", import.meta.url))], bundle: true, platform: "node", format: "esm", write: false });
 const nav = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString("base64")}`);
 
+test("management analytics offers the shared dashboards and a groups dashboard only to leadership", () => {
+  for (const role of ["supervisor", "head", "admin"]) {
+    const tabs = nav.currentSection(role, "/analytics").tabs.map(item => item.to);
+    for (const id of ["summary", "weeks", "quality", "productivity", "discipline", "operators"]) {
+      assert.ok(tabs.includes(`/analytics?tab=${id}`), `${role}: ${id}`);
+    }
+    assert.equal(tabs.includes("/analytics?tab=groups"), role !== "supervisor");
+    const destination = new URL(nav.subsectionDestination({ to: "/analytics?tab=weeks", label: "4 недели" }, "/analytics", "?window=weeks&from=2026-09-14&to=2026-10-11&group_id=5&page=3"), "https://puls.test");
+    assert.equal(destination.searchParams.get("window"), "weeks");
+    assert.equal(destination.searchParams.get("group_id"), "5");
+    assert.equal(destination.searchParams.get("from"), "2026-09-14");
+    assert.equal(destination.searchParams.has("page"), false);
+  }
+});
+
 test("supervisor teams are discoverable without giving trainers team administration", () => {
   for (const role of ["admin", "head"]) {
     const item = nav.currentSection(role, "/admin/groups");
