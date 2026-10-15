@@ -2,11 +2,13 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { scenarioKeys, scenarios, scenarioWorkSite, type ScenarioAttempt, type ScenarioSummary } from "../../api/scenarios";
+import { useAuth } from "../../auth/AuthContext";
 import "./scenarios.css";
 
 const message = (error: unknown) => error instanceof Error ? error.message : "Не удалось выполнить действие. Повторите попытку.";
 
 export function ScenarioPage() {
+  const { user } = useAuth();
   const { key = "business_park", attemptId } = useParams(), navigate = useNavigate(), client = useQueryClient();
   const catalog = useQuery({ queryKey: scenarioKeys.catalog, queryFn: ({ signal }) => scenarios.catalog(signal), enabled: !attemptId, retry: false, staleTime: 0, refetchOnMount: "always" });
   const attempt = useQuery({ queryKey: scenarioKeys.attempt(attemptId ?? ""), queryFn: ({ signal }) => scenarios.attempt(attemptId!, signal), enabled: !!attemptId, retry: false, refetchOnWindowFocus: true });
@@ -21,7 +23,7 @@ export function ScenarioPage() {
     {query.isPending && <section className="scenario-card" role="status">Загружаем сценарий…</section>}
     {query.isError && <section className="scenario-card scenario-error" role="alert"><h1>Сценарий пока недоступен</h1><p>{message(query.error)}</p><button className="scenario-button" onClick={() => query.refetch()}>Повторить</button><p>Район сценариев предназначен для операторов ТП. Доступ и учебная группа проверяются сервером.</p></section>}
     {!attemptId && catalog.data && (summary ? <ScenarioIntroduction scenario={summary} preview={catalog.data.is_preview} pending={start.isPending} error={start.isError ? message(start.error) : undefined} onStart={() => start.mutate()} /> : <section className="scenario-card"><h1>Сценарий не найден</h1><p>Вернитесь в город ТП и выберите доступный сценарий.</p></section>)}
-    {attempt.data && <ScenarioAttemptView key={attempt.data.id} attempt={attempt.data} pending={answer.isPending || finish.isPending} error={answer.isError ? message(answer.error) : finish.isError ? message(finish.error) : undefined} onAnswer={(step, choice) => answer.mutate({ step, choice })} onFinish={() => finish.mutate()} onRepeat={() => navigate(`/training/scenarios/${attempt.data.scenario_key}`)} onReload={() => { answer.reset(); finish.reset(); void attempt.refetch(); }} />}
+    {attempt.data && <ScenarioAttemptView actor={user?.id} key={attempt.data.id} attempt={attempt.data} pending={answer.isPending || finish.isPending} error={answer.isError ? message(answer.error) : finish.isError ? message(finish.error) : undefined} onAnswer={(step, choice) => answer.mutate({ step, choice })} onFinish={() => finish.mutate()} onRepeat={() => navigate(`/training/scenarios/${attempt.data.scenario_key}`)} onReload={() => { answer.reset(); finish.reset(); void attempt.refetch(); }} />}
   </main>;
 }
 
@@ -38,12 +40,12 @@ export function ScenarioIntroduction({ scenario, preview, pending, error, onStar
   </section>;
 }
 
-export function ScenarioAttemptView({ attempt, pending, error, onAnswer, onFinish, onRepeat, onReload }: { attempt: ScenarioAttempt; pending: boolean; error?: string; onAnswer: (step: number, choice: number) => void; onFinish: () => void; onRepeat: () => void; onReload?: () => void }) {
+export function ScenarioAttemptView({ attempt, actor, pending, error, onAnswer, onFinish, onRepeat, onReload }: { attempt: ScenarioAttempt; actor?: number; pending: boolean; error?: string; onAnswer: (step: number, choice: number) => void; onFinish: () => void; onRepeat: () => void; onReload?: () => void }) {
   const [choice, setChoice] = useState<number | null>(null), [chosenStep, setChosenStep] = useState(attempt.current_step);
   const selected = chosenStep === attempt.current_step ? choice : null;
   const step = attempt.steps[attempt.current_step];
   const done = attempt.state !== "in_progress";
-  const legacy = attempt.revision < 2 && !done;
+  const legacy = attempt.revision < 3 && !done;
   return <>
     <header className="scenario-card scenario-heading"><span className="scenario-eyebrow">ОБРАЩЕНИЕ ВОДИТЕЛЯ{attempt.is_preview ? " · ПРЕДПРОСМОТР" : ""}</span><h1>{attempt.title}</h1><ScenarioProgress attempt={attempt} /><div className="scenario-case-context"><strong>{attempt.driver.name}</strong><span>{attempt.driver.phone}</span><span>{attempt.driver.park} · {attempt.driver.city}</span></div></header>
     {legacy ? <section className="scenario-card"><h2>Сценарий обновлён</h2><p>Теперь вы сами выбираете реплики и рабочие действия. Начните новую версию сценария.</p><Link className="scenario-button scenario-button--primary" to={`/training/scenarios/${attempt.scenario_key}`}>Открыть новый сценарий</Link></section> : <>
@@ -52,10 +54,11 @@ export function ScenarioAttemptView({ attempt, pending, error, onAnswer, onFinis
       {!done && attempt.phase === "dialogue" && step && <section className="scenario-card scenario-dialogue">
         <p className="scenario-eyebrow">{step.kind === "action" ? "РАБОЧЕЕ ДЕЙСТВИЕ" : "ДИАЛОГ С ВОДИТЕЛЕМ"}</p>
         <div className="scenario-speech"><strong>{step.speaker}</strong><p>{step.text}</p></div>
-        {step.resource === "classifier" && <details className="scenario-reference"><summary>Материалы обращения · классификатор</summary><p><strong>{attempt.classifier.title}</strong></p><p className="scenario-muted">Учебный пример от {attempt.classifier.checked_on}. {attempt.classifier.notice}</p><ul>{attempt.classifier.entries.map((entry, index) => <li key={index}>{entry.brand} {entry.model} · от {entry.min_year} г. · {entry.colors.join(", ")}</li>)}</ul><a href={attempt.classifier.source_url} target="_blank" rel="noreferrer">Официальный классификатор города ↗</a></details>}
+        {step.resource === "classifier" && attempt.revision < 3 && <details className="scenario-reference"><summary>Материалы обращения · классификатор</summary><p><strong>{attempt.classifier.title}</strong></p><p className="scenario-muted">Учебный пример от {attempt.classifier.checked_on}. {attempt.classifier.notice}</p><ul>{attempt.classifier.entries.map((entry, index) => <li key={index}>{entry.brand} {entry.model} · от {entry.min_year} г. · {entry.colors.join(", ")}</li>)}</ul><a href={attempt.classifier.source_url} target="_blank" rel="noreferrer">Официальный классификатор города ↗</a></details>}
+        {step.resource === "office" && attempt.office && <aside className="scenario-reference"><strong>{attempt.office.name}</strong><p>{attempt.office.address}<br />{attempt.office.hours}</p><p className="scenario-muted">{attempt.office.notice}</p></aside>}
         <form onSubmit={event => { event.preventDefault(); if (selected !== null && !pending) onAnswer(attempt.current_step, selected); }}><fieldset disabled={pending} className="scenario-options"><legend>{step.prompt || (step.kind === "action" ? "Что сделаете дальше?" : "Что ответите водителю?")}</legend>{step.options.map((option, index) => <label key={index} className={selected === index ? "is-selected" : undefined}><input type="radio" name={`step-${attempt.current_step}`} value={index} checked={selected === index} onChange={() => { setChosenStep(attempt.current_step); setChoice(index); }} /><span>{option}</span></label>)}</fieldset><button className="scenario-button scenario-button--primary" disabled={selected === null || pending}>{pending ? "Проверяем…" : step.kind === "action" ? "Выполнить действие" : "Отправить ответ"}</button></form>
       </section>}
-      {!done && (attempt.phase === "dispatch" || attempt.phase === "crm") && <section className="scenario-card scenario-workspace-entry"><span className="scenario-eyebrow">РАБОТА С ОБРАЩЕНИЕМ</span><h2>Продолжите в рабочих сайтах</h2><p>Диспетчерская и CRM доступны в учебной среде. Выполните выбранное действие и вернитесь к разговору.</p><Link className="scenario-button scenario-button--primary" to={scenarioWorkSite(attempt, attempt.phase)}>Открыть рабочие сайты</Link><p className="scenario-muted">Открытие сайта само по себе не засчитывает действие. Прогресс сохраняется после проверки данных или сохранённого обращения. Для оператора нужен действующий доступ по QR.</p></section>}
+      {!done && (attempt.phase === "dispatch" || attempt.phase === "crm") && <section className="scenario-card scenario-workspace-entry"><span className="scenario-eyebrow">РАБОТА С ОБРАЩЕНИЕМ</span><h2>Продолжите в рабочих сайтах</h2><p>Диспетчерская и CRM доступны в учебной среде. Выполните выбранное действие и вернитесь к разговору.</p><Link className="scenario-button scenario-button--primary" to={scenarioWorkSite(attempt, attempt.phase, actor)}>Открыть рабочие сайты</Link><p className="scenario-muted">Открытие сайта само по себе не засчитывает действие. Прогресс сохраняется после проверки данных или сохранённого обращения. Для оператора нужен действующий доступ по QR.</p></section>}
       {!done && attempt.phase === "complete" && <section className="scenario-card"><h2>Обращение завершено</h2><p>Действия в рабочих сайтах и заключительный ответ водителю сохранены. Можно посмотреть результат.</p><button className="scenario-button scenario-button--primary" disabled={pending} onClick={onFinish}>{pending ? "Сохраняем результат…" : "Завершить сценарий"}</button></section>}
     </>}
     {done && <ScenarioResult attempt={attempt} onRepeat={onRepeat} />}

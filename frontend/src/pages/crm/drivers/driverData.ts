@@ -25,6 +25,7 @@ export interface TrainingDriver {
 }
 
 export const CAR_BRANDS: Record<string, string[]> = {
+  "Mercedes-Benz": ["E-Класс", "S-Класс"],
   Chevrolet: ["Cobalt", "Nexia", "Onix", "Malibu", "Spark"], Hyundai: ["Accent", "Elantra", "Sonata", "Creta"], Kia: ["Rio", "K5", "Cerato", "Sportage"],
   Toyota: ["Camry", "Corolla", "Prius", "RAV4"], Volkswagen: ["Polo", "Golf", "Passat"], Nissan: ["Cefiro", "Almera", "Qashqai"], Lada: ["Granta", "Vesta", "Largus"], Skoda: ["Rapid", "Octavia"],
 };

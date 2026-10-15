@@ -29,7 +29,8 @@ class ScenarioInspection(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     driver_id: str = Field(min_length=1, max_length=80)
     park_id: str = Field(min_length=1, max_length=80)
-    section: Literal["profile", "car"]
+    section: Literal["profile", "car", "classifier"]
+    classification_result: Literal["eligible", "not_eligible"] | None = None
 
 
 class ScenarioCrmCheck(BaseModel):

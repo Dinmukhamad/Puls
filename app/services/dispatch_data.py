@@ -357,6 +357,20 @@ CRM_DRIVERS = [
     ),
 ]  # fmt: skip
 DRIVERS += CRM_DRIVERS
+# A separate eligible Business case; existing training accounts keep their data and IDs.
+DRIVERS.append(
+    driver(
+        "business_candidate",
+        "itaxi-ala",
+        "Тестов",
+        "Арман",
+        "Сергеевич",
+        "+77010000055",
+        "BT000055",
+        rating=4.98,
+        car=car("Mercedes-Benz", "E-Класс", 2022, "Чёрный", "055TST02", ["Эконом", "Комфорт"]),
+    )
+)
 # Every fleet account has a CRM number too.
 for _index, _driver in enumerate(DRIVERS):
     _driver["crm_id"] = _driver["crm_id"] or 11046000 + _index

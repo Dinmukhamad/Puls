@@ -16,13 +16,13 @@ async function moduleAt(path, request = async () => ({})) {
   new Function("require", "module", "exports", built.outputFiles[0].text)(name => name === "test:client" ? { request } : require(name), module, module.exports);
   return module.exports;
 }
-const { scenarioKeys, scenarioWorkSite, preserveScenarioContext } = await moduleAt("../../api/scenarios.ts");
+const { scenarioKeys, scenarioWorkSite, preserveScenarioContext, rememberScenarioWorkspace } = await moduleAt("../../api/scenarios.ts");
 const { ScenarioIntroduction, ScenarioAttemptView, ScenarioResult } = await moduleAt("./ScenarioPage.tsx");
 const { crmSubmissionDetails, parseScenarioChecks } = await moduleAt("./ScenarioCrmProof.tsx");
 const { crmDetailRows } = await moduleAt("../../api/crm.ts");
 const noop = () => {};
-const summary = (patch = {}) => ({ key: "business_park", title: "Подключение тарифа Бизнес", description: "Учебная консультация", minutes: 20, revision: 2, pass_percent: 80, critical_required: true, coins_reward: 125, completed: false, enabled: true, attempt_id: null, state: "new", ...patch });
-const attempt = (patch = {}) => ({ id: 42, scenario_key: "business_park", title: "Подключение тарифа Бизнес", description: "Учебный диалог", revision: 2, opening_message: "Здравствуйте! Хочу подключить Бизнес.", state: "in_progress", phase: "dialogue", current_step: 0, steps: [{ speaker: "Водитель", text: "Можно подключиться?", options: ["Проверим профиль и классификатор", "Гарантирую подключение"], critical: true, kind: "reply" }], answers: {}, feedback: null, practice: { dispatch: false, crm: false }, driver: { id: "zhaksylykov", name: "Учебный водитель", phone: "+7 700 000 00 01", license_number: "TEST-01", park_id: "almaty", park: "iTaxi", city: "Алматы" }, classifier: { title: "Учебный классификатор", checked_on: "2026-10-07", source_url: "https://pro.yandex.com/", notice: "Учебный пример. Допуск не подтверждён.", entries: [] }, crm_requirements: [{ key: "classifier", label: "Проверка допуска" }], coins_reward: 125, awarded_coins: 0, reward_already_claimed: false, score: null, pass_percent: 80, is_preview: false, finished_at: null, ...patch });
+const summary = (patch = {}) => ({ key: "business_park", title: "Подключение тарифа Бизнес", description: "Учебная консультация", minutes: 20, revision: 3, pass_percent: 80, critical_required: true, coins_reward: 125, completed: false, enabled: true, attempt_id: null, state: "new", ...patch });
+const attempt = (patch = {}) => ({ id: 42, scenario_key: "business_park", title: "Подключение тарифа Бизнес", description: "Учебный диалог", revision: 3, opening_message: "Здравствуйте! Хочу подключить Бизнес.", state: "in_progress", phase: "dialogue", current_step: 0, steps: [{ speaker: "Водитель", text: "Можно подключиться?", options: ["Проверим профиль и классификатор", "Гарантирую подключение"], critical: true, kind: "reply" }], answers: {}, feedback: null, practice: { dispatch: false, crm: false }, driver: { id: "zhaksylykov", name: "Учебный водитель", phone: "+7 700 000 00 01", license_number: "TEST-01", park_id: "almaty", park: "iTaxi", city: "Алматы" }, classifier: { title: "Учебный классификатор", checked_on: "2026-10-07", source_url: "https://pro.yandex.com/", notice: "Учебный пример. Допуск не подтверждён.", entries: [] }, crm_requirements: [{ key: "classifier", label: "Проверка допуска" }], coins_reward: 125, awarded_coins: 0, reward_already_claimed: false, score: null, pass_percent: 80, is_preview: false, finished_at: null, ...patch });
 const render = (Component, props) => renderToStaticMarkup(React.createElement(StaticRouter, { location: "/" }, React.createElement(Component, props)));
 
 test("introduction presents the case and tools without disclosing the action sequence", () => {
@@ -72,7 +72,7 @@ test("dialogue cannot submit without a choice and does not expose a front-end co
   assert.doesNotMatch(interrupted, /Начислено|Сценарий пройден/);
 });
 
-test("v2 starts with driver search; verified profile can resume and CRM starts at the list", () => {
+test("v3 starts with driver search; verified profile can resume and CRM starts at the list", () => {
   const dispatch = new URL(scenarioWorkSite(attempt(), "dispatch"), "https://puls.test");
   assert.equal(dispatch.pathname, "/training/work-sites");
   assert.equal(dispatch.searchParams.get("scenarioAttempt"), "42");
@@ -184,4 +184,35 @@ test("result reviews first decision and correction without replacing server scor
 
 test("CRM diagnostics displays a readable status", () => {
   assert.deepEqual(crmDetailRows({ scenario_diagnostics: "awaiting_driver_diagnostics" }), [["Диагностика", "Скриншот запрошен, ожидается"]]);
+});
+
+test("workspace restores driver cards across scenario visits and isolates users and attempts", () => {
+  const values = new Map(), previous = globalThis.sessionStorage;
+  globalThis.sessionStorage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) };
+  try {
+    rememberScenarioWorkspace(7, 42, new URLSearchParams("site=crm&view=drivers&driver=901&screen=car&fleet=driver%2Fzhaksylykov%2Fcar&fpark=almaty&ignored=secret"));
+    const crm = new URL(scenarioWorkSite(attempt(), "crm", 7), "https://puls.test");
+    const fleet = new URL(scenarioWorkSite(attempt(), "dispatch", 7), "https://puls.test");
+    assert.equal(crm.searchParams.get("view"), "drivers");
+    assert.equal(crm.searchParams.get("driver"), "901");
+    assert.equal(crm.searchParams.get("screen"), "car");
+    assert.equal(fleet.searchParams.get("fleet"), "driver/zhaksylykov/car");
+    assert.equal(fleet.searchParams.get("fpark"), "almaty");
+    assert.equal(fleet.searchParams.get("site"), "dispatch");
+    assert.equal(fleet.searchParams.has("ignored"), false);
+    assert.equal(new URL(scenarioWorkSite(attempt(), "crm", 8), "https://puls.test").searchParams.has("driver"), false);
+    assert.equal(new URL(scenarioWorkSite(attempt({ id: 43 }), "crm", 7), "https://puls.test").searchParams.has("driver"), false);
+  } finally { if (previous === undefined) delete globalThis.sessionStorage; else globalThis.sessionStorage = previous; }
+});
+
+test("office consultation evidence persists and displays readable labels", () => {
+  const details = { scenario_outcome: "eligible", scenario_next_action: "office_visit", scenario_office: "Учебная, 10", scenario_visit_time: "10:00–18:00" };
+  const saved = crmSubmissionDetails(details, [], "42");
+  assert.equal(saved.scenario_office, details.scenario_office);
+  assert.equal(saved.scenario_visit_time, details.scenario_visit_time);
+  const rows = JSON.stringify(crmDetailRows(saved));
+  assert.match(rows, /соответствуют требованиям Бизнес/);
+  assert.match(rows, /Визит в офис/);
+  assert.match(rows, /Учебная, 10/);
+  assert.doesNotMatch(rows, /scenario_|office_visit|eligible|Диагностика/);
 });

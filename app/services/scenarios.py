@@ -16,7 +16,7 @@ from app.models.scenario import ScenarioAttempt
 from app.models.user import Group
 from app.services import city_world, dispatch
 from app.services.coins import post_transaction
-from app.services.crm_catalog import default_categories
+from app.services.crm_catalog import category_id, default_categories
 from app.services.learning import lock_learner
 from app.services.rules import write_audit
 from app.services.scenario_catalog import (
@@ -75,6 +75,40 @@ def action_workflow(attempt):
     return attempt.snapshot.get("workflow_version", 1) >= 2
 
 
+def office_workflow(attempt):
+    return attempt.snapshot.get("workflow_version", 1) >= 3
+
+
+def inspection_sections(attempt):
+    return ("profile", "car", "classifier") if office_workflow(attempt) else ("profile", "car")
+
+
+def classifier_matches(driver, classifier):
+    rating, car = driver.get("rating"), driver.get("car")
+    if not isinstance(rating, int | float) or not rating > classifier["min_rating"] or not car:
+        return False
+    return any(
+        normalized(car["brand"]) == normalized(entry["brand"])
+        and normalized(car["model"]) == normalized(entry["model"])
+        and car["year"] >= entry["min_year"]
+        and normalized(car["color"]) in {normalized(color) for color in entry["colors"]}
+        for entry in classifier["entries"]
+    )
+
+
+def required_inspection(attempt):
+    if attempt.state != "in_progress" or attempt.phase != "dispatch":
+        return None
+    for section, field in (
+        ("profile", "dispatch_after"),
+        ("car", "vehicle_after"),
+        ("classifier", "classifier_after"),
+    ):
+        if attempt.current_step == attempt.snapshot.get(field):
+            return section
+    return None
+
+
 def attempt_data(attempt):
     snapshot = deepcopy(attempt.snapshot)
     steps = snapshot["steps"]
@@ -117,10 +151,14 @@ def attempt_data(attempt):
             "dispatch": bool(attempt.practice.get("dispatch")),
             "crm": bool(attempt.practice.get("crm")),
             "crm_appeal_id": attempt.practice.get("crm", {}).get("appeal_id"),
-            "inspections": {key: bool(inspections.get(key)) for key in ("profile", "car")},
+            "inspections": {
+                key: bool(inspections.get(key)) for key in inspection_sections(attempt)
+            },
+            "required_section": required_inspection(attempt),
         },
         "driver": snapshot["driver"],
         "classifier": snapshot["classifier"],
+        "office": snapshot.get("office"),
         "crm_requirements": snapshot["crm_requirements"],
         "coins_reward": snapshot["reward"]["coins"],
         "awarded_coins": attempt.awarded_coins,
@@ -230,6 +268,13 @@ async def start(session, user, key):
         raise ConflictError(
             "В учебном аккаунте нет автомобиля. Восстановите учебную диспетчерскую перед началом."
         )
+    if snapshot.get("workflow_version", 1) >= 3 and not classifier_matches(
+        driver, snapshot["classifier"]
+    ):
+        raise ConflictError(
+            "Данные учебного кандидата изменены. Восстановите его рейтинг и автомобиль "
+            "перед началом сценария."
+        )
     snapshot["reward"] = deepcopy(mission)
     snapshot["driver"] = {
         "id": driver["id"],
@@ -249,8 +294,10 @@ async def start(session, user, key):
         "employment": driver["employment"],
         "park": park["name"],
         "city": park["city"],
-        "classification_result": "not_confirmed",
+        "classification_result": snapshot["classifier"]["outcome"],
     }
+    if snapshot.get("workflow_version", 1) >= 3:
+        snapshot["observations"]["rating"] = driver["rating"]
     # Timestamp precision varies by database. The append-only CRM identifier also
     # rejects an older record created within the same timestamp tick as this run.
     snapshot["crm_after_id"] = int(
@@ -338,7 +385,9 @@ async def answer(session, user, attempt_id, body):
     attempt.answers = {**attempt.answers, str(body.step): body.answer}
     attempt.current_step += 1
     if attempt.current_step == attempt.snapshot["dispatch_after"] or (
-        action_workflow(attempt) and attempt.current_step == attempt.snapshot["vehicle_after"]
+        action_workflow(attempt)
+        and attempt.current_step
+        in (attempt.snapshot["vehicle_after"], attempt.snapshot.get("classifier_after"))
     ):
         attempt.phase = "dispatch"
     elif action_workflow(attempt) and attempt.current_step == attempt.snapshot["crm_after"]:
@@ -372,6 +421,14 @@ async def inspection_observations(session, user, attempt):
         "city": park["city"],
         "classification_result": "not_confirmed",
     }
+    if office_workflow(attempt):
+        observed["rating"] = driver["rating"]
+        if not classifier_matches(driver, attempt.snapshot["classifier"]):
+            raise ConflictError(
+                "Рейтинг должен быть строго выше 4,95, а автомобиль — соответствовать "
+                "учебному классификатору Бизнес."
+            )
+        observed["classification_result"] = "eligible"
     expected = attempt.snapshot["observations"]
     identity = attempt.snapshot["driver"]
     if (
@@ -394,6 +451,10 @@ async def inspect(session, user, attempt_id, body):
     driver = attempt.snapshot["driver"]
     if body.driver_id != driver["id"] or body.park_id != driver["park_id"]:
         raise DomainError("Откройте действующую карточку водителя из обращения в нужном парке")
+    if body.section != "classifier" and body.classification_result is not None:
+        raise DomainError("Вывод классификатора передаётся только при его проверке")
+    if body.section == "classifier" and not office_workflow(attempt):
+        raise ConflictError("В этой версии нет отдельной проверки классификатора")
     inspections = dict(attempt.practice.get("inspections", {}))
     if inspections.get(body.section):
         return attempt
@@ -401,12 +462,18 @@ async def inspect(session, user, attempt_id, body):
         raise ConflictError("Сначала выберите проверку профиля водителя в сценарии")
     if body.section == "car" and not inspections.get("profile"):
         raise ConflictError("Сначала проверьте профиль водителя, затем его автомобиль")
-    required_step = attempt.snapshot[
-        "dispatch_after" if body.section == "profile" else "vehicle_after"
-    ]
-    if attempt.current_step != required_step:
+    if body.section == "classifier" and not all(inspections.get(key) for key in ("profile", "car")):
+        raise ConflictError("Сначала проверьте профиль и автомобиль водителя")
+    if required_inspection(attempt) != body.section:
         raise ConflictError("Выполните текущее действие сценария перед проверкой этой вкладки")
     observed = await inspection_observations(session, user, attempt)
+    if (
+        body.section == "classifier"
+        and body.classification_result != observed["classification_result"]
+    ):
+        raise DomainError(
+            "Сопоставьте рейтинг, модель, год и цвет с учебным классификатором ещё раз"
+        )
     inspections[body.section] = {
         "driver_id": driver["id"],
         "park_id": driver["park_id"],
@@ -414,7 +481,7 @@ async def inspect(session, user, attempt_id, body):
         "observations": observed,
     }
     practice = {**attempt.practice, "inspections": inspections}
-    if all(inspections.get(key) for key in ("profile", "car")):
+    if all(inspections.get(key) for key in inspection_sections(attempt)):
         practice["dispatch"] = {
             "observations": observed,
             "verified_at": datetime.now(UTC).isoformat(),
@@ -496,6 +563,17 @@ async def validate_crm(session, user, attempt, appeal_id):
     }
     if not allowed.intersection(appeal.category_ids) or appeal.is_ticket:
         raise DomainError("Сохраните консультацию по тарифам, а не заявку или другую категорию")
+    if office_workflow(attempt):
+        driver_type = (
+            "Обычный водитель"
+            if attempt.snapshot["observations"]["employment"] == "Физическое лицо"
+            else "Самозанятый водитель"
+        )
+        expected_category = category_id(
+            ["Водитель", driver_type, "Консультация", "Консультация по Тарифам"]
+        )
+        if expected_category not in appeal.category_ids:
+            raise DomainError(f"Выберите консультацию по тарифам в категории «{driver_type}»")
     details = appeal.details or {}
     try:
         checks = json.loads(details.get("scenario_checks", "[]"))
@@ -512,9 +590,21 @@ async def validate_crm(session, user, attempt, appeal_id):
                     attempt.snapshot["steps"][: attempt.snapshot["crm_after"]]
                 )
             )
-            and all(attempt.practice.get("inspections", {}).get(key) for key in ("profile", "car"))
-            and details.get("scenario_diagnostics") == "awaiting_driver_diagnostics"
+            and all(
+                attempt.practice.get("inspections", {}).get(key)
+                for key in inspection_sections(attempt)
+            )
         )
+        if office_workflow(attempt):
+            proof_complete = proof_complete and (
+                details.get("scenario_office") == attempt.snapshot["office"]["address"]
+                and details.get("scenario_visit_time") == attempt.snapshot["office"]["hours"]
+            )
+        else:
+            proof_complete = (
+                proof_complete
+                and details.get("scenario_diagnostics") == "awaiting_driver_diagnostics"
+            )
     else:
         proof_complete = isinstance(checks, list) and set(map(str, checks)) == {
             item["key"] for item in attempt.snapshot["crm_requirements"]
@@ -522,13 +612,19 @@ async def validate_crm(session, user, attempt, appeal_id):
     if (
         details.get("scenario_attempt") != str(attempt.id)
         or not proof_complete
-        or details.get("scenario_outcome") != "not_confirmed"
-        or details.get("scenario_next_action") != "check_pro_diagnostics"
-        or len(appeal.comment.strip()) < 40
+        or details.get("scenario_outcome")
+        != ("eligible" if office_workflow(attempt) else "not_confirmed")
+        or details.get("scenario_next_action")
+        != ("office_visit" if office_workflow(attempt) else "check_pro_diagnostics")
+        or (not office_workflow(attempt) and len(appeal.comment.strip()) < 40)
     ):
         raise DomainError(
-            "Заполните в CRM все пункты консультации, предварительный итог и "
-            "следующее действие по сценарию"
+            "Проверьте итог консультации и согласованные адрес и часы офиса"
+            if office_workflow(attempt)
+            else (
+                "Заполните в CRM все пункты консультации, предварительный итог и следующее "
+                "действие по сценарию"
+            )
         )
     return appeal
 
@@ -538,6 +634,8 @@ async def crm_check(session, user, attempt_id, body):
     accepted = attempt.practice.get("crm")
     if accepted:
         if accepted["appeal_id"] == body.appeal_id:
+            if attempt.state == "in_progress":
+                await validate_crm(session, user, attempt, body.appeal_id)
             return attempt
         raise ConflictError("Для этой попытки уже подтверждено другое обращение")
     if attempt.state != "in_progress" or attempt.phase != "crm":
@@ -565,7 +663,7 @@ async def finish(session, user, attempt_id):
     ):
         raise ConflictError("Завершите диалог и практику в диспетчерской и CRM")
     if action_workflow(attempt) and not all(
-        attempt.practice.get("inspections", {}).get(key) for key in ("profile", "car")
+        attempt.practice.get("inspections", {}).get(key) for key in inspection_sections(attempt)
     ):
         raise ConflictError("Проверьте профиль и автомобиль в диспетчерской")
     await validate_crm(session, user, attempt, attempt.practice["crm"]["appeal_id"])

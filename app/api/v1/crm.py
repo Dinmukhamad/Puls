@@ -311,6 +311,16 @@ async def create_appeal(
         body = AppealInput.model_validate_json(payload)
     except ValidationError as exc:
         raise HTTPException(422, "; ".join(e["msg"] for e in exc.errors())) from exc
+    scenario_attempt = None
+    if body.details.get("scenario_attempt"):
+        from app.services import scenarios
+
+        marker = body.details["scenario_attempt"]
+        if not marker.isdecimal() or int(marker) <= 0:
+            raise HTTPException(422, "Некорректная попытка сценария")
+        candidate = await scenarios.own_attempt(session, user, int(marker), lock=True)
+        if scenarios.office_workflow(candidate):
+            scenario_attempt = candidate
     existing = await session.scalar(
         select(CrmAppeal).where(
             CrmAppeal.author_id == user.id, CrmAppeal.request_id == str(body.request_id)
@@ -331,6 +341,14 @@ async def create_appeal(
     session.add(row)
     try:
         await session.flush()
+        if scenario_attempt is not None:
+            from app.schemas.scenario import ScenarioCrmCheck
+
+            # Save and verify together: an invalid consultation is rolled back,
+            # and a successful response always advances this same scenario.
+            await scenarios.crm_check(
+                session, user, scenario_attempt.id, ScenarioCrmCheck(appeal_id=row.id)
+            )
         for name, mime, data in uploads:
             session.add(
                 CrmAttachment(appeal_id=row.id, name=name, mime=mime, data=data, size=len(data))

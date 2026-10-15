@@ -15,7 +15,7 @@ export interface CrmAppeal extends Omit<CrmInput, "request_id"> {
 export const CRM_STATUS: Record<string, string> = { recorded: "Зафиксировано", new: "Новый тикет", in_progress: "В работе", closed: "Закрыт" };
 export const CRM_FIELDS: Record<string, string> = { company: "Название компании", callback: "Номер для обратного звонка", service: "Предлагаемая услуга", employee: "Имя сотрудника", transaction: "Транзакция / РРН", conditions: "Условия работы", error_description: "Описание ошибки" };
 const SCENARIO_CHECK_LABELS: Record<string, string> = { classifier: "Проверка автомобиля и допуска", activation: "Этапы подключения", standards: "Дресс-код и автомобиль", commission: "Условия комиссий", diagnostics: "Диагностика и следующий шаг" };
-const SCENARIO_NEXT_LABELS: Record<string, string> = { check_pro_diagnostics: "Получить скриншот или текст диагностики и продолжить проверку условий", start_business: "Начать выполнять заказы Business", wait_park: "Ждать подключения от парка" };
+const SCENARIO_NEXT_LABELS: Record<string, string> = { office_visit: "Визит в офис для следующего этапа подключения", check_pro_diagnostics: "Получить скриншот или текст диагностики и продолжить проверку условий", start_business: "Начать выполнять заказы Business", wait_park: "Ждать подключения от парка" };
 const SCENARIO_DIAGNOSTICS_LABELS: Record<string, string> = { awaiting_driver_diagnostics: "Скриншот запрошен, ожидается", diagnostics_confirmed: "Диагностика получена и проверена" };
 /** Saved scenario evidence reads as a consultation record, never internal JSON or route IDs. */
 export function crmDetailRows(details: Record<string, string>): [string, string][] {
@@ -24,8 +24,10 @@ export function crmDetailRows(details: Record<string, string>): [string, string]
     if (key === "scenario_checks") {
       try { const keys: unknown = JSON.parse(value); const labels = Array.isArray(keys) ? keys.filter((item): item is string => typeof item === "string").map(item => SCENARIO_CHECK_LABELS[item]).filter(Boolean) : []; return labels.length ? [["Темы консультации", labels.join("; ")]] : []; } catch { return []; }
     }
-    if (key === "scenario_outcome") return [["Итог консультации", value === "confirmed" ? "Допуск к Business подтверждён" : "Допуск к Business не подтверждён — требуется проверка сервиса"]];
+    if (key === "scenario_outcome") return [["Итог консультации", value === "eligible" ? "Рейтинг и автомобиль соответствуют требованиям Бизнес" : value === "confirmed" ? "Допуск к Business подтверждён" : "Допуск к Business не подтверждён — требуется проверка сервиса"]];
     if (key === "scenario_next_action") return [["Следующее действие", SCENARIO_NEXT_LABELS[value] ?? "Уточнить следующее действие"]];
+    if (key === "scenario_office") return [["Офис для визита", value]];
+    if (key === "scenario_visit_time") return [["Часы визита", value]];
     if (key === "scenario_diagnostics") return [["Диагностика", SCENARIO_DIAGNOSTICS_LABELS[value] ?? "Уточнить состояние диагностики"]];
     return [[CRM_FIELDS[key] ?? key, value]];
   });

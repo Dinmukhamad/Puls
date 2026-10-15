@@ -7,7 +7,7 @@ export function crmSubmissionDetails(details: Record<string, string>, fields: st
   if (attemptId) {
     result.scenario_attempt = attemptId;
     for (const key of ["scenario_checks", "scenario_outcome", "scenario_next_action"]) result[key] = details[key] ?? "";
-    if (details.scenario_diagnostics !== undefined) result.scenario_diagnostics = details.scenario_diagnostics;
+    for (const key of ["scenario_diagnostics", "scenario_office", "scenario_visit_time"]) if (details[key] !== undefined) result[key] = details[key];
   }
   return result;
 }
@@ -21,6 +21,16 @@ export function ScenarioCrmProof({ attemptId, details, onChange }: { attemptId: 
   const checks = parseScenarioChecks(details.scenario_checks);
   if (query.isError) return <div className="crm-error" role="alert"><p>{query.error.message}</p><button type="button" className="crm-secondary" onClick={() => query.refetch()}>Загрузить требования сценария</button></div>;
   if (!query.data) return <p role="status">Загружаем требования сценария…</p>;
+  if (query.data.revision >= 3 && query.data.office) {
+    const office = query.data.office;
+    return <fieldset className="scenario-crm-proof scenario-crm-proof--compact"><legend>Консультация по подключению Бизнес</legend>
+      <p>Сохраните результат проверки и согласованное приглашение. Комментарий необязателен.</p>
+      <label className="crm-field"><span>Результат проверки *</span><select required value={details.scenario_outcome ?? ""} onChange={event => onChange({ ...details, scenario_outcome: event.target.value })}><option value="">Выберите результат</option><option value="eligible">Рейтинг и автомобиль соответствуют требованиям Бизнес</option><option value="not_confirmed">Соответствие не подтверждено</option></select></label>
+      <label className="crm-field"><span>Следующее действие *</span><select required value={details.scenario_next_action ?? ""} onChange={event => onChange({ ...details, scenario_next_action: event.target.value })}><option value="">Выберите согласованное действие</option><option value="office_visit">Визит в офис для следующего этапа подключения</option><option value="start_business">Начать заказы без визита</option></select></label>
+      <label className="crm-field"><span>Офис для визита *</span><select required value={details.scenario_office ?? ""} onChange={event => onChange({ ...details, scenario_office: event.target.value, scenario_visit_time: event.target.value ? office.hours : "" })}><option value="">Выберите офис</option><option value={office.address}>{office.name} · {office.address}</option></select></label>
+      <p>Часы работы: {office.hours}. {office.notice}</p>
+    </fieldset>;
+  }
   if (query.data.revision >= 2) return <fieldset className="scenario-crm-proof scenario-crm-proof--compact"><legend>Итог консультации</legend>
     <p>Зафиксируйте результат разговора и согласованное следующее действие. Проверенные данные и пояснения внесите в комментарий обращения.</p>
     <label className="crm-field"><span>Допуск к Business *</span><select required value={details.scenario_outcome ?? ""} onChange={event => onChange({ ...details, scenario_outcome: event.target.value })}><option value="">Выберите результат консультации</option><option value="not_confirmed">Допуск не подтверждён — требуется проверка сервиса</option><option value="confirmed">Допуск подтверждён</option></select></label>
