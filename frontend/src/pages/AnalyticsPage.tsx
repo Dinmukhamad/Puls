@@ -6,7 +6,7 @@ import { analytics, type AnalyticsOut } from "../api/analytics";
 import { lookups } from "../api/access";
 
 import { DateRangePicker } from "../components/DateRangePicker";
-import { validDateRange, type DateRangePreset } from "../components/dateRange";
+import { validDateRange } from "../components/dateRange";
 import { GlassSurface } from "../components/GlassSurface";
 import { Sheet } from "../components/Sheet";
 import { Button, Select } from "../components/ui";
@@ -16,9 +16,6 @@ import "./analytics.css";
 
 const positiveInt = (value: string | null) => value && /^\d+$/.test(value) && Number(value) > 0 ? Number(value) : undefined;
 const isDate = (value: string | null) => value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : undefined;
-/** Analytics reads whole weeks first: the contest is weekly. */
-export const ANALYTICS_PRESETS: readonly DateRangePreset[] = ["this-week", "last-week", "this-month", "last-month", "ten-days"];
-
 /**
  * One date filter instead of days, weeks and months: the manager picks any
  * dates, and the server averages the whole range and picks the chart step.
@@ -60,7 +57,7 @@ export function useAnalyticsReport(overview = false) {
 
 /** The only period control: any dates, applied as one range. */
 export function ReportPeriod({ report, label }: { report: ReturnType<typeof useAnalyticsReport>; label?: string }) {
-  return <DateRangePicker className="analytics-period" ariaLabel={label ?? "Период"} value={report.range} loading={report.data.isLoading} presets={ANALYTICS_PRESETS}
+  return <DateRangePicker className="analytics-period" ariaLabel={label ?? "Период"} value={report.range} loading={report.data.isLoading}
     onChange={(next) => report.update({ from: next.date_from, to: next.date_to, page: undefined })} />;
 }
 
