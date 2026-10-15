@@ -23,12 +23,12 @@ function WheelEditor({initial}:{initial:WheelConfig}) {
     setValue((state)=>({...state,segments:state.segments.map((row,i)=>i===index?{...row,[field]:next}:row)}));
 
   return <form className="stack" onSubmit={(e)=>{e.preventDefault();if(editable&&!save.isPending)save.mutate();}}>
-    <Card title="Правила ленты удачи" subtitle="Бесплатные попытки каждый день, после них — платные. Результат и начисление определяет сервер.">
+    <Card title="Правила сундука дня" subtitle="Сундук открывается, когда оператор ответил на задания дня. Бесплатные сундуки каждый день, после них — платные. Приз определяет сервер.">
       <fieldset className="learning-fieldset stack" disabled={!editable||save.isPending}>
         <label className="learning-check"><input type="checkbox" checked={value.enabled} onChange={(e)=>setValue({...value,enabled:e.target.checked})}/>Доступно сотрудникам</label>
-        <label className="field"><span className="field__label">Попыток на человека в день</span><input className="input" type="number" min={1} max={10} required value={value.daily_spins} onChange={(e)=>setValue({...value,daily_spins:Number(e.target.value)})}/></label>
-        <label className="field"><span className="field__label">Платных попыток в день</span><input className="input" type="number" min={0} max={10} required value={value.paid_spins} onChange={(e)=>setValue({...value,paid_spins:Number(e.target.value)})}/><span className="field__note">0 — платных попыток нет</span></label>
-        <label className="field"><span className="field__label">Цена платной попытки, коинов</span><input className="input" type="number" min={0} max={1000} required value={value.spin_cost} onChange={(e)=>setValue({...value,spin_cost:Number(e.target.value)})}/><span className="field__note">Средний выигрыш сейчас {points(average)} {average>=value.spin_cost&&value.spin_cost>0?"— не меньше цены: платные попытки будут добавлять коины, а не сжигать":"коина за попытку"}</span></label>
+        <label className="field"><span className="field__label">Бесплатных сундуков в день</span><input className="input" type="number" min={1} max={10} required value={value.daily_spins} onChange={(e)=>setValue({...value,daily_spins:Number(e.target.value)})}/></label>
+        <label className="field"><span className="field__label">Платных сундуков в день</span><input className="input" type="number" min={0} max={10} required value={value.paid_spins} onChange={(e)=>setValue({...value,paid_spins:Number(e.target.value)})}/><span className="field__note">0 — платных попыток нет</span></label>
+        <label className="field"><span className="field__label">Цена платного сундука, коинов</span><input className="input" type="number" min={0} max={1000} required value={value.spin_cost} onChange={(e)=>setValue({...value,spin_cost:Number(e.target.value)})}/><span className="field__note">Средний выигрыш сейчас {points(average)} {average>=value.spin_cost&&value.spin_cost>0?"— не меньше цены: платные попытки будут добавлять коины, а не сжигать":"коина за попытку"}</span></label>
       </fieldset>
     </Card>
 

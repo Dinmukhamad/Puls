@@ -40,7 +40,7 @@ test("chances follow the weights and never divide by zero", () => {
   assert.deepEqual(prizeChances([]), []);
 });
 
-test("the prize strip is a site card and shows its prizes behind a sticker button", async () => {
+test("the chest of the day is a site card: its prize strip shows what is inside, its lock the daily tasks", async () => {
   const require = createRequire(import.meta.url);
   const page = await build({ entryPoints: [fileURLToPath(new URL("./GamesPage.tsx", import.meta.url))], bundle: true, platform: "node", format: "cjs", packages: "external", jsx: "automatic", loader: { ".css": "empty" }, write: false, define: { "import.meta.env": "{}" },
     plugins: [{ name: "test-auth", setup(plugin) { plugin.onResolve({ filter: /\/AuthContext$/ }, () => ({ path: "test:auth", external: true })); } }] });
@@ -60,19 +60,27 @@ test("the prize strip is a site card and shows its prizes behind a sticker butto
   // Лента удачи — обычная карточка сайта: название в шапке, рядом звук и призы.
   // Лента собрана из разметки, а не нарисована на холсте, поэтому берёт шрифты,
   // цвета и тёмную тему из общих стилей.
-  assert.match(html, /<h2 class="card__title">Лента удачи<\/h2>/);
+  assert.match(html, /<h2 class="card__title">Сундук дня<\/h2>/);
   assert.doesNotMatch(html, /Колес|КОЛЕСО|<canvas/);
   assert.match(html, /aria-label="Выключить звук" title="Выключить звук" aria-pressed="false"/);
   assert.match(html, /class="prize-strip__tile is-current"[^>]*><span class="prize-strip__sticker"[^>]*>🍀<\/span><span class="prize-strip__title">В этот раз без награды<\/span><span class="prize-strip__reward prize-strip__reward--none">без награды<\/span>/);
   assert.match(html, /💎<\/span><span class="prize-strip__title">1000 коинов<\/span><span class="prize-strip__reward">\+1\s000 коинов<\/span>/);
   assert.match(html, /<div class="prize-strip__window"><\/div>/);
-  assert.match(html, />Крутить<\/button><p class="wheel-card__note">Бесплатно · осталось 1 из 1 · попытки обновляются в 00:00 UTC<\/p>/);
+  assert.match(html, />Открыть сундук<\/button><p class="wheel-card__note">Бесплатный сундук ждёт вас · новый сундук — завтра<\/p>/);
+  assert.match(html, /class="chest" data-state="ready"/);
   assert.deepEqual(queries, ["wheel"]);
   // Выключенная лента не обещает попыток, которые нельзя потратить.
   config.enabled = false;
   const off = renderToStaticMarkup(React.createElement(GamesPage));
-  assert.match(off, />Скоро вернёмся<\/button><p class="wheel-card__note">Сейчас лента удачи выключена\. Попытки появятся, когда её снова включат\.<\/p>/);
-  assert.doesNotMatch(off, /осталось/);
+  assert.match(off, />Скоро вернёмся<\/button><p class="wheel-card__note">Сундук дня сейчас выключен\.<\/p>/);
+  // A chest is shut until the day's tasks are answered: no strip, a way to the tasks.
+  config.enabled = true; config.chest = { unlocked: false, answered: 1, total: 3 };
+  const shut = renderToStaticMarkup(React.createElement(GamesPage));
+  assert.match(shut, /class="chest" data-state="locked"/);
+  assert.match(shut, /Задания дня: 1 из 3/);
+  assert.match(shut, /Ответить на задания/);
+  assert.doesNotMatch(shut, /prize-strip__window|Открыть сундук/);
+  delete config.chest;
   const prizes = renderToStaticMarkup(React.createElement(PrizeStickers, { segments: wheel }));
   assert.equal((prizes.match(/class="prize-sticker-card"/g) ?? []).length, 5);
   assert.match(prizes, /💎<\/span><strong class="prize-sticker-card__title">1000 коинов<\/strong><span class="prize-sticker-card__reward">\+1\s000 коинов<\/span><span class="prize-sticker-card__chance">Шанс 50%<\/span>/);

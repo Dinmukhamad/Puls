@@ -48,7 +48,7 @@ const motivation = (supervisor = false) => section("motivation", "Мотивац
   ...(supervisor ? [tab("/rating", "Рейтинг")] : []),
   tab("/admin/levels", "Уровни"), tab("/admin/settings?tab=badges", "Достижения"),
   tab("/admin/store", "Товары магазина"), tab("/admin/requests", "Заказы и выдача"),
-  tab("/admin/games?tab=wheel", "Лента удачи"), tab("/admin/games?tab=raffles", "Розыгрыши"),
+  tab("/admin/games?tab=wheel", "Сундук дня"),
   tab("/admin/economy", "Экономика коинов"),
 ], ["/admin/levels", "/admin/store", "/admin/requests", "/admin/games", "/admin/economy", "/shop", "/games", ...(supervisor ? ["/rating"] : [])]);
 const coinHistory = section("coin_history", "История коинов", CoinIcon, [tab("/admin/wallet", "История коинов")]);
@@ -74,8 +74,8 @@ export const ROLE_NAVIGATION: Record<Role, readonly NavItem[]> = {
     // на минуту, и третьей вкладкой внутри «Наград» его каждый раз приходилось искать.
     // Право доступа прежнее — routeSection сопоставляет /games с разделом
     // rewards, так что отдельный пункт ничего не открывает сверх былого.
-    section("wheel", "Удача", GiftIcon, [tab("/games?tab=wheel", "Лента удачи")], ["/games"]),
-    section("rewards", "Награды", StoreIcon, [tab("/shop", "Магазин"), tab("/games?tab=raffles", "Розыгрыши")]),
+    section("wheel", "Удача", GiftIcon, [tab("/games?tab=wheel", "Сундук дня")], ["/games"]),
+    section("rewards", "Награды", StoreIcon, [tab("/shop", "Магазин")]),
     ACCOUNT_SECTION,
   ],
   supervisor: [staffHome, team(false, true), analytics(true), staffLearning, coinHistory, motivation(true), QR_ACCESS_SECTION, ACCOUNT_SECTION],
@@ -139,7 +139,7 @@ export function visibleNavigation(role: Role, allowed: AccessMap = defaultAccess
     team(), analytics(), performance(), staffLearning, motivation(),
     section("personal_training", "Моё обучение", SparkIcon, learningTabs),
     section("results", "Результаты", TrophyIcon, [tab("/rating?tab=board", "Рейтинг")]),
-    section("rewards", "Награды", StoreIcon, [tab("/shop", "Магазин"), tab("/games?tab=wheel", "Лента удачи"), tab("/games?tab=raffles", "Розыгрыши")]),
+    section("rewards", "Награды", StoreIcon, [tab("/shop", "Магазин"), tab("/games?tab=wheel", "Сундук дня")]),
     section("reports", "Отчёты", InboxIcon, [tab("/reports", "Отчёты и экспорт")]),
     section("system", "Система", InboxIcon, [tab("/admin/access", "Доступ к разделам"), tab("/admin/sessions", "Сессии и устройства"), tab("/admin/audit", "Журнал аудита")]),
   ];

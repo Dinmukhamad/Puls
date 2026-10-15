@@ -57,6 +57,28 @@ def config_data(config):
     }
 
 
+async def chest(session, user):
+    """The chest of the day: it opens once today's daily tasks are answered (city_quests).
+
+    With no tasks to deal (the operator has answered every situation of the bank), it is open,
+    or it would stay shut for good. Staff try the chest freely.
+    """
+    from app.services import city_quests
+
+    today = await city_quests.quests(session, user)
+    if today is None:
+        return {"unlocked": True, "answered": 0, "total": 0}
+    items = today["items"]
+    answered = sum(1 for item in items if item["answered"])
+    return {"unlocked": answered >= len(items), "answered": answered, "total": len(items)}
+
+
+def local_day():
+    from app.services.city_quests import today
+
+    return today()
+
+
 async def spins_today(session, user_id, today):
     """(free, paid) spins the operator has made today."""
     rows = (await session.execute(
@@ -71,8 +93,9 @@ async def spins_today(session, user_id, today):
 @router.get("/games/wheel")
 async def wheel(session: SessionDep, user: CurrentUser):
     data = config_data(await session.get(WheelConfig, 1))
-    free, paid = await spins_today(session, user.id, datetime.now(UTC).date())
+    free, paid = await spins_today(session, user.id, local_day())
     data["used_today"] = free + paid
+    data["chest"] = await chest(session, user)
     data["free_left"] = max(0, data["daily_spins"] - free)
     data["paid_left"] = max(0, data["paid_spins"] - paid) if data["spin_cost"] else 0
     return data
@@ -123,6 +146,8 @@ def spin_data(item):
 
 @router.post("/games/wheel/spin")
 async def spin(session: SessionDep, user: CurrentUser, payload: SpinInput):
+    # The first look at the day deals its tasks and commits: before the learner's lock.
+    state = await chest(session, user)
     await lock_learner(session, user.id)
     key = f"wheel:{user.id}:{payload.request_id}"
     previous = await session.scalar(select(WheelSpin).where(WheelSpin.request_key == key))
@@ -130,17 +155,23 @@ async def spin(session: SessionDep, user: CurrentUser, payload: SpinInput):
         return spin_data(previous)
     config = await session.get(WheelConfig, 1)
     if config is None or not config.enabled:
-        raise ConflictError("Лента удачи сейчас недоступна")
-    today = datetime.now(UTC).date()
+        raise ConflictError("Сундук дня сейчас недоступен")
+    today = local_day()
     free, paid = await spins_today(session, user.id, today)
+    if not state["unlocked"]:
+        raise ConflictError(
+            f"Сундук откроется, когда вы ответите на задания дня: {state['answered']} из "
+            f"{state['total']}",
+            code="chest_locked",
+        )
     cost = 0
     if free >= config.daily_spins:
         # After the free spins come the paid ones, if the head allowed them: the stake burns.
         if not config.spin_cost or paid >= config.paid_spins:
-            raise ConflictError("Попытки на сегодня закончились. Новые доступны после 00:00 UTC.")
+            raise ConflictError("Сундуки на сегодня закончились. Новый — завтра.")
         if not payload.paid:
             raise ConflictError(
-                f"Бесплатные попытки закончились. Платная попытка стоит {config.spin_cost} коинов.",
+                f"Бесплатный сундук уже открыт. Ещё один стоит {config.spin_cost} коинов.",
                 code="paid_spin_required",
             )
         cost = config.spin_cost
@@ -169,14 +200,14 @@ async def spin(session: SessionDep, user: CurrentUser, payload: SpinInput):
             user_id=user.id,
             amount=-cost,
             tx_type=TxType.GAME_STAKE,
-            reason="Платная попытка ленты удачи",
+            reason="Дополнительный сундук дня",
             idempotency_key=f"{key}:stake",
         )
-    await reward(session, user.id, segment["coins"], key, f"Лента удачи: {segment['title']}")
+    await reward(session, user.id, segment["coins"], key, f"Сундук дня: {segment['title']}")
     session.add(
         Notification(
             user_id=user.id,
-            title="Результат ленты удачи",
+            title="Сундук дня открыт",
             body=segment["title"],
             kind="games",
             link="/games?tab=wheel",
