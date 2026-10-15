@@ -23,37 +23,6 @@ function cellWidth(width: number) {
   return Math.round(Math.min(176, Math.max(132, width / 5.4)));
 }
 
-/** Короткий щелчок при проходе карточки мимо метки. */
-function makeClicker() {
-  let ctx: AudioContext | null = null;
-  return {
-    click() {
-      try {
-        // Контекст создаётся при первом щелчке, то есть уже внутри жеста
-        // пользователя: браузеры не дают завести звук раньше.
-        const Ctor =
-          window.AudioContext ??
-          (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-        if (!Ctor) return;
-        ctx ??= new Ctor();
-        if (ctx.state === "suspended") void ctx.resume();
-        const now = ctx.currentTime;
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = "square";
-        osc.frequency.setValueAtTime(1180, now);
-        gain.gain.setValueAtTime(0.06, now);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.035);
-        osc.connect(gain).connect(ctx.destination);
-        osc.start(now);
-        osc.stop(now + 0.04);
-      } catch {
-        // Звук — украшение. Если браузер его не дал, лента едет дальше.
-      }
-    },
-  };
-}
-
 /**
  * Лента призов: карточки в стиле сайта едут под рамкой в центре.
  *
@@ -66,6 +35,7 @@ export function PrizeStrip({
   stickers,
   spin,
   muted,
+  onTick,
   onSettled,
 }: {
   segments: StripSegment[];
@@ -73,6 +43,7 @@ export function PrizeStrip({
   stickers?: { icon: string; color: string }[];
   spin: SpinRequest | null;
   muted: boolean;
+  onTick: () => void;
   onSettled: () => void;
 }) {
   const stageRef = useRef<HTMLDivElement>(null);
@@ -85,7 +56,8 @@ export function PrizeStrip({
   const [, redraw] = useState(0);
   const [won, setWon] = useState<number | null>(null);
   const frame = useRef<number | null>(null);
-  const clicker = useRef(makeClicker());
+  const tickSound = useRef(onTick);
+  tickSound.current = onTick;
   const lastSpin = useRef<string | null>(null);
   const settle = useRef(onSettled);
   settle.current = onSettled;
@@ -133,7 +105,7 @@ export function PrizeStrip({
       const crossed = Math.floor(position.current);
       if (crossed !== passed) {
         passed = crossed;
-        if (!mutedRef.current) clicker.current.click();
+        if (!mutedRef.current) tickSound.current();
       }
       if (t < 1) frame.current = requestAnimationFrame(tick);
       else { frame.current = null; finish(); }
