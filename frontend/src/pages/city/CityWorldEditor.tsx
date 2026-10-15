@@ -7,13 +7,12 @@ import { preparedLand } from "../../city3d/world/estateGrid";
 import { plural } from "../../utils/format";
 import { FormFooter, FormStatus, Switch } from "./CityAdminControls";
 import { CityLayoutPlanner } from "./CityLayoutPlanner";
+import { districtColumns } from "./districtColumns";
 import { canEditWorldCity, changeWorldCity, hasRevokedWorldChanges, refreshWorldDraft, supervisorAssignment, WORLD_QUERY_KEYS, worldDraftState } from "./worldEditor";
 
 /** The city as saved: the plan of its districts lives there, apart from the draft. */
 const savedCity = (data: WorldEditorData, id: DepartmentId) => data.cities.find(city => city.id === id);
 
-/** A city's districts share one row; a longer list splits into two even rows. */
-const districtColumns = (count: number) => count <= 4 ? Math.max(1, count) : Math.ceil(count / 2);
 
 export function CityWorldEditor({ isHead = false }: { isHead?: boolean }) {
   const query = useQuery({ queryKey: ["city-world-settings"], queryFn: cityWorld.settings, refetchInterval: 30000 });
