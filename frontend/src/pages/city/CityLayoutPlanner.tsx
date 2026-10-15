@@ -7,6 +7,7 @@ import { Badge, Button, Select } from "../../components/ui";
 import { districtColour, LAYOUT_COUNTS } from "../../city3d/world/estateGrid";
 import { plural } from "../../utils/format";
 import { FormStatus } from "./CityAdminControls";
+import { districtColumns } from "./districtColumns";
 import type { LayoutPreview } from "./layoutPreview";
 
 const districts = (n: number) => `${n} ${plural(n, "район", "района", "районов")}`;
@@ -76,7 +77,7 @@ export function CityLayoutPlanner({ city, data, editable }: { city: WorldCity; d
       <label className="field city-layout-planner__count"><span className="field__label">Число районов</span>
         <Select aria-label="Число районов со следующего сезона" value={count} options={LAYOUT_COUNTS.map(n => ({ value: n, label: `${districts(n)}${n === current ? " · как сейчас" : ""}` }))}
           onChange={value => change(() => { const n = Number(value); setCount(n); setPlan(p => resize(p, n)); })} /></label>
-      <ol className="city-layout-planner__districts">{plan.map((district, index) => {
+      <ol className="city-layout-planner__districts" style={{ "--districts": districtColumns(plan.length) } as CSSProperties}>{plan.map((district, index) => {
         const options = [
           { value: "", label: "Свободный район" },
           ...data.supervisors.map(person => {
