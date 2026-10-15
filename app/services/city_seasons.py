@@ -204,6 +204,10 @@ async def close(session, actor, number, *, scheduled=False):
         state.open_band = city_land.open_band(state.district_id)
     for key in ids:
         event(session, key, "season", actor=actor, payload={"season": number})
+    # The new season starts on the land as planned: a city may now have another number of districts.
+    from app.services.city_world import apply_layouts
+
+    layouts = await apply_layouts(session)
     season.ended_at, season.ended_by_id = now, actor.id if actor else None
     season.snapshot, season.totals = jsonable_encoder(snapshot), jsonable_encoder(totals)
     session.add(
@@ -216,7 +220,7 @@ async def close(session, actor, number, *, scheduled=False):
             updated_by_id=season.updated_by_id,
         )
     )
-    await notify(session, districts, number, now, refunds)
+    await notify(session, districts, number, now, refunds, layouts)
     await write_audit(
         session,
         actor_id=actor.id if actor else None,
@@ -229,6 +233,8 @@ async def close(session, actor, number, *, scheduled=False):
             "buildings": totals["buildings"],
             "small": totals["small"],
             "refunded": sum(refunds.values()),
+            "layouts": {city: {"before": old, "after": new, "without_district": left}
+                        for city, (old, new, left) in layouts.items()},
         },
     )
     await session.flush()
@@ -286,8 +292,9 @@ async def cancel_projects(session, ids, actor, number, event):
     return refunds
 
 
-async def notify(session, districts, number, now, refunds):
+async def notify(session, districts, number, now, refunds, layouts=None):
     """Every operator of the districts learns the city starts again, and what they keep."""
+    layouts = layouts or {}
     groups = [g for d in districts.values() for g in d["group_ids"]]
     people = set(refunds)
     if groups:
@@ -299,7 +306,21 @@ async def notify(session, districts, number, now, refunds):
             )
         )
     until = (now + timedelta(days=VISIBLE_DAYS)).astimezone(ZoneInfo(settings.TIMEZONE))
+    names = {"support": "Техподдержки", "sales": "ОП"}
+    # An operator of a city cut anew learns how many districts it has now.
+    city_of = {
+        g: d["city"] for d in districts.values() for g in d["group_ids"] if d["city"] in layouts
+    }
+    homes = dict((await session.execute(
+        select(User.id, User.group_id).where(User.group_id.in_(list(city_of)))
+    )).all()) if city_of else {}
     for user_id in sorted(people):
+        city = city_of.get(homes.get(user_id))
+        layout = (
+            f" В городе {names[city]} теперь {layouts[city][1]} района."
+            if city and layouts[city][1] < 5 else
+            f" В городе {names[city]} теперь {layouts[city][1]} районов." if city else ""
+        )
         back = (
             f" Взносы в недостроенные проекты вернулись: {refunds[user_id]}."
             if refunds[user_id]
@@ -313,7 +334,7 @@ async def notify(session, districts, number, now, refunds):
                 link="/training/city",
                 body=f"Сезон {number} завершён: районы снова свободны, стройте заново. Прошлый "
                 f"город можно посмотреть в «Истории» до {until:%d.%m}. Обучение, опыт и коины "
-                f"остались.{back}",
+                f"остались.{layout}{back}",
             )
         )
 

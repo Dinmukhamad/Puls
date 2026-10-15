@@ -20,7 +20,7 @@ class Plot(BaseModel):
     row: int = Field(ge=0, le=999)
 
 
-DISTRICT = r"^(support|sales)-team-[1-9][0-9]?$"
+DISTRICT = r"^(support|sales)(-team-[1-3]|-2-team-[1-2]|-4-team-[1-4]|-5-team-[1-5])$"
 #: A cell as [block, column, row].
 Cell = tuple[int, int, int]
 
@@ -96,7 +96,7 @@ class PlaceInput(Keyed, Plot):
 
 
 class ProjectInput(Keyed):
-    district_id: str = Field(pattern=r"^(support|sales)-team-[1-9][0-9]?$", max_length=32)
+    district_id: str = Field(pattern=DISTRICT, max_length=32)
     family: str = Field(pattern=r"^[a-z]{2,16}$")
     economy_revision: int = Field(ge=0)
     #: An upgrade of a public building, or a new one on the public square (module 0) at (u, v).
@@ -129,7 +129,7 @@ class CancelInput(Keyed):
 # ---- the administrators' test city (app/services/city_sandbox.py) --------------------------------
 
 #: A district of the test city by the id of the real one it copies.
-SANDBOX_DISTRICT = r"^(support|sales)-team-[1-3]$"
+SANDBOX_DISTRICT = DISTRICT
 
 
 class SandboxPlotInput(Plot):

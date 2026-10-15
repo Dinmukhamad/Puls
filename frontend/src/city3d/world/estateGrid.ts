@@ -20,18 +20,27 @@ export type ProjectFamily = "square" | "gazebo" | "fountain" | "sports" | "park"
  * Each district's own colour, by number: its border on the ground, the tint of its free land, its headquarters'
  * accents, its label on the map and its swatch in the lists (like the colour groups of a Monopoly board).
  */
-export const DISTRICT_COLOURS = ["#6b55c8", "#2f9e8f", "#d1823a"];
+export const DISTRICT_COLOURS = ["#6b55c8", "#2f9e8f", "#d1823a", "#c44f7c", "#3d7cc4"];
 /** The colour of district `number` (1, 2, 3, …; a fourth and later districts reuse the first ones). */
 export const districtColour = (number: number) => DISTRICT_COLOURS[(Math.max(1, Math.floor(number)) - 1) % DISTRICT_COLOURS.length];
-/** A team district's number from its id: 2 for "support-team-2". */
+/** A team district's number from its id: 2 for "support-team-2" and for "support-5-team-2". */
 export const districtNumber = (id: string) => Number(id.split("-").at(-1)) || 0;
+/** How many districts a city may be cut into; three is its first layout (app/services/city_land.py). */
+export const LAYOUT_COUNTS = [2, 3, 4, 5] as const;
+export const FIRST_LAYOUT = 3;
+const LAYOUT_ID = /^(?:test-)?(support|sales)(?:-([2-5]))?-team-[1-9]$/;
+/** How many districts the layout of a district id has: 3 for "support-team-2", 5 for "support-5-team-2". */
+export const districtLayout = (id: string) => Number(LAYOUT_ID.exec(id)?.[2] ?? FIRST_LAYOUT);
+/** District `number`'s id in `city` cut into `count` districts. */
+export const layoutDistrictId = (city: string, count: number, number: number) =>
+  count === FIRST_LAYOUT ? `${city}-team-${number}` : `${city}-${count}-team-${number}`;
+/** Whether an id is a team district of `city` in any layout. */
+export const isDistrictOf = (city: string, id: string) => LAYOUT_ID.exec(id)?.[1] === city && !id.startsWith("test-");
 
 /** The public square's side in cells. */
 export const MODULE_CELLS = 12;
-/** Each city is cut into three districts; others have no land (app/data/city_land.json). */
-export const LAND_DISTRICTS = 3;
-/** Whether district number n has land to build on. */
-export const preparedLand = (number: number) => number >= 1 && number <= LAND_DISTRICTS;
+/** Whether a district has land to build on: a district of a layout of 2–5 (app/data/city_land.json), not one past it. */
+export const preparedLand = (id: string) => LAYOUT_ID.test(id) && districtNumber(id) >= 1 && districtNumber(id) <= districtLayout(id);
 
 /** Columns × rows of cells (unturned) and levels of what operators build, as the server's PLOT_FAMILIES. */
 export const PLOT_SIZE: Record<PlotFamily, [number, number]> = {

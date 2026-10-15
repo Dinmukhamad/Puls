@@ -15,6 +15,7 @@ from the start; building still requires assignment to the district and its const
 """
 
 import json
+import re
 from functools import cache
 from pathlib import Path
 
@@ -25,15 +26,47 @@ PLOT_CELLS = 3
 #: The administrators' test city keeps copies of the districts under ids with this prefix
 #: (app/services/city_sandbox.py); they have the same land.
 SANDBOX = "test-"
+#: A city may be cut into this many districts; three is its first layout, whose ids carry no count
+#: ("support-team-2"). Another layout's ids name their count: "support-5-team-2".
+COUNTS = (2, 3, 4, 5)
+DEFAULT = 3
+ID = re.compile(r"^(?:test-)?(support|sales)(?:-([2-5]))?-team-([1-9])$")
+
+
+def district_id(city, count, number):
+    """The id of district `number` of `city` cut into `count` districts."""
+    return f"{city}-team-{number}" if count == DEFAULT else f"{city}-{count}-team-{number}"
+
+
+def parse(district_id):
+    """(city, count, number) of a district id: ("support", 5, 2) for "support-5-team-2"."""
+    match = ID.match(district_id)
+    if not match:
+        raise ValueError(f"Unknown district {district_id!r}")
+    city, count, number = match.groups()
+    return city, int(count) if count else DEFAULT, int(number)
+
+
+def layout(district_id):
+    """How many districts the district's city is cut into in its layout."""
+    return parse(district_id)[1]
 
 
 @cache
 def _land():
     data = json.loads(LAND_FILE.read_text(encoding="utf-8"))
     out = {}
-    for city, land in data["cities"].items():
-        for number, blocks in land["districts"].items():
-            out[(city, int(number))] = {
+    layouts = [
+        (city, count, districts)
+        for city, land in data["cities"].items()
+        for count, districts in [
+            (DEFAULT, land["districts"]),
+            *((int(n), d) for n, d in land.get("layouts", {}).items()),
+        ]
+    ]
+    for city, count, districts in layouts:
+        for number, blocks in districts.items():
+            out[(city, count, int(number))] = {
                 b["block"]: {
                     "band": b["band"],
                     "cols": b["cols"],
@@ -53,13 +86,17 @@ def _land():
 
 def split(district_id):
     """("support", 1) for "support-team-1" (and for its test copy "test-support-team-1")."""
-    city, number = district_id.removeprefix(SANDBOX).rsplit("-team-", 1)
-    return city, int(number)
+    city, _count, number = parse(district_id)
+    return city, number
 
 
 def blocks(district_id):
     """The district's blocks by number: band, columns, rows, cells not for sale; {} without land."""
-    return _land()[0].get(split(district_id), {})
+    try:
+        key = parse(district_id)
+    except ValueError:
+        return {}
+    return _land()[0].get(key, {})
 
 
 def has_land(district_id):

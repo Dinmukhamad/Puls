@@ -46,7 +46,10 @@ test('the catalogue matches the server: what stands on the land and its cells, w
   assert.ok(GRIDS.sales.bands <= land.length);
   assert.match(server, /^SQUARE, MODULE_CELLS = 0, 12$/m);
   assert.equal(E.MODULE_CELLS, 12);
-  assert.deepEqual([1, 2, 3, 4].map(E.preparedLand), [true, true, true, false]);
+  assert.deepEqual(['support-team-1', 'support-team-3', 'sales-team-3', 'support-team-4', 'support-5-team-5', 'sales-2-team-2', 'sales-2-team-3', 'support-6-team-1'].map(E.preparedLand), [true, true, true, false, true, true, false, false]);
+  assert.deepEqual(['support-team-2', 'test-sales-4-team-1', 'support-5-team-5'].map(E.districtLayout), [3, 4, 5]);
+  assert.equal(E.layoutDistrictId('sales', 3, 2), 'sales-team-2');
+  assert.equal(E.layoutDistrictId('sales', 5, 2), 'sales-5-team-2');
 });
 
 test('what is built on a picked cell goes where it fits round it; where it cannot, its blocked cells show', () => {

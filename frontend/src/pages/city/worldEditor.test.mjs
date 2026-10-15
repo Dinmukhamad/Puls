@@ -195,3 +195,21 @@ test("legacy marker preserves unresolved raw assignments even when effective gro
   const cleared = changeWorldCity(state, "support", city => { city.districts[1].supervisor_id = null; });
   assert.equal(worldSavePayload(cleared.draft).cities[0].districts[1].supervisor_id, null);
 });
+
+test("a planned number of districts shows its status, who is left without a district, and saves through the layout route", async () => {
+  const data = settings();
+  data.cities[0].plan = { count: 2, districts: [{ name: "Север", supervisor_id: 20 }, { name: "Юг", supervisor_id: null }] };
+  const html = render(data);
+  assert.match(html, /Районов со следующего сезона/);
+  assert.match(html, /Сейчас 3 района, со следующего сезона будет 2 района\. Изменится при сбросе сезона\./);
+  assert.match(html, /Запланировано: 2 района/);
+  // The third district's team is not in the plan: the head is warned before the reset.
+  assert.match(html, /Команде Будущая команда не хватит района/);
+  assert.match(html, /Один район останется свободным: стройка в нём закрыта/);
+  // Борис leads the sales district: he cannot be planned here.
+  assert.match(html, /<option value="21" disabled="">Борис · ведёт район в городе отдела продаж/);
+  response = data;
+  await cityWorld.layout({ revision: 4, city: "support", count: 5, districts: [] });
+  assert.equal(requests.at(-1).path, "/api/v1/admin/learning/city/layout");
+  assert.equal(requests.at(-1).method, "PUT");
+});

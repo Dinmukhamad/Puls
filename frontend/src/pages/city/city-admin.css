@@ -177,3 +177,19 @@
 @media (prefers-reduced-motion: reduce) {
   .city-admin-switch__track, .city-admin-switch__track > span, .city-admin-refreshing { transition: none; }
 }
+
+/* The number of districts from the next season (CityLayoutPlanner). */
+.city-layout-planner { display: grid; gap: var(--sp-3); margin-top: var(--sp-5); padding: var(--sp-4); border: 1px dashed var(--border-strong); border-radius: var(--radius-l); background: var(--surface-secondary); min-width: 0; }
+.city-layout-planner__head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-2); }
+.city-layout-planner h3 { margin: 0; color: var(--text-primary); font-size: var(--text-body); font-weight: 650; }
+.city-layout-planner__status { margin: 0; color: var(--text-primary); font-weight: 550; }
+.city-layout-planner .field__note, .city-layout-planner .ui-note { margin: 0; }
+.city-layout-planner__controls { display: grid; gap: var(--sp-3); min-width: 0; margin: 0; padding: 0; border: 0; }
+.city-layout-planner__count { max-width: 280px; }
+.city-layout-planner__districts { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap: var(--sp-3); margin: 0; padding: 0; list-style: none; }
+.city-layout-planner__district { position: relative; display: grid; gap: var(--sp-3); min-width: 0; padding: var(--sp-3) var(--sp-3) var(--sp-3) calc(var(--sp-3) + 6px); border: 1px solid var(--separator); border-radius: var(--radius-m); background: var(--surface-primary); }
+.city-layout-planner__district::before { content: ""; position: absolute; inset: 8px auto 8px 6px; width: 4px; border-radius: 2px; background: var(--district); }
+.city-layout-planner__number { justify-self: start; display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--district); color: #fff; font-size: var(--text-caption); font-weight: 700; }
+.city-layout-planner__actions { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.city-layout-planner__preview { margin: 0; display: grid; gap: var(--sp-2); }
+.city-layout-planner__preview canvas { width: 100%; max-width: 420px; height: auto; border-radius: var(--radius-m); background: var(--surface-primary); }

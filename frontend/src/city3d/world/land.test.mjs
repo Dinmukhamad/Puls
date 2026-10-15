@@ -414,6 +414,31 @@ test('the lake city\'s districts meet where its streets ran and down the bouleva
   for (const b of borders) for (const gap of b.gaps) assert.ok(Math.abs(gap - L.BORDER_GAP) < 1e-9, `a gap of ${gap} between the blocks`);
 });
 
+test('a city cut into 2, 4 or 5 districts: equal shares, each with its centre, and the server has every layout', () => {
+  const data = JSON.parse(readFileSync(LAND_FILE, 'utf8'));
+  assert.deepEqual([...L.DISTRICT_COUNTS], [2, 3, 4, 5]);
+  for (const [city, world] of Object.entries(CITIES)) {
+    assert.deepEqual(Object.keys(data.cities[city].layouts), ['2', '4', '5'], `${city}: layouts in the land file`);
+    // The first layout is the one the city always had.
+    assert.deepEqual(L.landJson(L.landGrid(world, 3)), L.landJson(GRIDS[city]));
+    for (const n of [2, 4, 5]) {
+      const grid = L.landGrid(world, n), cells = L.landCells(grid), numbers = Array.from({ length: n }, (_, i) => i + 1);
+      assert.deepEqual(grid.centres.map(c => c.district), numbers, `${city} × ${n}: a centre in every district`);
+      assert.deepEqual(Object.keys(data.cities[city].layouts[n]), numbers.map(String));
+      const counts = numbers.map(d => cells.filter(c => c.district === d).length), mean = counts.reduce((a, b) => a + b) / n;
+      for (const k of counts) assert.ok(Math.abs(k - mean) / mean < .1, `${city} × ${n}: ${counts.join(' / ')} cells`);
+      for (const centre of grid.centres) {
+        const block = grid.blocks.find(b => b.district === centre.district && b.block === centre.block);
+        assert.ok(block, `${city} × ${n}: district ${centre.district}'s centre on its own block`);
+        for (let c = centre.col; c < centre.col + centre.cols; c++) for (let r = centre.row; r < centre.row + centre.rows; r++) assert.ok(block.skip.has(`${c}:${r}`), `${city} × ${n}: a centre's cell for sale`);
+      }
+      // Every cell is in one district only, and the borders still run between them.
+      assert.equal(new Set(cells.map(c => `${Math.round(c.x * 10)}:${Math.round(c.z * 10)}`)).size, cells.length, `${city} × ${n}: a cell sold twice`);
+      assert.ok(L.districtBorders(grid, world).length >= n - 1, `${city} × ${n}: borders`);
+    }
+  }
+});
+
 test('laying the grid out and finding its borders is quick', () => {
   let best = Infinity;
   for (let k = 0; k < 3; k++) { const t = performance.now(); L.landGrid(SUPPORT); best = Math.min(best, performance.now() - t); }

@@ -13,18 +13,30 @@ export const LAND_FILE = fileURLToPath(new URL('../../app/data/city_land.json', 
 /** The file's text: one block a line, so a change of the land reads as a change of its blocks. */
 export async function cityLandText() {
   const built = await build({
-    stdin: { contents: `export { islandWorld } from './cities.ts'; export { generateSalesWorld } from './sales.ts'; export { landGrid, landJson, CELLS } from './land.ts'; export { WORLD_X4 } from './worldSpec.ts';`, resolveDir: fileURLToPath(new URL('../src/city3d/world/', import.meta.url)), loader: 'ts' },
+    stdin: { contents: `export { islandWorld } from './cities.ts'; export { generateSalesWorld } from './sales.ts'; export { landGrid, landJson, CELLS, DISTRICT_COUNTS, DEFAULT_DISTRICTS } from './land.ts'; export { WORLD_X4 } from './worldSpec.ts';`, resolveDir: fileURLToPath(new URL('../src/city3d/world/', import.meta.url)), loader: 'ts' },
     bundle: true, platform: 'node', format: 'esm', write: false,
   });
   const L = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
-  const cities = { support: L.landJson(L.landGrid(L.islandWorld(L.WORLD_X4))), sales: L.landJson(L.landGrid(L.generateSalesWorld())) };
+  const worlds = { support: L.islandWorld(L.WORLD_X4), sales: L.generateSalesWorld() };
   const lines = ['{', `  "plot_cells": ${L.CELLS},`, '  "cities": {'];
-  Object.entries(cities).forEach(([city, land], i, all) => {
-    lines.push(`    "${city}": {`, `      "bands": ${land.bands},`, '      "districts": {');
+  /** One layout's districts, one block a line, indented by `pad`. */
+  const districtLines = (land, pad) => {
     Object.entries(land.districts).forEach(([district, blocks], j, districts) => {
-      lines.push(`        "${district}": [`);
-      blocks.forEach((b, k) => lines.push(`          ${JSON.stringify(b).replaceAll(',"', ', "').replaceAll('":', '": ')}${k + 1 < blocks.length ? ',' : ''}`));
-      lines.push(`        ]${j + 1 < districts.length ? ',' : ''}`);
+      lines.push(`${pad}"${district}": [`);
+      blocks.forEach((b, k) => lines.push(`${pad}  ${JSON.stringify(b).replaceAll(',"', ', "').replaceAll('":', '": ')}${k + 1 < blocks.length ? ',' : ''}`));
+      lines.push(`${pad}]${j + 1 < districts.length ? ',' : ''}`);
+    });
+  };
+  Object.entries(worlds).forEach(([city, world], i, all) => {
+    // The city's first layout of three districts, then the others it may be cut into.
+    const first = L.landJson(L.landGrid(world, L.DEFAULT_DISTRICTS)), others = L.DISTRICT_COUNTS.filter(n => n !== L.DEFAULT_DISTRICTS);
+    lines.push(`    "${city}": {`, `      "bands": ${first.bands},`, '      "districts": {');
+    districtLines(first, '        ');
+    lines.push('      },', '      "layouts": {');
+    others.forEach((n, k) => {
+      lines.push(`        "${n}": {`);
+      districtLines(L.landJson(L.landGrid(world, n)), '          ');
+      lines.push(`        }${k + 1 < others.length ? ',' : ''}`);
     });
     lines.push('      }', `    }${i + 1 < all.length ? ',' : ''}`);
   });

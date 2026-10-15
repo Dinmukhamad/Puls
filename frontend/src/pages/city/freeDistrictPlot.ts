@@ -1,18 +1,20 @@
 import type { DistrictEstate } from "../../api/cityEstate";
 import type { DepartmentId } from "../../api/cityWorld";
 import { islandWorld } from "../../city3d/world/cities";
-import { districtNumber } from "../../city3d/world/estateGrid";
+import { FIRST_LAYOUT, districtLayout, districtNumber, layoutDistrictId } from "../../city3d/world/estateGrid";
 import { CELLS, areaPoint, areaCorners, cellKey, landGrid, type LandGrid } from "../../city3d/world/land";
 import { generateSalesWorld } from "../../city3d/world/sales";
 import { WORLD_X4 } from "../../city3d/world/worldSpec";
 
-// The same immutable geometry as the map; generate it once, only when building is available.
-const grids = new Map<DepartmentId, LandGrid>();
-export function districtPlotGrid(city: DepartmentId): LandGrid {
-  let grid = grids.get(city);
+// The same immutable geometry as the map; generate it once per city and layout (2–5 districts), only when building
+// is available.
+const grids = new Map<string, LandGrid>();
+export function districtPlotGrid(city: DepartmentId, count = FIRST_LAYOUT): LandGrid {
+  const key = `${city}:${count}`;
+  let grid = grids.get(key);
   if (!grid) {
-    grid = landGrid(city === "sales" ? generateSalesWorld() : islandWorld(WORLD_X4))!;
-    grids.set(city, grid);
+    grid = landGrid(city === "sales" ? generateSalesWorld() : islandWorld(WORLD_X4), count)!;
+    grids.set(key, grid);
   }
   return grid;
 }
@@ -26,7 +28,8 @@ export interface FreePlot { block: number; col: number; row: number; band: numbe
  */
 export function freeDistrictPlot(grid: LandGrid, district: DistrictEstate): FreePlot | null {
   const number = districtNumber(district.id);
-  if (district.id !== `${grid.city}-team-${number}` || number !== district.number) return null;
+  const count = districtLayout(district.id);
+  if (district.id !== layoutDistrictId(grid.city, count, number) || number !== district.number || grid.centres.length !== count) return null;
   const occupied = new Set<string>();
   for (const object of district.objects) {
     // Module zero is the public square, not the district's land. Include every resident's full footprint.
