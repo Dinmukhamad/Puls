@@ -7,6 +7,21 @@
 .scenario-eyebrow { font-size: 11px; font-weight: 800; letter-spacing: .12em; color: var(--text-secondary); }
 .scenario-facts { display: flex; flex-wrap: wrap; gap: 10px 18px; font-size: 13px; margin: 18px 0; }
 .scenario-coins { color: var(--gold-text); font-weight: 700; }
+.scenario-brief { border-block: 1px solid var(--border-strong); padding-block: 22px; margin-block: 22px; }
+.scenario-brief h2 { font-size: 20px; }
+.scenario-completion { display: grid; gap: 8px; margin: 20px 0; font-size: 13px; color: var(--text-secondary); }
+.scenario-completion progress { width: 100%; height: 7px; accent-color: var(--accent-secondary); border: 0; border-radius: 20px; overflow: hidden; }
+.scenario-completion progress::-webkit-progress-bar { background: var(--surface-secondary); }
+.scenario-completion progress::-webkit-progress-value { background: var(--accent-secondary); border-radius: 20px; }
+.scenario-case-context { display: flex; gap: 8px 18px; flex-wrap: wrap; font-size: 13px; color: var(--text-secondary); }
+.scenario-case-context strong { color: var(--text-primary); }
+.scenario-incoming { border-left: 4px solid var(--accent-secondary); }
+.scenario-incoming p { margin-bottom: 0; }
+.scenario-original { margin: 0 0 18px; padding: 0 4px; color: var(--text-secondary); font-size: 13px; }
+.scenario-original summary, .scenario-reference summary { cursor: pointer; min-height: 32px; }
+.scenario-original p { line-height: 1.6; }
+.scenario-reference { padding: 14px 16px; border: 1px solid var(--border-strong); border-radius: 12px; margin-bottom: 22px; line-height: 1.6; }
+.scenario-reference a { color: var(--text-primary); }
 .scenario-notice { padding: 12px 14px; background: var(--surface-secondary); border-radius: 12px; }
 .scenario-route { margin: 22px 0; padding-left: 22px; }
 .scenario-route li { padding: 8px 0 8px 5px; }

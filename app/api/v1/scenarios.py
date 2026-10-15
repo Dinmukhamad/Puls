@@ -4,7 +4,12 @@ from fastapi import APIRouter, Depends, Response
 
 from app.core.deps import CurrentUser, SessionDep
 from app.core.work_sites import require_work_sites
-from app.schemas.scenario import ScenarioAnswer, ScenarioCrmCheck, ScenarioDispatchCheck
+from app.schemas.scenario import (
+    ScenarioAnswer,
+    ScenarioCrmCheck,
+    ScenarioDispatchCheck,
+    ScenarioInspection,
+)
 from app.services import scenarios
 
 router = APIRouter(prefix="/learning/scenarios", tags=["Учебные сценарии"])
@@ -41,6 +46,15 @@ async def dispatch_check(
     attempt_id: int, body: ScenarioDispatchCheck, session: SessionDep, user: CurrentUser
 ):
     attempt = await scenarios.dispatch_check(session, user, attempt_id, body)
+    await session.commit()
+    return scenarios.attempt_data(attempt)
+
+
+@router.post("/attempts/{attempt_id}/inspect", dependencies=[Depends(require_work_sites)])
+async def inspect(
+    attempt_id: int, body: ScenarioInspection, session: SessionDep, user: CurrentUser
+):
+    attempt = await scenarios.inspect(session, user, attempt_id, body)
     await session.commit()
     return scenarios.attempt_data(attempt)
 
