@@ -108,13 +108,14 @@ test("driver gratitude remains its own metric and never creates or replaces a ca
   assert.doesNotMatch(metricTiles(html), /Нет данных/);
 });
 
-test("operator cabinet no longer renders removed summaries or loads its old ledger", async () => {
+test("operator cabinet keeps weekly metrics beside the wallet without removed summaries", async () => {
   const queries = [];
   const { CabinetPage } = await component("./CabinetPage.tsx", {
-    "@tanstack/react-query": { useQuery: ({ queryKey }) => {
+    "@tanstack/react-query": { useQuery: ({ queryKey, enabled }) => {
+      if (enabled === false) return {};
       queries.push(queryKey[0]);
       const data = {
-        dashboard: { full_name: "Оператор", balance: { balance: 10, available: 10, rank: null, rank_delta: null }, week: week({ metrics: [metric()], base_points: 23, final_points: 23, coins_from_points: 4, coins_total: 4 }) },
+        dashboard: { full_name: "Оператор", balance: { balance: 10, available: 10, reserved: 0, rank: null, rank_delta: null }, week: week({ metrics: [metric()], base_points: 23, final_points: 23, coins_from_points: 4, coins_total: 4 }) },
         "coin-progress": { total: 0, current: null, next: null, progress: 0 },
         badges: [],
       };
@@ -125,8 +126,9 @@ test("operator cabinet no longer renders removed summaries or loads its old ledg
   assert.match(html, /Показатели недели/);
   assert.match(html, /Прогноз баллов/);
   assert.match(html, /Прогноз коинов/);
-  assert.doesNotMatch(html, /Быстрые действия|История операций|Ожидается за неделю|Итог недели/);
-  assert.deepEqual(queries.sort(), ["badges", "coin-progress", "dashboard"]);
+  assert.doesNotMatch(html, /Быстрые действия|Ожидается за неделю|Итог недели/);
+  assert.match(html, /Кошелёк|Последние операции/);
+  assert.deepEqual(queries.sort(), ["badges", "coin-progress", "dashboard", "wallet"]);
 });
 
 test("old rating progress links lead to coin progress and levels", async () => {
@@ -139,7 +141,7 @@ test("old rating progress links lead to coin progress and levels", async () => {
   assert.match(renderToStaticMarkup(React.createElement(RatingPage)), /href="\/progress"/);
 });
 
-test("personal wallet ignores obsolete URL filters while the team wallet keeps them", async () => {
+test("personal history ignores obsolete URL filters, shows own ledger and leaves the team wallet unchanged", async () => {
   let administrative = false;
   let captured;
   const params = new URLSearchParams("from=2026-01-01&to=2026-02-01&kind=purchase&user=37&page=2");
@@ -149,7 +151,7 @@ test("personal wallet ignores obsolete URL filters while the team wallet keeps t
     "@tanstack/react-query": { useQuery: (options) => {
       if (options.queryKey[0] === "wallet") {
         captured = options.queryKey[2];
-        return { data: { summary: { balance: 10, available: 10, reserved: 0, earned_total: 10, awarded: 100, spent: 0, refunded: 0 }, history: { total: 0, items: [] } } };
+        return { data: { summary: { balance: 10, available: 10, reserved: 0, earned_total: 10, awarded: 100, spent: 40, refunded: 5 }, history: { total: 1, items: [{ id: 12, user_id: 7, full_name: "Свой оператор", amount: -40, balance_after: 10, tx_type: "purchase", reason: "Покупка сертификата", created_at: "2026-01-10T10:30:00Z", author_name: "Руководитель", author_role: "head", shop_request_id: 3 }] } } };
       }
       return {};
     } },
@@ -157,15 +159,23 @@ test("personal wallet ignores obsolete URL filters while the team wallet keeps t
   let html = renderToStaticMarkup(React.createElement(WalletPage, { administrative }));
   assert.deepEqual(captured, { page: 2, kind: "", date_from: "", date_to: "", user_id: undefined });
   assert.doesNotMatch(html, /Фильтры|Начало периода|Конец периода|Тип операции|За выбранные даты|Измените фильтры/);
-  assert.match(html, /Заработано за всё время/);
+  assert.match(html, /История операций/);
+  assert.match(html, /Кошелёк в кабинете/);
+  assert.match(html, /Потрачено и списано за всё время<\/dt><dd>40<\/dd>/);
+  assert.match(html, /Возвращено за всё время<\/dt><dd>\+5<\/dd>/);
+  assert.match(html, /<th>Дата<\/th><th>Операция<\/th><th class="num">Сумма<\/th><th class="num">Баланс после<\/th>/);
+  assert.match(html, /Покупка сертификата/);
+  assert.match(html, /Операция №12/);
+  assert.match(html, /Покупка №3/);
+  assert.match(html, /Баланс после<\/dt><dd>10<\/dd>/);
   assert.doesNotMatch(html, /не число|NaN/);
-  assert.match(html, /Заработано за всё время<\/span><span class="kpi__value">10<\/span>/);
-  assert.doesNotMatch(html, /История операций|Операций не найдено|Операция №/);
+  assert.doesNotMatch(html, /class="kpi|Текущий баланс|Заработано за всё время|href="\/admin\/|Свой оператор|Руководитель|Начислить \/ списать/);
   administrative = true;
   html = renderToStaticMarkup(React.createElement(WalletPage, { administrative }));
   assert.match(html, /История операций/);
   assert.deepEqual(captured, { page: 2, kind: "purchase", date_from: "2026-01-01", date_to: "2026-02-01", user_id: 37 });
   assert.match(html, /Фильтры/);
+  assert.match(html, /class="kpi-grid"/);
 });
 
 test("the weekly calculation reads as two sums and keeps a zero penalty neutral", () => {
@@ -189,7 +199,7 @@ test("the cabinet lists the three achievements closest to completion and folds t
     badge("e", { progress_percent: 45 }), badge("f", { progress_percent: 45 }), badge("g", { progress_percent: 5 })];
   const { CabinetPage, nearestBadges } = await component("./CabinetPage.tsx", {
     "@tanstack/react-query": { useQuery: ({ queryKey }) => ({ data: {
-      dashboard: { full_name: "Оператор", balance: { balance: 10, available: 10, rank: null, rank_delta: null }, week: week() },
+      dashboard: { full_name: "Оператор", balance: { balance: 10, available: 10, reserved: 0, rank: null, rank_delta: null }, week: week() },
       "coin-progress": { total: 0, current: null, next: null, progress: 0 },
       badges,
     }[queryKey[0]] }) },

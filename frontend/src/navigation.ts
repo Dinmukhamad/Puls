@@ -23,7 +23,7 @@ export const ACCOUNT_SECTION = section("profile", "Профиль", UserIcon, [
   tab("/profile", "Мои данные и настройки"), tab("/notifications", "Уведомления"),
 ]);
 const QR_ACCESS_SECTION = section("qr_access", "QR-доступ", QrIcon, [tab("/qr-access", "Сканер QR")]);
-const personal = [tab("/cabinet", "Мой кабинет"), tab("/progress", "Мой прогресс"), tab("/wallet", "Мои коины")];
+const personal = [tab("/cabinet", "Мой кабинет"), tab("/progress", "Мой прогресс")];
 const learningTabs = [tab("/training/city", "Мой город · миссии")];
 const staffLearning = section("training", "Обучение", SparkIcon, [
   tab("/admin/learning/city", "Миссии города"), tab("/training/city", "Город оператора"),
@@ -113,7 +113,7 @@ export function routeSection(pathname: string, search = "", role: Role = "operat
 
 export function canVisit(role: Role, to: string, allowed: AccessMap, isDeveloper = false): boolean {
   if (to === "/") return true;
-  const [path, search = ""] = to.split("?");
+  const [path, search = ""] = to.split("#")[0].split("?");
   if (role === "trainer" && !["/qr-access", "/profile", "/notifications", "/trainer", "/admin/learning-analytics", "/admin/learning", "/training", "/simulator", "/admin/users"].some(p => path === p || path.startsWith(p + "/"))) return false;
   if (role === "operator" && path.startsWith("/admin/users")) return false;
   // Сценарии Driver Simulator ведёт только тренер, у остальных студии нет.
@@ -173,6 +173,8 @@ export function visibleNavigation(role: Role, allowed: AccessMap = defaultAccess
 export function currentSection(role: Role, pathname: string, search = "", allowed: AccessMap = defaultAccess(role), isDeveloper = false): NavItem | undefined {
   if (!canVisit(role, `${pathname}${search}`, allowed, isDeveloper)) return undefined;
   const sections = visibleNavigation(role, allowed, isDeveloper);
+  // Bookmarked personal history stays under the cabinet without another tab.
+  if (pathname === "/wallet") return sections.find(item => item.tabs.some(link => link.to === "/cabinet"));
   if (pathname === "/training/work-sites" || pathname.startsWith("/training/scenarios/")) return sections.find(item => item.tabs.some(tab => tab.to === "/training/city"));
   if (role === "trainer" && ["/admin/learning", "/training", "/simulator"].some(p => pathname === p || pathname.startsWith(p + "/"))) {
     const driver = pathname === "/admin/learning" || pathname.startsWith("/simulator") || (pathname === "/training/city" && new URLSearchParams(search).get("district") === "driver");
@@ -198,6 +200,7 @@ export function currentSection(role: Role, pathname: string, search = "", allowe
 
 /** Query-specific tabs take precedence over generic destinations on the same route. */
 export function currentTab(item: NavItem, pathname: string, search: string): SectionTab | undefined {
+  if (pathname === "/wallet") return item.tabs.find(link => link.to === "/cabinet");
   if (pathname.startsWith("/training/scenarios/")) {
     const cityTab = item.tabs.find(link => link.to.split("?")[0] === "/training/city");
     if (cityTab) return cityTab;

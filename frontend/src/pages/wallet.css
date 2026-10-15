@@ -51,3 +51,9 @@
 .wallet-ledger-cards .list-card__metrics { grid-template-columns: minmax(0, 1fr); margin: 0; }
 .wallet-ledger-cards .list-card__metric dt { color: var(--text-tertiary); }
 .wallet-ledger-cards .list-card__metric dd { margin: 0; text-align: right; font-weight: 550; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.wallet-ledger--own .table { min-width: 660px; }
+.wallet-history-summary { display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-5); margin: 0 0 var(--sp-4); padding-bottom: var(--sp-3); border-bottom: 1px solid var(--separator); font-size: var(--text-caption); }
+.wallet-history-summary > div { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.wallet-history-summary dt { color: var(--text-secondary); }
+.wallet-history-summary dd { margin: 0; font-variant-numeric: tabular-nums; font-weight: 650; }
+.wallet-ledger-cards--own .list-card__head { flex-wrap: wrap; }
