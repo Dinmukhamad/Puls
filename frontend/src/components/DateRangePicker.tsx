@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { ChevronLeftIcon, ChevronRightIcon } from "./icons";
 import { Button } from "./ui";
 import { calendarDate, dateKey, monthCaption, shiftDays, shiftMonth } from "./weekCalendar";
-import { formatDateRange, inclusiveRangeDays, moveCalendarMonth, presetDateRange, rangeCalendarDays, todayDateKey, validDateRange, type DateRange, type DateRangePreset } from "./dateRange";
+import { formatDateRange, inclusiveRangeDays, moveCalendarMonth, rangeCalendarDays, todayDateKey, validDateRange, type DateRange } from "./dateRange";
 import "./DateRangePicker.css";
 
 export type { DateRange } from "./dateRange";
@@ -16,24 +16,17 @@ export interface DateRangePickerProps {
   loading?: boolean;
   className?: string;
   ariaLabel?: string;
-  /** Quick choices above the calendar; reports of whole weeks offer weeks first. */
-  presets?: readonly DateRangePreset[];
 }
 
 const usePopoverLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
-const PRESET_LABELS: Record<DateRangePreset, string> = {
-  "today": "Сегодня",
-  "three-days": "3 дня",
-  "ten-days": "10 дней",
-  "this-week": "Эта неделя",
-  "last-week": "Прошлая неделя",
-  "this-month": "Этот месяц",
-  "last-month": "Прошлый месяц",
-};
-const DEFAULT_PRESETS: readonly DateRangePreset[] = ["today", "three-days", "ten-days", "this-month", "last-month"];
+const capitalized = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+const days = (n: number) => `${n} ${n % 10 === 1 && n % 100 !== 11 ? "день" : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? "дня" : "дней"}`;
 
-/** Dates are a draft until Apply: selecting a day never starts a data request. */
-export function DateRangePicker({ value, defaultRange, onChange, disabled = false, loading = false, className = "", ariaLabel = "Период", presets = DEFAULT_PRESETS }: DateRangePickerProps) {
+/**
+ * One calendar and nothing else: the first tap is the period's start, the second its end (or Apply right
+ * away for one day). Dates are a draft until Apply: selecting a day never starts a data request.
+ */
+export function DateRangePicker({ value, defaultRange, onChange, disabled = false, loading = false, className = "", ariaLabel = "Период" }: DateRangePickerProps) {
   const id = useId();
   const root = useRef<HTMLDivElement>(null), trigger = useRef<HTMLButtonElement>(null), panel = useRef<HTMLDivElement>(null);
   const effective = value ?? defaultRange;
@@ -47,12 +40,11 @@ export function DateRangePicker({ value, defaultRange, onChange, disabled = fals
   const [hovered, setHovered] = useState<string | null>(null);
   const [focusedDate, setFocusedDate] = useState(today);
   const valid = validDateRange(draft);
-  const days = rangeCalendarDays(month);
+  const grid = rangeCalendarDays(month);
   const count = inclusiveRangeDays(draft);
   const caption = !effective && loading ? "Загрузка периода…" : formatDateRange(effective);
-  const error = !draft.date_from || !draft.date_to ? "Укажите обе даты." : !calendarDate(draft.date_from) || !calendarDate(draft.date_to) ? "Проверьте введённые даты." : draft.date_from > draft.date_to ? "Дата начала должна быть раньше даты окончания или совпадать с ней." : !valid ? "Проверьте введённые даты." : "";
   const preview = anchor && hovered ? { date_from: anchor < hovered ? anchor : hovered, date_to: anchor < hovered ? hovered : anchor } : draft;
-  const activeDay = days.some((day) => day.key === focusedDate) ? focusedDate : days.find((day) => day.inMonth)?.key;
+  const activeDay = grid.some((day) => day.key === focusedDate) ? focusedDate : grid.find((day) => day.inMonth)?.key;
 
   function close(restoreFocus = false) {
     setOpen(false);
@@ -73,16 +65,6 @@ export function DateRangePicker({ value, defaultRange, onChange, disabled = fals
     if (!anchor) { setDraft({ date_from: key, date_to: key }); setAnchor(key); }
     else { setDraft({ date_from: key < anchor ? key : anchor, date_to: key < anchor ? anchor : key }); setAnchor(null); }
     setHovered(null); setFocusedDate(key);
-  }
-
-  function preset(value: DateRangePreset) {
-    const range = presetDateRange(value, today);
-    setDraft(range); setMonth(range.date_from.slice(0, 7)); setFocusedDate(range.date_from); setAnchor(null); setHovered(null);
-  }
-
-  function editDate(field: keyof DateRange, next: string) {
-    setDraft((current) => ({ ...current, [field]: next })); setAnchor(null); setHovered(null);
-    if (calendarDate(next)) { setMonth(next.slice(0, 7)); setFocusedDate(next); }
   }
 
   function focusDate(key: string) {
@@ -156,23 +138,20 @@ export function DateRangePicker({ value, defaultRange, onChange, disabled = fals
       <svg className={open ? "date-range-picker__chevron is-open" : "date-range-picker__chevron"} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
     </button>
     {open && host && createPortal(<div ref={panel} id={`${id}-calendar`} className="date-range-picker__popup" role="dialog" aria-modal="false" aria-labelledby={`${id}-title`} style={position} {...{ popover: "manual" }} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(true); } }}>
-      <header className="date-range-picker__head"><div><strong id={`${id}-title`}>Выберите период</strong><span>Нажмите дату начала и дату окончания</span></div><button type="button" className="date-range-picker__close" aria-label="Закрыть календарь" onClick={() => close(true)}>×</button></header>
-      <div className="date-range-picker__presets" role="group" aria-label="Быстрый выбор периода">{presets.map((item) => { const range = presetDateRange(item, today); return <button type="button" key={item} className="date-range-picker__preset" aria-pressed={draft.date_from === range.date_from && draft.date_to === range.date_to} onClick={() => preset(item)}>{PRESET_LABELS[item]}</button>; })}</div>
-      <div className="date-range-picker__inputs">
-        <label className="date-range-picker__field"><span>С</span><input className="input" type="date" name="date_from" aria-label="Начало периода" min="0001-01-01" max="9999-12-31" value={draft.date_from} aria-invalid={!valid || undefined} aria-describedby={error ? `${id}-error` : undefined} onChange={(event) => editDate("date_from", event.target.value)} /></label>
-        <label className="date-range-picker__field"><span>По</span><input className="input" type="date" name="date_to" aria-label="Конец периода" min="0001-01-01" max="9999-12-31" value={draft.date_to} aria-invalid={!valid || undefined} aria-describedby={error ? `${id}-error` : undefined} onChange={(event) => editDate("date_to", event.target.value)} /></label>
-      </div>
-      <div className="date-range-picker__month"><button type="button" className="date-range-picker__arrow" aria-label="Предыдущий месяц" disabled={month <= "0001-01"} onClick={() => setMonth(shiftMonth(month, -1))}><ChevronLeftIcon size={18} /></button><strong aria-live="polite">{monthCaption(month)}</strong><button type="button" className="date-range-picker__arrow" aria-label="Следующий месяц" disabled={month >= "9999-12"} onClick={() => setMonth(shiftMonth(month, 1))}><ChevronRightIcon size={18} /></button></div>
+      <h2 className="sr-only" id={`${id}-title`}>Выберите период</h2>
+      <div className="date-range-picker__month"><button type="button" className="date-range-picker__arrow" aria-label="Предыдущий месяц" disabled={month <= "0001-01"} onClick={() => setMonth(shiftMonth(month, -1))}><ChevronLeftIcon size={18} /></button><strong aria-live="polite">{capitalized(monthCaption(month))}</strong><button type="button" className="date-range-picker__arrow" aria-label="Следующий месяц" disabled={month >= "9999-12"} onClick={() => setMonth(shiftMonth(month, 1))}><ChevronRightIcon size={18} /></button></div>
       <div className="date-range-picker__weekdays" aria-hidden="true">{["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"].map((day) => <span key={day}>{day}</span>)}</div>
-      <div className="date-range-picker__days" role="group" aria-label={`Даты: ${monthCaption(month)}`} onPointerLeave={() => setHovered(null)}>{days.map((day) => {
+      <div className="date-range-picker__days" role="group" aria-label={`Даты: ${monthCaption(month)}`} onPointerLeave={() => setHovered(null)}>{grid.map((day, index) => {
         const selected = valid && day.key >= draft.date_from && day.key <= draft.date_to;
         const inPreview = validDateRange(preview) && day.key >= preview.date_from && day.key <= preview.date_to;
-        const from = day.key === draft.date_from, to = day.key === draft.date_to;
+        const from = inPreview && day.key === preview.date_from, to = inPreview && day.key === preview.date_to;
+        // The band runs across a week's row and rounds where the period or the row starts and ends.
+        const rowStart = index % 7 === 0, rowEnd = index % 7 === 6;
         const label = calendarDate(day.key)?.toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }) ?? "Дата вне допустимого диапазона";
-        return <button type="button" key={day.key} data-date={day.key} className={`date-range-picker__day${!day.inMonth ? " is-outside" : ""}${inPreview ? " is-in-range" : ""}${from || to ? " is-endpoint" : ""}`} disabled={!day.selectable} tabIndex={day.key === activeDay ? 0 : -1} aria-label={`${label}${from && to ? ", начало и конец периода" : from ? ", начало периода" : to ? ", конец периода" : ""}`} aria-pressed={selected} aria-current={day.key === today ? "date" : undefined} onFocus={() => setFocusedDate(day.key)} onPointerEnter={() => anchor && setHovered(day.key)} onKeyDown={(event) => onDayKey(event, day.key)} onClick={() => pickDate(day.key)}>{day.day}</button>;
+        const cls = ["date-range-picker__cell", inPreview && "is-in-range", from && "is-from", to && "is-to", inPreview && rowStart && "is-row-start", inPreview && rowEnd && "is-row-end"].filter(Boolean).join(" ");
+        return <span key={day.key} className={cls}><button type="button" data-date={day.key} className={`date-range-picker__day${!day.inMonth ? " is-outside" : ""}${from || to ? " is-endpoint" : ""}`} disabled={!day.selectable} tabIndex={day.key === activeDay ? 0 : -1} aria-label={`${label}${from && to ? ", начало и конец периода" : from ? ", начало периода" : to ? ", конец периода" : ""}`} aria-pressed={selected} aria-current={day.key === today ? "date" : undefined} onFocus={() => setFocusedDate(day.key)} onPointerEnter={() => anchor && setHovered(day.key)} onKeyDown={(event) => onDayKey(event, day.key)} onClick={() => pickDate(day.key)}>{day.day}</button></span>;
       })}</div>
-      <p className="date-range-picker__hint" aria-live="polite">{anchor ? "Теперь выберите дату окончания или примените один день." : valid ? `${formatDateRange(draft)} · ${count} ${count % 10 === 1 && count % 100 !== 11 ? "день" : count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 12 || count % 100 > 14) ? "дня" : "дней"}` : "Можно выбрать любое количество дней."}</p>
-      {error && <p className="date-range-picker__error" id={`${id}-error`} role="status">{error}</p>}
+      <p className="date-range-picker__hint" aria-live="polite">{anchor ? "Выберите дату окончания — или примените один день" : valid ? <><strong>{formatDateRange(draft)}</strong> · {days(count)}</> : "Нажмите дату начала, затем дату окончания"}</p>
       <footer className="date-range-picker__footer"><Button onClick={() => close(true)}>Отмена</Button><Button variant="primary" disabled={!valid} onClick={() => { if (valid) { onChange({ ...draft }); close(true); } }}>Применить</Button></footer>
     </div>, host)}
   </div>;

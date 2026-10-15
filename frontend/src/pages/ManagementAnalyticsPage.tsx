@@ -102,7 +102,7 @@ export function ManagementAnalyticsPage() {
     <GlassSurface className={`ma-filters${hasGroupFilter ? '' : ' ma-filters--single-group'}`} variant="regular">
       <div className="field ma-period-control">
         <span className="field__label">Период</span>
-        <DateRangePicker value={report.range} onChange={next => report.setRange(next, 'range')} presets={['this-week', 'last-week', 'this-month', 'last-month']} />
+        <DateRangePicker value={report.range} onChange={next => report.setRange(next, 'range')} />
       </div>
       {hasGroupFilter && <label className="field ma-group-filter"><span className="field__label">{head ? 'Группа' : 'Мои группы'}</span><Select aria-label={head ? 'Группа' : 'Мои группы'} value={report.filters.group_id ?? ''} options={[{ value: '', label: head ? 'Все группы' : 'Все мои группы' }, ...(report.groups.data ?? []).map(g => ({ value: g.id, label: g.name }))]} onChange={id => update({ group_id: id, operators: undefined, unassigned: undefined, search: undefined, status: undefined, page: undefined })} /></label>}
       <label className="field ma-metric-filter"><span className="field__label">Показатель для сравнения</span><Select aria-label="Показатель для сравнения" value={selectableMetrics.length ? metric?.code ?? '' : ''} options={selectableMetrics.length ? selectableMetrics.map(m => ({ value: m.code, label: m.title })) : [{ value: '', label: category ? 'Показателей категории пока нет' : 'Показателей пока нет' }]} onChange={onMetric} /></label>
