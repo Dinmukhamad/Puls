@@ -38,6 +38,14 @@ METRICS_WEAK = {
 }
 
 
+@pytest.fixture(autouse=True)
+async def weekly_contest(session: AsyncSession):
+    """These tests play places and nominations every week; the monthly contest has its own."""
+    rules = await get_rules(session)
+    rules.contest_period = "week"
+    await session.commit()
+
+
 async def _add_metrics(
     session: AsyncSession, week_id: int, user_id: int, values: dict[str, float]
 ) -> None:
@@ -77,15 +85,17 @@ async def test_ranks_are_assigned_by_final_points(session: AsyncSession) -> None
     assert by_user[best.id].final_points > by_user[worst.id].final_points
 
 
-async def test_antimetrics_reduce_points_before_conversion(session: AsyncSession) -> None:
+async def test_antimetrics_are_fines_not_points(session: AsyncSession) -> None:
     week, _, _, worst = await _setup_week(session)
     results = await weekly_service.calculate_week(session, week)
     await session.commit()
 
     weak = next(r for r in results if r.user_id == worst.id)
-    # 2 опоздания по 5 баллов + 1 сайт за 3 балла.
-    assert weak.penalty_points == pytest.approx(13.0)
-    assert weak.final_points == pytest.approx(weak.base_points - 13.0)
+    # Lateness and forbidden sites no longer take points: they are a direct fine,
+    # 2 опоздания × 50 + 1 сайт × 30.
+    assert weak.penalty_points == pytest.approx(0.0)
+    assert weak.final_points == pytest.approx(weak.base_points)
+    assert weak.coins_fine == 130
 
 
 async def test_close_week_awards_coins_by_rate(session: AsyncSession) -> None:

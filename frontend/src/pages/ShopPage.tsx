@@ -361,7 +361,7 @@ function ProductCard({ item, available, onBuy }: { item: ShopItemForOperator; av
         <div className="shop-card__price"><span className="shop-coin" aria-hidden="true">◈</span>{coins(item.price)}<small>{plural(item.price, "коин", "коина", "коинов")}</small></div>
         <ul className="shop-card__meta">
           <li>{item.requires_approval ? "👤 С одобрением" : "⚡ Сразу"}</li>
-          {item.stock_limit !== null && <li>📦 Осталось {item.stock_limit}</li>}
+          {item.month_left != null ? <li>📦 В этом месяце осталось {item.month_left}</li> : item.stock_limit !== null && <li>📦 Осталось {item.stock_limit}</li>}
           {item.per_user_monthly_limit !== null && <li>🗓 {item.per_user_monthly_limit} в месяц</li>}
         </ul>
         {group === "ready" && <p className="shop-card__after">После покупки останется <b>{coins(available - item.price)} ◈</b></p>}

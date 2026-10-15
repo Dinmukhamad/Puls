@@ -121,6 +121,8 @@ class CoinAccount(Base, TimestampMixin):
     reserved: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     total_earned: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     total_spent: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    #: Штраф, на который не хватило коинов: спишется при следующем закрытии недели.
+    fine_debt: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
 
     user: Mapped[User] = relationship("User", back_populates="account")
 

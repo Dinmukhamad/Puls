@@ -138,6 +138,10 @@ async def test_trainer_and_operator_cannot_preview_or_apply_batches(
 
 
 async def test_limit_9999_single_bulk_and_legacy_duplicates(client, session, head, operator):
+    # The economy's default is 200 a time; a head may raise it up to 9999.
+    rules = await get_rules(session)
+    rules.manual_max_abs_amount = 9999
+    await session.commit()
     headers = auth(await login(client, head.login))
     selection = {"user_ids": [operator.id, operator.id]}
     checked = await preview(client, headers, selection, amount=9999)

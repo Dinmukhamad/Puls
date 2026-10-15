@@ -1,8 +1,6 @@
 """Магазин бонусов: каталог, заявки и их согласование (п. 4.3, 4.4.4)."""
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
-
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -57,8 +55,9 @@ async def _issued_count(session: AsyncSession, item_id: int) -> int:
 
 
 async def _user_month_count(session: AsyncSession, item_id: int, user_id: int) -> int:
-    today = date.today()
-    month_start = datetime(today.year, today.month, 1, tzinfo=UTC)
+    from app.services import economy
+
+    month_start, _ = economy.month_range(*economy.this_month())
     total = await session.scalar(
         select(func.count(ShopRequest.id)).where(
             ShopRequest.item_id == item_id,
@@ -80,6 +79,11 @@ async def check_availability(
         issued = await _issued_count(session, item.id)
         if issued >= item.stock_limit:
             return "Лимит выдач по этому бонусу исчерпан"
+    from app.services import economy
+
+    month = await economy.shop_block(session, item)
+    if month:
+        return month
     if item.per_user_monthly_limit is not None:
         used = await _user_month_count(session, item.id, user_id)
         if used >= item.per_user_monthly_limit:

@@ -477,7 +477,7 @@ async def quest_rows(session, user_id):
 async def test_daily_quests_are_dealt_once_and_hide_answers(client, session, operator):
     headers = auth(await login(client, operator.login))
     first = (await client.get(BASE, headers=headers)).json()["quests"]
-    assert len(first["items"]) == 3 and first["coins"] == 10
+    assert len(first["items"]) == 3 and first["coins"] == 3
     assert all(q["right"] is None and q["explanation"] is None for q in first["items"])
     assert [q["giver"] for q in first["items"]] == ["driver", "client", "guide"]
     again = (await client.get(BASE, headers=headers)).json()["quests"]
@@ -488,7 +488,7 @@ async def test_daily_quests_are_dealt_once_and_hide_answers(client, session, ope
     right = rows[0].snapshot["correct"]
     done = await client.post(f"{BASE}/quests/0/answer", headers=headers, json={"answer": right})
     assert done.status_code == 200
-    assert done.json()["correct"] and done.json()["coins"] == 10 and done.json()["explanation"]
+    assert done.json()["correct"] and done.json()["coins"] == 3 and done.json()["explanation"]
     assert (
         await client.post(f"{BASE}/quests/0/answer", headers=headers, json={"answer": right})
     ).status_code == 409
@@ -508,7 +508,7 @@ async def test_daily_quests_are_dealt_once_and_hide_answers(client, session, ope
         await client.post(f"{BASE}/quests/2/answer", headers=headers, json={"answer": 9})
     ).status_code == 422
     city = (await client.get(BASE, headers=headers)).json()
-    assert city["balance"] == 10
+    assert city["balance"] == 3
     assert city["quests"]["items"][0]["answered"] and city["quests"]["items"][2]["right"] is None
 
 
@@ -554,7 +554,7 @@ async def test_quests_come_from_the_bank(client, session, operator):
             headers=headers,
             json={"answer": row.snapshot["correct"]},
         )
-        assert answered.json()["coins"] == 10
+        assert answered.json()["coins"] == 3
 
 
 async def test_concurrent_answers_pay_once_and_staff_never_deal(client, session, operator):
@@ -716,7 +716,7 @@ async def test_head_sets_the_game_numbers_and_they_apply(client, session, operat
     current = (await client.get(ADMIN + "/economy", headers=coach)).json()
     assert not current.pop("can_edit") and len(current.pop("catalogue")) == 8
     assert current["revision"] == 0 and current["prices"]["garden"] == 40
-    assert current["quest_coins"] == 10
+    assert current["quest_coins"] == 3
     assert (await client.get(ADMIN + "/economy", headers=me)).status_code == 403
     body = {**current, "prices": {**current["prices"], "garden": 25}, "quest_coins": 15}
     assert (await client.put(ADMIN + "/economy", headers=coach, json=body)).status_code == 403

@@ -29,7 +29,9 @@ export type TxType =
   | "game_reward"
   | "achievement_reward"
   | "city_build"
-  | "city_contribution";
+  | "city_contribution"
+  | "fine"
+  | "game_stake";
 
 export interface Token {
   access_token: string;
@@ -245,6 +247,10 @@ export interface ShopItemOut {
   is_active: boolean;
   stock_limit: number | null;
   per_user_monthly_limit: number | null;
+  /** Pieces for everyone in a calendar month; null — no limit. */
+  monthly_stock?: number | null;
+  /** What the bonus costs the company in tenge; it counts against the shop's monthly budget. */
+  cost_tenge?: number | null;
   requires_approval: boolean;
   sort_order: number;
 }
@@ -253,6 +259,8 @@ export interface ShopItemForOperator extends ShopItemOut {
   can_buy: boolean;
   missing_coins: number;
   blocked_reason: string | null;
+  /** Pieces left this month; null — no monthly limit. */
+  month_left?: number | null;
 }
 
 export interface ShopCatalogOut {

@@ -33,30 +33,48 @@ def coin_segment(segment):
     return result
 
 
+#: The wheel until a head saves one (docs/COIN_ECONOMY.md): a free spin wins 5 coins on average,
+#: a paid one costs 10, so half of every stake burns.
+DEFAULT_SEGMENTS = [
+    {"title": "В этот раз без награды", "weight": 30, "coins": 0},
+    {"title": "2 коина", "weight": 25, "coins": 2},
+    {"title": "5 коинов", "weight": 25, "coins": 5},
+    {"title": "10 коинов", "weight": 12, "coins": 10},
+    {"title": "20 коинов", "weight": 6, "coins": 20},
+    {"title": "50 коинов", "weight": 2, "coins": 50},
+]
+
+
 def config_data(config):
     return {
         "enabled": config.enabled if config else False,
         "daily_spins": config.daily_spins if config else 1,
+        "paid_spins": config.paid_spins if config else 3,
+        "spin_cost": config.spin_cost if config else 10,
         "segments": [coin_segment(item) for item in config.segments]
         if config
-        else [
-            {"title": "В этот раз без награды", "weight": 1, "coins": 0},
-            {"title": "5 коинов", "weight": 1, "coins": 5},
-        ],
+        else DEFAULT_SEGMENTS,
     }
+
+
+async def spins_today(session, user_id, today):
+    """(free, paid) spins the operator has made today."""
+    rows = (await session.execute(
+        select(WheelSpin.cost > 0, func.count(WheelSpin.id))
+        .where(WheelSpin.user_id == user_id, WheelSpin.day == today)
+        .group_by(WheelSpin.cost > 0)
+    )).all()
+    counts = {bool(paid): int(n) for paid, n in rows}
+    return counts.get(False, 0), counts.get(True, 0)
 
 
 @router.get("/games/wheel")
 async def wheel(session: SessionDep, user: CurrentUser):
     data = config_data(await session.get(WheelConfig, 1))
-    data["used_today"] = int(
-        await session.scalar(
-            select(func.count(WheelSpin.id)).where(
-                WheelSpin.user_id == user.id, WheelSpin.day == datetime.now(UTC).date()
-            )
-        )
-        or 0
-    )
+    free, paid = await spins_today(session, user.id, datetime.now(UTC).date())
+    data["used_today"] = free + paid
+    data["free_left"] = max(0, data["daily_spins"] - free)
+    data["paid_left"] = max(0, data["paid_spins"] - paid) if data["spin_cost"] else 0
     return data
 
 
@@ -114,16 +132,18 @@ async def spin(session: SessionDep, user: CurrentUser, payload: SpinInput):
     if config is None or not config.enabled:
         raise ConflictError("Лента удачи сейчас недоступна")
     today = datetime.now(UTC).date()
-    used = (
-        await session.scalar(
-            select(func.count(WheelSpin.id)).where(
-                WheelSpin.user_id == user.id, WheelSpin.day == today
+    free, paid = await spins_today(session, user.id, today)
+    cost = 0
+    if free >= config.daily_spins:
+        # After the free spins come the paid ones, if the head allowed them: the stake burns.
+        if not config.spin_cost or paid >= config.paid_spins:
+            raise ConflictError("Попытки на сегодня закончились. Новые доступны после 00:00 UTC.")
+        if not payload.paid:
+            raise ConflictError(
+                f"Бесплатные попытки закончились. Платная попытка стоит {config.spin_cost} коинов.",
+                code="paid_spin_required",
             )
-        )
-        or 0
-    )
-    if used >= config.daily_spins:
-        raise ConflictError("Попытки на сегодня закончились. Новые доступны после 00:00 UTC.")
+        cost = config.spin_cost
     target = secrets.randbelow(sum(item["weight"] for item in config.segments))
     chosen = 0
     for index, segment in enumerate(config.segments):
@@ -137,11 +157,21 @@ async def spin(session: SessionDep, user: CurrentUser, payload: SpinInput):
         day=today,
         request_key=key,
         segment=chosen,
+        cost=cost,
         reward=segment,
         segments=config.segments,
     )
     session.add(item)
     await session.flush()
+    if cost:
+        await post_transaction(
+            session,
+            user_id=user.id,
+            amount=-cost,
+            tx_type=TxType.GAME_STAKE,
+            reason="Платная попытка ленты удачи",
+            idempotency_key=f"{key}:stake",
+        )
     await reward(session, user.id, segment["coins"], key, f"Лента удачи: {segment['title']}")
     session.add(
         Notification(
@@ -197,6 +227,7 @@ async def raffle_data(session, item, user_id):
         "closes_at": utc(item.closes_at),
         "status": item.status,
         "coins_reward": item.coins_reward,
+        "entry_cost": item.entry_cost,
         "participants": count,
         "entered": entered,
         "winner_name": winner.full_name if winner else None,
@@ -286,7 +317,19 @@ async def enter(session: SessionDep, user: CurrentUser, raffle_id: int):
         return Message(detail="Вы уже участвуете")
     if item.status != "published" or utc(item.closes_at) <= datetime.now(UTC):
         raise ConflictError("Приём участников завершён")
-    session.add(RaffleEntry(raffle_id=item.id, user_id=user.id))
+    entry = RaffleEntry(raffle_id=item.id, user_id=user.id)
+    session.add(entry)
+    await session.flush()
+    if item.entry_cost:
+        await lock_learner(session, user.id)
+        await post_transaction(
+            session,
+            user_id=user.id,
+            amount=-item.entry_cost,
+            tx_type=TxType.GAME_STAKE,
+            reason=f"Билет розыгрыша: {item.title}",
+            idempotency_key=f"raffle:{item.id}:entry:{user.id}",
+        )
     await session.commit()
     return Message(detail="Вы участвуете в розыгрыше")
 

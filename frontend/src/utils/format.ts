@@ -69,7 +69,7 @@ export const TX_LABELS: Record<string, string> = {
   rank_bonus: "Призовое место",
   no_lateness_bonus: "Без опозданий",
   no_sites_bonus: "Без посторонних сайтов",
-  nomination_bonus: "Номинация недели",
+  nomination_bonus: "Номинация",
   driver_gratitude: "Благодарность водителя",
   manual_credit: "Ручное начисление",
   manual_debit: "Ручное списание",
@@ -81,6 +81,8 @@ export const TX_LABELS: Record<string, string> = {
   game_reward: "Игровая награда",
   city_build: "Постройка в городе",
   city_contribution: "Взнос в проект района",
+  fine: "Штраф",
+  game_stake: "Платная попытка или билет",
 };
 
 export const REQUEST_STATUS_LABELS: Record<string, string> = {

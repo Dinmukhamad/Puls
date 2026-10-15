@@ -29,6 +29,14 @@ export interface Rules {
   discipline_requires_reported: boolean;
   rating_show_balance_to_operators: boolean;
   nomination_min_participants: number;
+  /** Places and nominations: every week or once a month (docs/COIN_ECONOMY.md). */
+  contest_period: "week" | "month";
+  lateness_fine: number;
+  forbidden_site_fine: number;
+  gratitude_monthly_limit: number;
+  manual_monthly_limit: number;
+  coin_rate_tenge: number;
+  shop_monthly_budget_tenge: number;
 }
 export type StoreItemInput = Omit<ShopItemOut, "id">;
 

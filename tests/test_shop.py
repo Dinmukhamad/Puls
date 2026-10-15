@@ -31,7 +31,7 @@ async def _item(session: AsyncSession, code: str = "coffee_card") -> ShopItem:
 async def test_request_reserves_coins_without_changing_balance(
     session: AsyncSession, operator: User
 ) -> None:
-    await _fund(session, operator, 200)
+    await _fund(session, operator, 1000)
     item = await _item(session)
 
     request = await shop_service.create_request(
@@ -41,15 +41,15 @@ async def test_request_reserves_coins_without_changing_balance(
 
     account = await coins_service.get_account(session, operator.id)
     assert request.status == ShopRequestStatus.NEW
-    assert account.balance == 200
+    assert account.balance == 1000
     assert account.reserved == item.price
-    assert account.available == 200 - item.price
+    assert account.available == 1000 - item.price
 
 
 async def test_approval_writes_off_reserved_coins(
     session: AsyncSession, operator: User, supervisor: User
 ) -> None:
-    await _fund(session, operator, 200)
+    await _fund(session, operator, 1000)
     item = await _item(session)
     request = await shop_service.create_request(session, user=operator, item_id=item.id)
     await session.commit()
@@ -59,7 +59,7 @@ async def test_approval_writes_off_reserved_coins(
 
     account = await coins_service.get_account(session, operator.id)
     assert request.status == ShopRequestStatus.APPROVED
-    assert account.balance == 200 - item.price
+    assert account.balance == 1000 - item.price
     assert account.reserved == 0
     assert account.total_spent == item.price
 
@@ -75,7 +75,7 @@ async def test_approval_writes_off_reserved_coins(
 async def test_rejection_returns_coins_with_reason(
     session: AsyncSession, operator: User, supervisor: User
 ) -> None:
-    await _fund(session, operator, 200)
+    await _fund(session, operator, 1000)
     item = await _item(session)
     request = await shop_service.create_request(session, user=operator, item_id=item.id)
     await session.commit()
@@ -88,14 +88,14 @@ async def test_rejection_returns_coins_with_reason(
     account = await coins_service.get_account(session, operator.id)
     assert request.status == ShopRequestStatus.REJECTED
     assert request.decision_comment == "Бонус закончился на складе"
-    assert account.balance == 200
+    assert account.balance == 1000
     assert account.reserved == 0
 
 
 async def test_rejection_requires_a_reason(
     session: AsyncSession, operator: User, supervisor: User
 ) -> None:
-    await _fund(session, operator, 200)
+    await _fund(session, operator, 1000)
     item = await _item(session)
     request = await shop_service.create_request(session, user=operator, item_id=item.id)
     await session.commit()
@@ -121,8 +121,8 @@ async def test_purchase_without_enough_coins_is_blocked(
 async def test_reserved_coins_cannot_be_spent_twice(
     session: AsyncSession, operator: User
 ) -> None:
-    await _fund(session, operator, 200)
-    item = await _item(session)  # 120 коинов
+    await _fund(session, operator, 500)
+    item = await _item(session)  # 300 коинов
     await shop_service.create_request(session, user=operator, item_id=item.id)
     await session.commit()
 
@@ -133,7 +133,7 @@ async def test_reserved_coins_cannot_be_spent_twice(
 async def test_operator_can_cancel_own_request(
     session: AsyncSession, operator: User
 ) -> None:
-    await _fund(session, operator, 200)
+    await _fund(session, operator, 1000)
     item = await _item(session)
     request = await shop_service.create_request(session, user=operator, item_id=item.id)
     await session.commit()
@@ -144,13 +144,13 @@ async def test_operator_can_cancel_own_request(
     account = await coins_service.get_account(session, operator.id)
     assert request.status == ShopRequestStatus.CANCELLED
     assert account.reserved == 0
-    assert account.balance == 200
+    assert account.balance == 1000
 
 
 async def test_processed_request_cannot_be_decided_again(
     session: AsyncSession, operator: User, supervisor: User
 ) -> None:
-    await _fund(session, operator, 200)
+    await _fund(session, operator, 1000)
     item = await _item(session)
     request = await shop_service.create_request(session, user=operator, item_id=item.id)
     await session.commit()
@@ -164,7 +164,7 @@ async def test_processed_request_cannot_be_decided_again(
 async def test_stock_limit_blocks_new_requests(
     session: AsyncSession, operator: User
 ) -> None:
-    await _fund(session, operator, 500)
+    await _fund(session, operator, 2500)
     item = await _item(session)
     item.stock_limit = 1
     await session.commit()
@@ -179,7 +179,7 @@ async def test_stock_limit_blocks_new_requests(
 async def test_price_is_frozen_at_request_time(
     session: AsyncSession, operator: User, supervisor: User
 ) -> None:
-    await _fund(session, operator, 500)
+    await _fund(session, operator, 2500)
     item = await _item(session)
     original_price = item.price
 
@@ -194,4 +194,33 @@ async def test_price_is_frozen_at_request_time(
 
     account = await coins_service.get_account(session, operator.id)
     assert request.price == original_price
-    assert account.balance == 500 - original_price
+    assert account.balance == 2500 - original_price
+
+
+async def test_month_stock_and_budget_close_an_item_until_next_month(
+    session: AsyncSession, operator: User
+) -> None:
+    from app.services.rules import get_rules
+
+    await _fund(session, operator, 5000)
+    item = await _item(session)
+    assert (item.price, item.cost_tenge, item.monthly_stock) == (300, 1500, 8)
+    item.monthly_stock = 1
+    await session.commit()
+    await shop_service.create_request(session, user=operator, item_id=item.id)
+    await session.commit()
+    with pytest.raises(ConflictError, match="закончился"):
+        await shop_service.create_request(session, user=operator, item_id=item.id)
+
+    # The budget: lunch costs 3000 ₸, two of them do not fit 4000 ₸ left of the month.
+    rules = await get_rules(session)
+    rules.shop_monthly_budget_tenge = 1500 + 3000 + 2000
+    lunch = await _item(session, "company_lunch")
+    await session.commit()
+    await shop_service.create_request(session, user=operator, item_id=lunch.id)
+    await session.commit()
+    with pytest.raises(ConflictError, match="Бюджет магазина"):
+        await shop_service.create_request(session, user=operator, item_id=lunch.id)
+    # A bonus that costs the company nothing is not limited by the budget.
+    star = await _item(session, "star_of_week")
+    await shop_service.create_request(session, user=operator, item_id=star.id)

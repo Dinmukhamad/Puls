@@ -371,6 +371,12 @@ async def list_shop_items(session: SessionDep, _: StaffUser) -> list[ShopItem]:
     )
 
 
+#: Shop item fields that may be cleared (None means "no limit").
+SHOP_OPTIONAL = (
+    "description", "stock_limit", "per_user_monthly_limit", "monthly_stock", "cost_tenge",
+)
+
+
 @router.post(
     "/shop-items",
     response_model=ShopItemOut,
@@ -381,7 +387,7 @@ async def create_shop_item(
     session: SessionDep, actor: HeadUser, payload: ShopItemCreate
 ) -> ShopItem:
     data = _clean_changes(
-        payload.model_dump(), ("description", "stock_limit", "per_user_monthly_limit")
+        payload.model_dump(), SHOP_OPTIONAL
     )
     item = ShopItem(**data)
     session.add(item)
@@ -403,7 +409,7 @@ async def update_shop_item(
         raise NotFoundError(f"Бонус id={item_id} не найден")
     changes = _clean_changes(
         payload.model_dump(exclude_unset=True),
-        ("description", "stock_limit", "per_user_monthly_limit"),
+        SHOP_OPTIONAL,
     )
     before = {field: getattr(item, field) for field in changes}
     for field, value in changes.items():
