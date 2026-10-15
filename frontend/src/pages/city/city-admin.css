@@ -137,8 +137,7 @@
 .city-world-editor__owner { display: flex; align-items: center; min-height: 44px; padding: 0 var(--sp-4); border: 1px dashed var(--border-strong); border-radius: var(--radius-m); color: var(--text-primary); font-weight: 550; overflow-wrap: anywhere; }
 /* The districts of a city share the whole row (--districts is set from their number); a narrow card stacks them. */
 .city-world-editor__city > .card__body { container-type: inline-size; }
-.city-world-editor__districts { display: grid; grid-template-columns: repeat(var(--districts, 3), minmax(0, 1fr)); gap: var(--sp-4); }
-@container (max-width: 719px) { .city-world-editor__districts { grid-template-columns: minmax(0, 1fr); } }
+.city-world-editor__districts { display: grid; grid-template-columns: repeat(auto-fit, minmax(max(150px, calc((100% - (var(--districts, 3) - 1) * var(--sp-4)) / var(--districts, 3))), 1fr)); gap: var(--sp-4); }
 .city-world-editor__district { display: flex; flex-direction: column; gap: var(--sp-4); min-width: 0; padding: var(--sp-4); border: 1px solid var(--separator); border-radius: var(--radius-l); background: var(--surface-primary); }
 /* As tall as a badge, so a district without one keeps its fields level with its neighbours. */
 .city-world-editor__district-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); min-width: 0; min-height: 26px; }
@@ -186,11 +185,12 @@
 .city-layout-planner .field__note, .city-layout-planner .ui-note { margin: 0; }
 .city-layout-planner__controls { display: grid; gap: var(--sp-3); min-width: 0; margin: 0; padding: 0; border: 0; }
 .city-layout-planner__count { max-width: 280px; }
-.city-layout-planner__districts { display: grid; grid-template-columns: repeat(var(--districts, 3), minmax(0, 1fr)); gap: var(--sp-3); margin: 0; padding: 0; list-style: none; }
+.city-layout-planner__districts { display: grid; grid-template-columns: repeat(auto-fit, minmax(max(150px, calc((100% - (var(--districts, 3) - 1) * var(--sp-4)) / var(--districts, 3))), 1fr)); gap: var(--sp-4); margin: 0; padding: 0; list-style: none; }
 .city-layout-planner__district { position: relative; display: grid; gap: var(--sp-3); min-width: 0; padding: var(--sp-3) var(--sp-3) var(--sp-3) calc(var(--sp-3) + 6px); border: 1px solid var(--separator); border-radius: var(--radius-m); background: var(--surface-primary); }
 .city-layout-planner__district::before { content: ""; position: absolute; inset: 8px auto 8px 6px; width: 4px; border-radius: 2px; background: var(--district); }
 .city-layout-planner__number { justify-self: start; display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--district); color: #fff; font-size: var(--text-caption); font-weight: 700; }
-@container (max-width: 719px) { .city-layout-planner__districts { grid-template-columns: minmax(0, 1fr); } }
 .city-layout-planner__actions { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
 .city-layout-planner__preview { margin: 0; display: grid; gap: var(--sp-2); }
 .city-layout-planner__preview canvas { width: 100%; max-width: 420px; height: auto; border-radius: var(--radius-m); background: var(--surface-primary); }
+/* On a narrow card every district takes a row of its own, current and planned alike. */
+@container (max-width: 719px) { .city-world-editor__districts, .city-layout-planner__districts { grid-template-columns: minmax(0, 1fr); } }
