@@ -33,7 +33,7 @@ function Wheel() {
 
   useEffect(()=>{ try { localStorage.setItem(MUTE_KEY, muted?"1":"0"); } catch { /* приватный режим */ } },[muted]);
 
-  const spin = useMutation({ mutationFn:()=>{ key.current ??= crypto.randomUUID(); return games.spin(key.current); },onSuccess:(value)=>{
+  const spin = useMutation({ mutationFn:(paid: boolean)=>{ key.current ??= crypto.randomUUID(); return games.spin(key.current, paid); },onSuccess:(value)=>{
     // Результат придерживаем до остановки ленты: показать награду раньше
     // значит обессмыслить саму прокрутку.
     setSnapshot(value.segments); setResult(null); setAnimating(true);
@@ -50,14 +50,16 @@ function Wheel() {
   }
   if(query.isLoading) return <RowsSkeleton />; if(query.isError) return <ErrorState error={query.error} onRetry={()=>query.refetch()} />;
   const config=query.data!;const segments=snapshot??config.segments;
-  const left=Math.max(0,config.daily_spins-config.used_today);
+  // After the free spins, paid ones if the head allowed them: the stake burns (docs/COIN_ECONOMY.md).
+  const left=config.free_left??Math.max(0,config.daily_spins-config.used_today);
+  const paidLeft=config.paid_left??0, paid=left===0&&paidLeft>0, done=left===0&&!paid;
   return <div className="wheel-layout"><Card className="wheel-card" title="Лента удачи" subtitle="Приз, который остановится в рамке, — ваш"
     action={<><IconButton label={muted?"Включить звук":"Выключить звук"} aria-pressed={muted} onClick={()=>setMuted((on)=>!on)}>{muted?<SoundOffIcon/>:<SoundIcon/>}</IconButton>
       <button type="button" className="wheel-prizes-button" aria-haspopup="dialog" onClick={()=>setPrizesOpen(true)}><span className="wheel-prizes-button__sticker" aria-hidden="true">🎁</span><span>Что может выпасть</span></button></>}>
       <PrizeStrip segments={segments} stickers={segments.map((item)=>prizeSticker(item,segments))} spin={request} muted={muted} onSettled={settled} />
       <div className="wheel-card__foot">
-        <Button className="wheel-spin" variant="primary" size="l" disabled={!config.enabled||config.used_today>=config.daily_spins||spin.isPending||animating} onClick={()=>spin.mutate()}>{spin.isPending?"Готовим результат…":animating?"Лента крутится…":!config.enabled?"Скоро вернёмся":config.used_today>=config.daily_spins?"На сегодня всё":"Крутить"}</Button>
-        <p className="wheel-card__note">{config.enabled?<>Бесплатно · осталось {left} из {config.daily_spins} · попытки обновляются в 00:00 UTC</>:"Сейчас лента удачи выключена. Попытки появятся, когда её снова включат."}</p>
+        <Button className="wheel-spin" variant="primary" size="l" disabled={!config.enabled||done||spin.isPending||animating} onClick={()=>spin.mutate(paid)}>{spin.isPending?"Готовим результат…":animating?"Лента крутится…":!config.enabled?"Скоро вернёмся":done?"На сегодня всё":paid?`Крутить за ${coins(config.spin_cost)} ${plural(config.spin_cost,"коин","коина","коинов")}`:"Крутить"}</Button>
+        <p className="wheel-card__note">{!config.enabled?"Сейчас лента удачи выключена. Попытки появятся, когда её снова включат.":left>0?<>Бесплатно · осталось {left} из {config.daily_spins}{config.spin_cost>0&&config.paid_spins>0?<> · потом ещё {config.paid_spins} за {coins(config.spin_cost)} {plural(config.spin_cost,"коин","коина","коинов")}</>:null} · попытки обновляются в 00:00 UTC</>:paid?<>Бесплатные попытки на сегодня закончились · платных осталось {paidLeft} из {config.paid_spins}</>:"Попытки обновляются в 00:00 UTC"}</p>
         {spin.isError&&<ErrorState error={spin.error}/>}
       </div>
     </Card>

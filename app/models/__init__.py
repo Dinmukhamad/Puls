@@ -24,11 +24,14 @@ from app.models.city_estate import (
 from app.models.city_season import CitySeason
 from app.models.coin import CoinTransaction
 from app.models.contest import (
+    ContestMonth,
     ContestWeek,
     MetricDefinition,
+    MonthNominationWinner,
     NominationDefinition,
     NominationWinner,
     OperatorDayMetric,
+    OperatorMonthResult,
     OperatorWeekMetric,
     OperatorWeekResult,
 )
@@ -84,6 +87,7 @@ __all__ = [
     "CityWorld",
     "CoinAccount",
     "CoinTransaction",
+    "ContestMonth",
     "ContestWeek",
     "CrmAppeal",
     "CrmAttachment",
@@ -108,11 +112,13 @@ __all__ = [
     "MetricDefinition",
     "MetricDirection",
     "MetricKind",
+    "MonthNominationWinner",
     "NominationDefinition",
     "NominationWinner",
     "Notification",
     "OktellEvent",
     "OperatorDayMetric",
+    "OperatorMonthResult",
     "OperatorWeekMetric",
     "OperatorWeekResult",
     "ProgressLevel",

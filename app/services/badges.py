@@ -16,7 +16,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.badge import BadgeDefinition, UserBadge
 from app.models.contest import (
     TEST_SOURCE,
+    ContestMonth,
     ContestWeek,
+    MonthNominationWinner,
     NominationWinner,
     OperatorWeekMetric,
     OperatorWeekResult,
@@ -222,12 +224,21 @@ async def evaluate_badge(
 
     if rule == BadgeRule.NOMINATION_COUNT:
         target = float(params.get("gte", 1))
-        count = await session.scalar(
+        weekly = await session.scalar(
             select(func.count(NominationWinner.id))
             .join(ContestWeek, ContestWeek.id == NominationWinner.week_id)
             .where(NominationWinner.user_id == user_id, ContestWeek.status == WeekStatus.CLOSED)
         )
-        count = float(count or 0)
+        # Nominations of the monthly contest count the same as the weekly ones.
+        monthly = await session.scalar(
+            select(func.count(MonthNominationWinner.id))
+            .join(ContestMonth, ContestMonth.id == MonthNominationWinner.month_id)
+            .where(
+                MonthNominationWinner.user_id == user_id,
+                ContestMonth.status == WeekStatus.CLOSED,
+            )
+        )
+        count = float((weekly or 0) + (monthly or 0))
         return BadgeProgress(
             badge=badge,
             unlocked=count >= target,

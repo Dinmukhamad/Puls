@@ -31,6 +31,7 @@ import { DriverAnalyticsPage } from "./pages/DriverAnalyticsPage";
 import { LevelsAdminPage } from "./pages/LevelsAdminPage";
 import { NotificationsPage } from "./pages/NotificationsPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { EconomyPage } from "./pages/EconomyPage";
 import { StoreAdminPage } from "./pages/StoreAdminPage";
 import { LearningStudioPage } from "./pages/LearningStudioPage";
 import { GamesPage } from "./pages/GamesPage";
@@ -108,6 +109,7 @@ export function App() {
         <Route path="/admin/summary" element={<SummaryPage />} />
         <Route path="/admin/levels" element={<LevelsAdminPage />} />
         <Route path="/admin/settings" element={<SettingsPage />} />
+        <Route path="/admin/economy" element={<EconomyPage />} />
         <Route path="/admin/store" element={<StoreAdminPage />} />
         <Route path="/admin/users" element={<UsersPage />} />
         <Route path="/admin/users/:userId" element={<UserDetailPage />} />

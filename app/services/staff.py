@@ -26,6 +26,7 @@ from app.models.progress import Notification
 from app.models.shop import ShopRequest
 from app.models.user import CoinAccount, Group, User
 from app.services import coins as coins_service
+from app.services import economy
 from app.services.locking import lock_user
 from app.services.rules import get_rules, write_audit
 
@@ -190,6 +191,12 @@ async def manual_transaction(
             f"Разовая операция ограничена {maximum} коинами",
             code="amount_out_of_range",
         )
+
+    # Driver gratitudes have their own monthly count instead of the supervisor's limit.
+    if resolved_type == TxType.DRIVER_GRATITUDE:
+        await economy.check_gratitude_limit(session, target.id)
+    elif resolved_type == TxType.MANUAL_CREDIT:
+        await economy.check_manual_limit(session, actor, amount)
 
     minimum_reason_length = max(1, rules.manual_reason_min_length)
     if len(cleaned) < minimum_reason_length:

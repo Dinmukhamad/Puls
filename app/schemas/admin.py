@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import AfterValidator, BaseModel, Field, FiniteFloat, PositiveInt, model_validator
 
@@ -260,6 +260,13 @@ class RulesOut(ORMModel):
     discipline_requires_reported: bool
     rating_show_balance_to_operators: bool
     nomination_min_participants: int
+    gratitude_monthly_limit: int
+    contest_period: str
+    lateness_fine: int
+    forbidden_site_fine: int
+    manual_monthly_limit: int
+    coin_rate_tenge: float
+    shop_monthly_budget_tenge: int
 
 
 class RulesUpdate(BaseModel):
@@ -278,6 +285,13 @@ class RulesUpdate(BaseModel):
     discipline_requires_reported: bool | None = None
     rating_show_balance_to_operators: bool | None = None
     nomination_min_participants: int | None = Field(default=None, ge=0)
+    gratitude_monthly_limit: int | None = Field(default=None, ge=0, le=100)
+    contest_period: Literal["week", "month"] | None = None
+    lateness_fine: int | None = Field(default=None, ge=0, le=10000)
+    forbidden_site_fine: int | None = Field(default=None, ge=0, le=10000)
+    manual_monthly_limit: int | None = Field(default=None, ge=0, le=1000000)
+    coin_rate_tenge: float | None = Field(default=None, gt=0, le=100000)
+    shop_monthly_budget_tenge: int | None = Field(default=None, ge=0, le=100000000)
 
 
 class MetricOut(ORMModel):

@@ -31,22 +31,45 @@ class GamificationSettings(Base, TimestampMixin):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, default=SETTINGS_SINGLETON_ID)
 
-    #: Курс перевода: сколько баллов конкурса даёт один коин (п. 3.1).
-    points_per_coin: Mapped[float] = mapped_column(default=5.0, nullable=False)
+    #: Курс перевода: сколько баллов конкурса даёт один коин (п. 3.1). 0.5 - балл даёт 2 коина
+    #: (экономика 2.24.52, docs/COIN_ECONOMY.md).
+    points_per_coin: Mapped[float] = mapped_column(default=0.5, nullable=False)
 
-    #: Бонусы за призовые места недели (п. 3.2).
-    rank1_bonus: Mapped[int] = mapped_column(Integer, default=15)
-    rank2_bonus: Mapped[int] = mapped_column(Integer, default=10)
-    rank3_bonus: Mapped[int] = mapped_column(Integer, default=7)
+    #: Бонусы за призовые места конкурса (п. 3.2): месяца, если ``contest_period`` - "month".
+    rank1_bonus: Mapped[int] = mapped_column(Integer, default=300)
+    rank2_bonus: Mapped[int] = mapped_column(Integer, default=200)
+    rank3_bonus: Mapped[int] = mapped_column(Integer, default=150)
 
-    #: Дисциплинарные бонусы (п. 3.2).
-    no_lateness_bonus: Mapped[int] = mapped_column(Integer, default=5)
-    no_forbidden_sites_bonus: Mapped[int] = mapped_column(Integer, default=3)
+    #: Дисциплинарные бонусы недели (п. 3.2).
+    no_lateness_bonus: Mapped[int] = mapped_column(Integer, default=25)
+    no_forbidden_sites_bonus: Mapped[int] = mapped_column(Integer, default=15)
 
     #: Бонус за номинацию по умолчанию, если у номинации не задан свой.
-    nomination_bonus_default: Mapped[int] = mapped_column(Integer, default=5)
+    nomination_bonus_default: Mapped[int] = mapped_column(Integer, default=100)
     #: Начисление за благодарность водителя при ручном начислении (п. 3.2).
-    driver_gratitude_bonus: Mapped[int] = mapped_column(Integer, default=3)
+    driver_gratitude_bonus: Mapped[int] = mapped_column(Integer, default=30)
+    #: Сколько благодарностей водителей оплачивается одному оператору за календарный месяц.
+    gratitude_monthly_limit: Mapped[int] = mapped_column(Integer, default=5, server_default="5")
+
+    #: Как часто разыгрываются места и номинации: "week" - каждую неделю, "month" - раз в месяц
+    #: (неделя относится к месяцу своего четверга). Баллы и дисциплина начисляются каждую неделю.
+    contest_period: Mapped[str] = mapped_column(String(8), default="month", server_default="month")
+
+    #: Прямые штрафы при закрытии недели: за каждое опоздание и каждый посторонний сайт.
+    #: Не хватает коинов - остаток спишется при следующем закрытии (CoinAccount.fine_debt).
+    lateness_fine: Mapped[int] = mapped_column(Integer, default=50, server_default="50")
+    forbidden_site_fine: Mapped[int] = mapped_column(Integer, default=30, server_default="30")
+
+    #: Сколько коинов супервайзер может начислить вручную за календарный месяц (всем своим
+    #: операторам вместе). 0 - без ограничения. Руководитель и администратор не ограничены.
+    manual_monthly_limit: Mapped[int] = mapped_column(Integer, default=1500, server_default="1500")
+
+    #: Сколько тенге стоит коин в магазине и бюджет магазина на месяц: заявки на бонусы с
+    #: денежной стоимостью принимаются, пока бюджет месяца не исчерпан. 0 - без бюджета.
+    coin_rate_tenge: Mapped[float] = mapped_column(default=5.0, server_default="5")
+    shop_monthly_budget_tenge: Mapped[int] = mapped_column(
+        Integer, default=50000, server_default="50000"
+    )
 
     #: Коды антипоказателей, участвующих в дисциплинарных бонусах.
     lateness_metric_code: Mapped[str] = mapped_column(String(64), default="lateness")
@@ -55,7 +78,7 @@ class GamificationSettings(Base, TimestampMixin):
     )
 
     #: Ограничение на одну ручную операцию, чтобы опечатка не сломала экономику.
-    manual_max_abs_amount: Mapped[int] = mapped_column(Integer, default=9999)
+    manual_max_abs_amount: Mapped[int] = mapped_column(Integer, default=200)
     #: Минимальная длина комментария к ручной операции (п. 3.3 - комментарий обязателен).
     manual_reason_min_length: Mapped[int] = mapped_column(Integer, default=5)
 
@@ -90,6 +113,9 @@ class GamificationSettings(Base, TimestampMixin):
             "no_forbidden_sites_bonus": self.no_forbidden_sites_bonus,
             "nomination_bonus_default": self.nomination_bonus_default,
             "lateness_metric_code": self.lateness_metric_code,
+            "contest_period": self.contest_period,
+            "lateness_fine": self.lateness_fine,
+            "forbidden_site_fine": self.forbidden_site_fine,
             "forbidden_sites_metric_code": self.forbidden_sites_metric_code,
         }
 

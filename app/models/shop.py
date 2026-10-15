@@ -38,6 +38,11 @@ class ShopItem(Base, TimestampMixin):
     stock_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
     #: Лимит на одного оператора в течение месяца. NULL - без ограничения.
     per_user_monthly_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    #: Сколько штук на всех за календарный месяц. NULL - без ограничения.
+    monthly_stock: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    #: Сколько бонус стоит компании в тенге: идёт в бюджет магазина на месяц
+    #: (GamificationSettings.shop_monthly_budget_tenge). NULL или 0 - бесплатный для компании.
+    cost_tenge: Mapped[int | None] = mapped_column(Integer, nullable=True)
     #: Требуется ли согласование супервайзера. Оставлено настраиваемым:
     #: часть бонусов (например, бейдж «Звезда недели») может выдаваться сразу.
     requires_approval: Mapped[bool] = mapped_column(Boolean, default=True)

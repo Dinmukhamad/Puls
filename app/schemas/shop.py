@@ -19,6 +19,8 @@ class ShopItemOut(ORMModel):
     is_active: bool
     stock_limit: int | None = None
     per_user_monthly_limit: int | None = None
+    monthly_stock: int | None = None
+    cost_tenge: int | None = None
     requires_approval: bool = True
     sort_order: int = 100
 
@@ -32,6 +34,9 @@ class ShopItemForOperator(ShopItemOut):
     )
     blocked_reason: str | None = Field(
         default=None, description="Причина недоступности, если покупка невозможна"
+    )
+    month_left: int | None = Field(
+        default=None, description="Сколько штук осталось на этот месяц; null - без ограничения"
     )
 
 
@@ -48,6 +53,8 @@ class ShopItemCreate(BaseModel):
     description: str | None = None
     stock_limit: int | None = Field(default=None, ge=0)
     per_user_monthly_limit: int | None = Field(default=None, ge=1)
+    monthly_stock: int | None = Field(default=None, ge=0)
+    cost_tenge: int | None = Field(default=None, ge=0, le=10000000)
     requires_approval: bool = True
     is_active: bool = True
     sort_order: int = 100
@@ -59,6 +66,8 @@ class ShopItemUpdate(BaseModel):
     description: str | None = None
     stock_limit: int | None = Field(default=None, ge=0)
     per_user_monthly_limit: int | None = Field(default=None, ge=1)
+    monthly_stock: int | None = Field(default=None, ge=0)
+    cost_tenge: int | None = Field(default=None, ge=0, le=10000000)
     requires_approval: bool | None = None
     is_active: bool | None = None
     sort_order: int | None = None

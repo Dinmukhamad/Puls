@@ -41,7 +41,7 @@ export function StoreAdminPage() {
     <div className="configuration-cards">{visible.map((item) => <Card key={item.id} title={item.title} action={<Badge tone={item.is_active ? "success" : "neutral"}>{item.is_active ? "В каталоге" : "В архиве"}</Badge>} className="configuration-item">
       <div className="configuration-price">{coins(item.price)} <span>коинов</span></div>
       {item.description && <p className="configuration-description">{item.description}</p>}
-      <dl className="configuration-properties"><dt>Всего выдач</dt><dd>{item.stock_limit ?? "Без лимита"}</dd><dt>На сотрудника в месяц</dt><dd>{item.per_user_monthly_limit ?? "Без лимита"}</dd><dt>Одобрение</dt><dd>{item.requires_approval ? "Руководителем" : "Автоматически"}</dd></dl>
+      <dl className="configuration-properties"><dt>Всего выдач</dt><dd>{item.stock_limit ?? "Без лимита"}</dd><dt>На сотрудника в месяц</dt><dd>{item.per_user_monthly_limit ?? "Без лимита"}</dd><dt>Всем за месяц</dt><dd>{item.monthly_stock ?? "Без лимита"}</dd><dt>Стоит компании</dt><dd>{item.cost_tenge ? `${coins(item.cost_tenge)} ₸` : "Ничего"}</dd><dt>Одобрение</dt><dd>{item.requires_approval ? "Руководителем" : "Автоматически"}</dd></dl>
       {atLeast("head") && <div className="configuration-actions"><Button onClick={() => setEditor(item)}>Изменить</Button><Button variant="plain" onClick={() => setArchive(item)}>{item.is_active ? "В архив" : "Восстановить"}</Button></div>}
     </Card>)}</div>
     {query.isSuccess && <Pagination page={currentPage} size={size} total={items.length} onChange={(p) => filter("page", String(p))} />}
@@ -57,12 +57,14 @@ function StoreItemEditor({ item, onClose }: { item?: ShopItemOut; onClose: () =>
   const [price, setPrice] = useState(item ? String(item.price) : "");
   const [stock, setStock] = useState(item?.stock_limit != null ? String(item.stock_limit) : "");
   const [monthly, setMonthly] = useState(item?.per_user_monthly_limit != null ? String(item.per_user_monthly_limit) : "");
+  const [monthStock, setMonthStock] = useState(item?.monthly_stock != null ? String(item.monthly_stock) : "");
+  const [tenge, setTenge] = useState(item?.cost_tenge != null ? String(item.cost_tenge) : "");
   const [approval, setApproval] = useState(item?.requires_approval ?? true);
   const [active, setActive] = useState(item?.is_active ?? true);
   const [sort, setSort] = useState(String(item?.sort_order ?? 100));
   const client = useQueryClient(); const toast = useToast();
   const save = useMutation({ mutationFn: () => {
-    const data: StoreItemInput = { code: code.trim(), title: title.trim(), description: description.trim() || null, price: Number(price), stock_limit: stock === "" ? null : Number(stock), per_user_monthly_limit: monthly === "" ? null : Number(monthly), requires_approval: approval, is_active: active, sort_order: Number(sort) };
+    const data: StoreItemInput = { code: code.trim(), title: title.trim(), description: description.trim() || null, price: Number(price), stock_limit: stock === "" ? null : Number(stock), per_user_monthly_limit: monthly === "" ? null : Number(monthly), monthly_stock: monthStock === "" ? null : Number(monthStock), cost_tenge: tenge === "" ? null : Number(tenge), requires_approval: approval, is_active: active, sort_order: Number(sort) };
     if (item) { const { code: immutableCode, ...changes } = data; void immutableCode; return configuration.updateItem(item.id, changes); }
     return configuration.createItem(data);
   }, onSuccess: () => { void client.invalidateQueries({ queryKey: ["configuration-store"] }); void client.invalidateQueries({ queryKey: ["shop-catalog"] }); void client.invalidateQueries({ queryKey: ["shop"] }); toast.success("Бонус сохранён"); onClose(); } });
@@ -74,6 +76,7 @@ function StoreItemEditor({ item, onClose }: { item?: ShopItemOut; onClose: () =>
       <label className="field"><span className="field__label">Описание и условия выдачи</span><textarea className="input" rows={3} maxLength={5000} value={description} onChange={(e) => setDescription(e.target.value)} /></label>
       <div className="configuration-form-grid"><label className="field"><span className="field__label">Цена в коинах</span><input className="input" type="number" required min={1} step={1} value={price} onChange={(e) => setPrice(e.target.value)} /></label><label className="field"><span className="field__label">Порядок в каталоге</span><input className="input" type="number" required step={1} value={sort} onChange={(e) => setSort(e.target.value)} /></label></div>
       <div className="configuration-form-grid"><label className="field"><span className="field__label">Общий лимит выдач</span><input className="input" type="number" min={0} step={1} placeholder="Без лимита" value={stock} onChange={(e) => setStock(e.target.value)} /><span className="muted micro">За всё время, включая уже выданные бонусы. Пусто — без лимита.</span></label><label className="field"><span className="field__label">На сотрудника в месяц</span><input className="input" type="number" min={1} step={1} placeholder="Без лимита" value={monthly} onChange={(e) => setMonthly(e.target.value)} /></label></div>
+      <div className="configuration-form-grid"><label className="field"><span className="field__label">Штук на всех за месяц</span><input className="input" type="number" min={0} step={1} placeholder="Без лимита" value={monthStock} onChange={(e) => setMonthStock(e.target.value)} /><span className="muted micro">Обновляется 1-го числа. Пусто — без лимита.</span></label><label className="field"><span className="field__label">Стоимость для компании, ₸</span><input className="input" type="number" min={0} step={1} placeholder="Ничего не стоит" value={tenge} onChange={(e) => setTenge(e.target.value)} /><span className="muted micro">Идёт в бюджет магазина на месяц (Настройки → Правила).</span></label></div>
       <label className="configuration-toggle"><input type="checkbox" checked={approval} onChange={(e) => setApproval(e.target.checked)} /><span><strong>Требовать одобрение</strong><span>Заявку проверит руководитель перед списанием коинов.</span></span></label>
       {!item && <label className="configuration-toggle"><input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} /><span><strong>Показать в каталоге</strong><span>Сотрудники смогут подать заявку сразу после сохранения.</span></span></label>}
     </form>

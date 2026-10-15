@@ -46,7 +46,7 @@ async def test_dashboard_exposes_all_metric_histories_without_filling_gaps(
     assert quality_out["description"] == quality.description
     assert quality_out["trend"] == [None] * 6 + [90, 70]
     late = next(m for m in report["metrics"] if m["code"] == "lateness")
-    assert late["penalty_per_unit"] == 5
+    assert late["penalty_per_unit"] == 0  # A direct fine now (docs/COIN_ECONOMY.md)
     assert report["lateness_metric_code"] == "lateness"
     current.status = WeekStatus.CALCULATED
     await session.commit()

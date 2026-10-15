@@ -182,6 +182,6 @@ async def test_gratitude_uses_configured_bonus(
     )
     await session.commit()
 
-    assert tx.amount == 3
+    assert tx.amount == 30
     assert tx.tx_type == TxType.DRIVER_GRATITUDE
     assert "1247" in tx.reason

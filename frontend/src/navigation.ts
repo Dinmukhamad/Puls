@@ -49,7 +49,8 @@ const motivation = (supervisor = false) => section("motivation", "Мотивац
   tab("/admin/levels", "Уровни"), tab("/admin/settings?tab=badges", "Достижения"),
   tab("/admin/store", "Товары магазина"), tab("/admin/requests", "Заказы и выдача"),
   tab("/admin/games?tab=wheel", "Лента удачи"), tab("/admin/games?tab=raffles", "Розыгрыши"),
-], ["/admin/levels", "/admin/store", "/admin/requests", "/admin/games", "/shop", "/games", ...(supervisor ? ["/rating"] : [])]);
+  tab("/admin/economy", "Экономика коинов"),
+], ["/admin/levels", "/admin/store", "/admin/requests", "/admin/games", "/admin/economy", "/shop", "/games", ...(supervisor ? ["/rating"] : [])]);
 const coinHistory = section("coin_history", "История коинов", CoinIcon, [tab("/admin/wallet", "История коинов")]);
 const staffHome = section("home", "Главная", HomeIcon, [tab("/admin/summary", "Сводка"), ...personal]);
 
@@ -104,7 +105,7 @@ export function routeSection(pathname: string, search = "", role: Role = "operat
     ["training", ["/training", "/simulator"]], ["rewards", ["/shop", "/games"]],
     ["overview", ["/admin/summary"]], ["team", ["/admin/users", "/admin/groups", "/admin/operators"]],
     ["analytics", ["/analytics"]], ["performance", ["/admin/periods"]], ["learning_admin", ["/admin/learning"]],
-    ["motivation", ["/admin/wallet", "/admin/levels", "/admin/store", "/admin/requests", "/admin/games"]],
+    ["motivation", ["/admin/wallet", "/admin/levels", "/admin/store", "/admin/requests", "/admin/games", "/admin/economy"]],
     ["reports", ["/reports"]], ["system", ["/admin/audit"]],
   ];
   return routes.find(([, paths]) => paths.some(matches))?.[0];

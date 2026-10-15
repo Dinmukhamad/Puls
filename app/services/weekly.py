@@ -39,6 +39,7 @@ from app.models.settings import GamificationSettings
 from app.models.user import User
 from app.services import badges as badges_service
 from app.services import coins as coins_service
+from app.services import economy
 from app.services.rules import get_rules
 from app.services.scoring import points_to_coins, score_week
 
@@ -299,7 +300,11 @@ async def calculate_week(
 
     await session.flush()
 
-    nomination_bonus = await _award_nominations(session, week, results, rules)
+    # Once a month the places and nominations are played for among everyone (services/months.py);
+    # the weeks then pay points, discipline and fines only.
+    nomination_bonus = (
+        {} if monthly(rules) else await _award_nominations(session, week, results, rules)
+    )
     for result in results:
         result.coins_nomination_bonus = nomination_bonus.get(result.user_id, 0)
         result.coins_total = (
@@ -333,6 +338,18 @@ async def _reset_week_results(session: AsyncSession, week_id: int) -> None:
         delete(OperatorWeekResult).where(OperatorWeekResult.week_id == week_id)
     )
     await session.flush()
+
+
+def monthly(rules: GamificationSettings) -> bool:
+    """Places and nominations are played for once a month, not every week."""
+    return rules.contest_period == "month"
+
+
+def week_fine(result: OperatorWeekResult, rules: GamificationSettings) -> int:
+    """The week's direct fine: each lateness and each forbidden site costs coins."""
+    lateness = max(0, round(result.lateness_count or 0))
+    sites = max(0, round(result.forbidden_sites_count or 0))
+    return lateness * max(0, rules.lateness_fine) + sites * max(0, rules.forbidden_site_fine)
 
 
 def discipline_bonuses(
@@ -370,7 +387,8 @@ def _apply_coin_preview(
 ) -> None:
     """Заполняет расчётные поля коинов без проведения операций (шаги 4-5 п. 7)."""
     result.coins_from_points = points_to_coins(result.final_points, rules.points_per_coin)
-    result.coins_rank_bonus = rules.rank_bonus(result.rank)
+    result.coins_rank_bonus = 0 if monthly(rules) else rules.rank_bonus(result.rank)
+    result.coins_fine = week_fine(result, rules)
 
     lateness, sites = discipline_bonuses(result, rules, set(raw_values))
     result.coins_discipline_bonus = lateness + sites
@@ -569,6 +587,12 @@ async def close_week(
     badges_awarded = await badges_service.evaluate_for_week(session, week)
     awarded += int(await session.scalar(bonus_query) or 0) - bonus_before
 
+    # The month's last week closes the month: its places and nominations are paid.
+    if monthly(rules):
+        from app.services import months
+
+        await months.close_after_week(session, week, actor_id=actor_id)
+
     return WeekCloseReport(
         week_id=week.id,
         week_label=week.label,
@@ -658,6 +682,30 @@ async def _post_week_transactions(
             f"Номинация «{title}» за неделю {week.label}",
             f"nomination:{winner.nomination_id}",
         )
+
+    # The fine goes last, after the week's coins: the operator sees both lines.
+    fine = week_fine(result, rules)
+    lateness = max(0, round(result.lateness_count or 0))
+    sites = max(0, round(result.forbidden_sites_count or 0))
+    parts = []
+    if lateness and rules.lateness_fine:
+        parts.append(f"опоздания {lateness} × {rules.lateness_fine}")
+    if sites and rules.forbidden_site_fine:
+        parts.append(f"посторонние сайты {sites} × {rules.forbidden_site_fine}")
+    reason = (
+        f"Штраф за неделю {week.label}: {', '.join(parts)}." if parts
+        else "Остаток прошлого штрафа."
+    )
+    # The week's report counts coins net of fines, as the ledger of the week does.
+    total -= await economy.collect_fine(
+        session,
+        user_id=result.user_id,
+        amount=fine,
+        reason=reason,
+        key=f"{prefix}:fine",
+        week_id=week.id,
+        actor_id=actor_id,
+    )
 
     return total
 

@@ -1,4 +1,5 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import type { ReactNode } from "react";
 import { Navigate, useSearchParams } from "react-router-dom";
 
 import { ApiError } from "../api/client";
@@ -15,11 +16,13 @@ import {
   ErrorState,
   Pagination,
   RowsSkeleton,
+  SegmentedControl,
   Skeleton,
 } from "../components/ui";
 import { GlassSurface } from "../components/GlassSurface";
 import { WeekPicker } from "../components/WeekPicker";
 import { WEEK_STATUS_LABELS, coins, dateOnly, points } from "../utils/format";
+import { MonthContest } from "./MonthContest";
 import "./rating.css";
 
 const MEDAL_LABEL: Record<string, string> = {
@@ -29,18 +32,23 @@ const MEDAL_LABEL: Record<string, string> = {
 };
 
 export function RatingPage() {
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   if (params.get("tab") === "progress") return <Navigate to="/progress" replace />;
-  return <Leaderboard />;
+  // The contest is monthly (docs/COIN_ECONOMY.md); the weeks stay one tap away.
+  const view = params.get("view") === "weeks" || params.has("week") ? "weeks" : "month";
+  const toggle = <SegmentedControl label="Период рейтинга" value={view} options={[{ value: "month", label: "Конкурс месяца" }, { value: "weeks", label: "Недели" }]} onChange={(value) => { const next = new URLSearchParams(params); next.delete("week"); next.delete("page"); if (value === "weeks") next.set("view", "weeks"); else next.delete("view"); setParams(next); }} />;
+  return view === "month"
+    ? <div className="stack"><RatingHeading month />{toggle}<MonthContest /></div>
+    : <Leaderboard toggle={toggle} />;
 }
 
-function RatingHeading({ personal }: { personal?: boolean }) {
+function RatingHeading({ personal, month }: { personal?: boolean; month?: boolean }) {
   return <header className="page-head"><div><h1 className="page-title">Рейтинг</h1>
-    <p className="page-subtitle">{personal ? "Ваш результат по неделям" : "Результаты команды по неделям"}</p>
+    <p className="page-subtitle">{month ? "Места и номинации месяца среди всех операторов" : personal ? "Ваш результат по неделям" : "Результаты команды по неделям"}</p>
   </div></header>;
 }
 
-function Leaderboard() {
+function Leaderboard({ toggle }: { toggle?: ReactNode }) {
   const [params, setParams] = useSearchParams();
   const selectedWeek = Number(params.get("week"));
   const weekId = Number.isInteger(selectedWeek) && selectedWeek > 0 ? selectedWeek : undefined;
@@ -93,6 +101,7 @@ function Leaderboard() {
   return (
     <div className="stack">
       <RatingHeading personal={personal} />
+      {toggle}
       {/* Переключатель недели: единственный фильтр рейтинга. */}
       <GlassSurface variant="regular" className="filterbar rating-filters">
         <WeekPicker label="Период" weeks={weeks.data ?? []} value={weekId}
@@ -105,7 +114,7 @@ function Leaderboard() {
       {personal && <PersonalRatingCard data={data} />}
 
       {!personal && data.podium.length > 0 && (
-        <Card title="Топ-3 недели">
+        <Card title="Топ-3 недели" subtitle="Места недели для информации: призы разыгрываются раз в месяц">
           <ol className="podium">
             {data.podium.map((entry) => (
               <PodiumPlace key={entry.user_id} entry={entry} />

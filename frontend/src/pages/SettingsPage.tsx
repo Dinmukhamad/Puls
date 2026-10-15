@@ -69,20 +69,30 @@ function RulesSection() {
 const ruleGroups: { title: string; subtitle: string; fields: FieldSpec[] }[] = [
   { title: "Баллы и коины", subtitle: "Баллы конкурса переводятся в коины после закрытия периода", fields: [
     { key: "points_per_coin", label: "Баллов за 1 коин", type: "number", required: true, min: .000001, step: "any" },
-    { key: "rank1_bonus", label: "Бонус за 1 место", type: "number", required: true, min: 0 },
-    { key: "rank2_bonus", label: "Бонус за 2 место", type: "number", required: true, min: 0 },
-    { key: "rank3_bonus", label: "Бонус за 3 место", type: "number", required: true, min: 0 },
+    { key: "rank1_bonus", label: "Бонус за 1 место конкурса", type: "number", required: true, min: 0 },
+    { key: "rank2_bonus", label: "Бонус за 2 место конкурса", type: "number", required: true, min: 0 },
+    { key: "rank3_bonus", label: "Бонус за 3 место конкурса", type: "number", required: true, min: 0 },
+  ] },
+  { title: "Штрафы", subtitle: "Списываются при закрытии недели, после её начислений. Если коинов не хватает, остаток спишется при следующем закрытии", fields: [
+    { key: "lateness_fine", label: "За каждое опоздание", type: "number", required: true, min: 0 },
+    { key: "forbidden_site_fine", label: "За каждый посторонний сайт", type: "number", required: true, min: 0 },
   ] },
   { title: "Бонусы", subtitle: "Дополнительные начисления в коинах", fields: [
     { key: "no_lateness_bonus", label: "Неделя без опозданий", type: "number", required: true, min: 0 },
     { key: "no_forbidden_sites_bonus", label: "Без посторонних сайтов", type: "number", required: true, min: 0 },
     { key: "nomination_bonus_default", label: "Бонус номинации по умолчанию", type: "number", required: true, min: 0 },
     { key: "driver_gratitude_bonus", label: "Благодарность водителя", type: "number", required: true, min: 0 },
+    { key: "gratitude_monthly_limit", label: "Благодарностей в месяц на оператора", type: "number", required: true, min: 0, hint: "0 — без ограничения" },
     { key: "nomination_min_participants", label: "Минимум участников для номинаций", type: "number", required: true, min: 0 },
   ] },
   { title: "Ручные операции", subtitle: "Ограничения для начислений и списаний сотрудниками", fields: [
     { key: "manual_max_abs_amount", label: "Максимум коинов за одну операцию", type: "number", required: true, min: 1 },
     { key: "manual_reason_min_length", label: "Минимальная длина комментария", type: "number", required: true, min: 0, hint: "Число символов. Причина операции остаётся обязательной." },
+    { key: "manual_monthly_limit", label: "Начислений супервайзера в месяц", type: "number", required: true, min: 0, hint: "Сумма ручных начислений всем операторам. 0 — без ограничения. Руководитель не ограничен." },
+  ] },
+  { title: "Магазин", subtitle: "Бонусы с денежной стоимостью продаются, пока не исчерпан бюджет месяца", fields: [
+    { key: "coin_rate_tenge", label: "Тенге за 1 коин", type: "number", required: true, min: .01, step: "any", hint: "Для пересчёта цен и отчёта «Экономика месяца»" },
+    { key: "shop_monthly_budget_tenge", label: "Бюджет магазина на месяц, ₸", type: "number", required: true, min: 0, hint: "0 — без бюджета" },
   ] },
 ];
 
@@ -104,6 +114,9 @@ function RulesEditor({ initial, metrics }: { initial: Rules; metrics: Definition
     <p className="configuration-note">Изменения применяются к следующим расчётам. Опубликованные итоги и начисленные коины сохраняются.</p>
     {!editable && <p className="configuration-note">Просмотр настроек. Изменять правила могут руководитель и администратор.</p>}
     {ruleGroups.map((group) => <Card key={group.title} title={group.title} subtitle={group.subtitle}><div className="configuration-form-grid">{group.fields.map(field)}</div></Card>)}
+    <Card title="Конкурс" subtitle="Баллы, дисциплина и штрафы начисляются каждую неделю"><div className="configuration-form-grid">
+      {field({ key: "contest_period", label: "Места и номинации", type: "select", required: true, options: [{ value: "month", label: "Раз в месяц, среди всех операторов" }, { value: "week", label: "Каждую неделю" }], hint: "Неделя относится к месяцу своего четверга. Месяц закрывается вместе с его последней неделей." })}
+    </div></Card>
     <Card title="Дисциплина и видимость"><div className="configuration-form-grid">
       {field({ key: "lateness_metric_code", label: "Показатель опозданий", type: "select", options: metricOptions, required: true })}
       {field({ key: "forbidden_sites_metric_code", label: "Показатель посторонних сайтов", type: "select", options: metricOptions, required: true })}

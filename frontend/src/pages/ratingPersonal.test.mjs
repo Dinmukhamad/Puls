@@ -17,7 +17,7 @@ const built = await build({
 const module = { exports: {} };
 new Function("require", "module", "exports", built.outputFiles[0].text)((name) => ({
   "react-router-dom": {
-    useSearchParams: () => [new URLSearchParams("page=99"), () => {}],
+    useSearchParams: () => [new URLSearchParams("page=99&view=weeks"), () => {}],
     Navigate: () => null,
   },
   "@tanstack/react-query": {

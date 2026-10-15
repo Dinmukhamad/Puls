@@ -166,6 +166,8 @@ class OperatorWeekResult(Base, TimestampMixin):
     coins_discipline_bonus: Mapped[int] = mapped_column(Integer, default=0)
     coins_nomination_bonus: Mapped[int] = mapped_column(Integer, default=0)
     coins_total: Mapped[int] = mapped_column(Integer, default=0)
+    #: Прямой штраф недели: опоздания и посторонние сайты (списывается отдельно от coins_total).
+    coins_fine: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
     lateness_count: Mapped[float] = mapped_column(Float, default=0.0)
     forbidden_sites_count: Mapped[float] = mapped_column(Float, default=0.0)
@@ -194,7 +196,7 @@ class NominationDefinition(Base, TimestampMixin):
     require_zero: Mapped[bool] = mapped_column(Boolean, default=False)
     #: Минимальное значение показателя, ниже которого номинация не присуждается.
     min_value: Mapped[float | None] = mapped_column(Float, nullable=True)
-    coins_reward: Mapped[int] = mapped_column(Integer, default=5)
+    coins_reward: Mapped[int] = mapped_column(Integer, default=100)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=100)
 
@@ -219,3 +221,75 @@ class NominationWinner(Base, TimestampMixin):
     nomination: Mapped[NominationDefinition] = relationship("NominationDefinition")
     user: Mapped[User] = relationship("User")
     week: Mapped[ContestWeek] = relationship("ContestWeek")
+
+
+class ContestMonth(Base, TimestampMixin):
+    """Месяц конкурса: места и номинации среди всех операторов за недели месяца.
+
+    Неделя относится к месяцу своего четверга, так что каждая неделя - ровно в одном месяце.
+    """
+
+    __tablename__ = "contest_months"
+    __table_args__ = (UniqueConstraint("year", "month", name="uq_contest_month"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    year: Mapped[int] = mapped_column(Integer, nullable=False)
+    month: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[WeekStatus] = mapped_column(
+        String(16), default=WeekStatus.OPEN, nullable=False, index=True
+    )
+    calculated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    closed_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    rules_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSONType, nullable=True)
+
+    @property
+    def label(self) -> str:
+        return f"{self.year}-{self.month:02d}"
+
+
+class OperatorMonthResult(Base, TimestampMixin):
+    """Итог оператора за месяц: сумма баллов недель, место и бонусы месяца."""
+
+    __tablename__ = "operator_month_results"
+    __table_args__ = (UniqueConstraint("month_id", "user_id", name="uq_month_user_result"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    month_id: Mapped[int] = mapped_column(
+        ForeignKey("contest_months.id", ondelete="CASCADE"), index=True
+    )
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    points: Mapped[float] = mapped_column(Float, default=0.0, index=True)
+    weeks: Mapped[int] = mapped_column(Integer, default=0)
+    rank: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    coins_rank_bonus: Mapped[int] = mapped_column(Integer, default=0)
+    coins_nomination_bonus: Mapped[int] = mapped_column(Integer, default=0)
+    #: Средние значения показателей за недели месяца (для номинаций) и прочее для экрана.
+    breakdown: Mapped[dict[str, Any] | None] = mapped_column(JSONType, nullable=True)
+
+    user: Mapped[User] = relationship("User")
+
+
+class MonthNominationWinner(Base, TimestampMixin):
+    """Победитель номинации месяца."""
+
+    __tablename__ = "month_nomination_winners"
+    __table_args__ = (
+        UniqueConstraint("month_id", "nomination_id", name="uq_month_nomination"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    month_id: Mapped[int] = mapped_column(
+        ForeignKey("contest_months.id", ondelete="CASCADE"), index=True
+    )
+    nomination_id: Mapped[int] = mapped_column(
+        ForeignKey("nomination_definitions.id", ondelete="CASCADE")
+    )
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    value: Mapped[float] = mapped_column(Float, default=0.0)
+    coins_awarded: Mapped[int] = mapped_column(Integer, default=0)
+
+    nomination: Mapped[NominationDefinition] = relationship("NominationDefinition")
+    user: Mapped[User] = relationship("User")

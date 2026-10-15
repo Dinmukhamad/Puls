@@ -21,6 +21,9 @@ class WheelConfig(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     daily_spins: Mapped[int] = mapped_column(Integer, default=1)
+    #: Сколько платных спинов в день сверх бесплатных и цена каждого: 0 - платных нет.
+    paid_spins: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    spin_cost: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     segments: Mapped[list] = mapped_column(JSON, default=list)
 
 
@@ -31,6 +34,8 @@ class WheelSpin(Base, TimestampMixin):
     day: Mapped[date] = mapped_column(Date, index=True)
     request_key: Mapped[str] = mapped_column(String(180), unique=True)
     segment: Mapped[int] = mapped_column(Integer)
+    #: Цена платного спина; 0 - бесплатный спин дня.
+    cost: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     reward: Mapped[dict] = mapped_column(JSON)
     segments: Mapped[list] = mapped_column(JSON)
 
@@ -45,6 +50,8 @@ class Raffle(Base, TimestampMixin):
     status: Mapped[str] = mapped_column(String(20), default="draft", index=True)
     legacy_reward: Mapped[int] = mapped_column("xp_reward", Integer, default=0)
     coins_reward: Mapped[int] = mapped_column(Integer, default=0)
+    #: Цена билета: списывается при входе в розыгрыш. 0 - вход бесплатный.
+    entry_cost: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     winner_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     drawn_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 

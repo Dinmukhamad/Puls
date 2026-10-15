@@ -138,3 +138,8 @@
   .definition-card__footer > .btn { min-height: 44px; }
   .definition-details__facts > div { grid-template-columns: minmax(80px, .6fr) minmax(0, 1.4fr); gap: 12px; }
 }
+
+/* Экономика коинов: выпуск и сжигание бок о бок, на телефоне — друг под другом. */
+.economy-split { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: var(--sp-4); }
+.month-contest__head { display: flex; flex-wrap: wrap; align-items: end; gap: var(--sp-3) var(--sp-5); }
+.month-contest__head p { margin: 0; }

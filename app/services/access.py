@@ -180,6 +180,13 @@ def request_sections(path: str, method: str, role: Role | None = None) -> tuple[
             "learning_admin",
             "reports",
         )
+    # The monthly contest is part of the rating; its closing, of the weekly results.
+    if path.startswith("/contest/"):
+        return ("results", "overview", "performance", "motivation")
+    if path.startswith("/admin/contest/"):
+        return ("performance",)
+    if path.startswith("/admin/economy"):
+        return ("motivation", "performance")
     if path == "/rating/weeks":
         return ("results", "overview", "team", "analytics", "performance", "reports")
     if path.startswith("/rating"):

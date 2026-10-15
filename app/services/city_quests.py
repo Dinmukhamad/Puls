@@ -26,7 +26,8 @@ from app.services.learning import lock_learner
 from app.services.rules import write_audit
 
 SLOTS = 3
-COINS = 10
+#: Coins for a right answer (docs/COIN_ECONOMY.md: about 100 a month of the 1000).
+COINS = 3
 # Who asks, on the map: a taxi at the depot, a caller at the CRM centre, the guide on the plaza.
 GIVERS = ("driver", "client", "guide")
 BANK = [

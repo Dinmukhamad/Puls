@@ -12,6 +12,7 @@ from app.schemas.shop import (
     ShopRequestCreate,
     ShopRequestOut,
 )
+from app.services import economy
 from app.services import shop as shop_service
 
 router = APIRouter(prefix="/shop", tags=["Магазин бонусов"])
@@ -46,6 +47,8 @@ async def catalog(session: SessionDep, user: CurrentUser) -> ShopCatalogOut:
                         "is_active",
                         "stock_limit",
                         "per_user_monthly_limit",
+                        "monthly_stock",
+                        "cost_tenge",
                         "requires_approval",
                         "sort_order",
                     )
@@ -53,6 +56,7 @@ async def catalog(session: SessionDep, user: CurrentUser) -> ShopCatalogOut:
                 can_buy=reason is None,
                 missing_coins=missing,
                 blocked_reason=reason,
+                month_left=await economy.month_stock_left(session, item),
             )
         )
 
