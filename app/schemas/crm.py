@@ -42,6 +42,9 @@ class AppealInput(BaseModel):
             "scenario_checks",
             "scenario_outcome",
             "scenario_next_action",
+            "scenario_diagnostics",
+            "scenario_office",
+            "scenario_visit_time",
         }
         if set(value) - allowed or any(len(v) > 2000 for v in value.values()):
             raise ValueError("Некорректные дополнительные поля")

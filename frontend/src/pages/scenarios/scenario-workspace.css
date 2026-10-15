@@ -1,0 +1,45 @@
+.work-sites.work-sites--scenario:not([data-site=oktell]) { padding-right: 0; padding-bottom: 0; }
+.work-sites--scenario .crm-context-help { display: none; }
+.work-sites--scenario .work-sites-heading { padding-bottom: 10px; }
+.scenario-workspace-note { margin: 0 26px 16px; padding: 16px 18px; border: 1px solid #d9e2ef; border-radius: 15px; color: #253955; background: #fff; box-shadow: 0 3px 12px #24395808; font: 13px/1.5 Arial, Helvetica, sans-serif; }
+.scenario-workspace-note p { margin: 0; }
+.scenario-workspace-note__message { display: flex; align-items: flex-start; gap: 12px; }
+.scenario-workspace-note__message > div { min-width: 0; }
+.scenario-workspace-note__avatar { display: grid; place-items: center; flex: 0 0 36px; height: 36px; border-radius: 11px; color: #47658d; background: #edf3fa; }
+.scenario-workspace-note__eyebrow { display: block; margin-bottom: 4px; color: #62728b; font-size: 11px; }
+.scenario-workspace-note__message p { color: #263852; font-size: 14px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.scenario-workspace-note__task { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; margin-top: 12px; padding-top: 10px; border-top: 1px solid #edf0f5; }
+.scenario-workspace-note__task > p { flex: 1 1 350px; color: #536783; }
+.scenario-workspace-note__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.scenario-workspace-note__actions a { color: #355bbb; font-weight: 700; text-decoration: none; padding: 5px 0; }
+.scenario-workspace-note__saved { color: #39715e; font-size: 11px; }
+.scenario-workspace-note__status { margin-top: 9px !important; color: #62728b; font-size: 12px; }
+.scenario-workspace-note__error { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; color: #a22e43; margin-top: 10px; }
+.scenario-workspace-note--error { color: #a22e43; }
+.work-sites .scenario-workspace-note button { width: auto; min-height: 36px; border: 1px solid #cdd9e9; border-radius: 8px; padding: 7px 11px; background: #fff; color: #355bbb; font: inherit; font-weight: 600; }
+.scenario-workspace-note__check { margin-top: 10px; }
+.scenario-workspace-classifier { margin-top: 14px; padding-top: 12px; border-top: 1px solid #d9e2ef; }
+.scenario-workspace-classifier summary { cursor: pointer; font-weight: 700; padding: 8px 0; }
+.scenario-workspace-classifier p { margin: 9px 0; }
+.scenario-workspace-classifier a { color: #355bbb; }
+.scenario-classifier-table { max-width: 100%; overflow-x: auto; }
+.scenario-classifier-table table { border-collapse: collapse; width: 100%; font-size: 13px; }
+.scenario-classifier-table th, .scenario-classifier-table td { text-align: left; padding: 9px; border: 1px solid #d9e2ef; }
+.scenario-workspace-classifier form { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; margin-top: 12px; }
+.scenario-workspace-classifier label { display: grid; gap: 6px; flex: 1 1 260px; min-width: 0; }
+.scenario-workspace-classifier select { width: 100%; min-width: 0; padding: 8px; border: 1px solid #cdd9e9; border-radius: 8px; background: #fff; color: #253955; }
+.scenario-workspace-classifier button:disabled { opacity: .5; }
+.work-sites--scenario .scenario-crm-proof--compact { margin: 18px 0; padding: 16px; border: 1px solid #dce3ef; border-radius: 10px; background: #f7f9fc; color: #30496e; }
+.scenario-crm-proof--compact > p { margin: 0 0 14px; font-size: 12px; color: #60718e; }
+.work-sites--scenario .scenario-crm-proof--compact .crm-field { display: grid; grid-template-columns: 1fr; gap: 6px; margin: 0 0 13px; }
+.work-sites--scenario .scenario-crm-proof--compact .crm-field:last-child { margin-bottom: 0; }
+.work-sites--scenario .scenario-crm-proof--compact .crm-field > span { text-align: left; padding: 0; }
+.work-sites--scenario .scenario-crm-proof--compact select { width: 100%; margin: 0; }
+@media(max-width: 700px) {
+  .scenario-workspace-note { margin: 0 6px 12px; padding: 14px 12px; }
+  .scenario-workspace-note__message { gap: 9px; }
+  .scenario-workspace-note__message p { font-size: 13px; }
+  .scenario-workspace-note__avatar { flex-basis: 30px; height: 30px; border-radius: 9px; }
+  .scenario-workspace-note__actions { width: 100%; justify-content: space-between; }
+  .scenario-workspace-note__task > p { flex-basis: 100%; }
+}

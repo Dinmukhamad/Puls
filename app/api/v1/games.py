@@ -81,13 +81,13 @@ def local_day():
 
 async def spins_today(session, user_id, today):
     """(free, paid) spins the operator has made today."""
-    rows = (await session.execute(
-        select(WheelSpin.cost > 0, func.count(WheelSpin.id))
+    # Counting in one aggregate also works on PostgreSQL: grouping by two separate
+    # ``cost > 0`` expressions binds their zeroes to different SQL parameters.
+    total, paid = (await session.execute(
+        select(func.count(WheelSpin.id), func.count(WheelSpin.id).filter(WheelSpin.cost > 0))
         .where(WheelSpin.user_id == user_id, WheelSpin.day == today)
-        .group_by(WheelSpin.cost > 0)
-    )).all()
-    counts = {bool(paid): int(n) for paid, n in rows}
-    return counts.get(False, 0), counts.get(True, 0)
+    )).one()
+    return int(total - paid), int(paid)
 
 
 @router.get("/games/wheel")

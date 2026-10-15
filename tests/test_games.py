@@ -1,8 +1,9 @@
 import asyncio
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import asyncpg
 
 from app.api.v1 import games as games_api
 from app.models.coin import CoinTransaction
@@ -78,6 +79,55 @@ async def test_parallel_spins_cannot_exceed_daily_limit(client, session, operato
     )
     assert sorted(response.status_code for response in responses) == [200, 409]
     assert await session.scalar(select(func.count(WheelSpin.id))) == 1
+
+
+async def test_daily_spin_counts_are_scoped_to_user_and_day(client, session, operator, head):
+    today = games_api.local_day()
+    assert await games_api.spins_today(session, operator.id, today) == (0, 0)
+    entries = [
+        (operator.id, today, 0),
+        (operator.id, today, 0),
+        (operator.id, today, 10),
+        (operator.id, today, 50),
+        (operator.id, today - timedelta(days=1), 0),
+        (operator.id, today - timedelta(days=1), 10),
+        (head.id, today, 0),
+        (head.id, today, 10),
+    ]
+    session.add_all([
+        WheelSpin(user_id=user_id, day=day, cost=cost, request_key=f"daily-count-{index}",
+                  segment=0, reward={"title": "Без награды", "coins": 0}, segments=[])
+        for index, (user_id, day, cost) in enumerate(entries)
+    ])
+    await session.commit()
+    assert await games_api.spins_today(session, operator.id, today) == (2, 2)
+    assert await games_api.spins_today(session, head.id, today) == (1, 1)
+    assert await games_api.spins_today(session, operator.id, today - timedelta(days=1)) == (1, 1)
+    assert await games_api.spins_today(session, operator.id, today + timedelta(days=1)) == (0, 0)
+
+    origin = "https://gamification-web.onrender.com"
+    headers = {**auth(await login(client, operator.login)), "Origin": origin}
+    response = await client.get("/api/v1/games/wheel", headers=headers)
+    assert response.status_code == 200, response.text
+    assert response.headers["access-control-allow-origin"] in ("*", origin)
+    assert response.json()["used_today"] == 4
+
+
+async def test_daily_spin_count_query_does_not_group_by_bound_expressions():
+    """SQLite accepts separate cost parameters in SELECT/GROUP BY; PostgreSQL rejects them."""
+    class QuerySession:
+        async def execute(self, statement):
+            self.statement = statement
+            return self
+
+        def one(self):
+            return (0, 0)
+
+    session = QuerySession()
+    assert await games_api.spins_today(session, 1, date(2026, 10, 15)) == (0, 0)
+    sql = str(session.statement.compile(dialect=asyncpg.dialect()))
+    assert "GROUP BY" not in sql
+    assert "wheel_spins.user_id =" in sql and "wheel_spins.day =" in sql
 
 
 async def test_raffle_entry_draw_and_reward_are_once(client, session, operator, head):

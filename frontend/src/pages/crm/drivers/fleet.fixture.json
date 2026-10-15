@@ -2115,6 +2115,67 @@
     }
    ],
    "updated_at": "2026-09-10"
+  },
+  {
+   "id": "b5f6e53f5e28f8468b6a7f9acb09f3a5",
+   "park": "itaxi-ala",
+   "last_name": "Тестов",
+   "first_name": "Арман",
+   "middle_name": "Сергеевич",
+   "phone": "+77010000055",
+   "license": "BT000055",
+   "license_country": "Казахстан",
+   "license_issued": "2021-09-18",
+   "license_expires": "2031-09-18",
+   "experience_since": "2018-01-15",
+   "iin": "",
+   "address": "",
+   "works": true,
+   "status": "free",
+   "employment": "Парковый самозанятый",
+   "profession": "Водитель такси",
+   "rule": "Свободный (Яндекс 4%, Таксопарк 4%)",
+   "provider": "Sapar",
+   "balance": 0.0,
+   "account_limit": -50,
+   "rating": 4.98,
+   "car": {
+    "brand": "Mercedes-Benz",
+    "model": "E-Класс",
+    "year": 2022,
+    "color": "Чёрный",
+    "plate": "055TST02",
+    "callsign": "055TST02",
+    "vin": "",
+    "tariffs": [
+     "Эконом",
+     "Комфорт"
+    ],
+    "wrap": false,
+    "wrap_checked": false,
+    "lightbox": false,
+    "transmission": "Автоматическая",
+    "fuel": "Бензин"
+   },
+   "created": "2025-08-25",
+   "crm_id": 11046032,
+   "driver_no": 1541184,
+   "cash_limit": false,
+   "codes": 0,
+   "photo_control": "Пройден",
+   "stats": [
+    6,
+    6,
+    6,
+    800
+   ],
+   "history": [
+    {
+     "at": "2025-08-25",
+     "text": "Учётная запись создана"
+    }
+   ],
+   "updated_at": "2025-08-25"
   }
  ]
 }
