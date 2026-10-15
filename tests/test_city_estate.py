@@ -1008,30 +1008,22 @@ async def test_old_plots_close_once_the_team_district_opens(client, session, tea
     assert blocked.status_code == 409
 
 
-async def test_the_city_has_three_districts_with_land_and_only_they_open(client, estate_admin):
+async def test_the_city_has_three_districts_with_land_and_no_more_by_hand(client, estate_admin):
     boss = auth(await login(client, estate_admin.login))
     world = (await client.get(ADMIN + "/world", headers=boss)).json()
     body = {"revision": world["revision"], "cities": world["cities"]}
     districts = body["cities"][0]["districts"]
-    districts.append(
-        {
-            "id": "support-team-4",
-            "name": "Район 4",
-            "group_ids": [],
-            "supervisor_id": None,
-            "construction": True,
-        }
-    )
-    r = await client.put(ADMIN + "/world", headers=boss, json=body)
-    assert r.status_code == 400
-    districts[-1]["construction"] = False
+    # A fourth district past the layout has no land; districts come with a new layout (city_layout).
+    districts.append({"id": "support-team-4", "name": "Район 4", "supervisor_id": None})
+    assert (await client.put(ADMIN + "/world", headers=boss, json=body)).status_code == 422
+    districts.pop()
     districts[2]["construction"] = True
     r = await client.put(ADMIN + "/world", headers=boss, json=body)
     assert r.status_code == 200, r.text
     public = (await client.get(CITY + "/world", headers=boss)).json()
     support = [d["prepared"] for d in public["cities"][0]["districts"]]
-    assert support == [city_land.plot_count(f"support-team-{n}") for n in (1, 2, 3)] + [0]
-    assert all(n > 1000 for n in support[:3])
+    assert support == [city_land.plot_count(f"support-team-{n}") for n in (1, 2, 3)]
+    assert all(n > 1000 for n in support)
     sales = [d["prepared"] for d in public["cities"][1]["districts"]]
     assert all(n > 150 for n in sales)
 

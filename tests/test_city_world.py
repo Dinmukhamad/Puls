@@ -1,4 +1,3 @@
-from copy import deepcopy
 
 import pytest
 from sqlalchemy import func, select
@@ -112,21 +111,21 @@ async def test_mixed_supervisors_and_removing_existing_district_rejected(
     assert (await client.put(ADMIN, headers=h, json=body)).status_code == 400
     body = {"revision": 0, "cities": defaults()}
     body["cities"][0]["districts"][0]["id"] = "support-team-4"
+    # Three districts have no fourth: the id itself is refused.
+    assert (await client.put(ADMIN, headers=h, json=body)).status_code == 422
+    body["cities"][0]["districts"][0]["id"] = "support-4-team-1"
     assert (await client.put(ADMIN, headers=h, json=body)).status_code == 400
 
 
-async def test_district_expansion_keeps_existing_keys_and_does_not_write_coins(
+async def test_districts_are_not_added_by_hand_and_do_not_write_coins(
     client, world_admin, session
 ):
     h = auth(await login(client, world_admin.login))
     body = {"revision": 0, "cities": defaults()}
-    before = deepcopy(body["cities"][0]["districts"])
+    # A district of another layout comes only with that layout, at a season's reset.
     body["cities"][0]["districts"].append(
-        {"id": "support-team-4", "name": "Новая команда", "group_ids": []}
+        {"id": "support-4-team-4", "name": "Новая команда", "group_ids": []}
     )
     r = await client.put(ADMIN, headers=h, json=body)
-    assert r.status_code == 200, r.text
-    assert [(d["id"], d["name"]) for d in r.json()["cities"][0]["districts"][:3]] == [
-        (d["id"], d["name"]) for d in before
-    ]
+    assert r.status_code == 400 and "числом районов" in r.text
     assert await session.scalar(select(func.count()).select_from(CoinTransaction)) == 0

@@ -20,8 +20,13 @@ class Named(BaseModel):
         return value
 
 
+#: A district of a layout: three keep "support-team-n", other counts name themselves
+#: ("support-5-team-n").
+DISTRICT_ID = r"^(support|sales)(-team-[1-3]|-2-team-[1-2]|-4-team-[1-4]|-5-team-[1-5])$"
+
+
 class DistrictInput(Named):
-    id: str = Field(pattern=r"^(support|sales)-team-[1-9][0-9]?$", max_length=32)
+    id: str = Field(pattern=DISTRICT_ID, max_length=32)
     supervisor_id: int | None = Field(default=None, gt=0)
     # Compatibility with older editors. An explicit supervisor makes these read-only.
     group_ids: list[int] = Field(default_factory=list, max_length=100)
@@ -40,7 +45,7 @@ class DistrictInput(Named):
 class DepartmentInput(Named):
     id: Literal["support", "sales"]
     head_id: int | None = Field(default=None, gt=0)
-    districts: list[DistrictInput] = Field(min_length=3, max_length=12)
+    districts: list[DistrictInput] = Field(min_length=2, max_length=12)
 
 
 class WorldInput(BaseModel):
@@ -55,7 +60,7 @@ class WorldInput(BaseModel):
         seen_districts, seen_groups = set(), set()
         for city in self.cities:
             for district in city.districts:
-                if not district.id.startswith(city.id + "-team-") or district.id in seen_districts:
+                if not district.id.startswith(city.id + "-") or district.id in seen_districts:
                     raise ValueError(
                         "Идентификаторы районов должны быть уникальны и принадлежать городу"
                     )
@@ -68,4 +73,31 @@ class WorldInput(BaseModel):
                     if group < 1 or group in seen_groups:
                         raise ValueError("Каждая группа может принадлежать только одному району")
                     seen_groups.add(group)
+        return self
+
+
+class PlannedDistrict(Named):
+    """A district of the layout the city gets at the next season's reset."""
+    supervisor_id: int | None = Field(default=None, gt=0)
+
+
+class LayoutInput(BaseModel):
+    """How many districts the city has from the next season, and who leads them. None cancels."""
+    model_config = ConfigDict(extra="forbid")
+    revision: int = Field(ge=0)
+    city: Literal["support", "sales"]
+    count: int | None = Field(default=None, ge=2, le=5)
+    districts: list[PlannedDistrict] = Field(default_factory=list, max_length=5)
+
+    @model_validator(mode="after")
+    def matches_count(self):
+        if self.count is None:
+            if self.districts:
+                raise ValueError("Без числа районов план не задаётся")
+            return self
+        if len(self.districts) != self.count:
+            raise ValueError("Нужно столько районов, сколько выбрано")
+        chosen = [d.supervisor_id for d in self.districts if d.supervisor_id is not None]
+        if len(chosen) != len(set(chosen)):
+            raise ValueError("Супервайзер может вести только один район")
         return self

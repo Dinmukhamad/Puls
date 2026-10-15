@@ -19,7 +19,7 @@ import { disposeTree } from "./districts";
 import { mergeStatic } from "../assets/landmarks";
 import { generateSalesWorld, SALES_CENTERS } from "../world/sales";
 import { landGrid, type LandGrid } from "../world/land";
-import { districtNumber } from "../world/estateGrid";
+import { FIRST_LAYOUT, districtLayout, districtNumber } from "../world/estateGrid";
 import { districtMainFrame, landmarkBounds } from "../world/districtLandmark";
 import { createEstates, type Estates, type EstateFocusView } from "./estates";
 import type { CityBuildView, CityEstateView, EstatePick, EstateTarget } from "../types";
@@ -263,13 +263,39 @@ export function createDepartmentWorld(ctx: CityContext, catalogue: Catalogue, mo
   ctx.overlay.append(supportLabels, salesLabels);
   let config: CityWorld | undefined;
   // District land: the island city's whole mainland (the full map only), the lake city's all round the lake, in plots.
-  const grids: Partial<Record<DepartmentId, LandGrid>> = {};
-  const supportGrid = landGrid(ctx.world);
-  if (supportGrid) grids.support = supportGrid;
+  // A city is cut into 2–5 districts; its land follows the layout its districts' ids name (world/estateGrid.ts), so
+  // a past season keeps its own. Each layout's grid is generated once.
+  const grids: Partial<Record<DepartmentId, LandGrid>> = {}, layouts: Partial<Record<DepartmentId, number>> = {};
+  const generated = new Map<string, LandGrid | null>();
+  const gridOf = (city: DepartmentId, world: CityContext["world"], count: number) => {
+    const key = `${city}:${count}`;
+    if (!generated.has(key)) generated.set(key, landGrid(world, count));
+    return generated.get(key) ?? null;
+  };
+  const layoutOf = (view: CityEstateView | null | undefined) => {
+    const first = view?.state.districts[0]?.id;
+    return first ? districtLayout(first) : FIRST_LAYOUT;
+  };
+  const supportGrid = gridOf("support", ctx.world, FIRST_LAYOUT);
+  if (supportGrid) { grids.support = supportGrid; layouts.support = FIRST_LAYOUT; }
   const supportLand3d = new THREE.Scene(); supportLand3d.name = "support-districts"; supportRoot.add(supportLand3d);
   const estates: Partial<Record<DepartmentId, Estates>> = {};
   if (grids.support) { estates.support = createEstates({ ...ctx, scene: supportLand3d, overlay: supportLabels }, grids.support, onEstate); estates.support.setCatalogue(catalogue); }
   const views: Partial<Record<DepartmentId, CityEstateView | null>> = {};
+  /** Lays a city's land anew when a view comes in another layout: the estates are drawn on the new grid. */
+  function relayout(city: DepartmentId, view: CityEstateView | null) {
+    const count = layoutOf(view), current = estates[city];
+    if (!current || layouts[city] === count) return;
+    const context = city === "support" ? { ...ctx, scene: supportLand3d, overlay: supportLabels } : sales?.context;
+    const world = city === "support" ? ctx.world : sales?.world;
+    const grid = context && world && gridOf(city, world, count);
+    if (!context || !grid) return;
+    current.dispose();
+    const next = createEstates(context, grid, onEstate); next.setCatalogue(catalogue);
+    next.setActive(active === city); next.setBuild(build && cityOf(build.district) === city ? build : null);
+    estates[city] = next; grids[city] = grid; layouts[city] = count;
+    if (city === "sales" && sales) sales.land3d = next;
+  }
   let build: CityBuildView | null = null;
   const anchors = { support: new Map<string, THREE.Vector3>(), sales: new Map<string, THREE.Vector3>() };
   const elements = { support: new Map<string, HTMLElement>(), sales: new Map<string, HTMLElement>() };
@@ -302,10 +328,10 @@ export function createDepartmentWorld(ctx: CityContext, catalogue: Catalogue, mo
     const rail = station(world.railway ?? RAIL_LINES.sales, "sales"); scene.add(rail.root);
     if (portalModel) rail.usePortal(portalModel);
     if (stationModels) rail.useBuilding(stationModels);
-    const grid = landGrid(world)!; grids.sales = grid;
+    const count = layoutOf(views.sales), grid = gridOf("sales", world, count)!; grids.sales = grid; layouts.sales = count;
     const land3d = createEstates(context, grid, onEstate); land3d.setCatalogue(catalogue);
     estates.sales = land3d; land3d.set(views.sales ?? null); land3d.setBuild(build && cityOf(build.district) === "sales" ? build : null);
-    return { scene, frames, moves, terrain, water, hills, pools, cars, crowd, campus, teams, rail, land3d, line: world.railway ?? RAIL_LINES.sales };
+    return { scene, frames, moves, terrain, water, hills, pools, cars, crowd, campus, teams, rail, land3d, context, world, line: world.railway ?? RAIL_LINES.sales };
   }
   const cityOf = (district: string): DepartmentId => district.startsWith("sales-") ? "sales" : "support";
   function batch(root: THREE.Group) {
@@ -358,7 +384,7 @@ export function createDepartmentWorld(ctx: CityContext, catalogue: Catalogue, mo
     },
     setConfig(next) { config = next; configure(); },
     setEstates(city, view) {
-      views[city] = view; estates[city]?.set(view);
+      views[city] = view; relayout(city, view); estates[city]?.set(view);
       // The estate system draws the sole main building; these anchors follow its current bounds.
       configure();
     },

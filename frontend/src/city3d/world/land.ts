@@ -362,11 +362,33 @@ export function cellsWithin(grid: LandGrid, from: CellRef, to: CellRef): CellRef
   return out;
 }
 
-/** The land of a city's districts: the island city (x4) and the lake city have it, the old v1 map has none. */
-export function landGrid(world: WorldData): LandGrid | null {
-  if (world.spec.name === "x4") return islandLand(world);
-  if (world.spec.name === "sales") return lakeLand(world);
+/** How many districts a city may be cut into; three is the city's first layout. */
+export const DISTRICT_COUNTS = [2, 3, 4, 5] as const;
+export const DEFAULT_DISTRICTS = 3;
+
+/**
+ * The land of a city's districts, cut into `count` of them: the island city (x4) and the lake city have it, the old v1
+ * map has none. Three districts keep the city's first layout; another count cuts the city into districts of about
+ * equal numbers of cells (balancedBorders).
+ */
+export function landGrid(world: WorldData, count: number = DEFAULT_DISTRICTS): LandGrid | null {
+  if (world.spec.name === "x4") return islandLand(world, count === DEFAULT_DISTRICTS ? BORDERS : islandBorders(world, count));
+  if (world.spec.name === "sales") return count === DEFAULT_DISTRICTS ? lakeLand(world) : lakeSectorLand(world, count);
   return null;
+}
+
+/**
+ * Cuts out from the centre that part `count` districts of about equal numbers of cells: the first at `start`, the
+ * others where the cells, taken counter-clockwise by the angle of their middles, reach an equal share.
+ */
+export function balancedBorders(angles: number[], start: number, count: number): number[] {
+  const turned = angles.map(a => wrap(a - start)).sort((p, q) => p - q);
+  const out = [wrap(start)];
+  for (let k = 1; k < count; k++) {
+    const i = Math.min(turned.length - 1, Math.round(turned.length * k / count));
+    out.push(wrap(start + (turned[i] + (turned[i - 1] ?? turned[i])) / 2));
+  }
+  return out;
 }
 
 /**
@@ -417,7 +439,7 @@ const mainlandOf = (world: WorldData) => world.land.annuli.reduce((best, a) => a
 
 /** Grows the grid: blocks get their number within their district and their cells, each checked against `keep` and `clear`. */
 function builder(clear: (corners: Point[], centre: Point) => boolean) {
-  const blocks: LandBlock[] = [], counts = [0, 0, 0, 0];
+  const blocks: LandBlock[] = [], counts: number[] = [];
   /** Keeps `cols` × `rows` cells of a block from (col, row) for the district's centre, its front to `side`, and returns it. */
   const centreAt = (block: LandBlock, col: number, row: number, cols: number, rows: number, side: BlockSide): DistrictCentre => {
     for (let c = col; c < col + cols; c++) for (let r = row; r < row + rows; r++) block.skip.add(`${c}:${r}`);
@@ -434,7 +456,7 @@ function builder(clear: (corners: Point[], centre: Point) => boolean) {
     /** A block; a cell is for sale if it is the block's own (`keep`) and nothing of the city stands there (`clear`). */
     add(district: number, band: number, shape: BlockShape, cols: number, rows: number, keep: (col: number, row: number) => boolean = () => true) {
       if (cols < 1 || rows < 1) return null;
-      const block: LandBlock = { district, block: ++counts[district], band, cols, rows, shape, skip: new Set() };
+      const block: LandBlock = { district, block: (counts[district] = (counts[district] ?? 0) + 1), band, cols, rows, shape, skip: new Set() };
       for (let c = 0; c < cols; c++) for (let r = 0; r < rows; r++) {
         if (!keep(c, r)) { block.skip.add(`${c}:${r}`); continue; }
         const corners = areaCorners(block, c, r), [first, , opposite] = corners;
@@ -477,7 +499,29 @@ const near = (streets: readonly Road[], x0: number, x1: number, z0: number, z1: 
  * blocks overlap where its bands meet and every cell is for sale in one of them at most.
  */
 export const BORDERS = [-32.7 * DEG, 90 * DEG, -146.7 * DEG];
-function islandLand(world: WorldData): LandGrid {
+
+/** The island city's cells for sale before any cut parts them: on the mainland, clear of the station and its street. */
+function islandClear(world: WorldData) {
+  const line = world.railway, square = stationSquare(world), streets = world.roads.streets, mainland = mainlandOf(world);
+  const kept = near(streets, -mainland.outer, mainland.outer, -mainland.outer, mainland.outer).filter(([ax, az, bx, bz]) => Math.max(Math.hypot(ax, az), Math.hypot(bx, bz)) > mainland.inner);
+  return (corners: Point[], centre: Point) => {
+    if (line && [...corners, centre].some(p => onRailway(line, p, 1) || (square ? onSquare(line, square, p, 1) : false))) return false;
+    return !kept.length || offStreets(kept, corners, centre);
+  };
+}
+
+/** Cuts for `count` districts of the island city with about equal land, the first where the first layout's is. */
+function islandBorders(world: WorldData, count: number): number[] {
+  const mainland = mainlandOf(world), clear = islandClear(world), inner = mainland.inner + 1.2, outer = mainland.outer - 1.5, angles: number[] = [];
+  for (let x = -Math.ceil(outer / LAND_CELL) * LAND_CELL; x < outer; x += LAND_CELL) for (let z = -Math.ceil(outer / LAND_CELL) * LAND_CELL; z < outer; z += LAND_CELL) {
+    const corners = [{ x, z }, { x: x + LAND_CELL, z }, { x: x + LAND_CELL, z: z + LAND_CELL }, { x, z: z + LAND_CELL }], middle = { x: x + LAND_CELL / 2, z: z + LAND_CELL / 2 };
+    if (corners.some(p => { const r = Math.hypot(p.x, p.z); return r < inner || r > outer; }) || !clear(corners, middle)) continue;
+    angles.push(Math.atan2(middle.z, middle.x));
+  }
+  return balancedBorders(angles, BORDERS[0], count);
+}
+
+function islandLand(world: WorldData, cuts: readonly number[] = BORDERS): LandGrid {
   const line = world.railway, square = stationSquare(world), streets = world.roads.streets;
   // What stays of the city on the mainland: the station with its square and its street.
   const mainland = mainlandOf(world);
@@ -490,10 +534,10 @@ function islandLand(world: WorldData): LandGrid {
   // The ring roads' circles still part the bands, whose land costs more nearer the centre.
   const rings = world.spec.roadRings.filter(r => r > mainland.inner && r < mainland.outer);
   const edges = [mainland.inner + 1.2, ...rings, mainland.outer - 1.5], inner = edges[0], outer = edges[edges.length - 1];
-  const borders = BORDERS.map(wrap).sort((p, q) => p - q), districtOf = (a: number) => {
-    // District k runs counter-clockwise from BORDERS[k - 1] to BORDERS[k] (wrapping round).
+  const borders = cuts.map(wrap).sort((p, q) => p - q), districtOf = (a: number) => {
+    // District k runs counter-clockwise from cuts[k - 1] to cuts[k] (wrapping round).
     const x = wrap(a), start = [...borders].reverse().find(o => o <= x) ?? borders[borders.length - 1];
-    return BORDERS.map(wrap).indexOf(start) + 1;
+    return cuts.map(wrap).indexOf(start) + 1;
   };
   const sectors: LandSector[] = borders.map((from, i) => {
     const to = i + 1 < borders.length ? borders[i + 1] : borders[0] + TAU;
@@ -623,4 +667,87 @@ function lakeLand(world: WorldData): LandGrid {
     ...(sides[1] ? [b.centre(sides[1], "x0")] : []),
   ];
   return { city: "sales", bands: 3, blocks: b.blocks, centres };
+}
+
+/**
+ * The lake city cut into `count` districts other than its first three: the same land (the inner square by the lake,
+ * the frame round it, the strips at the edge) on the same lattice, parted by straight cuts out from the lake's middle
+ * into districts of about equal numbers of cells, the first along the boulevard to the station. As on the island city,
+ * each band of each district is one block round its cells, its centre in the second band on the middle of its sector.
+ */
+function lakeSectorLand(world: WorldData, count: number): LandGrid {
+  const line = world.railway, square = stationSquare(world), rect = world.land.rectangle!;
+  const lake = (rect.lake ?? 46) + 12, pier = rectangle(4, 48, 0, 44, 18, 0), boulevard = rectangle(0, 85, 0, 60, 10.4, 0);
+  const streets = world.roads.streets;
+  const clear = (corners: Point[], centre: Point) => {
+    if (corners.some(p => Math.hypot(p.x, p.z) < lake)) return false;
+    if (polygonsOverlap(corners, pier) || polygonsOverlap(corners, boulevard)) return false;
+    if (streets.length && !offStreets(streets, corners, centre)) return false;
+    return !(line && [...corners, centre].some(p => onRailway(line, p, 1) || (square ? onSquare(line, square, p, 1) : false)));
+  };
+  const INNER = 66, OUTER_X = 132, OUTER_Z = 111, EDGE_X = 141, EDGE_Z = 120;
+  /** The band of the cell from (x, z): 0 off the land (past the edge, or in a corner beyond both strips). */
+  const bandOf = (x: number, z: number) => {
+    const X = x + LAND_CELL, Z = z + LAND_CELL;
+    if (x < -EDGE_X || X > EDGE_X || z < -EDGE_Z || Z > EDGE_Z) return 0;
+    const ax = Math.min(Math.abs(x), Math.abs(X)), az = Math.min(Math.abs(z), Math.abs(Z));
+    if (ax >= OUTER_X && az >= OUTER_Z) return 0;
+    const mx = Math.abs(x + LAND_CELL / 2), mz = Math.abs(z + LAND_CELL / 2);
+    return mx < INNER && mz < INNER ? 1 : mx < OUTER_X && mz < OUTER_Z ? 2 : 3;
+  };
+  const cell = (x: number, z: number): Point[] => [{ x, z }, { x: x + LAND_CELL, z }, { x: x + LAND_CELL, z: z + LAND_CELL }, { x, z: z + LAND_CELL }];
+  const middle = (x: number, z: number) => ({ x: x + LAND_CELL / 2, z: z + LAND_CELL / 2 });
+  // Every cell for sale once, by its band; the cuts share them out.
+  const land: { x: number; z: number; band: number }[] = [];
+  for (let x = -EDGE_X; x < EDGE_X; x += LAND_CELL) for (let z = -EDGE_Z; z < EDGE_Z; z += LAND_CELL) {
+    const band = bandOf(x, z);
+    if (band && clear(cell(x, z), middle(x, z))) land.push({ x, z, band });
+  }
+  const cuts = balancedBorders(land.map(c => Math.atan2(c.z + LAND_CELL / 2, c.x + LAND_CELL / 2)), 90 * DEG, count);
+  const reach = Math.hypot(EDGE_X, EDGE_Z) + LAND_CELL;
+  const sectors: LandSector[] = cuts.map((from, i) => {
+    const next = cuts[(i + 1) % cuts.length];
+    return { district: i + 1, a0: from, a1: from + (wrap(next - from) || TAU), r0: lake, r1: reach };
+  });
+  /** Is a cell (its first corner) in the sector, BORDER_GAP clear of both its cuts? */
+  const cellWithin = (s: LandSector, x: number, z: number) => {
+    const fx = Math.cos(s.a0), fz = Math.sin(s.a0), tx = Math.cos(s.a1), tz = Math.sin(s.a1), X = x + LAND_CELL, Z = z + LAND_CELL;
+    const m = middle(x, z);
+    if (wrap(Math.atan2(m.z, m.x) - s.a0) >= s.a1 - s.a0) return false;
+    return Math.min(fx * z - fz * x, fx * Z - fz * x, fx * z - fz * X, fx * Z - fz * X) >= BORDER_GAP && Math.min(x * tz - z * tx, X * tz - z * tx, x * tz - Z * tx, X * tz - Z * tx) >= BORDER_GAP;
+  };
+  const b = builder(clear), lattice = (v: number) => Math.round(v / LAND_CELL) * LAND_CELL;
+  const wide = Math.ceil(CENTRE_WIDTH / LAND_CELL - 1e-9) * LAND_CELL, deep = Math.ceil(CENTRE_DEPTH / LAND_CELL - 1e-9) * LAND_CELL;
+  // Each district's centre: in the second band on the middle of its sector, its front to the lake.
+  const sites = sectors.map(s => {
+    const a = s.a0 + (s.a1 - s.a0) / 2, c = Math.cos(a), sn = Math.sin(a);
+    const side: BlockSide = Math.abs(c) > Math.abs(sn) ? (c > 0 ? "x0" : "x1") : (sn > 0 ? "z0" : "z1");
+    const w = side === "x0" || side === "x1" ? deep : wide, d = side === "x0" || side === "x1" ? wide : deep;
+    for (let r = INNER; r < reach; r += LAND_CELL / 4) {
+      const x0 = lattice(side === "x0" ? c * r : side === "x1" ? c * r - w : c * r - w / 2), z0 = lattice(side === "z0" ? sn * r : side === "z1" ? sn * r - d : sn * r - d / 2);
+      let free = true;
+      for (let x = x0; x < x0 + w && free; x += LAND_CELL) for (let z = z0; z < z0 + d && free; z += LAND_CELL) free = bandOf(x, z) === 2 && cellWithin(s, x, z) && clear(cell(x, z), middle(x, z));
+      if (free) return { side, x0, x1: x0 + w, z0, z1: z0 + d };
+    }
+    return null;
+  });
+  const onSite = (p: Point) => sites.some(t => t && p.x > t.x0 && p.x < t.x1 && p.z > t.z0 && p.z < t.z1);
+  const centres: DistrictCentre[] = [];
+  for (let band = 1; band <= 3; band++) sectors.forEach((s, i) => {
+    const own = new Set<string>();
+    let bx0 = Infinity, bx1 = -Infinity, bz0 = Infinity, bz1 = -Infinity;
+    for (const c of land) {
+      if (c.band !== band || onSite(middle(c.x, c.z)) || !cellWithin(s, c.x, c.z)) continue;
+      own.add(`${c.x}:${c.z}`);
+      bx0 = Math.min(bx0, c.x); bx1 = Math.max(bx1, c.x + LAND_CELL); bz0 = Math.min(bz0, c.z); bz1 = Math.max(bz1, c.z + LAND_CELL);
+    }
+    const site = band === 2 ? sites[i] : null;
+    if (site) { bx0 = Math.min(bx0, site.x0); bx1 = Math.max(bx1, site.x1); bz0 = Math.min(bz0, site.z0); bz1 = Math.max(bz1, site.z1); }
+    if (!(bx1 > bx0)) return;
+    const keep = (col: number, row: number) => own.has(`${bx0 + col * LAND_CELL}:${bz0 + row * LAND_CELL}`);
+    const block = b.add(s.district, band, { kind: "rect", x0: bx0, x1: bx1, z0: bz0, z1: bz1 }, Math.round((bx1 - bx0) / LAND_CELL), Math.round((bz1 - bz0) / LAND_CELL), keep);
+    if (block && site) centres.push(b.centreAt(block, Math.round((site.x0 - bx0) / LAND_CELL), Math.round((site.z0 - bz0) / LAND_CELL), Math.round((site.x1 - site.x0) / LAND_CELL), Math.round((site.z1 - site.z0) / LAND_CELL), site.side));
+  });
+  centres.sort((p, q) => p.district - q.district);
+  return { city: "sales", bands: 3, blocks: b.blocks, centres, sectors };
 }

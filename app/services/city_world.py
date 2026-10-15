@@ -10,7 +10,7 @@ from app.core.errors import ConflictError, DomainError, PermissionDeniedError
 from app.models.city import CityWorld
 from app.models.enums import Role
 from app.models.user import Group, User
-from app.services import city_estate
+from app.services import city_estate, city_land
 from app.services.city_estate import district_index, prepared
 from app.services.city_land import has_land
 from app.services.rules import write_audit
@@ -283,9 +283,7 @@ def _compile_city(city, previous, raw_previous, groups, supervisors):
         construction = (district.construction if district.construction is not None
                         else old.get("construction", False))
         if construction and not has_land(district.id):
-            raise DomainError(
-                "У этого района нет земли: город делится на три района, стройку открыть нельзя"
-            )
+            raise DomainError("У этого района нет земли: стройку открыть нельзя")
         result = {"id": district.id, "name": district.name,
                   "group_ids": (list(raw["group_ids"]) if preserve_legacy
                                 else list(grouped.get(supervisor, []))),
@@ -293,9 +291,13 @@ def _compile_city(city, previous, raw_previous, groups, supervisors):
         if not preserve_legacy:
             result["supervisor_id"] = supervisor
         districts.append(result)
-    return {"id": city.id, "name": city.name,
-            "head_id": (city.head_id if "head_id" in city.model_fields_set
-                        else previous["head_id"]), "districts": districts}
+    compiled = {"id": city.id, "name": city.name,
+                "head_id": (city.head_id if "head_id" in city.model_fields_set
+                            else previous["head_id"]), "districts": districts}
+    # The layout planned for the next season is saved on its own (save_layout) and kept here.
+    if raw_previous.get("plan"):
+        compiled["plan"] = deepcopy(raw_previous["plan"])
+    return compiled
 
 
 def _assignment_claims(cities, groups, active):
@@ -404,6 +406,10 @@ async def save(session, actor, body):
     new_ids = {d["id"] for c in cities for d in c["districts"]}
     if not old_ids <= new_ids:
         raise DomainError("Существующие районы нельзя удалять или менять их идентификатор")
+    if new_ids - old_ids:
+        raise DomainError(
+            "Районы добавляются числом районов со следующего сезона: город нарезается заново"
+        )
     effective = _resolve_cities(cities, groups, supervisors)
     _validate_assignments(
         effective, cities, old["cities"], raw_old["cities"], group_map, supervisors
@@ -435,3 +441,118 @@ async def save(session, actor, body):
         await session.rollback()
         raise ConflictError("Настройки уже изменили. Обновите страницу.") from None
     return await editor_data(session, actor)
+
+
+# ---- the layout of the next season ---------------------------------------------------------------
+
+
+def _after_reset(cities):
+    """Each city's districts as they will be after the next reset: its plan's, or today's."""
+    out = {}
+    for city in cities:
+        plan = city.get("plan")
+        out[city["id"]] = plan["districts"] if plan else city["districts"]
+    return out
+
+
+async def save_layout(session, actor, body):
+    """Plans how many districts a city has from the next season and who leads each of them.
+
+    The land changes only at a reset (city_seasons.close): until then the plan can be changed or
+    cancelled freely. A supervisor leads one district of both cities as they will be after it.
+    """
+    if not actor.is_active or actor.role not in (Role.HEAD, Role.ADMIN):
+        raise PermissionDeniedError("Недостаточно прав для изменения городов")
+    await lock_settings(session)
+    raw = await _raw_settings(session)
+    if raw["revision"] != body.revision:
+        raise ConflictError("Карту уже изменили. Обновите настройки и повторите.")
+    if body.city not in _editable(raw, actor):
+        raise PermissionDeniedError("Можно изменять только свой город")
+    groups, supervisors = await _assignment_directory(session)
+    active = {s["id"] for s in supervisors}
+    cities = deepcopy(raw["cities"])
+    city = next(c for c in cities if c["id"] == body.city)
+    before = deepcopy(city.get("plan"))
+    current = len(city["districts"])
+    if body.count is None or (body.count == current and not any(
+        d.supervisor_id != old.get("supervisor_id") or d.name != old["name"]
+        for d, old in zip(body.districts, city["districts"], strict=False)
+    )):
+        city.pop("plan", None)
+    else:
+        planned = []
+        for district in body.districts:
+            if district.supervisor_id is not None and district.supervisor_id not in active:
+                raise DomainError("Выберите активного пользователя с ролью супервайзера")
+            planned.append({"name": district.name, "supervisor_id": district.supervisor_id})
+        city["plan"] = {"count": body.count, "districts": planned}
+    claims = defaultdict(int)
+    for districts in _after_reset(cities).values():
+        for district in districts:
+            if district.get("supervisor_id") in active:
+                claims[district["supervisor_id"]] += 1
+    if any(n > 1 for n in claims.values()):
+        raise DomainError(
+            "После сброса супервайзер будет вести два района: уберите его из другого города"
+        )
+    revision = raw["revision"] + 1
+    if raw["revision"] == 0:
+        session.add(CityWorld(id=1, revision=revision, cities=cities, updated_by_id=actor.id))
+    else:
+        result = await session.execute(update(CityWorld).where(
+            CityWorld.id == 1, CityWorld.revision == raw["revision"]
+        ).values(revision=revision, cities=cities, updated_by_id=actor.id))
+        if result.rowcount != 1:
+            raise ConflictError("Настройки уже изменили. Обновите страницу.")
+    await write_audit(session, actor_id=actor.id, action="city.layout", entity_type="city_world",
+                      entity_id="1", payload={"city": body.city, "before": before,
+                                              "plan": city.get("plan"), "revision": revision})
+    await session.commit()
+    return await editor_data(session, actor)
+
+
+async def apply_layouts(session):
+    """At a season's reset: each planned city takes its new districts, empty, with their leaders.
+
+    District `n` of the new layout keeps the stroke of building of the old district `n`; a new
+    one is open when it has a supervisor. A leader who meanwhile left, or who now leads a district
+    of the other city, is not assigned. Returns {city: (old count, new count, unled supervisors)}.
+    """
+    await lock_settings(session)
+    raw = await _raw_settings(session)
+    cities = deepcopy(raw["cities"])
+    if not any(c.get("plan") for c in cities):
+        return {}
+    groups, supervisors = await _assignment_directory(session)
+    active = {s["id"] for s in supervisors}
+    grouped = _groups_by_supervisor(groups, supervisors)
+    changes = {}
+    for city in cities:
+        plan = city.pop("plan", None)
+        if not plan:
+            continue
+        others = {d.get("supervisor_id") for c in cities if c["id"] != city["id"]
+                  for d in (c.get("plan") or {}).get("districts") or c["districts"]}
+        old = city["districts"]
+        led_before = {d.get("supervisor_id") for d in old} & active
+        districts, taken = [], set()
+        for i, planned in enumerate(plan["districts"]):
+            supervisor = planned.get("supervisor_id")
+            if supervisor not in active or supervisor in others or supervisor in taken:
+                supervisor = None
+            taken.add(supervisor)
+            previous = old[i] if i < len(old) else None
+            districts.append({
+                "id": city_land.district_id(city["id"], plan["count"], i + 1),
+                "name": planned["name"], "supervisor_id": supervisor,
+                "group_ids": list(grouped.get(supervisor, [])) if supervisor else [],
+                "construction": (previous["construction"] if previous
+                                 else supervisor is not None),
+            })
+        city["districts"] = districts
+        changes[city["id"]] = (len(old), plan["count"], sorted(led_before - taken))
+    await session.execute(update(CityWorld).where(CityWorld.id == 1).values(
+        revision=raw["revision"] + 1, cities=cities
+    ))
+    return changes

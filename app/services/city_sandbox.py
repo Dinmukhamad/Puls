@@ -57,18 +57,32 @@ CITIES = ("support", "sales")
 
 def test_id(district_id):
     """The test copy of a district: "test-support-team-1" for "support-team-1"."""
-    city, number = city_land.split(district_id)
+    try:
+        city, _number = city_land.split(district_id)
+    except ValueError:
+        raise NotFoundError("У этого района нет земли") from None
     if city not in CITIES or not city_land.has_land(district_id):
         raise NotFoundError("У этого района нет земли")
-    return f"{city_land.SANDBOX}{city}-team-{number}"
+    return f"{city_land.SANDBOX}{district_id.removeprefix(city_land.SANDBOX)}"
 
 
 def real_id(district_id):
     return district_id.removeprefix(city_land.SANDBOX)
 
 
-def test_ids(city):
-    return [f"{city_land.SANDBOX}{city}-team-{n}" for n in (1, 2, 3)]
+async def layout_count(session, city):
+    """The test city shows the layout of the next season when one is planned, else today's."""
+    from app.services.city_world import _raw_settings
+
+    raw = next(c for c in (await _raw_settings(session))["cities"] if c["id"] == city)
+    return (raw.get("plan") or {}).get("count") or len(raw["districts"])
+
+
+async def test_ids(session, city):
+    count = await layout_count(session, city)
+    return [
+        f"{city_land.SANDBOX}{city_land.district_id(city, count, n)}" for n in range(1, count + 1)
+    ]
 
 
 async def state(session, user, city):
@@ -85,7 +99,7 @@ async def state(session, user, city):
             "number": n,
             "construction": True,
         }
-        for n, key in enumerate(test_ids(city), 1)
+        for n, key in enumerate(await test_ids(session, city), 1)
     }
     items = await describe(
         session,
@@ -386,7 +400,7 @@ async def reset(session, user, city):
     """Clears a city's test buildings and progress, keeping all its personal land available."""
     if city not in CITIES:
         raise NotFoundError("Город не найден")
-    keys = test_ids(city)
+    keys = await test_ids(session, city)
     await session.execute(delete(CityCell).where(CityCell.district_id.in_(keys)))
     for obj in await session.scalars(
         select(CityObject).where(CityObject.district_id.in_(keys), CityObject.state != "archived")

@@ -215,7 +215,7 @@ async def test_head_cannot_take_unowned_cities_or_change_owner_ids(
         department(body)["head_id"] = None
     else:
         department(body, "sales")["districts"].append(
-            {"id": "sales-team-4", "name": "Чужой район", "group_ids": []}
+            {"id": "sales-4-team-4", "name": "Чужой район", "group_ids": []}
         )
     response = await client.put(EDITOR, headers=await headers(client, head), json=body)
     assert response.status_code == 403, response.text

@@ -23,6 +23,7 @@ import { CityMap } from "./CityMap";
 import { DISTRICT_LEVEL_NAMES, MAX_DISTRICT_LEVEL, completedDistrictMissions, districtLevel } from "./cityLevels";
 import { DISTRICT_COLORS, districtLabels } from "./cityDistricts";
 import type { CityLabelInfo } from "../../city3d/types";
+import { districtLayout, isDistrictOf } from "../../city3d/world/estateGrid";
 import "../crm/pulsar.css";
 import "./city.css";
 import { DriverEntry } from "../DriverEntry";
@@ -64,7 +65,7 @@ export function CityPage() {
   function visit(id: DepartmentId) { const next = new URLSearchParams(params); next.set("city", id); setParams(next); setWorldSelected(null); toolbar.setActive(null); }
   function pickWorld(id: string) {
     // In the test city a district opens its own dock, not the real district's card.
-    if (sandboxOn && new RegExp(`^${department}-team-[1-3]$`).test(id)) { setWorldSelected(null); openSandbox(id); return; }
+    if (sandboxOn && isDistrictOf(department, id)) { setWorldSelected(null); openSandbox(id); return; }
     setWorldSelected(id); if (id !== "world") setWorldAction({ kind: "focus", target: id, at: Date.now() });
   }
   const operatorId = user?.role !== "operator" && /^\d+$/.test(params.get("operator") ?? "") ? Number(params.get("operator")) : null;
@@ -134,7 +135,7 @@ export function CityPage() {
   const homeEstate = estateQuery.data?.district;
   const ownLand = homeEstate ? landOf(homeEstate.id) : null;
   const suggestedPlot = useMemo(() => homeEstate && ownLand && estateQuery.data?.status === "ready"
-    ? freeDistrictPlot(districtPlotGrid(homeEstate.city), ownLand) : null,
+    ? freeDistrictPlot(districtPlotGrid(homeEstate.city, districtLayout(homeEstate.id)), ownLand) : null,
     [homeEstate?.id, homeEstate?.city, ownLand, estateQuery.data?.status]);
   function chooseFreePlot() {
     if (!homeEstate || !suggestedPlot || building?.district !== homeEstate.id || estateQuery.data?.status !== "ready") return;
@@ -212,17 +213,21 @@ export function CityPage() {
     setBuilding({ district, area: square ? "public" : "plots", placing: null, selected: null, choice: null, spot: null, project: square });
     focusLand({ district, kind: square ? "public" : "district" });
   }
+  // The test city shows the next season's layout when one is planned: its first district, whatever its id.
+  const sandboxFirst = (sandboxLand.data?.city === department ? sandboxLand.data.districts[0]?.id : undefined) ?? `${department}-team-1`;
   function toggleSandbox() {
     const next = new URLSearchParams(params);
     if (sandboxOn) next.delete("sandbox"); else next.set("sandbox", "1");
     setParams(next, { replace: true });
     setWorldSelected(null);
-    if (sandboxOn) setBuilding(null); else openSandbox(`${department}-team-1`);
+    if (sandboxOn) setBuilding(null); else openSandbox(sandboxFirst);
   }
   useEffect(() => {
-    // After a trip to the other city the test city's dock follows to its first district.
-    if (sandboxOn) setBuilding(b => b && !b.district.startsWith(`${department}-`) ? { district: `${department}-team-1`, area: "plots", placing: null, selected: null, choice: null, spot: null, project: false } : b);
-  }, [sandboxOn, department]);
+    // After a trip to the other city, or when the test city comes in another layout, its dock follows to its first
+    // district.
+    const ids = sandboxLand.data?.city === department ? sandboxLand.data.districts.map(d => d.id) : null;
+    if (sandboxOn) setBuilding(b => b && (!b.district.startsWith(`${department}-`) || (ids && !ids.includes(b.district))) ? { district: sandboxFirst, area: "plots", placing: null, selected: null, choice: null, spot: null, project: false } : b);
+  }, [sandboxOn, department, sandboxFirst]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!building) return;
     // Escape leaves the preview first, then the dock; it never undoes what the server already did.
@@ -335,7 +340,7 @@ export function CityPage() {
     <div className="city-hud__notices">
       {data.inspecting && <p className="city-note glass glass--regular">Город оператора: <strong>{data.full_name}</strong><Link to="/admin/learning/city?tab=participants">← К участникам</Link></p>}
       {data.preview && !data.inspecting && !sandboxOn && <p className="city-note glass glass--regular">Предпросмотр для сотрудника · без наград</p>}
-      {sandboxOn && <p className="city-note sandbox-note glass glass--regular" role="status"><span>🧪 <strong>Тестовый город</strong> · видят только администраторы, стройка бесплатная, настоящий город не меняется</span>{!building && <button type="button" onClick={() => openSandbox(`${department}-team-1`)}>Панель</button>}<button type="button" onClick={toggleSandbox}>Выйти</button></p>}
+      {sandboxOn && <p className="city-note sandbox-note glass glass--regular" role="status"><span>🧪 <strong>Тестовый город</strong> · видят только администраторы, стройка бесплатная, настоящий город не меняется</span>{!building && <button type="button" onClick={() => openSandbox(sandboxFirst)}>Панель</button>}<button type="button" onClick={toggleSandbox}>Выйти</button></p>}
       {sandboxLand.isError && sandboxOn && <p className="city-note glass glass--regular" role="alert">Не удалось загрузить тестовый город.<button type="button" onClick={() => sandboxLand.refetch()}>Повторить</button></p>}
       {worldQuery.isError && <p className="city-note glass glass--regular" role="alert">Не удалось загрузить города и районы.<button type="button" onClick={() => worldQuery.refetch()}>Повторить</button></p>}
       {query.isError && <p className="city-note glass glass--regular" role="alert">Не удалось обновить город.<button type="button" onClick={() => query.refetch()}>Повторить</button></p>}

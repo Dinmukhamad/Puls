@@ -14,7 +14,7 @@ from app.schemas.city import (
     SettingsInput,
     SituationsInput,
 )
-from app.schemas.city_world import WorldInput
+from app.schemas.city_world import LayoutInput, WorldInput
 from app.services import city, city_economy, city_quests, city_world
 
 router = APIRouter(tags=["Мой город"])
@@ -35,6 +35,12 @@ async def department_settings(session: SessionDep, user: LearningReader, respons
 @router.put("/admin/learning/city/world")
 async def configure_world(body: WorldInput, session: SessionDep, user: HeadUser):
     return await city_world.save(session, user, body)
+
+
+@router.put("/admin/learning/city/layout")
+async def plan_layout(body: LayoutInput, session: SessionDep, user: HeadUser):
+    """How many districts a city has from the next season, and who leads them."""
+    return await city_world.save_layout(session, user, body)
 
 
 @router.get("/learning/city")

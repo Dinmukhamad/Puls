@@ -3,10 +3,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError } from "../../api/client";
 import { cityWorld, type DepartmentId, type WorldEditorData, type WorldSaveSettings } from "../../api/cityWorld";
 import { Badge, Button, ErrorState, Select, Skeleton } from "../../components/ui";
-import { districtNumber, preparedLand } from "../../city3d/world/estateGrid";
+import { preparedLand } from "../../city3d/world/estateGrid";
 import { plural } from "../../utils/format";
 import { FormFooter, FormStatus, Switch } from "./CityAdminControls";
+import { CityLayoutPlanner } from "./CityLayoutPlanner";
 import { canEditWorldCity, changeWorldCity, hasRevokedWorldChanges, refreshWorldDraft, supervisorAssignment, WORLD_QUERY_KEYS, worldDraftState } from "./worldEditor";
+
+/** The city as saved: the plan of its districts lives there, apart from the draft. */
+const savedCity = (data: WorldEditorData, id: DepartmentId) => data.cities.find(city => city.id === id);
 
 /** A city's districts share one row; a longer list splits into two even rows. */
 const districtColumns = (count: number) => count <= 4 ? Math.max(1, count) : Math.ceil(count / 2);
@@ -101,7 +105,7 @@ export function WorldSettingsEditor({ data, isHead = false }: { data: WorldEdito
             </div>
             <div className="city-world-editor__districts" style={{ "--districts": districtColumns(city.districts.length) } as CSSProperties}>{city.districts.map((district, index) => {
               const supervisor = data.supervisors.find(person => person.id === district.supervisor_id);
-              const prepared = preparedLand(districtNumber(district.id));
+              const prepared = preparedLand(district.id);
               const supervisorOptions = [
                 { value: "", label: "Не назначен" },
                 ...(district.supervisor_id != null && !supervisor ? [{ value: district.supervisor_id, label: "Супервайзер недоступен · назначьте другого", disabled: true }] : []),
@@ -123,6 +127,7 @@ export function WorldSettingsEditor({ data, isHead = false }: { data: WorldEdito
               </section>;
             })}</div>
           </fieldset>
+          {savedCity(data, city.id) && <CityLayoutPlanner city={savedCity(data, city.id)!} data={data} editable={editable} />}
         </div>
       </section>;
     })}

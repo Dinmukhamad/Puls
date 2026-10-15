@@ -6,7 +6,11 @@ export interface TeamDistrict { id: string; name: string; mine: boolean; assigne
 export interface DepartmentCity { id: DepartmentId; name: string; districts: TeamDistrict[] }
 export interface CityWorld { revision: number; cities: DepartmentCity[]; home_city: DepartmentId | null; home_district: string | null; currency: "coins"; can_edit: boolean }
 export interface WorldDistrict { id: string; name: string; supervisor_id: number | null; group_ids: number[]; construction?: boolean; legacy_assignment?: boolean }
-export interface WorldCity { id: DepartmentId; name: string; head_id: number | null; districts: WorldDistrict[] }
+/** A district the city gets at the next season's reset. */
+export interface PlannedDistrict { name: string; supervisor_id: number | null }
+/** How many districts a city has from the next season (2–5): its land is cut anew at the reset. */
+export interface WorldLayoutPlan { count: number; districts: PlannedDistrict[] }
+export interface WorldCity { id: DepartmentId; name: string; head_id: number | null; districts: WorldDistrict[]; plan?: WorldLayoutPlan }
 export interface WorldSettings { revision: number; cities: WorldCity[] }
 export interface WorldSaveSettings {
   revision: number;
@@ -37,4 +41,7 @@ export const cityWorld = {
   get: (signal?: AbortSignal) => request<CityWorld>("/api/v1/learning/city/world", { signal, timeoutMs: CITY_READ_TIMEOUT_MS }),
   settings: () => request<WorldEditorData>("/api/v1/admin/learning/city/world"),
   save: (json: WorldSaveSettings) => request<WorldEditorData>("/api/v1/admin/learning/city/world", { method: "PUT", json: worldSavePayload(json) }),
+  /** Plans the city's districts from the next season; a null count cancels the plan. */
+  layout: (json: { revision: number; city: DepartmentId; count: number | null; districts: PlannedDistrict[] }) =>
+    request<WorldEditorData>("/api/v1/admin/learning/city/layout", { method: "PUT", json }),
 };
