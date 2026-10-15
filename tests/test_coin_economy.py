@@ -181,8 +181,16 @@ async def test_gratitudes_and_supervisor_credits_have_monthly_limits(client, ses
     assert debit.status_code == 200, debit.text
 
 
-async def test_paid_spins_and_raffle_tickets_burn_coins(client, session, operator, head):
+async def test_paid_spins_and_raffle_tickets_burn_coins(client, session, operator, head,
+                                                        monkeypatch):
     from datetime import UTC, datetime
+
+    from app.api.v1 import games as games_api
+
+    async def unlocked(session, user):
+        return {"unlocked": True, "answered": 0, "total": 0}
+
+    monkeypatch.setattr(games_api, "chest", unlocked)
 
     boss = auth(await login(client, head.login))
     r = await client.put("/api/v1/admin/games/wheel", headers=boss, json={

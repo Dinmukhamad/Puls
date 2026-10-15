@@ -61,7 +61,8 @@ export function CityPage() {
   const [journey, setJourney] = useState<JourneyPhase>(null), [destination, setDestination] = useState<DepartmentId>("sales");
   // The toolbar's open popup. A district's missions open when it is chosen on the map or in the skills, and on the
   // way back from its tools (?district=).
-  const toolbar = useCityToolbarState(params.has("district") ? "missions" : null);
+  // ?open=quests comes from the chest of the day: its lock opens with today's tasks.
+  const toolbar = useCityToolbarState(params.has("district") ? "missions" : params.get("open") === "quests" ? "quests" : null);
   function visit(id: DepartmentId) { const next = new URLSearchParams(params); next.set("city", id); setParams(next); setWorldSelected(null); toolbar.setActive(null); }
   function pickWorld(id: string) {
     // In the test city a district opens its own dock, not the real district's card.

@@ -1,11 +1,22 @@
 import asyncio
 from datetime import UTC, datetime, timedelta
 
+import pytest
 from sqlalchemy import func, select
 
+from app.api.v1 import games as games_api
 from app.models.coin import CoinTransaction
 from app.models.games import Raffle, RaffleEntry, WheelSpin
 from tests.conftest import auth, login
+
+
+@pytest.fixture(autouse=True)
+def open_chest(monkeypatch):
+    """These tests play the prize strip; the chest's lock has its own test below."""
+    async def unlocked(session, user):
+        return {"unlocked": True, "answered": 0, "total": 0}
+
+    monkeypatch.setattr(games_api, "chest", unlocked)
 
 
 async def enable(client, head):
@@ -121,3 +132,28 @@ async def test_games_configuration_is_role_guarded_and_validated(client, supervi
     assert (
         await client.put("/api/v1/admin/games/wheel", headers=admin, json=invalid)
     ).status_code == 422
+
+
+async def test_the_chest_opens_after_the_daily_tasks(client, session, operator, head, monkeypatch):
+    from app.models.city import CityQuest
+    from app.services import city_quests
+
+    monkeypatch.undo()
+    await enable(client, head)
+    headers = auth(await login(client, operator.login))
+    wheel = (await client.get("/api/v1/games/wheel", headers=headers)).json()
+    assert wheel["chest"] == {"unlocked": False, "answered": 0, "total": 3}
+    shut = await client.post("/api/v1/games/wheel/spin", headers=headers,
+                             json={"request_id": "chest-locked-000001"})
+    assert shut.status_code == 409 and shut.json()["code"] == "chest_locked"
+    assert "0 из 3" in shut.json()["detail"]
+    for row in await session.scalars(select(CityQuest).where(
+            CityQuest.user_id == operator.id, CityQuest.day == city_quests.today())):
+        answer = await client.post(f"/api/v1/learning/city/quests/{row.slot}/answer",
+                                   headers=headers, json={"answer": 0})
+        assert answer.status_code == 200, answer.text
+    wheel = (await client.get("/api/v1/games/wheel", headers=headers)).json()
+    assert wheel["chest"] == {"unlocked": True, "answered": 3, "total": 3}
+    opened = await client.post("/api/v1/games/wheel/spin", headers=headers,
+                               json={"request_id": "chest-open-0000001"})
+    assert opened.status_code == 200, opened.text
