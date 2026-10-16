@@ -24,7 +24,7 @@ export const ACCOUNT_SECTION = section("profile", "Профиль", UserIcon, [
 ]);
 const QR_ACCESS_SECTION = section("qr_access", "QR-доступ", QrIcon, [tab("/qr-access", "Сканер QR")]);
 const personal = [tab("/cabinet", "Мой кабинет"), tab("/progress", "Мой прогресс")];
-const learningTabs = [tab("/training/city", "Мой город · миссии")];
+const learningTabs = [tab("/training/tasks", "Мои задания"), tab("/training/city", "Мой город · миссии")];
 const staffLearning = section("training", "Обучение", SparkIcon, [
   tab("/admin/learning/city", "Миссии города"), tab("/training/city", "Город оператора"),
   tab("/admin/learning-analytics", "Аналитика симулятора"),
@@ -92,7 +92,7 @@ export function defaultAccess(role: Role): AccessMap {
 
 export function routeSection(pathname: string, search = "", role: Role = "operator"): SectionCode | "account" | "access" | "developer" | "qr_access" | undefined {
   if (pathname === "/qr-access") return "qr_access";
-  if (pathname === "/training/work-sites" || pathname === "/training/city" || pathname.startsWith("/training/scenarios/")) return role === "operator" ? "training" : "learning_admin";
+  if (pathname === "/training/work-sites" || pathname === "/training/city" || pathname === "/training/tasks" || pathname.startsWith("/training/scenarios/")) return role === "operator" ? "training" : "learning_admin";
   const matches = (path: string) => pathname === path || pathname.startsWith(`${path}/`);
   if (pathname === "/trainer" || pathname === "/admin/learning-analytics") return "learning_admin";
   if (matches("/progress")) return role === "operator" ? "results" : "personal";
