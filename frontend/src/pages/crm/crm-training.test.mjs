@@ -12,7 +12,7 @@ new Function("require", "module", "exports", built.outputFiles[0].text)(name => 
 const { CrmTrainingDock } = module.exports;
 const driver = { name: "Учебный водитель", id: "driver-1", phone: "+77010000000", license: "KZ123", park: "iTaxi", city: "Алматы", link: "https://fleet.yandex.kz/contractors/driver-1/details" };
 const task = (key, state) => ({ key, state, title: key === "crm_first" ? "Первое обращение" : "Смена номера", speech: "Прошу уточнить доступные тарифы", goal: "Зафиксируйте консультацию", driver, category_path: ["Водитель", "Обычный водитель", "Консультация", "Тарифы"], steps: [{ key: "identity", label: "Данные водителя", status: "pending" }, { key: "category", label: "Категория обращения", status: "pending" }], checks: [], appeal_id: null });
-const props = { loading: false, error: null, busy: false, actionError: null, onReload() {}, onStart() {}, onContinue() {}, onEdit() {}, onOpen() {}, onInstructions() {} };
+const props = { loading: false, error: null, busy: false, actionError: null, onReload() {}, onStart() {}, onContinue() {}, onEdit() {}, onOpen() {}, onInstructions() {}, onCity() {} };
 const render = data => renderToStaticMarkup(React.createElement(CrmTrainingDock, { ...props, data }));
 
 test("CRM stages are server evidence, and later exercises remain locked", () => {
@@ -43,4 +43,24 @@ test("only a passed server verdict exposes the next exercise", () => {
   assert.match(html, /Следующее задание/);
   assert.match(html, /Открыть сохранённое обращение #71/);
   assert.match(html, /aria-valuenow="1"/);
+});
+
+test("what to fix and the action come before the driver's words, and the data open while the task is in work", () => {
+  const current = { ...task("crm_first", "in_progress"), appeal_id: 71, driver: { ...driver, type: "Самозанятый водитель" }, checks: [{ key: "phone", label: "Номер телефона водителя", ok: false, message: "Номер не совпадает с номером водителя +77010000000." }] };
+  const html = render({ completed: 0, active_task: "crm_first", tasks: [current, task("crm_phone", "locked")] });
+  const at = text => html.indexOf(text);
+  assert.ok(at("Что нужно исправить") >= 0 && at("Что нужно исправить") < at("Исправить обращение #71"));
+  assert.ok(at("Исправить обращение #71") < at("Прошу уточнить доступные тарифы"), "the action is above the speech");
+  assert.match(html, /<details class="crm-training-source" open=""><summary>Данные водителя для обращения/);
+  assert.match(html, /<dt>Тип<\/dt><dd>Самозанятый водитель<\/dd>/);
+  assert.match(html, /Что сделать:/);
+});
+
+test("all three passed: the rewards wait in the city, one button away", () => {
+  const passed = key => ({ ...task(key, "passed"), checks: [{ key: "phone", label: "Телефон", ok: true, message: "" }] });
+  const html = render({ completed: 3, active_task: null, tasks: [passed("crm_first"), passed("crm_phone"), passed("crm_closed")] });
+  assert.match(html, /Награды за них — в городе/);
+  assert.match(html, /Забрать награды в городе →/);
+  // A passed task needs no data at hand: its block stays closed.
+  assert.doesNotMatch(html, /<details class="crm-training-source" open=""><summary>Данные водителя/);
 });

@@ -33,11 +33,21 @@
 .crm-training-verdict p { margin: 5px 0 0; font-size: 12px; line-height: 1.5; }
 .crm-training-error { color: #a1342c; font-size: 13px; line-height: 1.5; }
 .work-sites .crm-training-main-action { width: 100%; margin: 8px 0; }
-.crm-training-complete { color: #19734d; background: #edf9f2; padding: 12px; border-radius: 10px; font-size: 13px; line-height: 1.6; }
+/* The task's next step is the dock's one call to action: the CRM's blue, not Pulsar's grey that reads as disabled. */
+.work-sites .pulsar-dock .crm-primary.crm-training-main-action { background: var(--crm-blue); border-color: var(--crm-blue); color: #fff; font-weight: 600; }
+.work-sites .pulsar-dock .crm-primary.crm-training-main-action:hover:not(:disabled) { background: #3659ec; }
+.work-sites .pulsar-dock .crm-primary.crm-training-main-action:disabled { opacity: .6; cursor: default; }
+.crm-training-complete { display: grid; gap: 10px; color: #19734d; background: #edf9f2; padding: 12px; border-radius: 10px; font-size: 13px; line-height: 1.6; }
+.crm-training-complete p { margin: 0; }
+.crm-training-source > small { display: block; margin-top: 8px; color: #767d89; font-size: 11px; }
+.crm-training-dock .crm-training-verdict { margin-bottom: 4px; }
+.crm-training-mode { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 0 0 14px; padding: 10px 14px; border: 1px solid #dfe5ef; border-radius: 10px; background: #f6f8fc; color: #4a5568; font-size: 12px; line-height: 1.5; }
+.crm-training-mode button { border: 0; background: none; padding: 0; color: #3e63dd; font: inherit; font-weight: 600; cursor: pointer; text-decoration: underline; }
 .crm-training-dock .pulsar-dock-footer { justify-content: center; }
 .crm-training-start { max-width: 720px; padding: 28px; color: #303b50; }
 .crm-training-start h2 { font-size: 22px; line-height: 1.35; margin: 0 0 14px; }
 .crm-training-start p { font-size: 14px; line-height: 1.7; margin: 0 0 20px; }
+.crm-training-start-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .crm-training-all-checks { margin: 10px 0; color: #667084; font-size: 12px; }
 .crm-training-all-checks summary { cursor: pointer; padding: 5px 0; }
 .crm-training-all-checks ul { list-style: none; padding: 0; display: grid; gap: 6px; }

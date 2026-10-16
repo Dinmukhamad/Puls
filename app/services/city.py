@@ -7,7 +7,6 @@ from sqlalchemy.exc import IntegrityError
 
 from app.core.errors import ConflictError, NotFoundError, PermissionDeniedError
 from app.models.city import CityAward, CityBuild, CitySettings
-from app.models.crm import CrmAppeal
 from app.models.crm_training import CrmTrainingAttempt
 from app.models.driver import DriverOrder, DriverProfile
 from app.models.driver_shift import DriverShift
@@ -317,41 +316,6 @@ def empty_facts():
         "scenario_business_park": 0,
         **mission_facts(set()),
     }
-
-
-def crm_evidence_query(user_ids, phone_ids, dialect):
-    """Count appeals once per operator; an exact category match counts once per appeal."""
-    if dialect == "postgresql":
-        categories = (
-            func.json_array_elements_text(CrmAppeal.category_ids)
-            .table_valued("value")
-            .render_derived()
-        )
-    else:
-        categories = func.json_each(CrmAppeal.category_ids).table_valued("value")
-    phone = (
-        select(1)
-        .select_from(categories)
-        .where(categories.c.value.in_(phone_ids))
-        .correlate(CrmAppeal)
-        .exists()
-    )
-    return (
-        select(
-            CrmAppeal.author_id,
-            func.count(),
-            func.sum(case((phone, 1), else_=0)),
-            func.sum(case((CrmAppeal.is_ticket.is_(True), 1), else_=0)),
-            func.sum(
-                case(
-                    ((CrmAppeal.is_ticket.is_(True) & (CrmAppeal.status == "closed")), 1),
-                    else_=0,
-                )
-            ),
-        )
-        .where(CrmAppeal.author_id.in_(user_ids))
-        .group_by(CrmAppeal.author_id)
-    )
 
 
 async def evidence(session, user_ids):

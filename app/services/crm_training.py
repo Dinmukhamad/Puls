@@ -27,10 +27,33 @@ TITLES = {
     "crm_closed": "Запрос в таксопарк",
 }
 GOALS = {
-    "crm_first": "Сохрани консультацию по тарифам для учебного водителя.",
-    "crm_phone": "Оформи смену номера со ссылкой, двумя номерами и скриншотом.",
-    "crm_closed": "Создай тикет в таксопарк с просьбой снять лимит.",
+    "crm_first": "Зафиксируй консультацию по тарифам: перенеси данные водителя, выбери категорию "
+    "и коротко опиши итог в комментарии.",
+    "crm_phone": "Создай тикет на смену номера: укажи в комментарии старый и новый номера, "
+    "вставь ссылку на аккаунт и приложи скриншот учебной карточки.",
+    "crm_closed": "Передай запрос в таксопарк: создай тикет, опиши просьбу водителя и вставь "
+    "ссылку на его аккаунт.",
 }
+#: A comment is about the task when it names its topic in any of these words (stems).
+TOPICS = {
+    "crm_first": (
+        "тариф",
+        "эконом",
+        "комфорт",
+        "бизнес",
+        "минивэн",
+        "универсал",
+        "доставк",
+        "курьер",
+    ),
+    "crm_closed": ("лимит", "ограничен"),
+}
+#: A phone written in a comment: +7, 8 or nothing before ten digits, with spaces, brackets or
+#: dashes between them; never a run of digits inside an id.
+PHONE = re.compile(
+    r"(?<![\w+])(?:\+?[78][\s(-]*)?\(?\d{3}\)?[\s-]*\d{3}[\s-]*\d{2}[\s-]*\d{2}(?!\w)"
+)
+FLEET_LINK = re.compile(r"(?:https?://)?fleet\.yandex\.kz/contractors/[^\s<>]+", re.IGNORECASE)
 
 
 def _utc(value):
@@ -44,6 +67,13 @@ def _iso(value):
 def _digits(value):
     value = re.sub(r"\D", "", value or "")
     return "7" + value[1:] if len(value) == 11 and value.startswith("8") else value
+
+
+def _phone_tail(value):
+    """A phone's last ten digits however it is written (+7, 8 or nothing before them), as the
+    CRM's hints compare it (frontend/src/pages/crm/accountData.ts); None when it is no phone."""
+    digits = re.sub(r"\D", "", value or "")
+    return digits[-10:] if 10 <= len(digits) <= 12 else None
 
 
 def _plain(value):
@@ -83,6 +113,8 @@ async def _snapshots(session, user):
     driver_type = (
         "Обычный водитель" if source["employment"] == "Физическое лицо" else "Самозанятый водитель"
     )
+    # The category starts with the driver's type: the task's data says which.
+    driver["type"] = driver_type
     base = ["Водитель", driver_type]
     request = [*base, "Запрос", "Таксопарк", "Обработка запросов/ООЗ"]
     return {
@@ -91,26 +123,22 @@ async def _snapshots(session, user):
             "category_path": [*base, "Консультация", "Консультация по Тарифам"],
             "speech": (
                 f"Здравствуйте! Я {driver['name']}, работаю в {driver['park']}, "
-                f"город {driver['city']}. Подскажите, где узнать доступные мне тарифы? "
-                "Зафиксируй консультацию по тарифам и коротко опиши итог в комментарии."
+                f"город {driver['city']}. Подскажите, где узнать доступные мне тарифы?"
             ),
         },
         "crm_phone": {
             "driver": {**driver, "new_phone": new_phone},
             "category_path": [*request, "Смена номера"],
             "speech": (
-                f"Это {driver['name']}. Прошу заменить мой номер {driver['phone']} "
-                f"на {new_phone}. Создай тикет: укажи оба номера, ссылку на мой аккаунт "
-                "и приложи скриншот учебной карточки."
+                f"Это {driver['name']}. Прошу заменить мой номер {driver['phone']} на {new_phone}."
             ),
         },
         "crm_closed": {
             "driver": driver,
             "category_path": [*request, "Снятие лимита"],
             "speech": (
-                f"Здравствуйте, это {driver['name']}. Прошу передать в таксопарк запрос "
-                "на снятие лимита. Создай тикет в категории «Снятие лимита», "
-                "опиши просьбу и приложи ссылку на мой аккаунт."
+                f"Здравствуйте, это {driver['name']}. На аккаунте стоит лимит, не могу нормально "
+                "работать. Передайте, пожалуйста, в таксопарк, чтобы его сняли."
             ),
         },
     }
@@ -142,10 +170,10 @@ def _steps(key, checks, passed):
     groups = [
         (
             "identity",
-            "Найди водителя и перенеси его данные",
+            "Перенеси данные водителя: телефон, В/У, ID, парк и город",
             ("phone", "phone_format", "license", "driver_id", "park", "city", "channel"),
         ),
-        ("category", "Выбери полную категорию обращения", ("category", "ticket")),
+        ("category", "Выбери полную категорию и тип записи", ("category", "ticket")),
         ("content", "Заполни комментарий по задаче", ("comment", "link", "numbers")),
     ]
     if key == "crm_phone":
@@ -176,6 +204,8 @@ async def state(session, user):
         passed = _passed(key, attempts, awards)
         unlocked = not index or _passed(TASK_KEYS[index - 1], attempts, awards)
         snapshot = attempt.snapshot if attempt else snapshots[key]
+        # A task started before the driver's type was part of its data shows it from the fleet.
+        driver = {**snapshots[key]["driver"], **snapshot["driver"]}
         checks = attempt.checks if attempt else []
         task_state = (
             "passed"
@@ -193,7 +223,7 @@ async def state(session, user):
                 "goal": GOALS[key],
                 "speech": snapshot["speech"],
                 "state": task_state,
-                "driver": snapshot["driver"],
+                "driver": driver,
                 "category_path": snapshot["category_path"],
                 "steps": _steps(key, checks, passed),
                 "checks": checks,
@@ -245,22 +275,45 @@ async def start(session, user, task_key, request_id=None):
 
 
 def _account_link(comment, driver):
+    """Whether the comment links the driver's account in its park, and if not, why not.
+
+    Any link to the account in its park counts, with or without https:// and «/details»: the same
+    rule as the CRM's hint (frontend/src/pages/crm/accountData.ts linkMatch).
+    """
     target = urlparse(driver["link"])
     park_id = parse_qs(target.query)["park_id"][0]
-    for raw in re.findall(r"https?://[^\s<>]+", comment or ""):
+    account = driver["id"].casefold()
+    other = no_park = False
+    for raw in FLEET_LINK.findall(comment or ""):
+        raw = raw.rstrip(".,;!)]}")
         try:
-            parsed = urlparse(raw.rstrip(".,;!)]}"))
+            parsed = urlparse(raw if "://" in raw else "https://" + raw)
         except ValueError:
             # A malformed pasted URL is feedback, not a failed save transaction.
             continue
-        if (
-            parsed.scheme == "https"
-            and parsed.hostname == target.hostname
-            and parsed.path.rstrip("/") == target.path
-            and parse_qs(parsed.query).get("park_id") == [park_id]
-        ):
-            return True
-    return False
+        path = parsed.path.casefold().rstrip("/")
+        if path not in (f"/contractors/{account}", f"/contractors/{account}/details"):
+            other = True
+        elif parse_qs(parsed.query).get("park_id") == [park_id]:
+            return True, ""
+        else:
+            no_park = True
+    if no_park:
+        return False, (
+            "В ссылке нет таксопарка водителя (park_id). Скопируй ссылку на аккаунт целиком — "
+            "из данных задания или из адресной строки Диспетчерской."
+        )
+    if other:
+        return False, f"Ссылка ведёт на другой аккаунт. Нужен аккаунт: {driver['name']}."
+    if account in (comment or "").casefold():
+        return False, (
+            "В комментарии только ID. Вставь ссылку на аккаунт целиком: "
+            "https://fleet.yandex.kz/contractors/…?park_id=…"
+        )
+    return False, (
+        "Вставь в комментарий ссылку на аккаунт водителя — её можно скопировать из данных "
+        "задания или из адресной строки Диспетчерской."
+    )
 
 
 def _has_image(attachments):
@@ -348,22 +401,47 @@ async def autograde(session, user, task_key, row, attachments=None):
         other is None,
         "Это обращение уже использовано в другом задании.",
     )
-    for name, label, value, expected in (
-        ("phone", "Номер телефона водителя", _digits(row.phone), _digits(driver["phone"])),
+    phone = _phone_tail(row.phone)
+    for name, label, ok, message in (
+        (
+            "phone",
+            "Номер телефона водителя",
+            phone is not None and phone == _phone_tail(driver["phone"]),
+            f"Номер не совпадает с номером водителя {driver['phone']}. Скопируй его из данных "
+            "задания или из карточки в Диспетчерской.",
+        ),
         (
             "license",
             "Номер водительского удостоверения",
-            _plain(row.license_number),
-            _plain(driver["license"]),
+            _plain(row.license_number) == _plain(driver["license"]),
+            f"Номер В/У не совпадает: у водителя {driver['license']}.",
         ),
-        ("driver_id", "ID аккаунта водителя", _plain(row.driver_id), _plain(driver["id"])),
-        ("park", "Таксопарк водителя", _plain(row.park), _plain(driver["park"])),
-        ("city", "Город водителя", _plain(row.city), _plain(driver["city"])),
-        ("channel", "Канал обращения — звонок", row.channel, "Звонок"),
+        (
+            "driver_id",
+            "ID аккаунта водителя",
+            _plain(row.driver_id) == _plain(driver["id"]),
+            "Впиши ID аккаунта водителя — это часть ссылки на аккаунт после «contractors/».",
+        ),
+        (
+            "park",
+            "Таксопарк водителя",
+            _plain(row.park) == _plain(driver["park"]),
+            f"Выбери таксопарк водителя — «{driver['park']}».",
+        ),
+        (
+            "city",
+            "Город водителя",
+            _plain(row.city) == _plain(driver["city"]),
+            f"Выбери город водителя — «{driver['city']}».",
+        ),
+        (
+            "channel",
+            "Канал обращения — звонок",
+            row.channel == "Звонок",
+            "Водитель позвонил: в поле «Звонок/Чат» выбери «Звонок».",
+        ),
     ):
-        add(
-            name, label, value == expected, f"Проверь поле «{label}» по карточке учебного водителя."
-        )
+        add(name, label, ok, message)
     add(
         "phone_format",
         "Номер телефона без посторонних символов",
@@ -385,36 +463,40 @@ async def autograde(session, user, task_key, row, attachments=None):
         if ticket
         else "Сохрани консультацию без флажка «Формировать тикет».",
     )
-    meaningful = len(re.sub(r"https?://\S+", "", comment).strip()) >= 12
-    if key == "crm_first":
-        meaningful = meaningful and "тариф" in comment.casefold()
-    elif key == "crm_closed":
-        meaningful = meaningful and "лимит" in comment.casefold()
+    without_links = FLEET_LINK.sub("", re.sub(r"https?://\S+", "", comment))
+    text = without_links.strip()
+    meaningful = len(text) >= 12 and (
+        key not in TOPICS or any(word in text.casefold() for word in TOPICS[key])
+    )
     add(
         "comment",
         "Комментарий описывает обращение",
         meaningful,
-        "Коротко опиши итог консультации по тарифам."
+        "Опиши итог консультации: что ты рассказал водителю о тарифах."
         if key == "crm_first"
-        else "Опиши просьбу водителя в комментарии"
-        + (" о снятии лимита." if key == "crm_closed" else "."),
+        else "Опиши просьбу водителя одной-двумя фразами: снять лимит (ограничение) на аккаунте."
+        if key == "crm_closed"
+        else "Опиши просьбу водителя одной-двумя фразами.",
     )
     if ticket:
-        add(
-            "link",
-            "Ссылка на правильный аккаунт и таксопарк",
-            _account_link(comment, driver),
-            "Скопируй ссылку на этот аккаунт из карточки водителя.",
-        )
+        linked, why = _account_link(comment, driver)
+        add("link", "Ссылка на правильный аккаунт и таксопарк", linked, why)
     if key == "crm_phone":
-        without_links = re.sub(r"https?://\S+", "", comment)
-        numbers = {_digits(p) for p in re.findall(r"(?<!\d)\+?\d[\d ()-]{8,}\d", without_links)}
-        expected = {_digits(driver["phone"]), _digits(driver["new_phone"])}
+        numbers = {_phone_tail(p) for p in PHONE.findall(without_links)}
+        expected = {_phone_tail(driver["phone"]), _phone_tail(driver["new_phone"])}
+        missing = [
+            label
+            for label, number in (("старый", driver["phone"]), ("новый", driver["new_phone"]))
+            if _phone_tail(number) not in numbers
+        ]
         add(
             "numbers",
             "Старый и новый номера из звонка",
             expected.issubset(numbers),
-            "Укажи в комментарии старый и новый номера из задания.",
+            "Укажи в комментарии "
+            + (" и ".join(missing) if missing else "оба")
+            + f" номер{'а' if len(missing) != 1 else ''}: старый {driver['phone']}, "
+            f"новый {driver['new_phone']}.",
         )
         add(
             "attachment",

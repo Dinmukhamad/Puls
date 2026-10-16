@@ -102,7 +102,7 @@ async def test_driver_account_screens_have_editable_instructions(client, session
     assert after["title"] == "СМЗ: памятка"
 
 
-def test_car_change_request_is_available_for_training():
+async def test_car_change_request_is_available_for_training():
     """Car change is a worked example in Pulsar's tour, so the category must be selectable."""
     for driver_type in ("Обычный водитель", "Самозанятый водитель"):
         path = ["Водитель", driver_type, "Запрос", "Таксопарк", "Обработка запросов/ООЗ"]

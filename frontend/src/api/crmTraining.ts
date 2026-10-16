@@ -3,7 +3,8 @@ import { request } from "./client";
 export type CrmTaskKey = "crm_first" | "crm_phone" | "crm_closed";
 export interface CrmTrainingCheck { key: string; label: string; ok: boolean; message: string }
 export interface CrmTrainingStep { key: string; label: string; status: "pending" | "passed" | "failed" }
-export interface CrmTrainingDriver { id: string; name: string; phone: string; license: string; park: string; city: string; link: string; new_phone?: string }
+/** `type`: «Самозанятый водитель» or «Обычный водитель», where the category of the appeal starts. */
+export interface CrmTrainingDriver { id: string; name: string; phone: string; license: string; park: string; city: string; link: string; new_phone?: string; type?: string }
 export interface CrmTrainingTask {
   key: CrmTaskKey; title: string; speech: string; goal: string;
   state: "available" | "in_progress" | "passed" | "locked";

@@ -414,3 +414,108 @@ async def test_staff_status_change_increments_revision_and_rejects_stale_correct
         appeal_id=record["id"],
     )
     assert stale.status_code == 409
+
+
+async def operator_on(client, session, key):
+    """A new operator with the tasks before `key` passed and `key` started."""
+    user = await make_user(session, login=f"crm-way-{uuid4().hex[:8]}")
+    headers = await headers_for(client, user)
+    for previous in ("crm_first", "crm_phone", "crm_closed"):
+        item = await start(client, headers, previous)
+        if previous == key:
+            return headers, item
+        files = IMAGE if previous == "crm_phone" else None
+        result = await save(client, headers, appeal_payload(item), files=files)
+        assert result.status_code == 201, result.text
+
+
+def ten(phone):
+    return "".join(ch for ch in phone if ch.isdigit())[-10:]
+
+
+def written(key, item):
+    """What operators write the usual ways, each of which counts."""
+    d = item["driver"]
+    link = d["link"]
+    if key == "crm_first":
+        return [
+            {"phone": ten(d["phone"])},
+            {"phone": "8 " + ten(d["phone"])},
+            {"phone": "+7 (775) 610-22-84" if ten(d["phone"]) == "7756102284" else d["phone"]},
+            {"license_number": d["license"].lower()},
+            {"comment": "Подсказал, что Эконом и Комфорт видны в Таксометре в разделе «Режимы»."},
+        ]
+    if key == "crm_phone":
+        new = d["new_phone"]
+        return [
+            {"comment": f"Старый номер {ten(d['phone'])}, новый {ten(new)}. {link}"},
+            {"comment": f"Старый 8{ten(d['phone'])}, новый 8{ten(new)}.\n{link}"},
+            {"comment": f"Старый {d['phone']} новый {new} {link.replace('/details', '')}"},
+            {"comment": f"Старый {d['phone']} новый {new} {link.replace('https://', '')}"},
+            {"comment": f"Старый {d['phone']} новый {new} ({link.split('&lang')[0]})."},
+        ]
+    return [
+        {"comment": f"Водитель просит снять ограничение на наличные. {link}"},
+        {"comment": f"ЛИМИТ мешает работать, просит убрать.\n{link.replace('https', 'http')}"},
+    ]
+
+
+@pytest.mark.parametrize("key", ["crm_first", "crm_phone", "crm_closed"])
+async def test_the_usual_ways_operators_write_count_as_the_hints_say(
+    client, session, operator, key
+):
+    headers, item = await operator_on(client, session, key)
+    for changes in written(key, item):
+        # Each way on a task not passed yet: a new operator each time.
+        headers, item = await operator_on(client, session, key)
+        files = IMAGE if key == "crm_phone" else None
+        result = await save(client, headers, appeal_payload(item, **changes), files=files)
+        assert result.status_code == 201, result.text
+        done = task(result.json()["training_state"], key)
+        failed = [c for c in done["checks"] if not c["ok"]]
+        assert done["state"] == "passed", (changes, failed)
+
+
+async def test_failed_checks_say_what_is_wrong_and_the_task_shows_the_driver_type(
+    client, session, operator
+):
+    headers, item = await operator_on(client, session, "crm_phone")
+    d = item["driver"]
+    assert d["type"] == "Самозанятый водитель" == item["category_path"][1]
+    # The speech is the driver's alone; what to do is the goal.
+    assert "Создай" not in item["speech"] and "Создай тикет" in item["goal"]
+    wrong = appeal_payload(
+        item,
+        phone="+7 700 000 00 00",
+        channel="Чат",
+        is_ticket=False,
+        comment=f"Старый {d['phone']}. Аккаунт {d['id']}",
+    )
+    result = await save(client, headers, wrong, files=IMAGE)
+    assert result.status_code == 201, result.text
+    feedback = task(result.json()["training_state"], "crm_phone")
+    why = {c["key"]: c["message"] for c in feedback["checks"] if not c["ok"]}
+    assert set(why) == {"phone", "channel", "ticket", "link", "numbers"}
+    assert d["phone"] in why["phone"]
+    assert "«Звонок»" in why["channel"]
+    assert "только ID" in why["link"]
+    assert "новый номер" in why["numbers"] and d["new_phone"] in why["numbers"]
+    steps = {s["key"]: s for s in feedback["steps"]}
+    assert steps["category"]["label"] == "Выбери полную категорию и тип записи"
+    assert steps["category"]["status"] == "failed"
+    no_park = appeal_payload(
+        item,
+        request_id=wrong["request_id"],
+        comment=f"{d['phone']} {d['new_phone']} " + d["link"].split("?")[0],
+    )
+    again = await save(
+        client,
+        headers,
+        {**no_park, "revision": result.json()["revision"]},
+        appeal_id=result.json()["id"],
+    )
+    assert again.status_code == 200, again.text
+    link = next(
+        c for c in task(again.json()["training_state"], "crm_phone")["checks"] if c["key"] == "link"
+    )
+    assert not link["ok"] and "park_id" in link["message"]

@@ -38,6 +38,15 @@ test('a request comment counts once it carries the account link', () => {
   assert.equal(linkMatch(link, []), '');
 });
 
+test('the link counts as the server counts it: the account in its park, written any usual way', () => {
+  const parked = { ...account, park: '7ad2' };
+  for (const ok of [link, link.replace('/details', ''), link.replace('https://', ''), link.replace('https', 'http'), `(${link.split('&lang')[0]}).`])
+    assert.equal(linkMatch(`Прошу снять лимит. ${ok}`, [parked]), 'ok', ok);
+  // The ID alone, a link without the park or to another park or account is no link to it.
+  for (const bad of [`аккаунт ${account.id}`, link.split('?')[0], link.replace('7ad2', '9999'), link.replace(account.id, 'abc')])
+    assert.equal(linkMatch(`Прошу снять лимит. ${bad}`, [parked]), 'missing', bad);
+});
+
 test('without a call the test driver and the open account both count', () => {
   const open = { id: '9a8b7c6d5e4f30211203f4e5d6c7b8a9', phone: '+77057314482', license: 'MV305117' };
   const both = [account, open];
