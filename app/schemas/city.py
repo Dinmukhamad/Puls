@@ -1,6 +1,6 @@
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.services.city import TARGET_LIMITS, TEMPLATES
+from app.services.city import CRM_TASK_KEYS, TARGET_LIMITS, TEMPLATES
 
 
 class MissionInput(BaseModel):
@@ -29,6 +29,8 @@ class SettingsInput(BaseModel):
                 raise ValueError("Для знакомства и профиля цель равна одному действию")
             if key == "scenario_business_park" and mission.target != 1:
                 raise ValueError("Для сценария цель равна одному успешному прохождению")
+            if key in CRM_TASK_KEYS and mission.target != 1:
+                raise ValueError("Для задания CRM цель равна одному проверенному обращению")
             if key == "scenario_business_park" and (mission.xp or mission.prerequisite):
                 raise ValueError("Сценарий не выдаёт XP и доступен без других миссий")
             if mission.prerequisite == "scenario_business_park":

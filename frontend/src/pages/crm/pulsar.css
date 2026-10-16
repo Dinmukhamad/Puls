@@ -66,6 +66,9 @@
 .pulsar-edit-tools label { display:block; color:#6c6690; font-size:12px; margin-top:12px; }
 .work-sites .pulsar-edit-tools select { border:1px solid #e0e1e3; border-radius:8px; font-size:12.5px; color:#474a50; margin-top:6px; width:100%; }
 .pulsar-muted { color:#7b7596; font-size:13px; line-height:1.6; }
+.crm-reference { color: #2f3553; font-size: 13px; line-height: 1.6; }
+.crm-reference-steps { padding-left: 22px; display: grid; gap: 10px; margin: 12px 0; }
+.crm-reference small { display: block; color: #747985; line-height: 1.5; }
 .pulsar-editor fieldset { border:0; padding:0; margin:0; min-width:0; }
 .pulsar-editor label { display:block; color:#4d4670; font-size:13px; margin:15px 0 0; }
 .work-sites .pulsar-editor input,.work-sites .pulsar-editor textarea { margin-top:6px; border-color:#d9dbde; border-radius:8px; color:#2f3553; padding:9px; font-size:13.5px; }

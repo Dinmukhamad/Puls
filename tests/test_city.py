@@ -259,18 +259,20 @@ async def test_real_driver_chain_ignores_foreign_cancelled_and_preview_orders(
     assert await session.scalar(select(func.count()).select_from(CoinTransaction)) == 3
 
 
-async def test_crm_chain_requires_own_category_and_staff_closed_ticket(client, operator, session):
-    headers = auth(await login(client, operator.login))
+async def test_crm_chain_requires_verified_training_not_raw_or_staff_closed_tickets(
+    client, operator, session
+):
+    from tests.conftest import login_with_work_sites
+    from tests.test_crm_training import IMAGE, appeal_payload, save, start
+
+    headers = auth(await login_with_work_sites(client, operator.login))
     other = await make_user(session, login="other")
     await appeal(session, other.id, phone=True, ticket=True, status="closed")
     await claim(client, headers, "welcome")
     assert (await claim(client, headers, "crm_first")).status_code == 409
     await appeal(session, operator.id)
-    assert (await claim(client, headers, "crm_first")).status_code == 200
-    assert (await claim(client, headers, "crm_phone")).status_code == 409
+    assert (await claim(client, headers, "crm_first")).status_code == 409
     ticket = await appeal(session, operator.id, phone=True, ticket=True, status="new")
-    assert (await claim(client, headers, "crm_phone")).status_code == 200
-    assert (await claim(client, headers, "crm_closed")).status_code == 409
     staff = await make_user(session, login="trainer", role=Role.TRAINER)
     staff_headers = auth(await login(client, staff.login))
     response = await client.patch(
@@ -279,7 +281,16 @@ async def test_crm_chain_requires_own_category_and_staff_closed_ticket(client, o
         json={"status": "closed"},
     )
     assert response.status_code == 200, response.text
-    assert (await claim(client, headers, "crm_closed")).status_code == 200
+    # Business processing of an arbitrary ticket is separate from task proof.
+    assert (await claim(client, headers, "crm_first")).status_code == 409
+    for key in ("crm_first", "crm_phone", "crm_closed"):
+        item = await start(client, headers, key)
+        saved = await save(
+            client, headers, appeal_payload(item), files=IMAGE if key == "crm_phone" else None
+        )
+        assert saved.status_code == 201, saved.text
+        assert saved.json()["status"] == ("recorded" if key == "crm_first" else "new")
+        assert (await claim(client, headers, key)).status_code == 200
     result = (await client.get(BASE, headers=headers)).json()
     assert result["xp"] == 505 and result["balance"] == 210
 

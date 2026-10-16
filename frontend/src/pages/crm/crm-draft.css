@@ -1,0 +1,10 @@
+.crm-draft-status { margin:14px 20px 0; padding:10px 12px; border:1px solid #dce5f3; border-radius:4px; background:#f5f8fe; color:#657b9b; font-size:12px; }
+.crm-draft-status p { margin:0; }
+.crm-draft-status p + p { margin-top:6px; }
+.crm-draft-status[data-status=saved] { background:#f1faf6; border-color:#cce8da; color:#35735a; }
+.crm-draft-status[data-status=error],.crm-draft-status[data-status=conflict] { background:#fff8ed; border-color:#ecd6ab; color:#886326; }
+.crm-draft-status > div { display:flex; flex-wrap:wrap; gap:8px; }
+.crm-draft-status button { margin-top:8px; border:1px solid #cad7ed; border-radius:3px; background:white; color:#4967a0; padding:7px 10px; min-height:34px; }
+.crm-draft-status button:hover { border-color:#7d9ae0; background:#f2f6ff; }
+.crm-draft-status .crm-error { color:#a34836; }
+@media(max-width:600px) { .crm-draft-status { margin-inline:12px; } .crm-draft-status > div { flex-direction:column; align-items:stretch; } }

@@ -13,10 +13,14 @@ from sqlalchemy.orm import undefer
 
 from app.core.deps import CurrentUser, LearningEditor, LearningReader, SessionDep
 from app.core.work_sites import require_work_sites
+from app.db.base import utcnow
 from app.models.crm import CrmAppeal, CrmAttachment, CrmCategory, CrmInstruction
+from app.models.crm_training import CrmTrainingAttempt
 from app.schemas.crm import AppealInput, CategoryInput, InstructionInput, StatusInput
+from app.services import crm_draft, crm_training
 from app.services.crm_catalog import CITIES, PARKS, category_id, default_categories
 from app.services.crm_instructions import default_instructions
+from app.services.learning import lock_learner
 
 router = APIRouter(tags=["Учебная CRM"], dependencies=[Depends(require_work_sites)])
 PREFIX = "/learning/crm"
@@ -132,6 +136,8 @@ def brief(row):
             "is_ticket",
             "status",
             "created_at",
+            "revision",
+            "training_task",
         )
     }
 
@@ -300,6 +306,73 @@ async def read_files(files):
     return result
 
 
+SAVE_META = {
+    "request_id",
+    "training_task",
+    "draft_key",
+    "draft_revision",
+    "revision",
+    "remove_attachment_ids",
+}
+
+
+def appeal_body(payload):
+    try:
+        return AppealInput.model_validate_json(payload)
+    except ValidationError as exc:
+        raise HTTPException(422, "; ".join(e["msg"] for e in exc.errors())) from exc
+
+
+def unique_uploads(uploads, existing=()):
+    """A confirmed draft upload is not attached twice after a response is lost."""
+    seen = set(existing)
+    result = []
+    for item in uploads:
+        if item not in seen:
+            seen.add(item)
+            result.append(item)
+    return result
+
+
+def bound_uploads(uploads, existing=()):
+    files = [*existing, *uploads]
+    if len(files) > 5 or sum(len(data) for _, _, data in files) > 8 * 1024 * 1024:
+        raise HTTPException(422, "До 5 файлов, по 2 МБ каждый и до 8 МБ на обращение")
+
+
+async def require_started_training(session, user, key):
+    """Only an explicit, unfinished start may accept a new training proof."""
+    if key is None:
+        return
+    attempts, awards = await crm_training._records(session, user)
+    if crm_training._passed(key, attempts, awards):
+        raise HTTPException(409, "Это учебное задание уже пройдено")
+    if key not in attempts:
+        raise HTTPException(409, "Сначала начните это учебное задание CRM")
+    index = crm_training.TASK_KEYS.index(key)
+    if index and not crm_training._passed(crm_training.TASK_KEYS[index - 1], attempts, awards):
+        raise HTTPException(409, "Сначала пройдите предыдущее учебное задание CRM")
+
+
+async def saved_result(session, user, row, state=None):
+    result = await detail(session, row)
+    if row.training_task:
+        result["training_state"] = state or await crm_training.state(session, user)
+    return result
+
+
+async def save_labels(session, body, uploads):
+    nodes = {n["id"]: n for n in await catalog(session)}
+    try:
+        return validate_appeal(body, nodes, uploads)
+    except HTTPException as exc:
+        if not body.training_task or exc.status_code != 422:
+            raise
+        # The training grader must retain mistakes as actual saved work and explain
+        # them. It independently checks the full expected path, fields and evidence.
+        return [nodes[key]["label"] for key in body.category_ids if key in nodes]
+
+
 @router.post(PREFIX + "/appeals", status_code=201)
 async def create_appeal(
     session: SessionDep,
@@ -307,10 +380,10 @@ async def create_appeal(
     payload: str = Form(..., max_length=30000),
     files: list[UploadFile] = File(default=[]),
 ):
-    try:
-        body = AppealInput.model_validate_json(payload)
-    except ValidationError as exc:
-        raise HTTPException(422, "; ".join(e["msg"] for e in exc.errors())) from exc
+    body = appeal_body(payload)
+    if body.training_task and body.details.get("scenario_attempt"):
+        raise HTTPException(422, "Учебное задание CRM и попытка сценария сохраняются отдельно")
+    await lock_learner(session, user.id)
     scenario_attempt = None
     if body.details.get("scenario_attempt"):
         from app.services import scenarios
@@ -327,16 +400,31 @@ async def create_appeal(
         )
     )
     if existing:
-        return await detail(session, existing)
+        if existing.training_task != body.training_task:
+            raise HTTPException(409, "Этот запрос уже использован для другого обращения")
+        return await saved_result(session, user, existing)
+    await require_started_training(session, user, body.training_task)
+    if body.remove_attachment_ids:
+        raise HTTPException(422, "Удаление вложений доступно при исправлении обращения")
+    draft, draft_uploads = await crm_draft.load_for_save(
+        session, user, body.draft_key, body.draft_revision, body.training_task
+    )
+    if draft and draft.appeal_id is not None:
+        raise HTTPException(409, "Этот черновик исправляет сохранённое обращение")
     uploads = await read_files(files)
-    labels = validate_appeal(body, {n["id"]: n for n in await catalog(session)}, uploads)
+    uploads = unique_uploads([*draft_uploads, *uploads])
+    bound_uploads(uploads)
+    labels = await save_labels(session, body, uploads)
     row = CrmAppeal(
-        **body.model_dump(exclude={"request_id"}),
+        **body.model_dump(exclude=SAVE_META),
         request_id=str(body.request_id),
+        training_task=body.training_task,
+        revision=1,
         author_id=user.id,
         author_name=user.full_name,
         category_labels=labels,
         status="new" if body.is_ticket else "recorded",
+        created_at=utcnow(),
     )
     session.add(row)
     try:
@@ -353,6 +441,13 @@ async def create_appeal(
             session.add(
                 CrmAttachment(appeal_id=row.id, name=name, mime=mime, data=data, size=len(data))
             )
+        await session.flush()
+        training_state = None
+        if body.training_task:
+            training_state = await crm_training.autograde(
+                session, user, body.training_task, row, uploads
+            )
+        await crm_draft.consume_loaded(session, draft)
         await session.commit()
     except IntegrityError:
         await session.rollback()
@@ -362,9 +457,99 @@ async def create_appeal(
             )
         )
         if existing:
-            return await detail(session, existing)
+            return await saved_result(session, user, existing)
         raise
-    return await detail(session, row)
+    return await saved_result(session, user, row, training_state)
+
+
+@router.patch(PREFIX + "/appeals/{appeal_id}")
+async def correct_appeal(
+    appeal_id: int,
+    session: SessionDep,
+    user: CurrentUser,
+    payload: str = Form(..., max_length=30000),
+    files: list[UploadFile] = File(default=[]),
+):
+    """Correct one's own failed work; passed proof cannot be rewritten."""
+    body = appeal_body(payload)
+    await lock_learner(session, user.id)
+    row = await session.get(CrmAppeal, appeal_id, populate_existing=True)
+    if row is None or row.author_id != user.id:
+        raise HTTPException(404, "Собственное обращение не найдено")
+    if row.last_edit_request_id == str(body.request_id):
+        return await saved_result(session, user, row)
+    if body.revision is None or body.revision != row.revision:
+        raise HTTPException(409, "Обращение уже изменено. Обновите его перед исправлением.")
+    if row.details.get("scenario_attempt") or body.details.get("scenario_attempt"):
+        raise HTTPException(409, "Обращение сценария исправляется в его учебной попытке")
+    if row.training_task is None:
+        raise HTTPException(409, "Исправление доступно для текущего учебного задания CRM")
+    if row.status == "closed":
+        raise HTTPException(409, "Закрытое обращение нельзя изменять")
+    proof = await session.scalar(
+        select(CrmTrainingAttempt.id).where(
+            CrmTrainingAttempt.appeal_id == row.id, CrmTrainingAttempt.phase == "passed"
+        )
+    )
+    if proof is not None:
+        raise HTTPException(409, "Проверенное учебное обращение нельзя изменять")
+    current_attempt = await session.scalar(
+        select(CrmTrainingAttempt).where(
+            CrmTrainingAttempt.user_id == user.id,
+            CrmTrainingAttempt.task_key == row.training_task,
+        )
+    )
+    if current_attempt is None or current_attempt.appeal_id != row.id:
+        raise HTTPException(409, "Исправьте последнее обращение этого учебного задания")
+    if body.training_task not in (None, row.training_task):
+        raise HTTPException(409, "Учебное назначение обращения нельзя изменять")
+    task = row.training_task
+    await require_started_training(session, user, task)
+    body.training_task = task
+    draft, draft_uploads = await crm_draft.load_for_save(
+        session, user, body.draft_key, body.draft_revision, task
+    )
+    if draft and draft.appeal_id != row.id:
+        raise HTTPException(409, "Черновик относится к другому обращению")
+    old_files = list(
+        await session.scalars(
+            select(CrmAttachment)
+            .where(CrmAttachment.appeal_id == row.id)
+            .options(undefer(CrmAttachment.data))
+        )
+    )
+    removed = set(body.remove_attachment_ids)
+    if draft:
+        removed.update(draft.remove_appeal_attachment_ids)
+    if removed - {file.id for file in old_files}:
+        raise HTTPException(422, "Вложение не принадлежит этому обращению")
+    kept = [file for file in old_files if file.id not in removed]
+    kept_uploads = [(file.name, file.mime, file.data) for file in kept]
+    uploads = unique_uploads([*draft_uploads, *await read_files(files)], kept_uploads)
+    bound_uploads(uploads, kept_uploads)
+    labels = await save_labels(session, body, [*kept_uploads, *uploads])
+    for key, value in body.model_dump(exclude=SAVE_META).items():
+        setattr(row, key, value)
+    row.category_labels = labels
+    row.revision += 1
+    row.last_edit_request_id = str(body.request_id)
+    row.status = "new" if body.is_ticket else "recorded"
+    for file in old_files:
+        if file.id in removed:
+            await session.delete(file)
+    for name, mime, data in uploads:
+        session.add(
+            CrmAttachment(appeal_id=row.id, name=name, mime=mime, data=data, size=len(data))
+        )
+    await session.flush()
+    training_state = None
+    if task:
+        training_state = await crm_training.autograde(
+            session, user, task, row, [*kept_uploads, *uploads]
+        )
+    await crm_draft.consume_loaded(session, draft)
+    await session.commit()
+    return await saved_result(session, user, row, training_state)
 
 
 @router.patch("/admin/learning/crm/appeals/{appeal_id}/status")
@@ -375,6 +560,7 @@ async def update_status(
     if not row or not row.is_ticket:
         raise HTTPException(404, "Тикет не найден")
     row.status = body.status
+    row.revision += 1
     await session.commit()
     return await detail(session, row)
 

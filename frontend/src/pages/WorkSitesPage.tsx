@@ -3,6 +3,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { categoryRules, crm, type CrmAppeal } from "../api/crm";
+import { crmTraining, crmTrainingKey, type CrmTaskKey } from "../api/crmTraining";
+import { CrmTrainingDock } from "./crm/CrmTrainingDock";
 import { CrmAppealForm } from "./crm/CrmAppealForm";
 import { CrmAppealList } from "./crm/CrmAppealList";
 import { CrmAppealDetail } from "./crm/CrmAppealDetail";
@@ -44,6 +46,8 @@ export function WorkSitesPage() {
   }, [user?.id, scenarioAttemptId, params, scenario.data]);
   const workspaceReady = !scenarioAttemptId || !!scenario.data && !scenario.isError;
   const catalog = useQuery({ queryKey: ["crm-catalog"], queryFn: crm.catalog, refetchInterval: 30000, enabled: workspaceReady });
+  const training = useQuery({ queryKey: crmTrainingKey(user?.id), queryFn: ({ signal }) => crmTraining.state(signal), enabled: workspaceReady && !scenarioAttemptId, retry: false, refetchOnWindowFocus: true });
+  const startTraining = useMutation({ mutationFn: crmTraining.start, onSuccess: value => client.setQueryData(crmTrainingKey(user?.id), value) });
   const inspect = useMutation({ mutationFn: ({ attemptId, input }: { attemptId: string; input: ScenarioInspection }) => scenarios.inspect(attemptId, input), onSuccess: value => client.setQueryData(scenarioKeys.attempt(value.id), value) });
   const verifyAppeal = useMutation({ mutationFn: ({ attemptId, appealId }: { attemptId: string; appealId: number }) => scenarios.crmCheck(attemptId, appealId), onSuccess: value => client.setQueryData(scenarioKeys.attempt(value.id), value) });
   const inspectedViews = useRef(new Set<string>());
@@ -54,6 +58,8 @@ export function WorkSitesPage() {
   // walks between the tabs itself, so switching them keeps it.
   const [coach, setCoach] = useState<{ id: string; steps: CoachStep[]; cross?: boolean } | null>(null);
   const [forward, setForward] = useState("");
+  const [showInstructions, setShowInstructions] = useState(false);
+  const [reviewTask, setReviewTask] = useState<CrmTaskKey | null>(null);
   const [selection, setSelection] = useState<string[]>([]), [helpRequest, setHelpRequest] = useState(0);
   const instructionEditor = ["trainer", "supervisor", "head", "admin"].includes(user?.role ?? "");
   const updateSelection = useCallback((ids: string[]) => { setSelection(ids); }, []);
@@ -120,6 +126,10 @@ export function WorkSitesPage() {
   const [copied, setCopied] = useState(false);
   // The call a CRM request is made for: the appeal is about its driver until the call is solved.
   const [crmCall, setCrmCall] = useState<string | null>(null);
+  const activeTraining = training.data?.tasks.find(task => task.key === training.data.active_task && task.state === "in_progress");
+  const trainingTask = !scenarioAttemptId && !crmCall ? activeTraining?.key : undefined;
+  const availableTraining = training.data?.tasks.find(task => task.state === "available");
+  const trainingEdit = useQuery({ queryKey: ["crm-appeal", id], queryFn: () => crm.appeal(id), enabled: !scenarioAttemptId && view === "edit" && id > 0, retry: false });
   // What the operator copied last, recognised against the appeal's account: Pulsar waits for the right piece.
   const [copiedKind, setCopiedKind] = useState<CopyKind | "">("");
   const appealAccountsRef = useRef<AccountData[]>([]);
@@ -141,7 +151,7 @@ export function WorkSitesPage() {
   const sections = useSections(user?.id, drivers), sectionView = SECTION_VIEWS[view];
   const currentDriver = drivers.find(d => d.id === driverId);
   const setFormDirty = useCallback((value: boolean) => setDirty(value), []);
-  const pageTitle = sectionView ? sectionView.title : view === "create" ? "Создать обращение" : view === "categories" ? "Категории" : view === "drivers" ? "Учётные записи водителей" : id ? `Обращение #${id}` : "Обращения";
+  const pageTitle = sectionView ? sectionView.title : view === "edit" ? "Исправить обращение" : view === "create" ? "Создать обращение" : view === "categories" ? "Категории" : view === "drivers" ? "Учётные записи водителей" : id ? `Обращение #${id}` : "Обращения";
   const driverScreenTitle: Record<DriverScreen, string> = { details: "Подробнее", smz: "Перевод в СМЗ", limit: "Лимит", car: "Автомобиль" };
   const pulsarScreen = sectionView ? sectionView.screen : view === "drivers" ? `drivers:${currentDriver ? driverScreen ?? "details" : "list"}` : undefined;
   /** «В Диспетчерской» in the CRM card: the same account in its park of the dispatch. */
@@ -151,7 +161,31 @@ export function WorkSitesPage() {
     if (!force && dirty && !window.confirm("В обращении есть несохранённые изменения. Покинуть форму?")) return;
     const next = preserveScenarioContext(new URLSearchParams(query), params);
     for (const key of ["fleet", "fpark", "oscreen"]) { const value = params.get(key); if (value) next.set(key, value); }
-    setDirty(false); setParams(next); setNotice(""); if (!query.includes("view=create")) setSelection([]);
+    setDirty(false); setParams(next); setNotice(""); if (!query.includes("view=create") && !query.includes("view=edit")) setSelection([]);
+  }
+  function openTrainingForm(appealId?: number) {
+    if (dirty && !window.confirm("Перейти к заданию? Дождитесь сохранения черновика перед выходом из формы.")) return;
+    setCoach(null); setCrmCall(null); setCopy(undefined); setFormKey(value => value + 1); setShowInstructions(false);
+    go(appealId ? `view=edit&appeal=${appealId}` : "view=create", true);
+  }
+  async function beginTraining(key: CrmTaskKey) {
+    if (dirty && !window.confirm("Открыть задание? Дождитесь сохранения текущего черновика перед выходом из формы.")) return;
+    try {
+      await startTraining.mutateAsync(key);
+      setReviewTask(null);
+      setCrmCall(null); setCoach(null); setCopy(undefined); setFormKey(value => value + 1); setShowInstructions(false); go("view=create", true);
+    } catch { /* The dock keeps the server error and offers the same action again. */ }
+  }
+  function appealSaved(appeal: CrmAppeal, duplicate: boolean) {
+    if (trainingTask) setReviewTask(trainingTask);
+    if (appeal.training_state) client.setQueryData(crmTrainingKey(user?.id), appeal.training_state);
+    client.invalidateQueries({ queryKey: ["crm-appeals"] }); client.invalidateQueries({ queryKey: FLEET_QUERY });
+    client.invalidateQueries({ queryKey: ["city"] }); client.invalidateQueries({ queryKey: crmTrainingKey(user?.id) });
+    client.setQueryData(["crm-appeal", appeal.id], appeal); setDirty(false);
+    if (duplicate && !trainingTask) { setCopy(appeal); setFormKey(value => value + 1); } else go(`appeal=${appeal.id}`, true);
+    setNotice(`Обращение #${appeal.id} сохранено.${trainingTask ? " Результат проверки — в панели заданий CRM." : duplicate ? " Открыта копия; вложения нужно добавить заново." : " Оно доступно в истории обращений."}`);
+    setShowInstructions(false);
+    if (scenarioAttemptId && canCheckScenarioAppeal(scenario.data, appeal.id)) verifyAppeal.mutate({ attemptId: scenarioAttemptId, appealId: appeal.id });
   }
   function goFleet(path: string, park = fleetPark, record = true) {
     const next = new URLSearchParams(params); next.set("site", "dispatch"); next.set("fleet", path); next.set("fpark", park);
@@ -198,12 +232,7 @@ export function WorkSitesPage() {
     if (call && driver && park) setCoach({ id: tour, steps: callTour(call, driver, park) });
   }
   const endCoach = useCallback((finished: boolean) => { setCoach(current => { const key = current && seenKey(current.id); if (key) try { localStorage.setItem(key, finished ? "done" : "closed"); } catch { /* Optional preference. */ } return null; }); }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
-  const sectionTour: CoachTourId | null = SECTION_TOURS[view] && !params.get("reg") ? SECTION_TOURS[view] : view === "drivers" && !driverId ? "drivers" : (view === "list" && !id) || view === "create" ? "appeals" : null;
-  useEffect(() => {
-    if (scenarioAttemptId || site !== "crm" || !catalog.data || !sectionTour || coach) return;
-    let seen = true; try { seen = !!localStorage.getItem(seenKey(sectionTour)); } catch { /* Without storage the tour stays manual. */ }
-    if (!seen) { const timer = window.setTimeout(() => setCoach(tourOf(sectionTour)), 600); return () => window.clearTimeout(timer); }
-  }, [catalog.data, sectionTour, site, scenarioAttemptId]); // eslint-disable-line react-hooks/exhaustive-deps
+  // CRM training opens explicitly; optional tours explain controls and never grade a task.
   // The first visit to the dispatch starts the tour of the cabinet once.
   useEffect(() => {
     if (scenarioAttemptId || site !== "dispatch" || !fleetQuery.data || coach) return;
@@ -230,7 +259,7 @@ export function WorkSitesPage() {
   const appealAccounts: AccountData[] = (appealTarget ? [appealTarget] : [testDriver, fleetDriver])
     .filter((d): d is FleetDriver => !!d).map(d => ({ id: d.id, phone: d.phone, license: d.license }));
   appealAccountsRef.current = appealAccounts;
-  const needsLink = view === "create" && !!catalog.data && categoryRules(catalog.data.categories, selection).has("account_link");
+  const needsLink = (view === "create" || view === "edit") && !!catalog.data && categoryRules(catalog.data.categories, selection).has("account_link");
   /** The appeal tour walks to the driver's account in the Диспетчерская and back, so it lives on both tabs. */
   function tourOf(tour: CoachTourId) {
     return tour === "appeals" ? { id: tour, steps: appealTour(appealTarget && appealPark ? driverAccount(appealTarget, appealPark) : undefined), cross: true } : { id: tour, steps: COACH_TOURS[tour] };
@@ -257,9 +286,10 @@ export function WorkSitesPage() {
     {notice && <div className="crm-notice" role="status">✓ {notice}<button aria-label="Закрыть уведомление" onClick={() => setNotice("")}>×</button></div>}
     {catalog.isPending && <div className="crm-empty" role="status">Открываем CRM…</div>}{catalog.isError && <div className="crm-empty" role="alert"><p>{catalog.error.message}</p><button className="crm-secondary" onClick={() => catalog.refetch()}>Повторить</button></div>}
     {sectionView ? sections.state ? <SectionPage view={view} params={params} state={sections.state} update={sections.update} drivers={drivers} save={saveFleet} parks={fleetParks} employee={user?.full_name ?? "Оператор"} notify={setNotice} openDriver={driver => openDriver(driver)} go={query => go(query)} /> : <FleetLoading query={fleetQuery} />
-    : catalog.data && (view === "create" ? <CrmAppealForm key={`${formKey}:${scenarioAttemptId ?? ""}`} catalog={catalog.data} initial={copy} scenarioAttemptId={scenarioAttemptId} scenarioRevision={scenario.data?.revision} accounts={appealAccounts} onDirty={setFormDirty} onCategoryChange={updateSelection} onRequestHelp={() => setHelpRequest(n => n + 1)} onSaved={(appeal, duplicate) => { client.invalidateQueries({ queryKey: ["crm-appeals"] }); client.invalidateQueries({ queryKey: FLEET_QUERY }); client.setQueryData(["crm-appeal", appeal.id], appeal); setDirty(false); if (duplicate) { setCopy(appeal); setFormKey(k => k + 1); } else go(`appeal=${appeal.id}`, true); setNotice(`Обращение #${appeal.id} сохранено и доступно всем участникам.${duplicate ? " Открыта копия; вложения нужно добавить заново." : ""}`); if (scenarioAttemptId && canCheckScenarioAppeal(scenario.data, appeal.id)) verifyAppeal.mutate({ attemptId: scenarioAttemptId, appealId: appeal.id }); }} /> : view === "drivers" ? fleetQuery.data ? <CrmDrivers key={`${driverId ?? "list"}:${driverScreen ?? ""}`} drivers={drivers} save={saveFleet} rules={fleetQuery.data.rules.map(r => r.name)} tariffs={fleetQuery.data.catalog.tariffs} openFleet={openFleetDriver} open={openDriver} notify={setNotice} driverId={driverId} screen={driverScreen} onReset={async () => { try { await saveFleet(fleetApi.reset); setNotice("Учебные водители возвращены в исходное состояние — и в CRM, и в Диспетчерской."); } catch (e) { setNotice((e as Error).message); } }} /> : <FleetLoading query={fleetQuery} /> : view === "categories" && editor ? <CrmCategories nodes={catalog.data.categories} /> : id > 0 ? <CrmAppealDetail id={id} editor={editor} onDuplicate={create} /> : <CrmAppealList catalog={catalog.data} onOpen={appeal => go(`appeal=${appeal}`)} onCreate={() => create()} />)}
+    : catalog.data && (view === "create" || view === "edit" ? (!scenarioAttemptId && (training.isPending || training.isError) ? <div className="crm-empty" role={training.isError ? "alert" : "status"}>{training.isError ? <><p>{training.error.message}</p><button className="crm-secondary" onClick={() => void training.refetch()}>Загрузить обучение</button></> : "Восстанавливаем обучение…"}</div> : !scenarioAttemptId && !crmCall && view === "create" && !trainingTask && availableTraining ? <section className="crm-panel crm-training-start"><h2>Практика CRM: {availableTraining.title}</h2><p>Сначала откройте задание. Затем самостоятельно заполните обращение — система проверит его после сохранения и запомнит результат.</p><button className="crm-primary" disabled={startTraining.isPending} onClick={() => void beginTraining(availableTraining.key)}>{startTraining.isPending ? "Открываем задание…" : "Начать задание →"}</button>{startTraining.error && <p className="crm-error" role="alert">{startTraining.error.message}</p>}</section> : view === "edit" && !trainingEdit.data ? <div className="crm-empty" role={trainingEdit.isError ? "alert" : "status"}>{trainingEdit.isError ? <><p>{trainingEdit.error.message}</p><button className="crm-secondary" onClick={() => void trainingEdit.refetch()}>Повторить</button></> : "Открываем сохранённое обращение…"}</div> : <CrmAppealForm key={`${formKey}:${scenarioAttemptId ?? ""}:${trainingTask ?? "free"}:${view === "edit" ? id : "new"}`} catalog={catalog.data} initial={view === "edit" ? undefined : copy} editing={view === "edit" ? trainingEdit.data : undefined} trainingTask={trainingTask} scenarioAttemptId={scenarioAttemptId} scenarioRevision={scenario.data?.revision} accounts={appealAccounts} onDirty={setFormDirty} onCategoryChange={updateSelection} onRequestHelp={() => { setShowInstructions(true); setHelpRequest(n => n + 1); }} onSaved={appealSaved} />) : view === "drivers" ? fleetQuery.data ? <CrmDrivers key={`${driverId ?? "list"}:${driverScreen ?? ""}`} drivers={drivers} save={saveFleet} rules={fleetQuery.data.rules.map(r => r.name)} tariffs={fleetQuery.data.catalog.tariffs} openFleet={openFleetDriver} open={openDriver} notify={setNotice} driverId={driverId} screen={driverScreen} onReset={async () => { try { await saveFleet(fleetApi.reset); setNotice("Учебные водители возвращены в исходное состояние — и в CRM, и в Диспетчерской."); } catch (e) { setNotice((e as Error).message); } }} /> : <FleetLoading query={fleetQuery} /> : view === "categories" && editor ? <CrmCategories nodes={catalog.data.categories} /> : id > 0 ? <CrmAppealDetail id={id} editor={editor} onDuplicate={create} /> : <CrmAppealList catalog={catalog.data} onOpen={appeal => go(`appeal=${appeal}`)} onCreate={() => create()} />)}
     <footer className="crm-bottom-note">Учебная CRM · Практика работы с обращениями</footer></main></div></div></div>}
-    {site === "crm" ? !scenarioAttemptId && <PulsarGuide catalog={catalog.data} screen={pulsarScreen} categoryIds={selection} step={null} editor={instructionEditor} openRequest={helpRequest} onStart={() => startCoach(helpTour)} onClose={() => {}} onPrevious={() => {}} onNext={() => {}} />
+    {site === "crm" ? !scenarioAttemptId && (showInstructions ? <PulsarGuide catalog={catalog.data} screen={pulsarScreen} categoryIds={selection} step={null} editor={instructionEditor} openRequest={helpRequest} onStart={() => startCoach(helpTour)} onClose={() => {}} onPrevious={() => {}} onNext={() => {}} onTraining={() => setShowInstructions(false)} />
+      : <CrmTrainingDock requestedTask={reviewTask ?? params.get("task")} data={training.data} loading={training.isPending} error={training.error} busy={startTraining.isPending} actionError={startTraining.error} onReload={() => void training.refetch()} onStart={key => void beginTraining(key)} onContinue={() => openTrainingForm()} onEdit={appealId => openTrainingForm(appealId)} onOpen={appealId => go(`appeal=${appealId}`)} onInstructions={() => { setShowInstructions(true); setHelpRequest(n => n + 1); }} />)
       : site === "dispatch" && !scenarioAttemptId && <DispatchDock feedback={fleetFeedback} onFeedback={setFleetFeedback} onGo={(path, park) => goFleet(path, park)} onTour={tour => startFleetTour(tour)} onCrm={callId => { setCrmCall(callId); setCoach(null); if (view === "create") openSite("crm"); else create(); }} />}
     {coach && !scenarioAttemptId && <PulsarCoach key={coach.id} steps={coach.steps} onClose={endCoach} extra={step => step.slot === "courier-code" && coach.id.startsWith("call:") ? <CoachCourierCode callId={coach.id.slice(5)} feedback={fleetFeedback} onFeedback={setFleetFeedback} />
       : step.slot?.startsWith("test-") && testDriver ? <TestData key={step.slot} slot={step.slot} driver={testDriver} park={testPark} /> : null} />}

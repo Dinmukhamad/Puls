@@ -19,6 +19,8 @@ from app.api.v1 import (
     city_sandbox,
     city_seasons,
     crm,
+    crm_draft,
+    crm_training,
     dispatch,
     driver,
     economy,
@@ -44,6 +46,8 @@ api_router.include_router(city_sandbox.router)
 api_router.include_router(city_seasons.router)
 api_router.include_router(work_sites_access.router)
 api_router.include_router(crm.router)
+api_router.include_router(crm_draft.router)
+api_router.include_router(crm_training.router)
 api_router.include_router(dispatch.router)
 api_router.include_router(oktell.router)
 api_router.include_router(access.router)

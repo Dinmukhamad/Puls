@@ -1,4 +1,5 @@
 import { buildQuery, downloadFile, request } from "./client";
+import type { CrmTrainingState } from "./crmTraining";
 
 export interface CrmCategory { id: string; parent_id: string | null; label: string; hint: string; rules: string[]; disabled: boolean; custom: boolean }
 export interface CrmInstruction { key: string; title: string; body: string; steps: string[]; revision: number }
@@ -8,9 +9,15 @@ export interface CrmInput {
   contacted_at: string; park: string; city: string; category_ids: string[]; details: Record<string, string>;
   comment: string; is_ticket: boolean;
 }
+export interface CrmAttachment { id: number; name: string; mime: string; size: number }
+export interface CrmSaveInput extends CrmInput {
+  training_task?: string; draft_key?: string; draft_revision?: number;
+  revision?: number; remove_attachment_ids?: number[];
+}
 export interface CrmAppeal extends Omit<CrmInput, "request_id"> {
   id: number; author_id: number; author_name: string; category_labels: string[];
-  status: string; created_at: string; attachments: { id: number; name: string; mime: string; size: number }[];
+  status: string; created_at: string; attachments: CrmAttachment[];
+  revision?: number; training_task?: string | null; training_state?: CrmTrainingState;
 }
 export const CRM_STATUS: Record<string, string> = { recorded: "Зафиксировано", new: "Новый тикет", in_progress: "В работе", closed: "Закрыт" };
 export const CRM_FIELDS: Record<string, string> = { company: "Название компании", callback: "Номер для обратного звонка", service: "Предлагаемая услуга", employee: "Имя сотрудника", transaction: "Транзакция / РРН", conditions: "Условия работы", error_description: "Описание ошибки" };
@@ -37,10 +44,15 @@ export const crm = {
   instruction: ({ key, ...input }: CrmInstruction) => request<CrmInstruction>(`/api/v1/admin/learning/crm/instructions/${encodeURIComponent(key)}`, { method: "PUT", json: input }),
   list: (params: Record<string, unknown>) => request<{ items: CrmAppeal[]; total: number; page: number; size: number; counts: Record<string, number> }>(`/api/v1/learning/crm/appeals${buildQuery(params)}`),
   appeal: (id: number) => request<CrmAppeal>(`/api/v1/learning/crm/appeals/${id}`),
-  create: (input: CrmInput, files: File[]) => {
+  create: (input: CrmSaveInput, files: File[]) => {
     const multipart = new FormData(); multipart.append("payload", JSON.stringify(input));
     files.forEach(file => multipart.append("files", file));
     return request<CrmAppeal>("/api/v1/learning/crm/appeals", { method: "POST", multipart });
+  },
+  update: (id: number, input: CrmSaveInput, files: File[]) => {
+    const multipart = new FormData(); multipart.append("payload", JSON.stringify(input));
+    files.forEach(file => multipart.append("files", file));
+    return request<CrmAppeal>(`/api/v1/learning/crm/appeals/${id}`, { method: "PATCH", multipart });
   },
   category: (input: { label: string; parent_id: string | null; hint: string }) => request<CrmCategory>("/api/v1/admin/learning/crm/categories", { method: "POST", json: input }),
   status: (id: number, status: string) => request<CrmAppeal>(`/api/v1/admin/learning/crm/appeals/${id}/status`, { method: "PATCH", json: { status } }),

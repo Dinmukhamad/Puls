@@ -19,6 +19,18 @@ class AppealInput(BaseModel):
     details: dict[str, str] = Field(default_factory=dict, max_length=10)
     comment: str = Field(default="", max_length=10000)
     is_ticket: bool = False
+    training_task: Literal["crm_first", "crm_phone", "crm_closed"] | None = None
+    draft_key: str | None = Field(default=None, min_length=1, max_length=36)
+    draft_revision: int | None = Field(default=None, ge=0)
+    revision: int | None = Field(default=None, ge=1)
+    remove_attachment_ids: list[int] = Field(default_factory=list, max_length=5)
+
+    @field_validator("remove_attachment_ids")
+    @classmethod
+    def own_attachment_ids(cls, value):
+        if any(item <= 0 for item in value) or len(value) != len(set(value)):
+            raise ValueError("Некорректные идентификаторы вложений")
+        return value
 
     @field_validator("contacted_at")
     @classmethod

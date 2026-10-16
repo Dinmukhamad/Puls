@@ -56,6 +56,10 @@ class CrmAppeal(Base, TimestampMixin):
     comment: Mapped[str] = mapped_column(Text, default="")
     is_ticket: Mapped[bool] = mapped_column(Boolean, default=False)
     status: Mapped[str] = mapped_column(String(20), default="recorded", index=True)
+    revision: Mapped[int] = mapped_column(default=1)
+    # A saved training record keeps its task binding; business status remains independent.
+    training_task: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    last_edit_request_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
 
 
 class CrmAttachment(Base):
