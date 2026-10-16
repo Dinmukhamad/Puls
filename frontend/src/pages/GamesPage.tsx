@@ -10,6 +10,7 @@ import { DailyChest } from "./DailyChest";
 import { createChestSounds } from "./chestSounds";
 import { coins, plural, points } from "../utils/format";
 import { Raffles, WheelSettings } from "./GamesSettings";
+import { PrizeArt } from "./PrizeArt";
 import { PrizeStrip } from "./PrizeStrip";
 import { prizeChances, prizeSticker } from "./wheelPrizes";
 import "./games.css";
@@ -71,7 +72,7 @@ function Wheel() {
   const description=result?result.reward.coins>0?"Награда уже зачислена на ваш счёт. Найдите ей применение в магазине или в своём городе.":paid?"В этот раз без коинов. Можно открыть дополнительный сундук или вернуться завтра.":"Сегодня без коинов. Возвращайтесь за новым сундуком завтра!":locked?"Ответьте на все ситуации дня в «Моём городе», чтобы открыть сундук. Каждый ответ приближает вас к открытию.":opening?"Замок поддаётся. Скоро лента остановится на вашем призе.":!config.enabled?"Открытие временно недоступно. Загляните сюда чуть позже.":done?"Сегодняшние сундуки уже открыты. Новый шанс будет ждать вас на следующий день.":"Один поворот ключа — и сюрприз ваш. Внутри могут оказаться коины для новых покупок и построек.";
   return <div className="wheel-layout"><Card className="wheel-card chest-card" title="Сундук дня" subtitle="Ваш маленький ежедневный ритуал"
     action={<><IconButton label={muted?"Включить звук":"Выключить звук"} aria-pressed={muted} onClick={()=>setMuted((on)=>!on)}>{muted?<SoundOffIcon/>:<SoundIcon/>}</IconButton>
-      <button type="button" className="wheel-prizes-button" aria-haspopup="dialog" onClick={()=>setPrizesOpen(true)}><span className="wheel-prizes-button__sticker" aria-hidden="true">🎁</span><span>Что внутри</span></button></>}>
+      <button type="button" className="wheel-prizes-button" aria-haspopup="dialog" onClick={()=>setPrizesOpen(true)}><span className="wheel-prizes-button__sticker" aria-hidden="true"><PrizeArt kind="gift" /></span><span>Что внутри</span></button></>}>
       <div className="chest-hero" data-state={state} aria-busy={opening}>
         <div className="chest-hero__content">
           <span className="chest-hero__eyebrow"><span aria-hidden="true">✦</span> {result?"Сундук открыт":locked?"Награда за задания":opening?"Открываем сундук":!config.enabled?"Скоро вернёмся":done?"На сегодня всё":paid?"Дополнительный сундук":"Бесплатный сундук"}</span>
@@ -111,7 +112,7 @@ export function PrizeStickers({ segments }: { segments: WheelSpin["segments"] })
   const chances = prizeChances(segments);
   if (!segments.length) return <p className="secondary">Призы ленты удачи ещё не настроены.</p>;
   return <ul className="prize-stickers">{segments.map((item, index) => <li className="prize-sticker-card" key={index}>
-    <span className="prize-sticker" style={stickerStyle(item, segments, index)} aria-hidden="true">{prizeSticker(item, segments).icon}</span>
+    <span className="prize-sticker" data-kind={prizeSticker(item, segments).kind} style={stickerStyle(item, segments, index)} aria-hidden="true"><PrizeArt kind={prizeSticker(item, segments).kind} /></span>
     <strong className="prize-sticker-card__title">{item.title}</strong>
     {item.coins > 0 && <span className="prize-sticker-card__reward">+{coins(item.coins)} {plural(item.coins, "коин", "коина", "коинов")}</span>}
     <span className="prize-sticker-card__chance">Шанс {points(chances[index])}%</span>

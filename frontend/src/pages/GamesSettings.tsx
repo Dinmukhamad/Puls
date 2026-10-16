@@ -3,9 +3,11 @@ import { useState } from "react";
 import { games, type Raffle, type RaffleInput, type WheelConfig } from "../api/games";
 import { useAuth } from "../auth/AuthContext";
 import { Sheet } from "../components/Sheet";
+import { AlertIcon } from "../components/icons";
 import { useToast } from "../components/Toast";
 import { Badge, Button, Card, EmptyState, ErrorState, RowsSkeleton } from "../components/ui";
-import { dateTime, plural, points } from "../utils/format";
+import { coins as formatCoins, dateTime, plural, points } from "../utils/format";
+import { monthlyChestCoins, promisedCoins } from "./wheelPrizes";
 
 export function WheelSettings() {
   const query=useQuery({queryKey:["wheel"],queryFn:games.wheel});
@@ -19,6 +21,8 @@ function WheelEditor({initial}:{initial:WheelConfig}) {
   const total=value.segments.reduce((sum,item)=>sum+item.weight,0);
   // The average prize: a paid spin should cost more than it wins, or the wheel prints coins.
   const average=total?value.segments.reduce((sum,item)=>sum+item.weight*item.coins,0)/total:0;
+  // What the free chests alone give one operator in a month: the plan is about 100 of ~1 000 (docs/COIN_ECONOMY.md).
+  const monthly=monthlyChestCoins(value.daily_spins,value.segments);
   const patch=(index:number,field:"title"|"weight"|"coins",next:string|number)=>
     setValue((state)=>({...state,segments:state.segments.map((row,i)=>i===index?{...row,[field]:next}:row)}));
 
@@ -51,7 +55,8 @@ function WheelEditor({initial}:{initial:WheelConfig}) {
           <tbody>
             {value.segments.map((item,index)=>
               <tr key={index}>
-                <td><input className="input" required maxLength={100} disabled={!editable||save.isPending} value={item.title} onChange={(e)=>patch(index,"title",e.target.value)} aria-label={`Название приза ${index+1}`}/></td>
+                <td><input className="input" required maxLength={100} disabled={!editable||save.isPending} value={item.title} onChange={(e)=>patch(index,"title",e.target.value)} aria-label={`Название приза ${index+1}`} aria-describedby={mismatch(item)?`prize-warn-${index}`:undefined}/>
+                  {mismatch(item)&&<p className="prize-table__warn" id={`prize-warn-${index}`}><AlertIcon size={13}/>{mismatch(item)}</p>}</td>
                 <td className="num"><input className="input input--num" type="number" required min={1} max={10000} disabled={!editable||save.isPending} value={item.weight} onChange={(e)=>patch(index,"weight",Number(e.target.value))} aria-label={`Вес приза ${index+1}`}/></td>
                 <td className="num"><input className="input input--num" type="number" required min={0} max={1000} disabled={!editable||save.isPending} value={item.coins} onChange={(e)=>patch(index,"coins",Number(e.target.value))} aria-label={`Коины за приз ${index+1}`}/></td>
                 <td className="num prize-table__chance">{total>0?`${points(item.weight/total*100)}%`:"—"}</td>
@@ -61,6 +66,9 @@ function WheelEditor({initial}:{initial:WheelConfig}) {
         </table>
       </div>
       <p className="secondary small prize-table__hint">Вес задаёт относительную вероятность: вес 2 вдвое вероятнее веса 1. Шанс пересчитывается сразу и всегда даёт в сумме 100%.</p>
+      <p className={`small prize-table__hint prize-economy${monthly>300?" prize-economy--warn":""}`}>{monthly>300&&<AlertIcon size={14}/>}
+        Бесплатные сундуки дадут оператору около {formatCoins(monthly)} {plural(monthly,"коина","коинов","коинов")} в месяц.
+        {monthly>300?" Это больше трети его месячного дохода (около 1 000 коинов): коины обесценятся, а цены магазина потеряют смысл. По плану экономики сундук даёт около 100 коинов в месяц.":" Это в пределах плана экономики: около 100 коинов в месяц."}</p>
     </Card>
 
     {editable&&<div className="row">
@@ -69,6 +77,14 @@ function WheelEditor({initial}:{initial:WheelConfig}) {
     </div>}
     {save.isError&&<ErrorState error={save.error}/>}
   </form>;
+}
+
+/** A prize whose name promises other than it pays: operators read the name, the reward is what they get. */
+function mismatch(item:{title:string;coins:number}) {
+  const promised=promisedCoins(item.title);
+  if(promised===null||promised===item.coins)return null;
+  const pays=item.coins>0?`даёт ${formatCoins(item.coins)} ${plural(item.coins,"коин","коина","коинов")}`:"пустой";
+  return promised===0?`Название обещает пустой сундук, а приз ${pays}`:`В названии ${formatCoins(promised)}, а приз ${pays}`;
 }
 
 export function Raffles({administrative}:{administrative:boolean}) {

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { coins, plural } from "../utils/format";
+import { PrizeArt } from "./PrizeArt";
 import { spinProgress, stripTarget } from "./spinPhysics";
+import type { PrizeSticker } from "./wheelPrizes";
 
 export interface StripSegment {
   title: string;
@@ -40,7 +42,7 @@ export function PrizeStrip({
 }: {
   segments: StripSegment[];
   /** Стикер каждого приза — те же, что в окне «Что может выпасть». */
-  stickers?: { icon: string; color: string }[];
+  stickers?: PrizeSticker[];
   spin: SpinRequest | null;
   muted: boolean;
   onTick: () => void;
@@ -136,7 +138,7 @@ export function PrizeStrip({
         const x = middle + (index - at) * pitch - cell / 2;
         const state = index === won ? " is-won" : index === current ? " is-current" : "";
         return <div key={index} className={`prize-strip__tile${state}`} style={{ transform: `translateX(${x}px)` }}>
-          {sticker && <span className="prize-strip__sticker" style={{ "--sticker": sticker.color } as CSSProperties}>{sticker.icon}</span>}
+          {sticker && <span className="prize-strip__sticker" data-kind={sticker.kind} style={{ "--sticker": sticker.color } as CSSProperties}><PrizeArt kind={sticker.kind} /></span>}
           <span className="prize-strip__title">{prize.title}</span>
           {prize.coins ? <span className="prize-strip__reward">+{coins(prize.coins)} {plural(prize.coins, "коин", "коина", "коинов")}</span> : <span className="prize-strip__reward prize-strip__reward--none">без награды</span>}
         </div>;
