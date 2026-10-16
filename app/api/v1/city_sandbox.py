@@ -10,6 +10,8 @@ from app.schemas.city_estate import (
     SANDBOX_DISTRICT,
     LevelInput,
     SandboxDecorInput,
+    SandboxDecorMoveInput,
+    SandboxDecorTurnInput,
     SandboxDistrictInput,
     SandboxPlotInput,
     SandboxProjectInput,
@@ -39,6 +41,16 @@ async def lay(body: SandboxDecorInput, session: SessionDep, user: AdminUser):
 @router.post("/decor/remove")
 async def take_away(body: SandboxUndecorInput, session: SessionDep, user: AdminUser):
     return await city_sandbox.take_away(session, user, body)
+
+
+@router.post("/decor/move")
+async def move_decor(body: SandboxDecorMoveInput, session: SessionDep, user: AdminUser):
+    return await city_sandbox.move_decor(session, user, body)
+
+
+@router.post("/decor/turn")
+async def turn_decor(body: SandboxDecorTurnInput, session: SessionDep, user: AdminUser):
+    return await city_sandbox.turn_decor_cells(session, user, body)
 
 
 @router.post("/buildings/{object_id}/level")

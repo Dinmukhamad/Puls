@@ -125,6 +125,16 @@ async def test_only_administrators_open_the_test_city(
         assert (await build(client, h, "house", FIRST, 0, 0)).status_code == 403
         assert (await lay(client, h, "road", [(FIRST, 0, 0)])).status_code == 403
         assert (await take_away(client, h, [(FIRST, 0, 0)])).status_code == 403
+        for path, body in (
+            ("move", {"moves": [[FIRST, 0, 0, FIRST, 1, 0]]}),
+            ("turn", {"cells": [[FIRST, 0, 0, 1]]}),
+        ):
+            r = await client.post(
+                f"{SANDBOX}/decor/{path}",
+                headers=h,
+                json={"district_id": "support-team-1", **body},
+            )
+            assert r.status_code == 403
         assert (await district(client, h, open_band=2)).status_code == 403
         assert (await project(client, h, "square", u=0, v=0)).status_code == 403
         assert (await client.post(f"{SANDBOX}/cities/support/reset", headers=h)).status_code == 403
@@ -410,6 +420,23 @@ async def test_small_things_are_free_and_any_administrator_takes_them_away(
         ("test-support-team-1", 2, 0, admin.id),
         ("test-support-team-1", 3, 0, admin.id),
     ]
+    # Any administrator moves them onto free cells and turns lamps and benches.
+    moved = await client.post(
+        f"{SANDBOX}/decor/move",
+        headers=o,
+        json={"district_id": "support-team-1", "moves": [[FIRST, 3, 0, FIRST, 3, 1]]},
+    )
+    assert moved.status_code == 200 and moved.json() == {"moved": 1}
+    assert (await lay(client, me, "lamp", [(FIRST, 6, 0)])).status_code == 200
+    turned = await client.post(
+        f"{SANDBOX}/decor/turn",
+        headers=o,
+        json={"district_id": "support-team-1", "cells": [[FIRST, 6, 0, 1]]},
+    )
+    assert turned.status_code == 200 and turned.json() == {"turned": 1}
+    view = (await sandbox(client, me))["decor"]
+    assert view == {"road": [[FIRST, 2, 0, 1], [FIRST, 3, 1, 1]], "lamp": [[FIRST, 6, 0, 1, 1]]}
+    assert (await take_away(client, o, [(FIRST, 6, 0)])).json() == {"removed": 1}
     # Free; the real city never sees them; a reset clears them.
     assert await count(session, CoinTransaction) == 0
     assert (await district_view(client, me))["decor"] == {}

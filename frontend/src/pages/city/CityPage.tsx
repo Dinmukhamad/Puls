@@ -6,6 +6,7 @@ import { seasonDates, seasonWarning, shortLeft } from "./seasonText";
 import { CityWorldPanel, CityJourney } from "./CityWorldPanel";
 import { CityEstateDock, type BuildState, type EstateTarget } from "./CityEstateDock";
 import { CitySandboxDock } from "./CitySandboxDock";
+import { DEFAULT_SCREEN, type ScreenWays } from "./decorArrange";
 import type { CityEstateView, EstatePick, JourneyPhase, PlotAddress } from "../../city3d/types";
 import { NO_CHOICE, spacing } from "./cellChoice";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
@@ -126,6 +127,8 @@ export function CityPage() {
     return views;
   }, [historyOn, historyLand.data, sandboxOn, department, sandboxLand.data, supportLand.data, salesLand.data]);
   const [building, setBuilding] = useState<BuildState | null>(null), [estateFocus, setEstateFocus] = useState<EstateTarget & { at: number }>();
+  // Which way of the cells is up the screen now, for the arrows that move small things (decorArrange.ts).
+  const [screen, setScreen] = useState<ScreenWays>(DEFAULT_SCREEN);
   const choice = building?.choice, every = choice ? spacing(choice) : 1;
   const buildView = useMemo(() => building && { district: building.district, area: building.area, placing: building.placing, selected: building.selected,
     choice: choice ? { cells: choice.cells, shape: choice.shape, family: choice.family, rotation: choice.rotation, every } : null },
@@ -151,6 +154,7 @@ export function CityPage() {
     if (!sandboxOn) setBuilding(current => current && !current.project && current.district !== homeEstate?.id ? null : current);
   }, [sandboxOn, homeEstate?.id]);
   function onEstate(pick: EstatePick) {
+    if (pick.kind === "screen") { setScreen(s => s.up === pick.up && s.right === pick.right ? s : { up: pick.up, right: pick.right }); return; }
     if (historyOn) return;
     if (sandboxOn && (pick.kind === "project" || pick.kind === "public")) { setWorldSelected(null); openSandbox(pick.district, true); return; }
     if (pick.kind === "public") { setBuilding(null); setWorldSelected(pick.district); focusLand({ district: pick.district, kind: "public" }); return; }
@@ -401,8 +405,8 @@ export function CityPage() {
     {worldQuery.data && <CityWorldPanel world={worldQuery.data} current={department} selected={worldSelected} onPick={pickWorld} onClose={() => setWorldSelected(null)} ready={mapStatus === "ready"} onVisit={visit} onTravel={id => { setDestination(id); setWorldAction({ kind: "travel", target: id, at: Date.now() }); }}
       estates={department === "sales" ? salesLand.data : supportLand.data} mine={mineEstate} onMyEstate={canOpenBuild && !historyOn ? openBuild : undefined}
       onOpenProject={district => { setBuilding({ district, area: "public", placing: null, selected: null, choice: null, spot: null, project: true }); focusLand({ district, kind: "public" }); }} />}
-    {building && mineEstate && !sandboxOn && !historyOn && <CityEstateDock mine={mineEstate} land={buildingLand} build={building} setBuild={setBuilding} onClose={() => setBuilding(null)} onFocus={focusLand} onChooseFree={mapStatus === "ready" && !buildingLandQuery.isError && suggestedPlot && building.district === homeEstate?.id ? chooseFreePlot : undefined} mapStatus={mapStatus} loadingLand={!buildingLand && !buildingLandQuery.isError} landError={buildingLandQuery.isError ? buildingLandQuery.error : null} onRetryLand={reloadBuildLand} onRetryMap={retryMap} />}
-    {building && sandboxOn && <CitySandboxDock city={department} state={sandboxLand.data?.city === department ? sandboxLand.data : undefined} mine={mineEstate} build={building} setBuild={setBuilding} onClose={() => setBuilding(null)} onFocus={focusLand} />}
+    {building && mineEstate && !sandboxOn && !historyOn && <CityEstateDock mine={mineEstate} land={buildingLand} build={building} setBuild={setBuilding} onClose={() => setBuilding(null)} onFocus={focusLand} onChooseFree={mapStatus === "ready" && !buildingLandQuery.isError && suggestedPlot && building.district === homeEstate?.id ? chooseFreePlot : undefined} mapStatus={mapStatus} loadingLand={!buildingLand && !buildingLandQuery.isError} landError={buildingLandQuery.isError ? buildingLandQuery.error : null} onRetryLand={reloadBuildLand} onRetryMap={retryMap} screen={screen} />}
+    {building && sandboxOn && <CitySandboxDock city={department} state={sandboxLand.data?.city === department ? sandboxLand.data : undefined} mine={mineEstate} build={building} setBuild={setBuilding} onClose={() => setBuilding(null)} onFocus={focusLand} screen={screen} />}
     <CityJourney phase={journey} destination={worldQuery.data?.cities.find(c => c.id === destination)?.name ?? destination} onSkip={() => setWorldAction({ kind: "skip", target: destination, at: Date.now() })} />
 
     {reward && <Sheet title={reward.already_claimed ? "Эта награда уже получена" : "Миссия пройдена"} onClose={() => setReward(null)} size="s"><div className="city-celebration"><div className="city-medal" aria-hidden="true">✦</div><h2>{reward.title}</h2><p>{reward.already_claimed ? "Прогресс сохранён. Повторное начисление не требуется." : "Твой город стал немного больше. Следующая миссия уже ждёт."}</p><div className="city-rewards"><span>+{reward.xp} XP</span>{reward.coins>0&&<span>+{reward.coins} коинов</span>}</div><button className="city-action" onClick={()=>setReward(null)}>Вернуться в город →</button></div></Sheet>}

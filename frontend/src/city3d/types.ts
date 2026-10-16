@@ -6,6 +6,7 @@ import type { BuildingKey } from "./world/plots";
 import type { CityWorld, DepartmentId } from "../api/cityWorld";
 import type { CityEstates } from "../api/cityEstate";
 import type { DecorFamily, PlotFamily, ProjectFamily } from "./world/estateGrid";
+import type { Way } from "./world/land";
 export type JourneyPhase = "departing" | "tunnel" | "arriving" | null;
 
 /** Team district land of the city on screen (api/cityEstate.ts): plots, buildings, projects, open bands. */
@@ -42,7 +43,8 @@ export interface CityBuildView {
  * What the operator touched on district land: the cells chosen now (all of them, with what is on each; `update`: only
  * what is on the same cells now, after the land changed), where the building chosen for the one cell goes (its first
  * cell) and why it does not fit, where the preview stands now and why it does not fit, a building, a project or the
- * public square.
+ * public square. In build mode the map also tells which way of the cells is up the screen and which is to its right
+ * (`screen`), once and whenever the camera turns past them, so «←» on the panel moves things left as they are seen.
  */
 export type EstatePick =
   | { kind: "public"; district: string }
@@ -50,7 +52,8 @@ export type EstatePick =
   | { kind: "footprint"; district: string; cell: PlotAddress; family: PlotFamily; col: number; row: number; rotation: number; problem: string | null }
   | { kind: "place"; district: string; module: number; u: number; v: number; rotation: number; problem: string | null }
   | { kind: "object"; district: string; object: number }
-  | { kind: "project"; district: string; project: number };
+  | { kind: "project"; district: string; project: number }
+  | { kind: "screen"; up: Way; right: Way };
 /** What the camera flies to: a district's centre or public square, a plot, a building. */
 export interface EstateTarget { district: string; kind: "district" | "public" | "plot" | "object"; object?: number; plot?: PlotAddress }
 

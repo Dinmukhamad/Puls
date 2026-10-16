@@ -10,6 +10,7 @@ import { ApiError, request } from "./client";
 import { CITY_READ_TIMEOUT_MS } from "./city";
 import type { DepartmentId } from "./cityWorld";
 import type { DecorFamily, PlotFamily, ProjectFamily } from "../city3d/world/estateGrid";
+import type { DecorCell } from "../city3d/world/decor";
 
 export type { DecorFamily, PlotFamily, ProjectFamily };
 /**
@@ -49,8 +50,11 @@ export interface DistrictEstate {
   landmark: DistrictLandmark | null;
   hq: { level: number; name: string; built: number; next: { level: number; name: string; need: number } | null };
   objects: PublicObject[]; projects: DistrictProject[]; version: number;
-  /** The small things on the land by kind: [block, column, row, 1 if the viewer may take it away: their own, or in their district the district's]. */
-  decor: Partial<Record<DecorFamily, [number, number, number, number][]>>;
+  /**
+   * The small things on the land by kind: [block, column, row, 1 if the viewer may take it away: their own, or in their
+   * district the district's], and for a lamp or a bench its owner turned, its turn (world/decor.ts TURN_SIDES).
+   */
+  decor: Partial<Record<DecorFamily, DecorCell[]>>;
 }
 export interface CityEstates {
   city: DepartmentId; districts: DistrictEstate[];
@@ -84,7 +88,7 @@ export interface MyEstate {
   economy_revision: number; balance: number; available: number;
   legacy: { count: number; paid: number }; managed: string[];
 }
-export interface OperationResult { replayed: boolean; object?: OwnObject | PublicObject; merged?: boolean; price?: number; balance?: number; available?: number; accepted?: number; completed?: boolean; project?: DistrictProject; refunded?: number; laid?: number; removed?: number }
+export interface OperationResult { replayed: boolean; object?: OwnObject | PublicObject; merged?: boolean; price?: number; balance?: number; available?: number; accepted?: number; completed?: boolean; project?: DistrictProject; refunded?: number; laid?: number; removed?: number; moved?: number; turned?: number }
 export interface EstateReport {
   districts: { id: string; city: DepartmentId; name: string; construction: boolean; operators: number; builders: number; land: { cells: number; taken: number; built: number; open_band: number } | null; buildings: number; open_projects: number; landmark_level: number; hq_level: number; built_projects: number }[];
   operators_without_district: number; inventory: number;
@@ -116,6 +120,11 @@ async function keyed<T extends OperationResult>(key: string, send: () => Promise
 const post = <T extends OperationResult>(path: string, json: { key: string } & Record<string, unknown>) =>
   keyed(json.key, () => request<T>(`/api/v1/learning/city${path}`, { method: "POST", json }));
 
+/** A small thing moving: [block, column, row] it stands on, then [block, column, row] it goes to. */
+export type DecorMove = [number, number, number, number, number, number];
+/** A lamp or a bench turned: [block, column, row, turn]. */
+export type DecorTurn = [number, number, number, number];
+
 export const cityEstate = {
   city: (city: DepartmentId, signal?: AbortSignal) => request<CityEstates>(`/api/v1/learning/city/cities/${city}`, { signal, timeoutMs: CITY_READ_TIMEOUT_MS }),
   mine: (signal?: AbortSignal) => request<MyEstate>("/api/v1/learning/city/estate", { signal, timeoutMs: CITY_READ_TIMEOUT_MS }),
@@ -124,6 +133,10 @@ export const cityEstate = {
   lay: (json: { key: string; district_id: string; family: DecorFamily; cells: [number, number, number][]; economy_revision: number }) => post("/decor", json),
   /** One's own small things off the cells named, their coins back. */
   takeAway: (json: { key: string; district_id: string; cells: [number, number, number][] }) => post("/decor/remove", json),
+  /** One's own small things onto other free cells, free: [block, column, row] they stand on, then the cell they go to. */
+  moveDecor: (json: { key: string; district_id: string; moves: DecorMove[] }) => post("/decor/move", json),
+  /** One's own lamps and benches turned to a side of their cells, free: [block, column, row, turn]. */
+  turnDecor: (json: { key: string; district_id: string; cells: DecorTurn[] }) => post("/decor/turn", json),
   /** Where one's building looks with no road beside it. */
   turn: (id: number, json: { key: string; version: number; rotation: number }) => post(`/buildings/${id}/turn`, json),
   upgrade: (id: number, json: { key: string; version: number; economy_revision: number }) => post(`/buildings/${id}/upgrade`, json),
@@ -137,16 +150,18 @@ export const cityEstate = {
 /**
  * The administrators' test city (app/services/city_sandbox.py): a copy of a city's three districts that only
  * administrators see, on the same land and by the same rules, where they build for free, set any stage up or down,
- * take buildings away, set the main building's stage and build or cancel legacy shared projects at once. It never
+ * take buildings away, move small things and turn lamps and benches, set the main building's stage and build or cancel legacy shared projects at once. It never
  * touches the real districts, operators or coins, so its changes need no idempotency key: none of them pays.
  */
-export interface SandboxResult { object?: PublicObject; merged?: boolean; removed?: number; laid?: number; project?: number; cancelled?: number; open_band?: number; hq_level?: number; landmark_level?: number; reset?: boolean }
+export interface SandboxResult { object?: PublicObject; merged?: boolean; removed?: number; laid?: number; moved?: number; turned?: number; project?: number; cancelled?: number; open_band?: number; hq_level?: number; landmark_level?: number; reset?: boolean }
 const SANDBOX = "/api/v1/admin/learning/city/sandbox";
 export const citySandbox = {
   city: (city: DepartmentId, signal?: AbortSignal) => request<CityEstates>(`${SANDBOX}/cities/${city}`, { signal, timeoutMs: CITY_READ_TIMEOUT_MS }),
   build: (json: { district_id: string; family: PlotFamily; block: number; col: number; row: number; rotation: number }) => request<SandboxResult>(`${SANDBOX}/plots`, { method: "POST", json }),
   lay: (json: { district_id: string; family: DecorFamily; cells: [number, number, number][] }) => request<SandboxResult>(`${SANDBOX}/decor`, { method: "POST", json }),
   takeAway: (json: { district_id: string; cells: [number, number, number][] }) => request<SandboxResult>(`${SANDBOX}/decor/remove`, { method: "POST", json }),
+  moveDecor: (json: { district_id: string; moves: DecorMove[] }) => request<SandboxResult>(`${SANDBOX}/decor/move`, { method: "POST", json }),
+  turnDecor: (json: { district_id: string; cells: DecorTurn[] }) => request<SandboxResult>(`${SANDBOX}/decor/turn`, { method: "POST", json }),
   level: (id: number, level: number) => request<SandboxResult>(`${SANDBOX}/buildings/${id}/level`, { method: "POST", json: { level } }),
   remove: (id: number) => request<SandboxResult>(`${SANDBOX}/buildings/${id}`, { method: "DELETE" }),
   district: (id: string, json: { hq_level?: number; landmark_level?: number }) => request<SandboxResult>(`${SANDBOX}/districts/${id}`, { method: "PUT", json }),

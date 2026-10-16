@@ -9,6 +9,8 @@ from app.schemas.city_estate import (
     CancelInput,
     ContributionInput,
     DecorInput,
+    DecorMoveInput,
+    DecorTurnInput,
     PlaceInput,
     ProjectInput,
     PurchaseInput,
@@ -53,6 +55,18 @@ async def lay(body: DecorInput, session: SessionDep, user: CurrentUser):
 async def take_away(body: UndecorInput, session: SessionDep, user: CurrentUser):
     """One's own small things off the cells named, their coins back."""
     return await city_estate.take_away(session, user, body)
+
+
+@router.post("/learning/city/decor/move")
+async def move_decor(body: DecorMoveInput, session: SessionDep, user: CurrentUser):
+    """One's own small things onto other free cells of the district, free."""
+    return await city_estate.move_decor(session, user, body)
+
+
+@router.post("/learning/city/decor/turn")
+async def turn_decor(body: DecorTurnInput, session: SessionDep, user: CurrentUser):
+    """One's own lamps and benches turned to a side of their cells, free."""
+    return await city_estate.turn_decor_cells(session, user, body)
 
 
 @router.post("/learning/city/buildings/{object_id}/turn")

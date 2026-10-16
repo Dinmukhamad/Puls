@@ -5,6 +5,7 @@ import { isOfficeBuilding } from "../../city3d/world/officeBuildings";
 import { plural } from "../../utils/format";
 import { MULTI_KEY, SHAPES, SHOP_TABS, decorSpots, firstTab, isBuilding, isSpaced, ownCells, shopPicture, shopTab, spacing, NO_CHOICE, type Choice, type ShopTab } from "./cellChoice";
 import { readyBuildingLabel } from "./plotCatalogue";
+import type { Arrow } from "./decorArrange";
 
 export const coins = (n: number) => n.toLocaleString("ru-RU");
 export const cellsText = (n: number) => `${n.toLocaleString("ru-RU")} ${plural(n, "клетка", "клетки", "клеток")}`;
@@ -15,6 +16,16 @@ const EVERY = [[1, "На каждую клетку"], [2, "Через одну"]
 const onCells = (n: number) => `${n.toLocaleString("ru-RU")} ${plural(n, "клетку", "клетки", "клеток")}`;
 /** «1 занята — на неё не ставится», «4 заняты — на них не ставится». */
 const takenText = (n: number) => `${n.toLocaleString("ru-RU")} ${plural(n, "занята — на неё", "заняты — на них", "заняты — на них")} не ставится`;
+
+/**
+ * Moving one's own small things on the chosen cells a cell along the screen, and turning the lamps and benches among them
+ * (`turnable` of them), from the selection: the dock sends it (decorArrange.ts).
+ */
+export interface Arrange { turnable: number; problem: string | null; onMove: (arrow: Arrow) => void; onTurn: (step: 1 | -1) => void }
+const ARROWS: readonly { arrow: Arrow; icon: string; label: string }[] = [
+  { arrow: "up", icon: "↑", label: "Подвинуть вверх — от себя" }, { arrow: "left", icon: "←", label: "Подвинуть влево" },
+  { arrow: "right", icon: "→", label: "Подвинуть вправо" }, { arrow: "down", icon: "↓", label: "Подвинуть вниз — к себе" },
+];
 
 /** A thing of the shop: a building or a small thing, with what the card shows of it. */
 interface Item { family: PlotFamily | DecorFamily; name: string; icon: string; about: string; size: [number, number]; note: string | null }
@@ -34,13 +45,15 @@ function itemsOf(tab: ShopTab, plots: readonly PlotCatalogue[], decor: readonly 
  * line or an area as «Клетка / Линия / Область» says. Then what goes on them, by tabs, each thing with a picture of its model, its size and price: a building
  * stands round the one cell chosen (its cells show on the map, green where free and red where not), a small thing on
  * the cells of the line, lamps, trees, benches, bushes and flowerbeds also on every second or third. One's own small
- * things on the chosen cells go away for their coins. In the test city (`free`) all is free and anyone's things go.
+ * things on the chosen cells go away for their coins, move a cell along the screen by the arrows (`arrange`), and the
+ * lamps and benches among them turn. In the test city (`free`) all is free and anyone's things go.
  */
-export function CellShop({ choice, plots, decor, landPrices, available, batch, ready, message, pending, error, free = false, onChoice, onBuy, onRemove, onChooseFree }: {
+export function CellShop({ choice, plots, decor, landPrices, available, batch, ready, message, pending, error, free = false, arrange, onChoice, onBuy, onRemove, onChooseFree }: {
   choice: Choice | null; plots: readonly PlotCatalogue[]; decor: readonly DecorCatalogue[]; landPrices: readonly number[];
   /** Coins that can be spent; null in the test city. */
   available: number | null; batch: number; ready: boolean; message: string | null; pending: boolean; error: Error | null; free?: boolean;
   onChoice: (next: Choice) => void; onBuy: () => void; onRemove: () => void;
+  arrange?: Arrange;
   /** Chooses free cells for a house by itself. */
   onChooseFree?: () => void;
 }) {
@@ -72,6 +85,7 @@ export function CellShop({ choice, plots, decor, landPrices, available, batch, r
           <button type="button" className="city-secondary" onClick={() => set({ cells: [], at: null })}>Сбросить выбор</button>
           {own.length > 0 && <button type="button" className="city-secondary" disabled={!ready || pending} onClick={onRemove}>{free ? "Убрать" : "Убрать своё"} · {cellsText(own.length)}</button>}
         </div>
+        {own.length > 0 && arrange && <Arranging count={own.length} arrange={arrange} free={free} disabled={!ready || pending} />}
       </> : <p className="secondary small">Выбери место на карте: нажми на клетку или проведи по клеткам левой кнопкой мыши — получится линия. Камера: правая кнопка мыши, колесо и WASD, на телефоне — двумя пальцами.</p>}
       <p className="estate-tip estate-tip--mouse"><kbd>{MULTI_KEY}</kbd> + протянуть мышью — добавить прямоугольник: дорогу в две-три клетки шириной, рощу; <kbd>{MULTI_KEY}</kbd> + клик — добавить или убрать клетку; <kbd>Shift</kbd> + протянуть — добавить ещё линию.</p>
       <div className="estate-shape" role="radiogroup" aria-label="Что делает нажатие">{SHAPES.map(o =>
@@ -98,6 +112,25 @@ export function CellShop({ choice, plots, decor, landPrices, available, batch, r
         onEvery={every => set({ every })} onBuy={onBuy} />)}
     <p className="city-fine">{free ? "Тестовый город отдельный: настоящий район не меняется." : "Выбор ничего не списывает: коины спишутся по кнопке «Купить», сервер ещё раз проверит клетки. Цена включает землю под каждой клеткой."}</p>
   </section>;
+}
+
+/** The arrows that move one's own small things on the chosen cells a cell along the screen, and the turn of lamps and benches. */
+function Arranging({ count, arrange, free, disabled }: { count: number; arrange: Arrange; free: boolean; disabled: boolean }) {
+  return <div className="estate-arrange" role="group" aria-label={free ? "Подвинуть и повернуть выбранное" : "Подвинуть и повернуть своё"}>
+    <div className="estate-arrange__move">
+      <p><strong>Подвинуть · {cellsText(count)}</strong><small>На клетку в сторону, как видно на экране: ↑ — от себя, ↓ — к себе. Бесплатно.</small></p>
+      <div className="estate-arrange__pad">{ARROWS.map(a =>
+        <button type="button" key={a.arrow} data-arrow={a.arrow} aria-label={a.label} title={a.label} disabled={disabled} onClick={() => arrange.onMove(a.arrow)}>{a.icon}</button>)}</div>
+    </div>
+    {arrange.problem && <p className="estate-problem" role="alert">{arrange.problem}</p>}
+    {arrange.turnable > 0 && <div className="estate-arrange__turn">
+      <p><strong>Повернуть</strong><small>Фонарь встанет у другого края клетки, скамейка развернётся. Жёлтая стрелка на карте — куда.</small></p>
+      <div className="estate-placing__actions">
+        <button type="button" className="city-secondary" disabled={disabled} onClick={() => arrange.onTurn(1)} aria-label="Повернуть влево">↺ Влево</button>
+        <button type="button" className="city-secondary" disabled={disabled} onClick={() => arrange.onTurn(-1)} aria-label="Повернуть вправо">Вправо ↻</button>
+      </div>
+    </div>}
+  </div>;
 }
 
 /** Buying a building round the one cell chosen: where it goes, its price with the land, its front. */

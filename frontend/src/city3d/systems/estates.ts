@@ -21,8 +21,8 @@ import { createPatches } from "../render/terrain";
 import { createLampLights, type LampLights } from "../render/lampLights";
 import { TAP_DISTANCE, TAP_TIME } from "../engine/input";
 import { CELL, MODULE_CELLS, cellPoint, footprintAt, itemFootprint, moduleGround, objectLayout, pointCell, siteLayout, squareProblem, plotFootprint, projectFootprint, type ProjectFamily } from "../world/estates";
-import { areaCorners, areaFrame, areaSpan, blockCell, cellUnder, cellsBetween, cellsWithin, districtBorders, homeSide, type CellRef, type DistrictCentre, type Frame, type LandBlock, type LandGrid } from "../world/land";
-import { buildingFacing, decorKey, decorLayout, decorMap, type DecorMap, type GroundQuad } from "../world/decor";
+import { WAYS, areaCorners, areaFrame, areaPoint, areaSpan, blockCell, cellUnder, cellsBetween, cellsWithin, districtBorders, homeSide, sideOf, type CellRef, type DistrictCentre, type Frame, type LandBlock, type LandGrid, type Way } from "../world/land";
+import { buildingFacing, decorKey, decorLayout, decorMap, decorSide, edgeToward, isTurning, type DecorMap, type GroundQuad } from "../world/decor";
 import { createBorders } from "../render/borders";
 import { plotLayout } from "../world/landLayouts";
 import { districtColour, isDecorFamily, type DecorFamily, type PlotFamily } from "../world/estateGrid";
@@ -322,9 +322,12 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
   const frontMaterial = new THREE.MeshBasicNodeMaterial({ color: "#ffd24a", transparent: true, opacity: .9, depthWrite: false, side: THREE.DoubleSide });
   const front = new THREE.Mesh(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-.7, 0, 0), new THREE.Vector3(.7, 0, 0), new THREE.Vector3(0, 0, .9)]), frontMaterial);
   front.visible = false; front.renderOrder = 5; front.name = "district-plot-front";
-  // The cells chosen for small things, and the one under the mouse.
+  // The cells chosen for small things, and the one under the mouse; on the chosen lamps and benches of one's own, an
+  // arrow to the side of the cell each stands at or looks to.
   const pickMaterial = new THREE.MeshBasicNodeMaterial({ vertexColors: true, transparent: true, opacity: .55, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6 });
-  let chosen: THREE.Mesh | null = null;
+  // Pulled further towards the camera than the chosen cells, so the grid under them never covers an arrow.
+  const turnMaterial = new THREE.MeshBasicNodeMaterial({ color: "#ffd24a", transparent: true, opacity: .95, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -8, polygonOffsetUnits: -8 });
+  let chosen: THREE.Mesh | null = null, turns: THREE.Mesh | null = null;
   ctx.scene.add(cells, ghost, selection, front);
   let pinned: { module: number; u: number; v: number } | null = null, reported = "";
 
@@ -457,8 +460,9 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
    */
   function showCells() {
     if (chosen) { ctx.scene.remove(chosen); chosen.geometry.dispose(); chosen = null; }
+    if (turns) { ctx.scene.remove(turns); turns.geometry.dispose(); turns = null; }
     if (!build || !active) return;
-    const quads: { points: { x: number; z: number }[]; y: number; colour: THREE.Color }[] = [];
+    const quads: { points: { x: number; z: number }[]; y: number; colour: THREE.Color }[] = [], arrows: typeof quads = [];
     const cell = (block: LandBlock, col: number, row: number, colour: THREE.Color, by = .08) => quads.push({ points: inset(areaCorners(block, col, row), by), y: PICK_Y, colour });
     /** The cells of a place that are there to show: in the block, the district's land or not. */
     const footprint = (place: Place) => {
@@ -486,12 +490,44 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
         // A small thing on every `every`-th cell of the line; the cells between stay faintly chosen.
         if (small) cell(c.block, c.col, c.row, index % every ? PICKED : state === "free" ? OK : BAD, index % every ? .34 : .18);
         else cell(c.block, c.col, c.row, state === "free" ? PICKED : state === "own" ? TAKE : BAD, .18);
+        if (!stroke && state === "own" && isTurning(decor.get(key)?.family)) arrows.push(turnArrow(c));
       });
       if (hoverCell && !done.has(keyOf(hoverCell))) cell(hoverCell.block, hoverCell.col, hoverCell.row, HOVER, .3);
     }
+    if (arrows.length) { turns = flatMesh(arrows, turnMaterial, "district-chosen-turns"); turns.renderOrder = 5; ctx.scene.add(turns); }
     if (!quads.length) return;
     chosen = flatMesh(quads, pickMaterial, "district-chosen-cells"); chosen.renderOrder = 4;
     ctx.scene.add(chosen);
+  }
+  /** A flat arrow over a lamp's or a bench's cell, from its middle to the side it stands at or looks to. */
+  function turnArrow(c: CellRef) {
+    const centre = areaPoint(areaCorners(c.block, c.col, c.row), .5, .5), d = edgeToward(c.block, c.col, c.row, centre, decorSide(grid, decor, c.block, c.col, c.row));
+    const at = (along: number, across: number) => ({ x: centre.x + d.x * along - d.z * across, z: centre.z + d.z * along + d.x * across }), tip = at(1.05, 0);
+    return { points: [at(.1, -.38), at(.1, .38), tip, tip], y: PICK_Y + .02, colour: PICKED };
+  }
+
+  /**
+   * Which way of the cells is up the screen and which to its right, for the panel's arrows (EstatePick "screen"): the
+   * camera's look along the ground, to the nearest of the four ways. Told in build mode, once and when it changes.
+   */
+  let reportedScreen = "";
+  const lookAt = new THREE.Vector3();
+  function reportScreen() {
+    const own = build?.area === "plots" && active ? numberOf(build.district) : 0, block = own ? grid.blocks.find(b => b.district === own) : undefined;
+    if (!block) { reportedScreen = ""; return; }
+    ctx.camera.getWorldDirection(lookAt);
+    const centre = areaPoint(areaCorners(block, 0, 0), .5, .5), nearest = (x: number, z: number) => {
+      let best: Way = "row-", most = -Infinity;
+      for (const way of WAYS) { const d = edgeToward(block, 0, 0, centre, sideOf(block, way)), dot = d.x * x + d.z * z; if (dot > most) { most = dot; best = way; } }
+      return best;
+    };
+    const length = Math.hypot(lookAt.x, lookAt.z);
+    if (length < 1e-6) return;
+    // Right of the screen is the look turned a quarter clockwise seen from above.
+    const ux = lookAt.x / length, uz = lookAt.z / length, up = nearest(ux, uz), right = nearest(-uz, ux), key = `${up}:${right}`;
+    if (key === reportedScreen) return;
+    reportedScreen = key;
+    onPick({ kind: "screen", up, right });
   }
   /**
    * Reports the cells chosen now: `add` instead of the ones before (`replace`), after them (`extend`), or a click's cell
@@ -558,7 +594,7 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
     // Lines and areas go on only in the district they were started in.
     const district = build?.area === "plots" ? build.district : "";
     if (district !== lineDistrict) { lineDistrict = district; last = null; stroke = null; sizeLabel.hidden = true; }
-    refreshCells(); showSelection(); reported = ""; showGhost(pinned, false); showCells(); reportPlot(); reportCells();
+    refreshCells(); showSelection(); reported = ""; showGhost(pinned, false); showCells(); reportPlot(); reportCells(); reportScreen();
   }
 
   // ---- the community square and projects still collecting ----
@@ -646,7 +682,7 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
       if (t >= 1) { ctx.scene.remove(item.mesh); (item.mesh.material as THREE.Material).dispose(); veils.splice(i, 1); }
     }
   });
-  const offMove = ctx.onCameraMove(place);
+  const offMove = ctx.onCameraMove(() => { place(); if (build) reportScreen(); });
 
   // ---- pointer: a tap picks a plot or a building, or pins the preview; the mouse moves the preview or draws a line of cells ----
   const canvas = ctx.renderer.domElement, raycaster = new THREE.Raycaster(), pointer = new THREE.Vector2(), plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -.2), hit = new THREE.Vector3();
@@ -919,11 +955,12 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
       for (const mesh of [ground.mesh, ground.centreMesh, squarePatches, patches]) if (mesh) { ctx.scene.remove(mesh); mesh.geometry.dispose(); (mesh.material as THREE.Material).dispose(); }
       if (paving) { ctx.scene.remove(paving); paving.geometry.dispose(); }
       if (chosen) { ctx.scene.remove(chosen); chosen.geometry.dispose(); }
+      if (turns) { ctx.scene.remove(turns); turns.geometry.dispose(); }
       ctx.scene.remove(borders.band, borders.posts); borders.dispose();
       for (const item of veils.splice(0)) { ctx.scene.remove(item.mesh); (item.mesh.material as THREE.Material).dispose(); }
       ctx.scene.remove(cells, ghost, selection, front);
       cells.geometry.dispose(); ghost.geometry.dispose(); edges.geometry.dispose(); selection.geometry.dispose(); front.geometry.dispose();
-      [lineMaterial, ghostMaterial, edgeMaterial, selectMaterial, veilMaterial, frontMaterial, pickMaterial, pavingMaterial].forEach(m => m.dispose());
+      [lineMaterial, ghostMaterial, edgeMaterial, selectMaterial, veilMaterial, frontMaterial, pickMaterial, turnMaterial, pavingMaterial].forEach(m => m.dispose());
     },
   };
 }

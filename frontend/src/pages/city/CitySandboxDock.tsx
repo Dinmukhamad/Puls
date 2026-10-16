@@ -1,11 +1,14 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { citySandbox, type CityEstates, type DistrictEstate, type MyEstate, type PlotCatalogue, type PlotFamily, type ProjectCatalogue, type ProjectFamily, type PublicObject, type SandboxResult } from "../../api/cityEstate";
 import type { DepartmentId } from "../../api/cityWorld";
 import { isDecorFamily, projectFootprint } from "../../city3d/world/estateGrid";
 import type { BuildState, EstateTarget } from "./CityEstateDock";
-import { CellShop } from "./CityShop";
+import { CellShop, cellsText, type Arrange } from "./CityShop";
 import { decorSpots, ownCells, type Choice } from "./cellChoice";
+import { DEFAULT_SCREEN, arrowWay, shiftChosen, turnChosen, turnableChosen, type ScreenWays } from "./decorArrange";
+import { districtLayout } from "../../city3d/world/estateGrid";
+import { districtPlotGrid } from "./freeDistrictPlot";
 import { DistrictSwatch } from "./DistrictSwatch";
 import { isOfficeBuilding } from "../../city3d/world/officeBuildings";
 import { DistrictBuildProgress } from "./DistrictBuildProgress";
@@ -21,17 +24,20 @@ interface Step { run: () => Promise<SandboxResult>; text: (result: SandboxResult
  * The administrators' test city beside the map (api/cityEstate.ts citySandbox): the same three districts, land and
  * rules as the real city, kept apart from it. The same shop as in the city (CityShop.tsx), for free: cells chosen on
  * the map (a tap one, a drag a line), then a square, a house or an office round the one cell, or roads, trees, lamps
- * and the other small things on the cells of the line; anyone's small things on the chosen cells go away. A tap on a
- * building opens its card, where its stage goes up or down or the building goes away.
+ * and the other small things on the cells of the line; anyone's small things on the chosen cells go away, move a cell
+ * along the screen (`screen`: which way of the cells is up it), and lamps and benches turn. A tap on a building opens
+ * its card, where its stage goes up or down or the building goes away.
  * All land is open; the main building's level is set by hand, preserved shared projects are built or cancelled at
  * once, and the test city can be cleared.
  */
-export function CitySandboxDock({ city, state, mine, build, setBuild, onClose, onFocus }: {
+export function CitySandboxDock({ city, state, mine, build, setBuild, onClose, onFocus, screen = DEFAULT_SCREEN }: {
   city: DepartmentId; state: CityEstates | undefined; mine: MyEstate | undefined; build: BuildState;
-  setBuild: (next: BuildState | null) => void; onClose: () => void; onFocus: (target: EstateTarget) => void;
+  setBuild: (next: BuildState | null) => void; onClose: () => void; onFocus: (target: EstateTarget) => void; screen?: ScreenWays;
 }) {
   const client = useQueryClient();
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null), [problem, setProblem] = useState<string | null>(null);
+  const chosenKey = JSON.stringify(build.choice?.cells.map(c => [c.block, c.col, c.row]) ?? []);
+  useEffect(() => { setProblem(null); }, [chosenKey]);
   const land = state?.districts.find(d => d.id === build.district) ?? null;
   const activeComplex = land?.landmark?.status === "active";
   const publicMode = build.project || (activeComplex && build.area === "public");
@@ -74,6 +80,25 @@ export function CitySandboxDock({ city, state, mine, build, setBuild, onClose, o
   const takeAway = () => {
     const cells = ownCells(build.choice).map(c => [c.block, c.col, c.row] as [number, number, number]);
     if (!pending && cells.length) run({ run: () => citySandbox.takeAway({ district_id: build.district, cells }), text: r => `Убрано клеток: ${r.removed ?? 0}.`, next: () => ({ ...build, choice: spent() }) });
+  };
+  /** Anyone's small things on the chosen cells a cell along the screen; the lamps and benches among them turned. */
+  const grid = land?.land ? districtPlotGrid(city, districtLayout(land.id)) : null;
+  const arrange: Arrange = {
+    turnable: turnableChosen(land, build.choice?.cells ?? []).length, problem,
+    onMove: arrow => {
+      if (pending || !land || !grid || !build.choice) return;
+      const shift = shiftChosen(grid, land, build.choice.cells, arrowWay(screen, arrow));
+      setNotice(null); setProblem(shift.problem);
+      if (shift.problem || !shift.moves.length) return;
+      run({ run: () => citySandbox.moveDecor({ district_id: build.district, moves: shift.moves }), text: r => `Подвинуто: ${cellsText(r.moved ?? 0)}.`,
+        next: () => ({ ...build, choice: build.choice && { ...build.choice, cells: shift.cells, at: null } }) });
+    },
+    onTurn: step => {
+      if (pending || !land || !grid || !build.choice) return;
+      const cells = turnChosen(grid, land, build.choice.cells, step);
+      setProblem(null);
+      if (cells.length) run({ run: () => citySandbox.turnDecor({ district_id: build.district, cells }), text: r => `Повёрнуто: ${cellsText(r.turned ?? 0)}.` });
+    },
   };
   const setDistrict = (body: { landmark_level: number }, text: string) => run({ run: () => citySandbox.district(build.district, body), text: () => text });
   const nameOf = (o: PublicObject) => (o.owner === "district" ? projects.get(o.family as ProjectFamily) : plots.get(o.family as PlotFamily))?.levels[o.level - 1]?.name ?? o.family;
@@ -144,7 +169,7 @@ export function CitySandboxDock({ city, state, mine, build, setBuild, onClose, o
     const listed = [...land.objects].sort((a, b) => Number(a.owner === "district") - Number(b.owner === "district") || a.id - b.id);
     body = <>
       <CellShop choice={build.choice} plots={mine.catalogue} decor={decorCatalogue} landPrices={[]} available={null} batch={mine.decor_batch} ready message={null} pending={pending} error={error} free
-        onChoice={choice => go({ choice })} onBuy={buy} onRemove={takeAway} />
+        arrange={arrange} onChoice={choice => go({ choice })} onBuy={buy} onRemove={takeAway} />
       <p className="secondary small">Нажми на постройку на карте, чтобы изменить её уровень или убрать.</p>
       <DistrictBuildProgress land={land.land} />
       {land.landmark && <><DistrictLandmarkCard landmark={land.landmark} compact /><button type="button" className="city-secondary" onClick={() => area(true)}>Проверить уровни главного здания →</button></>}
