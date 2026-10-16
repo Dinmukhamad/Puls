@@ -1,9 +1,18 @@
 import { useId, type CSSProperties } from "react";
+import { PrizeArt } from "./PrizeArt";
+import type { PrizeSticker } from "./wheelPrizes";
 
 export type ChestState = "locked" | "ready" | "opening" | "open" | "spent" | "paused";
 
-/** Decorative only: the real reward is announced in the neighbouring status. */
-export function DailyChest({ state, reward, celebrate = false }: { state: ChestState; reward?: { icon: string; color: string }; celebrate?: boolean }) {
+/**
+ * Decorative only: the real reward is announced in the neighbouring status.
+ *
+ * The chest is alive in every state, never a still picture: a ready chest floats, light
+ * leaks through its lid and every few seconds it hops as if asking to be opened; a
+ * locked one swings its padlock; an open one keeps its beams turning, sparks rising,
+ * coins hopping out and the prize hovering over it. Reduced motion stops all of it.
+ */
+export function DailyChest({ state, reward, celebrate = false }: { state: ChestState; reward?: PrizeSticker; celebrate?: boolean }) {
   const id = useId().replace(/:/g, "");
   return <div className="chest-scene" data-state={state} data-celebrate={celebrate} aria-hidden="true">
     <div className="chest-scene__halo" />
@@ -45,12 +54,16 @@ export function DailyChest({ state, reward, celebrate = false }: { state: ChestS
             <rect x="133" y="153" width="29" height="35" rx="9" fill="#ffe9a0" fillOpacity=".55"/>
             <path className="chest__keyhole" d="M152 166a5 5 0 1 0-8 4l-2 9h12l-2-9a5 5 0 0 0 0-4" fill="#654029"/>
             <path d="M67 161v58" stroke="#f5bf7a" strokeWidth="3" strokeOpacity=".35" strokeLinecap="round"/>
+            <path className="chest__glint" d="m160 151 2 5 5 2-5 2-2 5-2-5-5-2 5-2Z" fill="#fffbe6"/>
           </g>
+          <path className="chest__seam" d="M60 147.5h176l27-19" stroke="#ffe9a6" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/>
         </g>
       </svg>
       <span className="chest__lock" data-visible={state === "locked"}>🔒</span>
     </div>
-    {state === "open" && reward && <span className="chest-scene__reward" style={{ "--sticker": reward.color } as CSSProperties}>{reward.icon}</span>}
+    {(state === "ready" || state === "open") && <div className="chest-scene__sparks">{Array.from({ length: 12 }, (_, i) => <i key={i} style={{ "--i": i, "--x": `${(i * 37 % 100) - 50}px`, "--d": `${2.2 + i % 4 * .45}s`, "--delay": `${i * .37}s` } as CSSProperties}/>)}</div>}
+    {state === "open" && <div className="chest-scene__coins">{Array.from({ length: 6 }, (_, i) => <i key={i} style={{ "--x": `${(i % 2 ? 1 : -1) * (60 + i * 14)}px`, "--y": `${-70 - i % 3 * 26}px`, "--delay": `${.9 + i * .55}s` } as CSSProperties}/>)}</div>}
+    {state === "open" && reward && <span className="chest-scene__reward" data-kind={reward.kind} style={{ "--sticker": reward.color } as CSSProperties}><PrizeArt kind={reward.kind} /></span>}
     {state === "open" && celebrate && <div className="chest-scene__burst">{Array.from({ length: 18 }, (_, i) => <i key={i} style={{ "--i": i, "--x": `${Math.cos(i * 2.4) * (110 + i % 4 * 25)}px`, "--y": `${-90 - (i % 5) * 31}px`, "--turn": `${i * 73}deg`, "--delay": `${i % 4 * 45}ms` } as CSSProperties}/>)}</div>}
     <div className="chest-scene__platform" />
   </div>;

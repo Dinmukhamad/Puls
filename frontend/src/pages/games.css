@@ -12,7 +12,11 @@
 .prize-strip { --cell:160px; position:relative; height:196px; margin:0 0 var(--sp-5); overflow:hidden; border:1px solid var(--separator); border-radius:var(--radius-xl); background:var(--surface-secondary); }
 .prize-strip__track { position:absolute; inset:0; -webkit-mask-image:linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent); mask-image:linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent); }
 .prize-strip__tile { position:absolute; top:22px; left:0; width:var(--cell); height:152px; display:grid; grid-template-rows:auto 1fr auto; justify-items:center; align-items:center; gap:var(--sp-1); padding:var(--sp-3) var(--sp-2); border:1px solid var(--separator); border-radius:var(--radius-l); background:var(--surface-primary); box-shadow:var(--shadow-sm); text-align:center; will-change:transform; transition:border-color var(--motion-fast) var(--ease-standard), box-shadow var(--motion-fast) var(--ease-standard); }
-.prize-strip__sticker { --sticker:#e86aa6; display:grid; place-items:center; width:48px; height:48px; border:3px solid #fff; border-radius:16px; background:color-mix(in srgb, var(--sticker) 28%, #ffffff); box-shadow:0 4px 10px rgba(20,25,35,.16); font-size:26px; line-height:1; }
+.prize-strip__sticker { --sticker:#e86aa6; display:grid; place-items:center; width:52px; height:52px; border:3px solid #fff; border-radius:16px; background:radial-gradient(circle at 35% 28%,#ffffff,color-mix(in srgb, var(--sticker) 34%, #ffffff) 70%); box-shadow:0 4px 10px rgba(20,25,35,.16); line-height:1; }
+.prize-strip__sticker .prize-art { width:84%; height:84%; }
+/* The prize under the frame celebrates: it hops, turns and catches the light. */
+.prize-strip__tile.is-won .prize-strip__sticker { animation:prize-won .7s var(--ease-spring) both, prize-hover 2.4s ease-in-out .7s infinite; }
+.prize-strip__tile.is-won .prize-art__glint, .prize-strip__tile.is-won .prize-art__spark { animation:prize-glint 1.6s ease-in-out infinite; }
 .prize-strip__title { display:-webkit-box; overflow:hidden; color:var(--text-primary); font-size:var(--text-secondary-size); font-weight:600; line-height:1.25; overflow-wrap:break-word; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
 .prize-strip__reward { padding:2px var(--sp-2); border-radius:var(--radius-pill); background:var(--coin-tint); color:var(--gold-text); font-size:var(--text-micro); font-weight:650; white-space:nowrap; }
 .prize-strip__reward--none { background:var(--surface-tertiary); color:var(--text-secondary); font-weight:600; }
@@ -24,7 +28,7 @@
 .prize-strip__window::before, .prize-strip__window::after { content:""; position:absolute; left:50%; width:0; height:0; transform:translateX(-50%); border-left:8px solid transparent; border-right:8px solid transparent; }
 .prize-strip__window::before { top:-1px; border-top:8px solid var(--accent-primary); }
 .prize-strip__window::after { bottom:-1px; border-bottom:8px solid var(--accent-primary); }
-@media (prefers-reduced-motion:reduce) { .prize-strip__tile { transition:none; } }
+@media (prefers-reduced-motion:reduce) { .prize-strip__tile { transition:none; } .prize-strip__tile.is-won .prize-strip__sticker, .prize-art * { animation:none !important; } }
 
 /* Таблица призов: поля прямо в ячейках, чтобы веса стояли в столбик и их
    можно было сравнить взглядом — ради этого в настройки и заходят. */
@@ -36,19 +40,27 @@
 .prize-table .input--num { appearance: textfield; padding-right: 10px; }
 .prize-table .input--num::-webkit-inner-spin-button, .prize-table .input--num::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 .prize-table { min-width: 560px; }
+.prize-table__warn { display:flex; align-items:center; gap:6px; margin:6px 0 0; color:var(--status-warning-text); font-size:var(--text-caption); line-height:1.35; }
+.prize-table__warn svg { flex:none; }
+.prize-economy { padding-top:0; color:var(--text-secondary); }
+.prize-economy--warn { display:flex; align-items:flex-start; gap:8px; color:var(--status-warning-text); }
+.prize-economy--warn svg { flex:none; margin-top:2px; }
 
 /* «Что может выпасть»: стикер подарка и подпись — в шапке карточки рядом со звуком,
    той же высоты и с той же рамкой, что кнопка звука (36 px, на телефоне 44 px). */
 .wheel-prizes-button { display:inline-flex; align-items:center; gap:var(--sp-2); height:36px; padding:0 var(--sp-3) 0 4px; border:1px solid var(--control-border); border-radius:var(--radius-s); background:transparent; color:var(--text-primary); font:inherit; font-size:var(--text-caption); font-weight:600; line-height:1.2; white-space:nowrap; cursor:pointer; transition:background var(--motion-fast) var(--ease-standard); }
 .wheel-prizes-button:hover { background:var(--surface-hover); }
 .wheel-prizes-button:focus-visible { outline:2px solid var(--accent-primary); outline-offset:2px; }
-.wheel-prizes-button__sticker { display:grid; place-items:center; flex:none; width:26px; height:26px; border:2px solid #fff; border-radius:9px; background:color-mix(in srgb, #e86aa6 26%, #ffffff); box-shadow:0 2px 6px rgba(20,25,35,.16); font-size:15px; line-height:1; transform:rotate(-6deg); transition:transform var(--motion-fast) var(--ease-spring); }
+.wheel-prizes-button__sticker { display:grid; place-items:center; flex:none; width:26px; height:26px; border:2px solid #fff; border-radius:9px; background:color-mix(in srgb, #e86aa6 26%, #ffffff); box-shadow:0 2px 6px rgba(20,25,35,.16); line-height:1; transform:rotate(-6deg); transition:transform var(--motion-fast) var(--ease-spring); }
+.wheel-prizes-button__sticker .prize-art { width:90%; height:90%; }
 .wheel-prizes-button:hover .wheel-prizes-button__sticker, .wheel-prizes-button:focus-visible .wheel-prizes-button__sticker { transform:rotate(0) scale(1.06); }
 /* Призы ленты удачи — стикеры: вырубка с белой кромкой, лёгкий наклон и тень.
    Белая кромка одинакова в обеих темах: так выглядит настоящий стикер. */
 .prize-stickers { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:var(--sp-4); margin:0; padding:0; list-style:none; }
 .prize-sticker-card { display:flex; flex-direction:column; align-items:center; gap:var(--sp-2); min-width:0; padding:var(--sp-5) var(--sp-3) var(--sp-4); border:1px solid var(--separator); border-radius:var(--radius-l); background:var(--surface-secondary); text-align:center; }
-.prize-sticker { --sticker:#e86aa6; --tilt:-4deg; display:grid; place-items:center; flex:none; width:84px; height:84px; margin-bottom:var(--sp-2); border:4px solid #fff; border-radius:26px; background:color-mix(in srgb, var(--sticker) 28%, #ffffff); box-shadow:0 8px 18px rgba(20,25,35,.2); font-size:44px; line-height:1; transform:rotate(var(--tilt)); transition:transform var(--motion-fast) var(--ease-spring); }
+.prize-sticker { --sticker:#e86aa6; --tilt:-4deg; display:grid; place-items:center; flex:none; width:84px; height:84px; margin-bottom:var(--sp-2); border:4px solid #fff; border-radius:26px; background:radial-gradient(circle at 35% 28%,#ffffff,color-mix(in srgb, var(--sticker) 34%, #ffffff) 70%); box-shadow:0 8px 18px rgba(20,25,35,.2); line-height:1; transform:rotate(var(--tilt)); transition:transform var(--motion-fast) var(--ease-spring); }
+.prize-sticker .prize-art { width:84%; height:84%; }
+.prize-sticker-card:hover .prize-art__glint, .prize-sticker-card:hover .prize-art__spark { animation:prize-glint 1.4s ease-in-out infinite; }
 .prize-sticker-card:hover .prize-sticker { transform:rotate(0) scale(1.05); }
 .prize-sticker-card__title { color:var(--text-primary); font-size:var(--text-secondary-size); line-height:1.3; overflow-wrap:anywhere; }
 .prize-sticker-card__reward { padding:2px var(--sp-2); border-radius:var(--radius-pill); background:var(--coin-tint); color:var(--gold-text); font-size:var(--text-caption); font-weight:650; }
@@ -104,35 +116,74 @@
 .chest__lid { transform-origin:58px 142px; transition:transform .7s cubic-bezier(.2,.9,.25,1.25); }
 .chest__inside { opacity:0; transition:opacity .4s; }
 .chest__keyhole { transform-origin:148px 169px; transition:transform .3s; }
+.chest__seam { opacity:0; }
+.chest__glint { opacity:0; transform-box:fill-box; transform-origin:center; }
+.chest-scene[data-state="opening"] .chest__seam { opacity:1; animation:chest-seam .35s ease-in-out infinite; }
 .chest__lock { display:none; position:absolute; left:44%; top:52%; font-size:27px; filter:drop-shadow(0 2px 2px #593820); }
 .chest__lock[data-visible="true"] { display:block; }
 .chest-scene__stars { position:absolute; inset:0; color:var(--gold-text); opacity:.65; }
 .chest-scene__stars>span { position:absolute; }
-.chest-scene[data-state="ready"] .chest__float { animation:chest-float 3s ease-in-out 2; }
-.chest-scene[data-state="ready"] .chest-scene__stars>span { animation:chest-twinkle 2.4s ease-in-out 2; animation-delay:calc(var(--i) * 130ms); }
+/* Ready: it floats for good, light leaks through the lid, and every few seconds it hops to call you. */
+.chest-scene[data-state="ready"] .chest__float { animation:chest-float 3.2s ease-in-out infinite; }
+.chest-scene[data-state="ready"] .chest { animation:chest-call 6.5s ease-in-out 1.2s infinite; }
+.chest-scene[data-state="ready"] .chest__seam { animation:chest-seam 2.2s ease-in-out infinite; }
+.chest-scene[data-state="ready"] .chest__glint { animation:chest-glint 3.4s ease-in-out infinite; }
+.chest-scene[data-state="ready"] .chest-scene__halo { animation:chest-breathe 3.2s ease-in-out infinite; }
+.chest-scene[data-state="ready"] .chest-scene__stars>span { animation:chest-twinkle 2.4s ease-in-out infinite; animation-delay:calc(var(--i) * 130ms); }
 .chest-hero:has(.wheel-spin:hover:not(:disabled)) .chest-scene[data-state="ready"] .chest__float { animation:chest-nudge .65s ease-in-out; }
-.chest-scene__rays { position:absolute; z-index:1; width:280px; height:240px; left:50%; top:-4%; opacity:0; transform:translateX(-50%) scale(.65); background:repeating-conic-gradient(from 6deg at 50% 85%,transparent 0deg 12deg,rgba(255,207,102,.35) 15deg 24deg,transparent 27deg 36deg); -webkit-mask-image:radial-gradient(ellipse at 50% 80%,#000,transparent 70%); mask-image:radial-gradient(ellipse at 50% 80%,#000,transparent 70%); clip-path:polygon(0 0,100% 0,70% 86%,30% 86%); transition:opacity .6s,transform .8s; }
+@property --ray-turn { syntax:"<angle>"; inherits:false; initial-value:0deg; }
+.chest-scene__rays { position:absolute; z-index:1; width:280px; height:240px; left:50%; top:-4%; opacity:0; transform:translateX(-50%) scale(.65); background:repeating-conic-gradient(from calc(6deg + var(--ray-turn)) at 50% 85%,transparent 0deg 12deg,rgba(255,207,102,.35) 15deg 24deg,transparent 27deg 36deg); -webkit-mask-image:radial-gradient(ellipse at 50% 80%,#000,transparent 70%); mask-image:radial-gradient(ellipse at 50% 80%,#000,transparent 70%); clip-path:polygon(0 0,100% 0,70% 86%,30% 86%); transition:opacity .6s,transform .8s; }
 .chest-scene[data-state="opening"] .chest__float { animation:chest-rumble .35s ease-in-out infinite; }
 .chest-scene[data-state="opening"] .chest__lid { animation:chest-lid-rattle .7s ease-in-out infinite; }
 .chest-scene[data-state="opening"] .chest__keyhole { transform:rotate(90deg); }
 .chest-scene[data-state="opening"] .chest-scene__halo { animation:chest-charge 1.2s ease-in-out infinite alternate; }
 .chest-scene[data-state="opening"] .chest-scene__rays { opacity:.7; transform:translateX(-50%) scale(1); }
-.chest-scene[data-state="open"] .chest__lid { transform:translate(-8px,-24px) rotate(-27deg); }
-.chest-scene[data-state="open"] .chest__inside { opacity:1; }
+/* Open: the lid sways on its hinge, the gold inside glows, the beams keep turning. */
+.chest-scene[data-state="open"] .chest__lid { transform:translate(-8px,-24px) rotate(-27deg); animation:chest-lid-sway 3.4s ease-in-out .9s infinite; }
+.chest-scene[data-state="open"] .chest__inside { opacity:1; animation:chest-inside 1.8s ease-in-out .6s infinite; }
+.chest-scene[data-state="open"] .chest-scene__halo { animation:chest-breathe 2.6s ease-in-out .6s infinite; }
 .chest-scene[data-state="open"] .chest__float { animation:chest-land .6s var(--ease-spring) both; }
-.chest-scene[data-state="open"] .chest-scene__rays { opacity:.8; transform:translateX(-50%) scale(1.2); }
+.chest-scene[data-state="open"] .chest-scene__rays { opacity:.8; transform:translateX(-50%) scale(1.2); animation:chest-rays 14s linear infinite; }
 .chest-scene[data-state="open"] .chest-scene__stars { animation:chest-message .7s ease both; }
-.chest-scene__reward { position:absolute; z-index:4; top:28px; left:50%; display:grid; place-items:center; width:78px; height:78px; margin-left:-39px; border:4px solid #fff; border-radius:25px; background:color-mix(in srgb,var(--sticker) 28%,#fff); box-shadow:0 12px 32px rgba(127,83,27,.23),0 0 40px var(--coin-tint); font-size:40px; animation:chest-reward .85s var(--ease-spring) both; }
+.chest-scene__reward { position:absolute; z-index:4; top:28px; left:50%; display:grid; place-items:center; width:84px; height:84px; margin-left:-42px; border:4px solid #fff; border-radius:26px; background:radial-gradient(circle at 35% 28%,#fff,color-mix(in srgb,var(--sticker) 34%,#fff) 70%); box-shadow:0 12px 32px rgba(127,83,27,.23),0 0 46px color-mix(in srgb,var(--sticker) 45%,transparent); animation:chest-reward .85s var(--ease-spring) both, chest-reward-hover 2.8s ease-in-out .85s infinite; }
+.chest-scene__reward .prize-art { width:84%; height:84%; }
+.chest-scene__reward .prize-art__glint, .chest-scene__reward .prize-art__spark { animation:prize-glint 1.8s ease-in-out .9s infinite; }
 .chest-scene__burst { position:absolute; z-index:5; inset:0; overflow:hidden; }
+.chest-scene__sparks { position:absolute; z-index:3; inset:0; overflow:hidden; }
+.chest-scene__sparks>i { position:absolute; left:50%; bottom:118px; width:6px; height:6px; margin-left:var(--x); border-radius:50%; background:#ffe9a6; box-shadow:0 0 10px 2px rgba(255,214,110,.75); opacity:0; animation:chest-spark var(--d) ease-out var(--delay) infinite; }
+.chest-scene[data-state="ready"] .chest-scene__sparks>i:nth-child(n+7) { display:none; }
+.chest-scene[data-state="ready"] .chest-scene__sparks>i { bottom:104px; animation-duration:calc(var(--d) * 1.4); }
+.chest-scene__coins { position:absolute; z-index:3; inset:0; overflow:hidden; }
+.chest-scene__coins>i { position:absolute; left:50%; bottom:120px; width:18px; height:18px; margin-left:-9px; border:2px solid #b7781f; border-radius:50%; background:radial-gradient(circle at 35% 30%,#fff3b8,#f6c74f 55%,#d48f25); box-shadow:0 2px 4px rgba(90,50,10,.25); opacity:0; animation:chest-coin 2.6s cubic-bezier(.25,.7,.4,1) var(--delay) infinite; }
 .chest-scene__burst>i { position:absolute; left:50%; top:56%; width:9px; height:14px; border-radius:2px; background:#c294eb; opacity:0; animation:chest-confetti 1.5s ease-out var(--delay) both; }
 .chest-scene__burst>i:nth-child(3n) { width:14px; height:14px; border:2px solid #c58a27; border-radius:50%; background:#f9d574; }
 .chest-scene__burst>i:nth-child(3n+1) { background:#5ab8a3; }
 .chest-scene[data-state="locked"] .chest { filter:saturate(.55) drop-shadow(0 14px 14px rgba(64,38,18,.1)); }
+/* Locked: the padlock swings and now and then the chest gives a sleepy shrug. */
+.chest-scene[data-state="locked"] .chest__lock { transform-origin:50% 0; animation:chest-padlock 2.8s ease-in-out infinite; }
+.chest-scene[data-state="locked"] .chest__float { animation:chest-shrug 7s ease-in-out 2s infinite; }
+.chest-scene[data-state="spent"] .chest__float, .chest-scene[data-state="paused"] .chest__float { animation:chest-breathe-body 4.5s ease-in-out infinite; }
 .chest-scene[data-state="locked"] .chest-scene__halo,.chest-scene[data-state="spent"] .chest-scene__halo,.chest-scene[data-state="paused"] .chest-scene__halo { opacity:.35; }
 .chest-scene[data-state="locked"] .chest-scene__stars,.chest-scene[data-state="spent"] .chest-scene__stars,.chest-scene[data-state="paused"] .chest-scene__stars { display:none; }
 .chest-scene[data-state="spent"] .chest__lid { transform:translateY(-6px) rotate(-5deg); }
 .chest-scene[data-state="spent"] .chest,.chest-scene[data-state="paused"] .chest { filter:saturate(.65); }
 @keyframes chest-float { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-7px); } }
+@keyframes chest-call { 0%,78%,100% { transform:translateX(-50%) rotate(0); } 81% { transform:translateX(-50%) translateY(-10px) rotate(-4deg); } 85% { transform:translateX(-50%) translateY(0) rotate(3deg); } 88% { transform:translateX(-50%) translateY(-5px) rotate(-2deg); } 92% { transform:translateX(-50%) rotate(1deg); } }
+@keyframes chest-seam { 0%,100% { opacity:.25; } 50% { opacity:1; } }
+@keyframes chest-glint { 0%,70%,100% { opacity:0; transform:scale(.4) rotate(0); } 80% { opacity:1; transform:scale(1.3) rotate(45deg); } 90% { opacity:0; transform:scale(.6) rotate(90deg); } }
+@keyframes chest-breathe { 0%,100% { opacity:.75; transform:scale(1); } 50% { opacity:1; transform:scale(1.06); } }
+@keyframes chest-breathe-body { 0%,100% { transform:scale(1); } 50% { transform:scale(1.012,.99); } }
+@keyframes chest-shrug { 0%,86%,100% { transform:rotate(0); } 89% { transform:rotate(-2deg); } 92% { transform:rotate(2deg); } 95% { transform:rotate(-1deg); } }
+@keyframes chest-padlock { 0%,100% { transform:rotate(-9deg); } 50% { transform:rotate(9deg); } }
+@keyframes chest-lid-sway { 0%,100% { transform:translate(-8px,-24px) rotate(-27deg); } 50% { transform:translate(-8px,-27px) rotate(-31deg); } }
+@keyframes chest-inside { 0%,100% { opacity:.8; } 50% { opacity:1; } }
+@keyframes chest-rays { to { --ray-turn:36deg; } }
+@keyframes chest-spark { 0% { opacity:0; transform:translateY(0) scale(.6); } 15% { opacity:1; } 100% { opacity:0; transform:translateY(-150px) translateX(calc(var(--x) * .3)) scale(.2); } }
+@keyframes chest-coin { 0% { opacity:0; transform:translate(0,0) rotateY(0) scale(.6); } 10% { opacity:1; } 45% { transform:translate(calc(var(--x) * .6),var(--y)) rotateY(360deg) scale(1); } 80% { opacity:1; } 100% { opacity:0; transform:translate(var(--x),40px) rotateY(720deg) scale(.9); } }
+@keyframes chest-reward-hover { 0%,100% { transform:translateY(0) rotate(5deg); } 50% { transform:translateY(-9px) rotate(1deg); } }
+@keyframes prize-won { 0% { transform:scale(.7) rotate(-12deg); } 60% { transform:scale(1.18) rotate(6deg); } 100% { transform:scale(1) rotate(0); } }
+@keyframes prize-hover { 0%,100% { transform:translateY(0) rotate(0); } 50% { transform:translateY(-4px) rotate(-3deg); } }
+@keyframes prize-glint { 0%,100% { opacity:.35; } 50% { opacity:1; } }
 @keyframes chest-twinkle { 0%,100% { opacity:.45; transform:scale(.8); } 50% { opacity:1; transform:scale(1.2); } }
 @keyframes chest-nudge { 0%,100% { transform:rotate(0); } 25% { transform:rotate(-3deg); } 65% { transform:rotate(3deg) translateY(-3px); } }
 @keyframes chest-rumble { 0%,100% { transform:translateX(0) rotate(0); } 25% { transform:translateX(-2px) rotate(-1deg); } 75% { transform:translateX(2px) rotate(1deg); } }
