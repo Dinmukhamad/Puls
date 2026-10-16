@@ -25,7 +25,7 @@ export function ProgressOverview({ data, showDetails, own = false }: { data: Coi
       <Progress value={data.progress} tone="accent" label="До следующего уровня" />
       <p>{data.next ? <>До уровня «{data.next.title}» осталось заработать <strong>{coins(data.remaining)} коинов</strong>.</> : "Все настроенные уровни достигнуты."}</p>
       <p className="coin-progress-explanation">Покупки не снижают уровень. Возвраты покупок не прибавляют прогресс.</p>
-      <div className="coin-progress-wallet"><span>Доступно в кошельке: <strong>{coins(data.available)} коинов</strong></span>{own && <Link hideWhenDenied to="/wallet">Открыть кошелёк →</Link>}</div>
+      <div className="coin-progress-wallet"><span>Доступно в кошельке: <strong>{coins(data.available)} коинов</strong></span>{own && <Link hideWhenDenied to="/cabinet#wallet">Кошелёк в кабинете →</Link>}</div>
     </Card>
     {showDetails && <>
       {nearest && <Card title="Ближайшее достижение"><Achievement item={nearest} own={own} /></Card>}

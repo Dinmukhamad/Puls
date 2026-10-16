@@ -110,13 +110,30 @@ test("coin history is a single staff destination and follows motivation access",
   }
 });
 
-test("operator progress has a single entry in results while the home keeps cabinet and wallet", () => {
+test("operator home contains only the cabinet while progress stays in results", () => {
   const sections = nav.visibleNavigation("operator");
-  assert.deepEqual(sections.find((item) => item.id === "home").tabs.map((item) => item.to), ["/cabinet", "/wallet"]);
+  assert.deepEqual(sections.find((item) => item.id === "home").tabs.map((item) => item.to), ["/cabinet"]);
   assert.deepEqual(sections.find((item) => item.id === "results").tabs.map((item) => item.to), ["/rating?tab=board", "/progress"]);
   assert.equal(sections.flatMap((item) => item.tabs).filter((item) => item.label === "Мой прогресс").length, 1);
   assert.equal(nav.currentSection("operator", "/progress")?.id, "results");
   assert.ok(sections.every((item) => item.tabs.every((item) => item.to !== "/rating?tab=progress")));
+});
+
+test("personal coin history keeps its guarded legacy route without a navigation tab", () => {
+  for (const role of ["operator", "supervisor", "head", "admin"]) {
+    const allowed = { ...nav.defaultAccess(role), personal: true };
+    const sections = nav.visibleNavigation(role, allowed);
+    assert.ok(sections.every(item => item.tabs.every(link => link.to !== "/wallet")));
+    const home = nav.currentSection(role, "/wallet", "?page=2&user=37", allowed);
+    assert.equal(home?.id, "home", role);
+    assert.equal(nav.currentTab(home, "/wallet", "?page=2")?.to, "/cabinet", role);
+    assert.equal(nav.canVisit(role, "/wallet", allowed), true);
+    assert.equal(nav.canVisit(role, "/cabinet#wallet", allowed), true);
+    assert.equal(nav.canVisit(role, "/wallet", { ...allowed, personal: false }), false);
+    assert.equal(nav.currentSection(role, "/wallet", "", { ...allowed, personal: false }), undefined);
+    assert.equal(nav.canVisit(role, "/cabinet#wallet", { ...allowed, personal: false }), false);
+    if (role !== "operator") assert.deepEqual(sections.find(item => item.id === "home").tabs.map(link => link.to), ["/admin/summary", "/cabinet", "/progress"]);
+  }
 });
 
 test("operator progress follows results access independently of cabinet access", () => {

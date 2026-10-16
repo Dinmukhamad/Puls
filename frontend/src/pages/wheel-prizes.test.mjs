@@ -73,6 +73,13 @@ test("the chest of the day is a site card: its prize strip shows what is inside,
   config.enabled = false;
   const off = renderToStaticMarkup(React.createElement(GamesPage));
   assert.match(off, />Скоро вернёмся<\/button><p class="wheel-card__note">Сундук дня сейчас выключен\.<\/p>/);
+  assert.match(off, /class="chest" data-state="paused"/);
+  config.enabled = true; config.free_left = 0; config.paid_left = 0;
+  const spent = renderToStaticMarkup(React.createElement(GamesPage));
+  assert.match(spent, /class="chest" data-state="spent"/);
+  assert.match(spent, /До встречи завтра!/);
+  assert.match(spent, /disabled="">На сегодня всё/);
+  delete config.free_left; delete config.paid_left;
   // A chest is shut until the day's tasks are answered: no strip, a way to the tasks.
   config.enabled = true; config.chest = { unlocked: false, answered: 1, total: 3 };
   const shut = renderToStaticMarkup(React.createElement(GamesPage));
@@ -80,9 +87,42 @@ test("the chest of the day is a site card: its prize strip shows what is inside,
   assert.match(shut, /Задания дня: 1 из 3/);
   assert.match(shut, /Ответить на задания/);
   assert.doesNotMatch(shut, /prize-strip__window|Открыть сундук/);
+  assert.doesNotMatch(shut, /class="chest-scene__reward"|class="chest-scene__burst"/);
   delete config.chest;
   const prizes = renderToStaticMarkup(React.createElement(PrizeStickers, { segments: wheel }));
   assert.equal((prizes.match(/class="prize-sticker-card"/g) ?? []).length, 5);
   assert.match(prizes, /💎<\/span><strong class="prize-sticker-card__title">1000 коинов<\/strong><span class="prize-sticker-card__reward">\+1\s000 коинов<\/span><span class="prize-sticker-card__chance">Шанс 50%<\/span>/);
   assert.match(prizes, /🍀<\/span><strong class="prize-sticker-card__title">В этот раз без награды<\/strong><span class="prize-sticker-card__chance">Шанс 12,5%/);
+});
+
+test("chest audio starts only on opening, reuses its context and releases it on mute or exit", async () => {
+  const source = readFileSync(new URL("./chestSounds.ts", import.meta.url), "utf8");
+  const built = await transform(source, { loader: "ts", format: "cjs" });
+  const module = { exports: {} };
+  new Function("module", "exports", built.code)(module, module.exports);
+  let contexts = 0, notes = 0, closed = 0;
+  const originalWindow = globalThis.window;
+  globalThis.window = { AudioContext: class {
+    state = "running"; currentTime = 0; destination = {};
+    constructor() { contexts++; }
+    createOscillator() { notes++; return { frequency:{setValueAtTime(){}}, connect(){return this;}, start(){}, stop(){}, disconnect(){} }; }
+    createGain() { return { gain:{setValueAtTime(){}, linearRampToValueAtTime(){}, exponentialRampToValueAtTime(){}}, connect(){return this;}, disconnect(){} }; }
+    close() { closed++; this.state = "closed"; return Promise.resolve(); }
+  } };
+  try {
+    const sounds = module.exports.createChestSounds();
+    sounds.tick(); sounds.reveal(true);
+    assert.equal(contexts, 0, "no automatic audio context before a user gesture");
+    assert.equal(notes, 0);
+    sounds.unlock(); sounds.tick(); sounds.reveal(true); sounds.unlock();
+    assert.equal(contexts, 1, "all stages share the user-activated context");
+    assert.ok(notes > 4);
+    sounds.close(); sounds.close();
+    assert.equal(closed, 1);
+    const before = notes; sounds.tick(); sounds.reveal(true);
+    assert.equal(notes, before, "muting/exit stops later sounds too");
+    sounds.unlock(); assert.equal(contexts, 2); sounds.close();
+    globalThis.window.AudioContext = class { constructor() { throw new Error("Audio unavailable"); } };
+    assert.doesNotThrow(() => { sounds.unlock(); sounds.tick(); sounds.reveal(false); sounds.close(); });
+  } finally { globalThis.window = originalWindow; }
 });

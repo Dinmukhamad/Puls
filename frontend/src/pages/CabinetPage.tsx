@@ -4,10 +4,12 @@ import { AccessLink as Link } from "../components/AccessLink";
 import { cabinet } from "../api/endpoints";
 import type { BadgeOut } from "../api/types";
 import { progressApi } from "../api/progress";
-import { CoinIcon, MedalIcon, SparkIcon } from "../components/icons";
+import { MedalIcon, SparkIcon } from "../components/icons";
 import { Button, Card, Delta, ErrorState, Progress, RowsSkeleton, Skeleton } from "../components/ui";
 import { coins } from "../utils/format";
 import { WeekMetricsCard } from "./WeekMetricsCard";
+import { RecentTransactions, WalletCard } from "./CabinetWallet";
+import { CabinetLearning } from "./CabinetLearning";
 import "./cabinet.css";
 
 function greeting(): string {
@@ -51,48 +53,51 @@ export function CabinetPage() {
         </div>
       </div>
 
-      <Hero greetingName={firstName} balance={balance} />
+      <p className="cabinet-greeting">{greeting()}, {firstName}. Каждый шаг — ваш прогресс.</p>
+      <div className="cabinet-overview">
+        <ProgressCard balance={balance} />
+        <WalletCard balance={balance} />
+      </div>
+      <div className="cabinet-activity">
+        <RecentTransactions />
+        <CabinetLearning />
+      </div>
       <WeekMetricsCard week={week} />
       <BadgesCard />
     </div>
   );
 }
 
-function Hero({
-  greetingName,
-  balance,
-}: {
-  greetingName: string;
+function ProgressCard({ balance }: {
   balance: import("../api/types").BalanceBlock;
 }) {
   const progress = useQuery({ queryKey: ["coin-progress", "me"], queryFn: () => progressApi.summary() });
   return (
-    <section className="hero">
-      <p className="hero__greeting">
-        {greeting()}, {greetingName}
-      </p>
-
+    <Card title="Мой прогресс" className="cabinet-progress" action={<Link hideWhenDenied className="cabinet-text-link" to="/progress">Подробнее →</Link>}>
       {progress.isLoading && <Skeleton height={150} />}
       {progress.isError && <ErrorState error={progress.error} onRetry={() => progress.refetch()} />}
-      {progress.data && <div className="level">
-        <Link className="level__title" to="/progress"><SparkIcon size={20} />{progress.data.current?.title ?? "Ваш путь в Puls"}</Link>
-        <div className="hero__balance"><span className="hero__amount">{coins(progress.data.total)}</span><span className="hero__coin-unit">коинов заработано</span></div>
+      {progress.data && <div className="cabinet-progress__content">
+        <div className="cabinet-progress__heading">
+          <div className="cabinet-progress__level"><span className="cabinet-progress__icon"><SparkIcon size={24} /></span><div><p className="small secondary">{progress.data.current ? `Уровень ${progress.data.level_number}` : "Ваш путь в Puls"}</p><h3>{progress.data.current?.title ?? "Начало пути"}</h3></div></div>
+          <div className="cabinet-progress__earned"><strong>{coins(progress.data.total)}</strong><span>коинов за всё время</span></div>
+        </div>
         <Progress value={progress.data.progress} tone="accent" label="До следующего уровня" />
         <p className="level__hint">{progress.data.next ? `${coins(progress.data.remaining)} коинов до уровня «${progress.data.next.title}»` : progress.data.current ? "Высший уровень достигнут" : "Уровни ещё не настроены"}</p>
+        <p className="small secondary">Покупки не уменьшают уровень. Возвраты не прибавляют прогресс.</p>
       </div>}
-      <div className="hero__stats">
-        <div className="hero__stat"><span className="hero__stat-label">Кошелёк</span><Link className="hero__stat-value" to="/wallet"><CoinIcon size={18} />{coins(balance.available)}</Link></div>
-        <div className="hero__stat">
-          <span className="hero__stat-label">Место</span>
-          <span className="hero__stat-value">
+      <div className="cabinet-progress__stats">
+        <div><span className="small secondary">Заработано за неделю</span><strong>{coins(balance.earned_this_week ?? 0)} <span className="small secondary">коинов</span></strong></div>
+        <div>
+          <span className="small secondary">Место в недельном рейтинге</span>
+          <strong>
             {balance.rank ? `#${balance.rank}` : "—"}
             {balance.rank_delta !== null && balance.rank_delta !== 0 && (
               <Delta value={balance.rank_delta} />
             )}
-          </span>
+          </strong>
         </div>
       </div>
-    </section>
+    </Card>
   );
 }
 
