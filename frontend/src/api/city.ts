@@ -13,7 +13,6 @@ export type BuildingKey = "garden" | "gazebo" | "playground" | "sports" | "fount
 /** A plot of the operator's own district; `item` is what stands on it. */
 export interface CityPlot { key: string; district: DistrictId; unlocked: boolean; item: BuildingKey | null }
 export interface CityBuilding { key: BuildingKey; name: string; description: string; icon: string; price: number }
-export interface CityBuilt { plot: string; item: BuildingKey; name: string; price: number; balance: number }
 /** A daily situation: `right` and `explanation` come only once it is answered. */
 export interface CityQuest { slot: number; giver: "driver" | "client" | "guide"; title: string; speaker: string; text: string; options: string[]; answered: boolean; answer: number | null; correct: boolean | null; right: number | null; explanation: string | null; coins: number }
 export interface CityQuests { day: string; coins: number; items: CityQuest[] }
@@ -33,7 +32,6 @@ export const city = {
   operator: (id: number, signal?: AbortSignal) => request<CityData>(`/api/v1/admin/learning/city/operators/${id}`, { signal, timeoutMs: CITY_READ_TIMEOUT_MS }),
   claim: (key: string, revision: number) => request<CityReward>(`/api/v1/learning/city/missions/${key}/claim`, { method: "POST", json: { revision } }),
   levelsSeen: (levels: Record<string, number>) => request<{ levels_seen: Record<string, number> }>("/api/v1/learning/city/levels/seen", { method: "POST", json: { levels } }),
-  build: (plot: string, item: BuildingKey) => request<CityBuilt>(`/api/v1/learning/city/plots/${plot}/build`, { method: "POST", json: { item } }),
   answer: (slot: number, answer: number) => request<CityQuest>(`/api/v1/learning/city/quests/${slot}/answer`, { method: "POST", json: { answer } }),
   economy: () => request<CityEconomy>("/api/v1/admin/learning/city/economy"),
   saveEconomy: ({ catalogue: _catalogue, can_edit: _canEdit, ...json }: CityEconomy) => request<CityEconomy>("/api/v1/admin/learning/city/economy", { method: "PUT", json }),

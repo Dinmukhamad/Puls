@@ -181,7 +181,7 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
     const mascotSystem = own(createMascot(ctx, mascot));
     const traffic = own(createTraffic(ctx));
     const crowd = own(createCrowd(ctx));
-    const plots = own(createPlots(ctx, { states: plotStates, onPick: options.onPlot }));
+    const plots = own(createPlots(ctx, { states: plotStates }));
     const quests = own(createQuests(ctx, { states: questStates, onPick: options.onQuest }));
     const labelLayer = own(createLabels(ctx, { anchors: districts.anchors, mascotAnchor: mascotSystem.nameAnchor, onSelect: choose }));
     // The view may go out to the outer ring road (and the tunnel's portal in the hills); the shadow map follows it there.
@@ -374,7 +374,6 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
     select: focusDistrict,
     setLabels(next: CityLabelInfo[]) { labels = next; when(p => p.labels.setLabels(next)); },
     setPlots(next) { if (JSON.stringify(plotStates) === JSON.stringify(next)) return; plotStates = next; when(p => p.plots.set(next)); },
-    focusPlot: key => when(p => { const plot = p.plots.find(key); if (plot) p.rig.focusPoint([plot.x, 1, plot.z], 30, .95); }),
     setQuests(next) { if (JSON.stringify(questStates) === JSON.stringify(next)) return; questStates = next; when(p => p.quests.set(next)); },
     focusQuest: slot => when(p => { const spot = p.quests.spot(slot); if (spot) p.rig.focusPoint([spot.x, 1, spot.z], 26, 1.0); }),
     zoom: factor => when(p => p.rig.zoom(factor)),

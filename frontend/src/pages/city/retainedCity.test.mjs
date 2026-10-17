@@ -39,7 +39,7 @@ function fixture(t) {
     const raw = Object.fromEntries([
       'setDepartment', 'setDepartmentWorld', 'setEstates', 'setBuild', 'focusEstate', 'focusWorld', 'travelTo', 'skipTravel', 'dispose', 'setActive', 'setLevels', 'setLabels', 'setMascot', 'setPlots',
       'setQuests', 'setTimeOfDay', 'setControls', 'select', 'setTraffic',
-      'focusMascot', 'focusPlot', 'focusQuest', 'zoom', 'rotate', 'tilt', 'reset',
+      'focusMascot', 'focusQuest', 'zoom', 'rotate', 'tilt', 'reset',
     ].map(name => [name, (...args) => calls.push([name, ...args])]));
     const engine = { host, canvas, options, raw, calls, called: name => calls.filter(call => call[0] === name) };
     engines.push(engine);
@@ -53,7 +53,7 @@ function fixture(t) {
 
 function page(overrides = {}) {
   const events = [];
-  const callbacks = Object.fromEntries(['onWorldPick', 'onArrival', 'onJourney', 'onEstate', 'onSelect', 'onView', 'onPlot', 'onQuest', 'onReady', 'onLost', 'onRestored', 'onProgress']
+  const callbacks = Object.fromEntries(['onWorldPick', 'onArrival', 'onJourney', 'onEstate', 'onSelect', 'onView', 'onQuest', 'onReady', 'onLost', 'onRestored', 'onProgress']
     .map(name => [name, (...args) => events.push([name, ...args])]));
   return {
     events,
@@ -65,7 +65,7 @@ function emitAll(options) {
   options.onWorldPick?.('station'); options.onArrival?.('sales'); options.onJourney?.('departing'); options.onEstate?.({ kind: 'object', district: 'support-team-1', object: 1 });
   options.onSelect('driver');
   options.onView({ azimuth: 2, polar: 1, distance: 40, target: [1, 2, 3] });
-  options.onPlot?.('plot-1'); options.onQuest?.(1);
+  options.onQuest?.(1);
   options.onProgress?.(.7); options.onLost(); options.onRestored?.(); options.onReady();
 }
 
@@ -180,7 +180,7 @@ test('reattachment refreshes progress and callbacks but keeps traffic and an unc
   assert.deepEqual(engine.called('setLevels'), [['setLevels', newPage.options.levels, ['crm']]]);
   emitAll(engine.options);
   assert.deepEqual(oldPage.events, []);
-  assert.deepEqual(newPage.events.map(event => event[0]), ['onWorldPick', 'onArrival', 'onJourney', 'onEstate', 'onSelect', 'onView', 'onPlot', 'onQuest', 'onProgress', 'onLost', 'onReady', 'onRestored', 'onReady']);
+  assert.deepEqual(newPage.events.map(event => event[0]), ['onWorldPick', 'onArrival', 'onJourney', 'onEstate', 'onSelect', 'onView', 'onQuest', 'onProgress', 'onLost', 'onReady', 'onRestored', 'onReady']);
 });
 
 test('selection changes from both the page and the canvas are remembered across visits', t => {
@@ -225,17 +225,16 @@ test('changing owner, city key or logging out disposes the previous scene and ne
 
 test('a capability change rebuilds with the new permitted actions instead of retaining the old permissions', t => {
   const { acquire, engines } = fixture(t);
-  // CityMap includes canBuild/canQuest in the key: callback presence controls
-  // whether the renderer creates interactive plot/quest controls at all.
-  const first = acquire({ key: 'x4-build0-quest0', options: page({ onPlot: undefined, onQuest: undefined }).options });
-  assert.equal(engines[0].options.onPlot, undefined);
+  // CityMap includes canQuest in the key: callback presence controls
+  // whether the renderer creates interactive quest controls at all.
+  const first = acquire({ key: 'x4-quest0', options: page({ onQuest: undefined }).options });
   assert.equal(engines[0].options.onQuest, undefined);
   first.release();
-  const newPage = page(), second = acquire({ key: 'x4-build1-quest1', options: newPage.options });
+  const newPage = page(), second = acquire({ key: 'x4-quest1', options: newPage.options });
   assert.equal(second.reused, false);
   assert.equal(engines[0].called('dispose').length, 1);
-  engines[1].options.onPlot('plot-1'); engines[1].options.onQuest(2);
-  assert.deepEqual(newPage.events, [['onPlot', 'plot-1'], ['onQuest', 2]]);
+  engines[1].options.onQuest(2);
+  assert.deepEqual(newPage.events, [['onQuest', 2]]);
 });
 
 test('a failed retained engine is recreated, while an engine that finishes loading off-page is reused', t => {

@@ -17,13 +17,13 @@ import { watchCityStartup } from "./startupDeadline";
  * has seen, `levelsSeen` are the ones the account has seen on any device and `onLevelsSeen` records new ones, so an
  * upgrade is celebrated once.
  */
-export function CityMap({ department = "support", departmentWorld, onWorldPick, onArrival, onJourney, worldAction, estates, build = null, onEstate, estateFocus, sceneIdentity, districts, missions, labels, selected, onSelect, progressKey, levelsSeen = null, onLevelsSeen, mascot, forceWebGL = false, focusRequest = 0, plots = [], onPlot, plotFocus, quests = [], onQuest, questFocus, controls = "orbit", onControls, controlsOpen = false, onStatus, onRetry }: { department?: DepartmentId; departmentWorld?: CityWorld; onWorldPick?: (id: string) => void; onArrival?: (id: DepartmentId) => void; onJourney?: (phase: JourneyPhase) => void; worldAction?: { kind: "travel" | "skip" | "focus"; target: string; at: number };
+export function CityMap({ department = "support", departmentWorld, onWorldPick, onArrival, onJourney, worldAction, estates, build = null, onEstate, estateFocus, sceneIdentity, districts, missions, labels, selected, onSelect, progressKey, levelsSeen = null, onLevelsSeen, mascot, forceWebGL = false, focusRequest = 0, plots = [], quests = [], onQuest, questFocus, controls = "orbit", onControls, controlsOpen = false, onStatus, onRetry }: { department?: DepartmentId; departmentWorld?: CityWorld; onWorldPick?: (id: string) => void; onArrival?: (id: DepartmentId) => void; onJourney?: (phase: JourneyPhase) => void; worldAction?: { kind: "travel" | "skip" | "focus"; target: string; at: number };
   /** Team district land of both cities, the build mode, taps on the land; `estateFocus` flies there when it changes. */
   estates?: Partial<Record<DepartmentId, CityEstateView>>; build?: CityBuildView | null; onEstate?: (pick: EstatePick) => void;
   estateFocus?: EstateTarget & { at: number };
   sceneIdentity: string; districts: CityDistrict[]; missions: CityMission[]; labels: CityLabelInfo[]; selected: DistrictId; onSelect: (id: DistrictId) => void; progressKey?: string; levelsSeen?: Record<string, number> | null; onLevelsSeen?: (levels: Record<string, number>) => void; mascot?: CityMascot; forceWebGL?: boolean; focusRequest?: number;
-  /** The operator's plots; `onPlot` (when the viewer may build) opens the catalogue; `plotFocus` flies to a plot when it changes. */
-  plots?: CityPlot[]; onPlot?: (key: string) => void; plotFocus?: { key: string; at: number };
+  /** What the operator built on the plots behind the learning districts; the others stand built up for everyone. */
+  plots?: CityPlot[];
   /** Today's situations; `onQuest` (the operator themself) opens one from its "!"; `questFocus` flies to one. */
   quests?: CityQuest[]; onQuest?: (slot: number) => void; questFocus?: { slot: number; at: number };
   /** How the mouse moves the camera (the operator's choice); `onControls` opens the choice from the map tools. */
@@ -38,9 +38,8 @@ export function CityMap({ department = "support", departmentWorld, onWorldPick, 
   const questsKey = JSON.stringify(quests.map(q => ({ slot: q.slot, giver: q.giver, answered: q.answered }))), questsRef = useRef(quests), questRef = useRef(onQuest);
   questsRef.current = quests; questRef.current = onQuest;
   const canQuest = !!onQuest;
-  const plotsKey = JSON.stringify(plots.map(p => [p.key, p.unlocked, p.item])), plotsRef = useRef(plots), plotRef = useRef(onPlot);
-  plotsRef.current = plots; plotRef.current = onPlot;
-  const canBuild = !!onPlot;
+  const plotsKey = JSON.stringify(plots.map(p => [p.key, p.unlocked, p.item])), plotsRef = useRef(plots);
+  plotsRef.current = plots;
   // The city (docs/CITY_V3_TZ.md) with its full map of ten islands (?world=v1: the five-island layout).
   // The stats overlay is for staff.
   const { user, atLeast } = useAuth(), staff = atLeast("supervisor");
@@ -99,14 +98,14 @@ export function CityMap({ department = "support", departmentWorld, onWorldPick, 
       if (cancelled || !mount.current) return;
       setReloadRequired(false);
       const visit = retainedCity.acquire({
-        owner, key: JSON.stringify([sceneIdentity, world, webGL, showStats, canBuild, canQuest]),
+        owner, key: JSON.stringify([sceneIdentity, world, webGL, showStats, canQuest]),
         mount: mount.current, traffic: trafficRef.current, create: createCity,
         options: {
         department: worldRef.current.department, departmentWorld: worldRef.current.departmentWorld,
         onWorldPick: id => worldRef.current.onWorldPick?.(id), onArrival: id => worldRef.current.onArrival?.(id), onJourney: phase => worldRef.current.onJourney?.(phase),
         estates: worldRef.current.estates, build: worldRef.current.build, onEstate: pick => { if (!cancelled) worldRef.current.onEstate?.(pick); },
         world, forceWebGL: webGL, stats: showStats, timeOfDay: timeRef.current, controls: controlsRef.current,
-        plots: plotsRef.current.map(({ key, unlocked, item }) => ({ key, unlocked, item })), onPlot: canBuild ? key => { if (!cancelled) plotRef.current?.(key); } : undefined,
+        plots: plotsRef.current.map(({ key, unlocked, item }) => ({ key, unlocked, item })),
         quests: questsRef.current.map(({ slot, giver, answered }) => ({ slot, giver, answered })), onQuest: canQuest ? slot => { if (!cancelled) questRef.current?.(slot); } : undefined,
         levels: levelsRef.current, selected: selectedRef.current, labels: labelsRef.current, grown: growthRef.current(), mascot: mascotRef.current,
         onSelect: id => { if (!cancelled) selectRef.current(id); }, onView: () => { /* The retained camera owns its view between visits. */ },
@@ -121,7 +120,7 @@ export function CityMap({ department = "support", departmentWorld, onWorldPick, 
     }).catch(fail);
     return () => { cancelled = true; stopDeadline?.(); release?.(); control.current = undefined; host.current = undefined; };
   // eslint-disable-next-line react-hooks/exhaustive-deps -- live server state updates below; only a different scene/capability creates a runtime
-  }, [owner, sceneIdentity, world, webGL, showStats, canBuild, canQuest]);
+  }, [owner, sceneIdentity, world, webGL, showStats, canQuest]);
   useEffect(() => { control.current?.setDepartment(department); }, [department]);
   useEffect(() => { if (departmentWorld) control.current?.setDepartmentWorld(departmentWorld); }, [departmentWorld]);
   useEffect(() => { if (estates?.support) control.current?.setEstates("support", estates.support); }, [estates?.support]);
@@ -140,7 +139,6 @@ export function CityMap({ department = "support", departmentWorld, onWorldPick, 
   useEffect(() => { control.current?.setQuests(JSON.parse(questsKey)); }, [questsKey]);
   useEffect(() => { if (questFocus) control.current?.focusQuest(questFocus.slot); }, [questFocus?.slot, questFocus?.at]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { control.current?.setPlots(JSON.parse(plotsKey).map(([key, unlocked, item]: [string, boolean, CityPlot["item"]]) => ({ key, unlocked, item }))); }, [plotsKey]);
-  useEffect(() => { if (plotFocus) control.current?.focusPlot(plotFocus.key); }, [plotFocus?.key, plotFocus?.at]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     control.current?.setTimeOfDay(timeOfDay);
     try { localStorage.setItem("puls.city.time-of-day", timeOfDay); } catch { /* Scene controls also work without storage. */ }

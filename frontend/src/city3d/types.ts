@@ -95,9 +95,8 @@ export interface CityOptions {
   timeOfDay?: TimeOfDay;
   /** The camera scheme the operator chose; "orbit" if not given. */
   controls?: CityControlScheme;
-  /** The operator's plots; `onPlot` (only when the viewer may build) opens the catalogue for an empty open plot. */
+  /** What the operator built on the plots behind the learning districts; the others are built up for everyone. */
   plots?: CityPlotInfo[];
-  onPlot?: (key: string) => void;
   /** Today's situations; `onQuest` (only for the operator themself) opens one from its "!" on the map. */
   quests?: CityQuestInfo[];
   onQuest?: (slot: number) => void;
@@ -125,8 +124,6 @@ export interface CityControl {
   /** Refreshes changed district buildings while retaining the live city and camera. */
   setLevels: (levels: Record<string, number>, grown?: DistrictId[]) => void;
   setPlots: (plots: CityPlotInfo[]) => void;
-  /** Flies to a plot, e.g. to show what was just built there. */
-  focusPlot: (key: string) => void;
   setQuests: (quests: CityQuestInfo[]) => void;
   focusQuest: (slot: number) => void;
   zoom: (factor: number) => void; rotate: (radians: number) => void; tilt: (radians: number) => void; reset: () => void;

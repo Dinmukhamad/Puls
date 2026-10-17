@@ -12,7 +12,7 @@ import { NO_CHOICE, spacing } from "./cellChoice";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { city, nextMission, type BuildingKey, type CityBuilt, type CityData, type CityDistrict, type CityMission, type CityQuest, type CityReward, type DistrictId } from "../../api/city";
+import { city, nextMission, type CityData, type CityDistrict, type CityMission, type CityQuest, type CityReward, type DistrictId } from "../../api/city";
 import { attemptPath, learning, type LearningContent } from "../../api/learning";
 import { CityTasks, speakerIcon } from "./CityTasks";
 import { driverShift } from "../../api/driverShift";
@@ -81,11 +81,8 @@ export function CityPage() {
   const [mapAttempt, setMapAttempt] = useState(0);
   function retryMap() { retainedCity.clear(); setMapStatus("loading"); setMapAttempt(attempt => attempt + 1); }
   const [focusRequest, requestFocus] = useState(0);
-  const [plotKey, setPlotKey] = useState<string | null>(null), [built, setBuilt] = useState<CityBuilt | null>(null);
-  const [plotFocus, setPlotFocus] = useState<{ key: string; at: number }>();
   const [questSlot, setQuestSlot] = useState<number | null>(null), [questFocus, setQuestFocus] = useState<{ slot: number; at: number }>();
   const answer = useMutation({ mutationFn: ({ slot, choice }: { slot: number; choice: number }) => city.answer(slot, choice), onSuccess: async () => { await client.invalidateQueries(); }, onError: () => { void query.refetch(); } });
-  const build = useMutation({ mutationFn: ({ plot, item }: { plot: string; item: BuildingKey }) => city.build(plot, item), onSuccess: async result => { setPlotKey(null); setBuilt(result); setPlotFocus({ key: result.plot, at: Date.now() }); await client.invalidateQueries(); }, onError: () => { void query.refetch(); } });
   // The account remembers the district stages its city showed, so another device does not celebrate them again.
   const seeLevels = (levels: Record<string, number>) => void city.levelsSeen(levels)
     .then(saved => client.setQueryData<CityData>(["city", "self"], current => current && { ...current, levels_seen: saved.levels_seen }))
@@ -309,12 +306,6 @@ export function CityPage() {
     {!data.inspecting && !askGuide && !guideEditing && !showControls && <button type="button" className="city-guide-edit" onClick={() => setGuideEditing(true)} aria-label="Изменить фигуру и имя помощника" title="Изменить помощника">✎</button>}
   </div>;
   const fineFor = (d: CityDistrict) => d.id === "scenarios" ? "Коины начисляются автоматически после первого успешного прохождения. Повторная тренировка — без повторной награды." : ["crm", "dispatch", "oktell"].includes(d.id) ? "Рабочие сайты открываются оператору через QR." : "Завершённые ранее действия тоже учитываются.";
-  /** Old plots stay listed where something was built on them, or while building still happens there. */
-  function plotsFor(d: CityDistrict) {
-    const plots = data.plots.filter(p => p.district === d.id), free = plots.find(p => p.unlocked && !p.item);
-    if (!plots.length || (data.plots_moved && !plots.some(p => p.item))) return null;
-    return <CityPlotsSummary plots={plots} buildings={data.buildings} canBuild={data.can_build} moved={data.plots_moved} onShow={key => setPlotFocus({ key, at: Date.now() })} onBuild={free && data.can_build ? () => { setPlotFocus({ key: free.key, at: Date.now() }); openPlot(free.key); } : undefined} />;
-  }
   // Today's situations and the trainer's scenarios: the toolbar counts what is still to do.
   const quests = data.quests?.items ?? [];
   const assigned = data.inspecting ? [] : (assignments.data ?? []).filter(item => item.assigned);
@@ -325,7 +316,6 @@ export function CityPage() {
   // A new operator meets the first mission as soon as the first visit's cards are answered or put off.
   const welcomeAhead = department === "support" && !data.inspecting && !data.preview && !building && mapStatus !== "loading" && !askGuide && !showControls
     && data.missions.some(m => m.key === "welcome" && m.state !== "completed" && m.state !== "unavailable");
-  function openPlot(key: string) { build.reset(); setPlotKey(key); }
   const mineEstate = estateQuery.data, canOpenBuild = !!mineEstate?.district && (mineEstate.status === "ready" || mineEstate.status === "closed");
   const buildingLandQuery = building?.district.startsWith("sales-") ? salesLand : supportLand;
   const buildingLand = building ? landOf(building.district) : null;
@@ -349,7 +339,7 @@ export function CityPage() {
       <button type="button" onClick={leaveHistory}>Выйти</button>
     </div>}
     {historyOpen && seasons && <CityHistory seasons={seasons} department={department} viewing={historyId} onView={viewHistory} onLeave={() => { setHistoryOpen(false); leaveHistory(); }} onClose={() => setHistoryOpen(false)} />}
-    <CityMap key={mapAttempt} department={department} departmentWorld={worldQuery.data} onWorldPick={pickWorld} onArrival={visit} onJourney={setJourney} worldAction={worldAction} estates={estateViews} build={buildView} onEstate={onEstate} estateFocus={estateFocus} sceneIdentity={`${data.user_id}:${data.inspecting ? "inspect" : "self"}`} forceWebGL={params.get("backend") === "webgl"} mascot={mascot} labels={labels} districts={data.districts} missions={data.missions} selected={selected.id} focusRequest={focusRequest} onSelect={selectDistrict} plots={data.plots} onPlot={data.can_build ? openPlot : undefined} plotFocus={plotFocus} quests={data.quests?.items ?? []} onQuest={data.inspecting ? undefined : slot => { answer.reset(); setQuestSlot(slot); }} questFocus={questFocus} controls={controls} onControls={user ? () => setControlsEditing(true) : undefined} controlsOpen={showControls} onStatus={setMapStatus} onRetry={retryMap} progressKey={!data.inspecting && !data.preview ? `city-levels:${data.user_id}` : undefined} levelsSeen={data.levels_seen ?? null} onLevelsSeen={seeLevels} />
+    <CityMap key={mapAttempt} department={department} departmentWorld={worldQuery.data} onWorldPick={pickWorld} onArrival={visit} onJourney={setJourney} worldAction={worldAction} estates={estateViews} build={buildView} onEstate={onEstate} estateFocus={estateFocus} sceneIdentity={`${data.user_id}:${data.inspecting ? "inspect" : "self"}`} forceWebGL={params.get("backend") === "webgl"} mascot={mascot} labels={labels} districts={data.districts} missions={data.missions} selected={selected.id} focusRequest={focusRequest} onSelect={selectDistrict} plots={data.plots} quests={data.quests?.items ?? []} onQuest={data.inspecting ? undefined : slot => { answer.reset(); setQuestSlot(slot); }} questFocus={questFocus} controls={controls} onControls={user ? () => setControlsEditing(true) : undefined} controlsOpen={showControls} onStatus={setMapStatus} onRetry={retryMap} progressKey={!data.inspecting && !data.preview ? `city-levels:${data.user_id}` : undefined} levelsSeen={data.levels_seen ?? null} onLevelsSeen={seeLevels} />
 
     <CityPeekPanel className="city-hud-peek" toolbarSlot="level" label="Уровень, опыт и меню" compactLabel="Уровень" icon={data.level}>
     <header className="city-hud glass glass--regular">
@@ -390,7 +380,7 @@ export function CityPage() {
       <CitySkillsPanel data={data} labels={labels} district={chosen} missionKey={params.get("mission")} completed={completed} total={total}
         onDistrict={(id, key) => id ? selectDistrict(id, key) : allDistricts()} onMission={selectMission}
         error={claim.isError ? <p className="city-error" role="alert">{claim.error.message}</p> : null}
-        action={missionAction} opensTool={opensTool} tool={districtTool} guide={guideFor} fine={fineFor} plots={plotsFor} />
+        action={missionAction} opensTool={opensTool} tool={districtTool} guide={guideFor} fine={fineFor} />
     </CityPeekPanel>}
     {!building && (quests.length > 0 || allPassed || assigned.length > 0) && <CityPeekPanel className="city-tasks-peek" toolbarSlot="quests" label={todo ? `Задания: осталось ${todo}` : "Задания: всё выполнено"} compactLabel="Задания" icon={<>❗{todo > 0 && <b className="city-count">{todo}</b>}</>} holdOpen={startAssignment.isPending}>
       <CityTasks quests={quests} coins={data.quests?.coins ?? 0} allPassed={allPassed} assigned={assigned} onQuest={openQuest} onStart={item => startAssignment.mutate(item)} starting={startAssignment.isPending ? startAssignment.variables?.id ?? null : null} error={startAssignment.isError ? startAssignment.error.message : null} />
@@ -403,40 +393,9 @@ export function CityPage() {
     <CityJourney phase={journey} destination={worldQuery.data?.cities.find(c => c.id === destination)?.name ?? destination} onSkip={() => setWorldAction({ kind: "skip", target: destination, at: Date.now() })} />
 
     {reward && <Sheet title={reward.already_claimed ? "Эта награда уже получена" : "Миссия пройдена"} onClose={() => setReward(null)} size="s"><div className="city-celebration"><div className="city-medal" aria-hidden="true">✦</div><h2>{reward.title}</h2><p>{reward.already_claimed ? "Прогресс сохранён. Повторное начисление не требуется." : "Твой город стал немного больше. Следующая миссия уже ждёт."}</p><div className="city-rewards"><span>+{reward.xp} XP</span>{reward.coins>0&&<span>+{reward.coins} коинов</span>}</div><button className="city-action" onClick={()=>setReward(null)}>Вернуться в город →</button></div></Sheet>}
-    {plotKey && <Sheet title={`Участок · ${data.districts.find(d => d.id === data.plots.find(p => p.key === plotKey)?.district)?.name ?? "район"}`} onClose={() => setPlotKey(null)}><CityCatalogue data={data} pending={build.isPending} error={build.isError ? build.error.message : null} onBuild={item => build.mutate({ plot: plotKey, item })} /></Sheet>}
-    {built && <Sheet title="Построено!" onClose={() => setBuilt(null)} size="s"><div className="city-celebration"><div className="city-medal" aria-hidden="true">{data.buildings.find(b => b.key === built.item)?.icon ?? "🏗️"}</div><h2>{built.name}</h2><p>Постройка уже стоит в твоём районе. Каждый новый участок делает город твоим.</p><div className="city-rewards"><span>−{built.price} коинов</span><span>Осталось {built.balance.toLocaleString("ru-RU")}</span></div><button className="city-action" onClick={() => setBuilt(null)}>Смотреть город →</button></div></Sheet>}
     {questSlot !== null && data.quests?.items.find(q => q.slot === questSlot) && <Sheet title="Задание дня" onClose={() => setQuestSlot(null)} size="s"><CityQuestCard quest={data.quests.items.find(q => q.slot === questSlot)!} reward={data.quests.coins} readOnly={data.inspecting || data.preview} pending={answer.isPending} error={answer.isError ? answer.error.message : null} onAnswer={choice => answer.mutate({ slot: questSlot, choice })} onNext={(() => { const next = data.quests!.items.find(q => !q.answered && q.slot !== questSlot); return next ? () => { answer.reset(); setQuestSlot(next.slot); setQuestFocus({ slot: next.slot, at: Date.now() }); } : undefined; })()} /></Sheet>}
     {driverLaunch && <Sheet title="Автопарк · Driver Simulator" onClose={() => setDriverLaunch(false)}><DriverEntry /></Sheet>}
   </div></CityToolbarProvider>;
-}
-
-/** The district's plots in the mission panel: how many are built, and the way to the next free one. */
-function CityPlotsSummary({ plots, buildings, canBuild, moved, onShow, onBuild }: { plots: CityData["plots"]; buildings: CityData["buildings"]; canBuild: boolean; moved?: boolean; onShow: (key: string) => void; onBuild?: () => void }) {
-  const built = plots.filter(p => p.item), open = plots.some(p => p.unlocked);
-  return <div className="city-plots city-extra">
-    <div className="city-plots__head"><strong>Участки района</strong><span>{built.length} из {plots.length} застроено</span></div>
-    <div className="city-plots__list">{plots.map(p => {
-      const b = buildings.find(item => item.key === p.item);
-      return <button type="button" key={p.key} data-state={p.item ? "built" : p.unlocked ? "open" : "locked"} onClick={() => onShow(p.key)} aria-label={b ? `Участок: ${b.name}` : p.unlocked ? "Свободный участок" : "Участок закрыт"} title={b?.name ?? (p.unlocked ? "Свободный участок" : "Откроется после первой миссии района")}>{b ? b.icon : p.unlocked ? "＋" : "🔒"}</button>;
-    })}</div>
-    {moved ? <small>Новые постройки теперь появляются в районе твоей команды — кнопка «Строить». Прежние остаются здесь.</small> : !open ? <small>Участки откроются после первой пройденной миссии района.</small> : onBuild ? <button type="button" className="city-secondary" onClick={onBuild}>Построить на свободном участке →</button> : canBuild ? <small>Все участки района застроены.</small> : null}
-  </div>;
-}
-
-/** What can be built on a plot, with the price in coins from the common wallet. */
-function CityCatalogue({ data, pending, error, onBuild }: { data: CityData; pending: boolean; error: string | null; onBuild: (item: BuildingKey) => void }) {
-  return <div className="city-catalogue">
-    <p className="city-catalogue__balance">Можно потратить <strong>◈ {data.available.toLocaleString("ru-RU")}</strong> {data.available < data.balance ? "(часть коинов в резерве по заявкам магазина)" : "коинов"}. Постройка остаётся на участке навсегда.</p>
-    {error && <p className="city-error" role="alert">{error}</p>}
-    <ul>{data.buildings.map(b => {
-      const missing = b.price - data.available;
-      return <li key={b.key}>
-        <span className="city-catalogue__icon" aria-hidden="true">{b.icon}</span>
-        <span className="city-catalogue__text"><strong>{b.name}</strong><small>{b.description}</small></span>
-        <button type="button" className="city-action" disabled={pending || missing > 0} onClick={() => onBuild(b.key)} aria-label={`Построить «${b.name}» за ${b.price} коинов`}>{missing > 0 ? `Не хватает ${missing}` : `◈ ${b.price}`}</button>
-      </li>;
-    })}</ul>
-  </div>;
 }
 
 /** Calls `onOpen` the first time `when` holds while the page is open. */

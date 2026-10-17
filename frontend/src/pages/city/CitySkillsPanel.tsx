@@ -17,8 +17,6 @@ export interface SkillsActions {
   guide: (mission: CityMission) => ReactNode;
   /** A line under the button: how the district's tools open or rewards come. */
   fine: (district: CityDistrict) => string;
-  /** The district's old plots, where there is still something to show. */
-  plots: (district: CityDistrict) => ReactNode;
 }
 
 /**
@@ -84,7 +82,7 @@ function DistrictStatus({ district, progress }: { district: CityDistrict; progre
   return <small>{progress.done} из {progress.total} миссий</small>;
 }
 
-function DistrictView({ data, label, district, missionKey, onBack, onMission, error, action, opensTool, tool, guide, fine, plots }: {
+function DistrictView({ data, label, district, missionKey, onBack, onMission, error, action, opensTool, tool, guide, fine }: {
   data: CityData; label?: CityLabelInfo; district: CityDistrict; missionKey: string | null; onBack: () => void; onMission: (key: string) => void; error: ReactNode;
 } & SkillsActions) {
   // Every mission of the district is listed, a paused one too; the progress counts the curriculum's.
@@ -132,7 +130,6 @@ function DistrictView({ data, label, district, missionKey, onBack, onMission, er
           </div>}
         </li>;
       })}</ol>}
-      {plots(district)}
     </div>
     <footer className="skills-foot">
       {error}

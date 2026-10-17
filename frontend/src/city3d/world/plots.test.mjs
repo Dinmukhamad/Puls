@@ -52,3 +52,17 @@ test('every building, the building site and a shut plot stay on their plot', () 
     for (const surface of surfaces) assert.ok(gen.insidePlot(surface, plot), `${surface.kind} inside`);
   }
 });
+
+test('plots are built up: the operator\'s building stays, every other plot has one of its own for everyone', () => {
+  const own = X4.plots.map((plot) => gen.plotBuilding(plot, null));
+  assert.ok(own.every((item) => gen.BUILDING_KEYS.includes(item)));
+  assert.deepEqual(X4.plots.map((plot) => gen.plotBuilding(plot, null)), own, 'the same for every visit and every viewer');
+  assert.ok(new Set(own).size >= 6, 'a mix of houses, parks and yards');
+  // Behind each district: no two plots alike.
+  for (const district of new Set(X4.plots.map((p) => p.district))) {
+    const items = X4.plots.filter((p) => p.district === district).map((p) => gen.plotBuilding(p, null));
+    assert.equal(new Set(items).size, items.length, `${district} plots differ`);
+  }
+  assert.equal(gen.plotBuilding(X4.plots[0], 'fountain'), 'fountain', 'what the operator built stays');
+  assert.ok(gen.BUILDING_KEYS.includes(gen.plotBuilding({ ...X4.plots[0], key: 'future-9' }, null)), 'a new plot gets a building too');
+});
