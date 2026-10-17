@@ -173,6 +173,12 @@ test('the two mouse schemes: "map" drags with the left button, "orbit" (as befor
   }
   assert.equal(mouseGesture('orbit', 0, { altKey: true }), 'turn');
   assert.equal(mouseGesture('orbit', 1), 'dolly');
+  // While building the left button may draw cells: the middle one turns in both schemes, the others stay.
+  for (const scheme of ['orbit', 'map']) {
+    assert.equal(mouseGesture(scheme, 1, {}, true), 'turn', `${scheme}: the middle button turns while building`);
+    assert.equal(mouseGesture(scheme, 0, {}, true), mouseGesture(scheme, 0));
+    assert.equal(mouseGesture(scheme, 2, {}, true), mouseGesture(scheme, 2));
+  }
   assert.equal(fingerGesture('map'), 'drag');
   assert.equal(fingerGesture('orbit'), 'turn');
 });
@@ -204,6 +210,25 @@ test('"orbit": a left drag turns around the view centre, a right drag grabs the 
   dom.dispatchEvent(mouse('pointermove', 800, 650, { button: 1 }));
   assert.ok(rig.currentView().distance > far, 'dragging down goes away');
   dom.dispatchEvent(mouse('pointerup', 800, 650, { button: 1 }));
+  rig.dispose();
+});
+
+test('"orbit" while building: the middle button turns the view instead of zooming, and zooms again afterwards', () => {
+  const { dom, rig } = setup({ controls: 'orbit' });
+  rig.setBuilding(true);
+  const before = rig.currentView();
+  dom.dispatchEvent(mouse('pointerdown', 800, 450, { button: 1 }));
+  dom.dispatchEvent(mouse('pointermove', 900, 450, { button: 1 }));
+  dom.dispatchEvent(mouse('pointerup', 900, 450, { button: 1 }));
+  const turned = rig.currentView();
+  near(turned.azimuth, before.azimuth - 2 * Math.PI * .75 * 100 / H, 1e-9, 'a middle drag turns');
+  assert.equal(turned.distance, before.distance, 'and does not zoom');
+  rig.setBuilding(false);
+  dom.dispatchEvent(mouse('pointerdown', 800, 450, { button: 1 }));
+  dom.dispatchEvent(mouse('pointermove', 800, 350, { button: 1 }));
+  dom.dispatchEvent(mouse('pointerup', 800, 350, { button: 1 }));
+  assert.ok(rig.currentView().distance < turned.distance, 'out of build mode the middle button zooms again');
+  assert.equal(rig.currentView().azimuth, turned.azimuth);
   rig.dispose();
 });
 

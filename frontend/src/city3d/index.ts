@@ -191,7 +191,7 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
       frame: options.frame, view: options.view, controls, reducedMotion, onView: view => { sky.followView(view.target[0], view.target[2], view.distance); options.onView(view); },
     }));
     const first = rig.currentView(); sky.followView(first.target[0], first.target[2], first.distance); sky.setViewDistance(first.distance);
-    rig.setActive(active);
+    rig.setActive(active); rig.setBuilding(!!buildView);
     // Legacy learning-district hit volumes overlap the team land. Build taps belong to the estate picker.
     const picker = own(createPicker(canvas, camera, () => department === "support" && !journey && !buildView ? districts.pickables.filter(hit => labels.some(label => label.id === hit.userData.district)) : [], { onPick: id => choose(id as DistrictId), onHover: id => districts.hover(id) }));
     const post = own(createPost(ctx));
@@ -335,7 +335,7 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
     setDepartment(id) { if (journey) { journey = null; notifyJourney(null); } switchDepartment(id); },
     setDepartmentWorld(config: CityWorld) { departmentConfig = config; parts?.departments?.setConfig(config); },
     setEstates(city, view) { estateViews[city] = view; parts?.departments?.setEstates(city, view); },
-    setBuild(view) { if (buildView && !view) requestedEstateFocus = lastEstateFocus = null; buildView = view; parts?.departments?.setBuild(view); },
+    setBuild(view) { if (buildView && !view) requestedEstateFocus = lastEstateFocus = null; buildView = view; parts?.departments?.setBuild(view); parts?.rig.setBuilding(!!view); },
     focusEstate,
     focusWorld(id) { const point = parts?.departments?.point(id); if (point) parts?.rig.focusPoint([point.x, point.y, point.z], id === "station" ? 38 : 46, .9); },
     travelTo(id) {

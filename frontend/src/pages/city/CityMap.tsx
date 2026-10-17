@@ -163,6 +163,10 @@ export function CityMap({ department = "support", departmentWorld, onWorldPick, 
     {!failed && !ready && <div className="city-loading" role="status"><span>{progress < .3 ? "Запускаем карту…" : progress < .75 ? "Загружаем здания…" : "Подготавливаем город…"} {Math.round(progress * 100)}%</span></div>}
     {failed && <div className="city-fallback" role="status"><span aria-hidden="true">🏙️</span><strong>Не удалось загрузить карту города</strong><small>Попробуй загрузить карту ещё раз. Навыки и задания — на панели сверху.</small>{onRetry && <button type="button" className="city-secondary" onClick={() => reloadRequired ? window.location.reload() : onRetry()}>Повторить загрузку карты</button>}</div>}
     {live && <span className="city-map-hint" key={controls}>{CONTROL_SCHEMES[controls].hint}</span>}
+    {live && build && <div className="city-turn glass glass--regular" role="group" aria-label="Повернуть карту">
+      <button type="button" aria-label="Повернуть карту против часовой стрелки" title="Повернуть карту против часовой стрелки" onClick={() => control.current?.rotate(-TURN)}>↺</button>
+      <button type="button" aria-label="Повернуть карту по часовой стрелке" title="Повернуть карту по часовой стрелке" onClick={() => control.current?.rotate(TURN)}>↻</button>
+    </div>}
     {!failed && <CityPeekPanel label="Управление картой" compactLabel="Карта" toolbarSlot="tools" icon={<span aria-hidden="true">⚙</span>} className="city-map-peek">
       <div className="city-map-tools glass glass--regular" role="toolbar" aria-label="Управление картой" aria-orientation="horizontal">
       <button type="button" className="city-time-toggle" aria-label={timeOfDay === "day" ? "Включить ночной режим" : "Включить дневной режим"} title={timeOfDay === "day" ? "Включить ночной режим" : "Включить дневной режим"} aria-pressed={timeOfDay === "night"} onClick={() => setTimeOfDay(value => value === "day" ? "night" : "day")}><span aria-hidden="true">{timeOfDay === "day" ? "☀" : "☾"}</span><small>{timeOfDay === "day" ? "День" : "Ночь"}</small></button>
@@ -178,6 +182,9 @@ export function CityMap({ department = "support", departmentWorld, onWorldPick, 
     </CityPeekPanel>}
   </section>;
 }
+
+/** While building the left button may be drawing cells: ↺ ↻ on the map turn it by an eighth of a circle (↻ clockwise on screen). */
+const TURN = Math.PI / 4;
 
 function mapLabel(controls: CityControlScheme) {
   const mouse = controls === "orbit" ? "Мышь: тянуть — вращать, правая кнопка — двигать город, колесо — масштаб." : "Мышь: тянуть — двигать город, правая кнопка — поворот и наклон, колесо — масштаб.";

@@ -8,7 +8,8 @@
  * In both the wheel and a pinch zoom towards the pointer, and one finger does what a left-button drag
  * does. In "map" two fingers also twist to turn and slide up or down together to tilt. WASD or the
  * arrows move, Q/E turn, R/F tilt. Flights (district focus, buttons) ease in between, the default view is fitted into the free
- * frame between the panels, and the view stays over the city.
+ * frame between the panels, and the view stays over the city. While building (`setBuilding`) the left button may draw cells
+ * on the own land, so the middle button turns the view in both schemes.
  */
 import * as THREE from "three/webgpu";
 import { RELIEF_END } from "../world/relief";
@@ -106,8 +107,10 @@ export interface Modifiers { shiftKey?: boolean; ctrlKey?: boolean; metaKey?: bo
 /**
  * What a mouse press starts; `button` is MouseEvent.button. "orbit" reads the modifiers as OrbitControls
  * did: Shift, Ctrl or Cmd swap the left and right buttons, Alt changes nothing. "map" turns with any of them.
+ * While `building`, the middle button turns in both: the left one may be drawing cells.
  */
-export function mouseGesture(scheme: ControlScheme, button: number, keys: Modifiers = {}): Gesture {
+export function mouseGesture(scheme: ControlScheme, button: number, keys: Modifiers = {}, building = false): Gesture {
+  if (building && button === 1) return "turn";
   if (scheme === "map") return button === 0 && !(keys.shiftKey || keys.ctrlKey || keys.metaKey || keys.altKey) ? "drag" : "turn";
   if (button === 1) return "dolly";
   const swapped = !!(keys.shiftKey || keys.ctrlKey || keys.metaKey);
@@ -156,6 +159,8 @@ export interface CameraRig {
   defaultView(): CityView;
   /** Switches the mouse scheme; a gesture already under way finishes the way it started. */
   setControls(scheme: ControlScheme): void;
+  /** Build mode: the middle button turns the view (mouseGesture). */
+  setBuilding(building: boolean): void;
   /** Stops input and motion while a cached city is detached, preserving its current view. */
   setActive(active: boolean): void;
   dispose(): void;
@@ -300,7 +305,7 @@ export function createCameraRig(camera: THREE.PerspectiveCamera, options: Camera
   const grips = new Map<number, Grip>();
   let mode: "none" | Gesture | "two" | "pinch" | "tilt" = "none", travelled = 0, twisted = 0, twisting = false;
   // The scheme a gesture started with: switching mid-gesture takes effect from the next one.
-  let gestureScheme: ControlScheme = scheme;
+  let gestureScheme: ControlScheme = scheme, building = false;
   const samples: { time: number; x: number; z: number }[] = [];
   const glide = new THREE.Vector2();
   let gliding = false;
@@ -337,7 +342,7 @@ export function createCameraRig(camera: THREE.PerspectiveCamera, options: Camera
     if (event.pointerType === "mouse") {
       // A click focuses the map, so the keys work straight after it.
       if (document.activeElement !== host) host.focus?.({ preventScroll: true });
-      mode = mouseGesture(scheme, event.button, event);
+      mode = mouseGesture(scheme, event.button, event, building);
     } else if (grips.size === 1) mode = fingerGesture(scheme);
     else { mode = "two"; restartGrips(); }
     if (grips.size === 1) gestureScheme = scheme;
@@ -499,6 +504,7 @@ export function createCameraRig(camera: THREE.PerspectiveCamera, options: Camera
   return {
     animateTo, currentView, defaultView,
     setControls(next) { scheme = next; },
+    setBuilding(next) { building = next; },
     setActive(next) {
       if (disposed || active === next) return;
       active = next;

@@ -807,15 +807,17 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
   }
   let down: { x: number; y: number; time: number } | null = null, pressed = 0, frame = 0, hover: { x: number; y: number } | null = null;
   /**
-   * On the own land the mouse's left button chooses cells: a drag a line of them (an area in the area mode), instead of
-   * the ones chosen; with Shift after them. With Ctrl or Cmd held either button draws an area after them (a road two or
-   * three cells wide, a grove), and a click takes one cell in or out. The camera keeps the right button, the wheel and
-   * the keys.
+   * On the own land the mouse's left button draws cells only where drawing is asked for: a line of them in the line mode
+   * (an area in the area mode) instead of the ones chosen, with Shift a line after them. With Ctrl or Cmd held either
+   * button draws an area after them (a road two or three cells wide, a grove), and a click takes one cell in or out.
+   * Otherwise (a building, one cell at a time, nothing chosen yet) a left drag moves the camera as everywhere in the
+   * city and a click is a tap. The camera keeps the right button, the middle one to turn, the wheel and the keys.
    */
   const onPress = (event: PointerEvent) => {
     const held = event.ctrlKey || event.metaKey;
     if (!build || build.area !== "plots" || build.placing || !active || event.pointerType !== "mouse") return;
-    if (!(event.button === 0 || (held && event.button === 2))) return;
+    const draws = held || event.shiftKey || shape() !== "cell";
+    if (!((event.button === 0 && draws) || (held && event.button === 2))) return;
     const area = held || shape() === "area", p = groundAt(event.clientX, event.clientY), at = p && (area ? cornerAt(p) : ownCellAt(p));
     if (!at) return;
     event.stopImmediatePropagation(); event.preventDefault();

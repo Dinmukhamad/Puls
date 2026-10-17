@@ -213,7 +213,7 @@ function DecorWhere({ item, choice, batch, onShape, onEvery, onReset }: {
     {open.length > limit && <p className="estate-problem" role="alert">За раз можно поставить не больше {limit} клеток.</p>}
     {choice.cells.length > 0 && <button type="button" className="city-secondary" onClick={onReset}>Сбросить выбор</button>}
     <details className="estate-tips estate-tip--mouse"><summary>Подсказки для мыши</summary>
-      <p><kbd>{MULTI_KEY}</kbd> + протянуть — добавить прямоугольник; <kbd>{MULTI_KEY}</kbd> + клик — добавить или убрать клетку; <kbd>Shift</kbd> + протянуть — добавить ещё линию. Камера: правая кнопка мыши, колесо и WASD.</p>
+      <p><kbd>{MULTI_KEY}</kbd> + протянуть — добавить прямоугольник; <kbd>{MULTI_KEY}</kbd> + клик — добавить или убрать клетку; <kbd>Shift</kbd> + протянуть — добавить ещё линию. Камера: ↺ ↻ внизу карты или средняя кнопка мыши — повернуть, колесо — масштаб, WASD — двигать.</p>
     </details>
   </div>;
 }

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { build } from "esbuild";
 import React from "react";
@@ -58,7 +59,7 @@ test("the shop goes what → where → buy: seven tabs of pictures first, then t
   const road = render({ mine: { ...mine, decor }, build: { ...overview, choice: choice({ family: "road", shape: "line" }) } });
   assert.match(road, /<div class="estate-shape" role="radiogroup" aria-label="Как выбирать клетки"><button type="button" role="radio" aria-checked="true">Линией<\/button><button type="button" role="radio" aria-checked="false">Областью<\/button><button type="button" role="radio" aria-checked="false">По клетке<\/button><\/div>/);
   assert.match(road, /<p class="estate-hint">Нажми на начало и на конец — выберутся все клетки между ними\. Мышью можно просто провести\.<\/p>/);
-  assert.match(road, /<details class="estate-tips estate-tip--mouse"><summary>Подсказки для мыши<\/summary><p><kbd>Ctrl<\/kbd> \+ протянуть — добавить прямоугольник; <kbd>Ctrl<\/kbd> \+ клик — добавить или убрать клетку; <kbd>Shift<\/kbd> \+ протянуть — добавить ещё линию\. Камера: правая кнопка мыши, колесо и WASD\.<\/p><\/details>/);
+  assert.match(road, /<details class="estate-tips estate-tip--mouse"><summary>Подсказки для мыши<\/summary><p><kbd>Ctrl<\/kbd> \+ протянуть — добавить прямоугольник; <kbd>Ctrl<\/kbd> \+ клик — добавить или убрать клетку; <kbd>Shift<\/kbd> \+ протянуть — добавить ещё линию\. Камера: ↺ ↻ внизу карты или средняя кнопка мыши — повернуть, колесо — масштаб, WASD — двигать\.<\/p><\/details>/);
   assert.match(road, /disabled="">Сначала выбери клетки на карте<\/button>/);
   const areas = render({ mine: { ...mine, decor }, build: { ...overview, choice: choice({ family: "road", shape: "area" }) } });
   assert.match(areas, /aria-checked="true">Областью<\/button>/);
@@ -214,4 +215,14 @@ test("small things go on the free cells of the line chosen, lamps and trees also
   const closed = render({ mine: { ...base.mine, status: "closed", message: "Стройка в районе пока закрыта." }, build: { ...overview, choice: choice({ cells: line, family: "road" }) } });
   assert.match(closed, /Стройка в районе пока закрыта\./);
   assert.match(closed, /disabled="">Купить · ◈ 15<\/button>/);
+});
+
+test("while building the map keeps turning: ↺ ↻ on the map, and the middle button turns the camera", () => {
+  const map = readFileSync(new URL("./CityMap.tsx", import.meta.url), "utf8"), engine = readFileSync(new URL("../../city3d/index.ts", import.meta.url), "utf8");
+  assert.match(map, /\{live && build && <div className="city-turn glass glass--regular" role="group" aria-label="Повернуть карту">/);
+  assert.match(map, /aria-label="Повернуть карту против часовой стрелки"[^>]*onClick=\{\(\) => control\.current\?\.rotate\(-TURN\)\}>↺<\/button>/);
+  assert.match(map, /aria-label="Повернуть карту по часовой стрелке"[^>]*onClick=\{\(\) => control\.current\?\.rotate\(TURN\)\}>↻<\/button>/);
+  // The camera learns of build mode when the city starts and whenever it changes.
+  assert.match(engine, /rig\.setActive\(active\); rig\.setBuilding\(!!buildView\);/);
+  assert.match(engine, /setBuild\(view\) \{[^\n]*parts\?\.rig\.setBuilding\(!!view\); \}/);
 });
