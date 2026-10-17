@@ -312,7 +312,7 @@ def empty_view(year: int, month: int) -> dict:
 
 async def view(session: AsyncSession, item: ContestMonth, *, viewer: User | None = None) -> dict:
     """The month's standings, nominations and weeks for the screens."""
-    from app.core.visibility import can_identify
+    from app.core.visibility import ranking_name
 
     results = list(await session.scalars(
         select(OperatorMonthResult)
@@ -328,9 +328,9 @@ async def view(session: AsyncSession, item: ContestMonth, *, viewer: User | None
 
     def who(user_id: int) -> str | None:
         user = users.get(user_id)
-        if user is None or (viewer is not None and not can_identify(viewer, user)):
+        if user is None:
             return None
-        return user.full_name
+        return user.full_name if viewer is None else ranking_name(viewer, user)
 
     return {
         "id": item.id,

@@ -19,6 +19,7 @@ new Function("require", "module", "exports", built.outputFiles[0].text)((name) =
   "react-router-dom": {
     useSearchParams: () => [new URLSearchParams("page=99&view=weeks"), () => {}],
     Navigate: () => null,
+    Link: ({ to, children }) => React.createElement("a", { href: to }, children),
   },
   "@tanstack/react-query": {
     useQuery: (options) => {
@@ -50,6 +51,7 @@ test("personal rating explains actual place, participant count and period withou
   assert.match(html, /До призового результата — <strong>7,5 баллов<\/strong>/);
   assert.match(html, /операторы делят место/);
   assert.match(html, /без изменений/);
+  assert.match(html, /href="\/race\?week=17">Кого догнать и что подтянуть/);
   assert.doesNotMatch(html, /Общая таблица|Результаты команды|Чужое Скрытое Имя|Чужая Группа|<table|pagination|Топ-3 недели/);
 });
 

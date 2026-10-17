@@ -4,6 +4,7 @@ import type {
   DashboardOut,
   OperatorRowOut,
   Page,
+  RaceOut,
   RatingOut,
   ShopCatalogOut,
   ShopRequestOut,
@@ -71,6 +72,8 @@ export const rating = {
   weeks: (limit = 20) => request<WeekOut[]>(`${V1}/rating/weeks${buildQuery({ limit })}`),
   leaderboard: (params: { week_id?: number; page?: number; size?: number; search?: string }) =>
     request<RatingOut>(`${V1}/rating${buildQuery({ ...params })}`),
+  /** «Гонка недели»: the operator's place, the gaps and what to improve. */
+  race: (weekId?: number) => request<RaceOut>(`${V1}/rating/race${buildQuery({ week_id: weekId })}`),
 };
 
 /* --- магазин --- */

@@ -138,7 +138,8 @@ test("coin history is a single staff destination and follows motivation access",
 test("operator home contains only the cabinet while progress stays in results", () => {
   const sections = nav.visibleNavigation("operator");
   assert.deepEqual(sections.find((item) => item.id === "home").tabs.map((item) => item.to), ["/cabinet"]);
-  assert.deepEqual(sections.find((item) => item.id === "results").tabs.map((item) => item.to), ["/rating?tab=board", "/progress"]);
+  assert.deepEqual(sections.find((item) => item.id === "results").tabs.map((item) => item.to), ["/rating?tab=board", "/race", "/progress"]);
+  assert.equal(nav.currentSection("operator", "/race")?.id, "results");
   assert.equal(sections.flatMap((item) => item.tabs).filter((item) => item.label === "Мой прогресс").length, 1);
   assert.equal(nav.currentSection("operator", "/progress")?.id, "results");
   assert.ok(sections.every((item) => item.tabs.every((item) => item.to !== "/rating?tab=progress")));
@@ -164,7 +165,7 @@ test("personal coin history keeps its guarded legacy route without a navigation 
 test("operator progress follows results access independently of cabinet access", () => {
   const allowed = { ...nav.defaultAccess("operator"), personal: false };
   assert.equal(nav.currentSection("operator", "/progress", "", allowed)?.id, "results");
-  assert.deepEqual(nav.visibleNavigation("operator", allowed).find((item) => item.id === "results").tabs.map((item) => item.to), ["/rating?tab=board", "/progress"]);
+  assert.deepEqual(nav.visibleNavigation("operator", allowed).find((item) => item.id === "results").tabs.map((item) => item.to), ["/rating?tab=board", "/race", "/progress"]);
   const denied = { ...nav.defaultAccess("operator"), results: false };
   assert.equal(nav.canVisit("operator", "/progress", denied), false);
   assert.ok(nav.visibleNavigation("operator", denied).every((item) => item.tabs.every((item) => item.to !== "/progress")));

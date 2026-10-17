@@ -95,6 +95,7 @@ function ProgressCard({ balance }: {
               <Delta value={balance.rank_delta} />
             )}
           </strong>
+          {balance.rank ? <Link className="small cabinet-progress__race" to="/race">Гонка недели →</Link> : null}
         </div>
       </div>
     </Card>

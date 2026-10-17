@@ -1,0 +1,72 @@
+/* «Гонка недели»: the place, the gaps, the top three, what to improve and the table. */
+
+.race-hero { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 20px 32px; align-items: center; }
+.race-hero p { margin: 0; }
+.race-hero--out { display: grid; gap: 6px; grid-template-columns: minmax(0, 1fr); }
+.race-hero__lead { font-size: var(--text-xl, 22px); font-weight: 600; }
+.race-hero__place { display: grid; justify-items: start; gap: 4px; min-width: 120px; }
+.race-hero__place strong { font-size: 64px; line-height: 1; font-weight: 750; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+.race-hero__place > span { color: var(--text-secondary); font-size: 14px; }
+.race-hero__points { display: grid; gap: 10px; min-width: 0; }
+.race-hero__points strong { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.race-gaps { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.race-gap { display: grid; gap: 4px; padding: 14px 16px; border-radius: var(--radius-m, 16px); background: var(--surface-secondary); border: 1px solid var(--border-subtle); min-width: 0; }
+.race-gap > span { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-secondary); }
+.race-gap strong { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.race-gap small { color: var(--text-secondary); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.race-gap--up { box-shadow: inset 3px 0 0 var(--status-warning); }
+.race-gap--down { box-shadow: inset 3px 0 0 var(--status-success); }
+.race-gap--podium { box-shadow: inset 3px 0 0 var(--coin-color); }
+.race-gap--lead { box-shadow: inset 3px 0 0 var(--coin-color); }
+.race-gap--lead strong { color: var(--gold-text); }
+
+.race-top { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.race-top__place { display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; grid-template-areas: "medal name points" "medal gap gap"; gap: 2px 12px; align-items: center; padding: 10px 14px; border-radius: var(--radius-m, 16px); background: var(--surface-secondary); }
+.race-top__place.is-me { background: var(--accent-tint); box-shadow: inset 3px 0 0 var(--accent-primary); }
+.race-top__medal { grid-area: medal; display: flex; align-items: center; gap: 6px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.race-top__place--1 .race-top__medal { color: var(--gold-text); }
+.race-top__name { grid-area: name; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.race-top__points { grid-area: points; font-weight: 700; font-variant-numeric: tabular-nums; }
+.race-top__gap { grid-area: gap; font-size: 13px; color: var(--text-secondary); }
+.race-top__gap:empty { display: none; }
+
+.race-advice { display: grid; gap: 20px; }
+.race-advice h3 { margin: 0 0 8px; font-size: 16px; font-weight: 650; }
+.race-advice p { margin: 0 0 8px; }
+.race-advice__goal { padding: 14px 16px; border-radius: var(--radius-m, 16px); background: var(--surface-secondary); border: 1px solid var(--border-subtle); }
+.race-advice__lead { font-weight: 600; }
+
+.race-options { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.race-options li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 4px 14px; align-items: baseline; padding: 8px 0; border-top: 1px solid var(--border-subtle); }
+.race-options li:first-child { border-top: 0; }
+.race-options__title { font-weight: 550; min-width: 0; }
+.race-options__move { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.race-options__gain { color: var(--status-success-text); font-weight: 650; white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+.race-metrics { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 12px; }
+.race-metric { display: grid; gap: 6px; }
+.race-metric p { margin: 0; }
+.race-metric__head { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+.race-metric__lost { font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.race-metric__lost.is-lost { color: var(--status-danger-text); }
+.race-metric__lost.is-full { color: var(--status-success-text); }
+.race-metric__lost.is-missing { color: var(--text-secondary); font-weight: 500; }
+
+.race-table td { vertical-align: middle; }
+.race-table__gap td { text-align: center; color: var(--text-secondary); padding-top: 2px; padding-bottom: 2px; }
+.race-table__delta { margin-left: 10px; display: inline-flex; vertical-align: middle; font-size: 12px; }
+.race-table__diff { white-space: nowrap; }
+.race-table__more { display: flex; justify-content: center; padding: 10px 16px 14px; }
+
+.race-note { display: grid; gap: 4px; padding: 0 4px; }
+.race-note p { margin: 0; }
+
+@media (max-width: 600px) {
+  .race-hero { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .race-hero__place { grid-template-columns: auto minmax(0, 1fr); align-items: end; column-gap: 12px; }
+  .race-hero__place strong { font-size: 52px; grid-row: span 2; }
+  .race-options li { grid-template-columns: minmax(0, 1fr) auto; }
+  .race-options__move { grid-column: 1; white-space: normal; }
+  .race-options__gain { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
+}
