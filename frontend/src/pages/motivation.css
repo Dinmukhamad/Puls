@@ -1,0 +1,88 @@
+/* «Мотивация»: the section's pages share the site's rows, filter bar and cards. */
+
+/* Уровни: a ladder, one row per level, the threshold drawn as a bar. */
+.levels-saved { margin:0; padding:var(--sp-3) var(--sp-4); border-radius:var(--radius-m); background:var(--surface-secondary); font-size:var(--text-secondary-size); }
+.levels-list { list-style:none; margin:0; padding:0; }
+.levels-row { display:grid; grid-template-columns:32px minmax(0,1fr) minmax(160px,240px) auto; align-items:center; gap:var(--sp-3) var(--sp-5); padding:var(--sp-3) var(--sp-5); border-top:1px solid var(--separator); }
+.levels-row:hover { background:var(--surface-hover); }
+.levels-row.is-hidden { opacity:.6; }
+.levels-row__number { display:grid; place-items:center; width:32px; height:32px; border-radius:50%; background:var(--surface-secondary); color:var(--text-secondary); font-size:var(--text-caption); font-weight:650; font-variant-numeric:tabular-nums; }
+.levels-row__main { display:grid; gap:2px; min-width:0; }
+.levels-row__main p { margin:0; }
+.levels-row__title { display:flex; align-items:center; gap:var(--sp-2); flex-wrap:wrap; }
+.levels-row__title strong { font-weight:600; }
+.levels-row__meta { color:var(--text-secondary); font-size:var(--text-caption); overflow-wrap:anywhere; }
+.levels-row__threshold { display:grid; gap:6px; justify-items:end; }
+.levels-row__coins { color:var(--gold-text); font-weight:650; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.levels-row__bar { display:block; width:100%; height:6px; border-radius:3px; background:var(--surface-secondary); overflow:hidden; }
+.levels-row__bar > span { display:block; height:100%; border-radius:inherit; background:var(--gold-text); opacity:.45; }
+.levels-note { margin:0; padding:var(--sp-3) var(--sp-5); border-top:1px solid var(--separator); color:var(--text-secondary); font-size:var(--text-caption); }
+
+@media(max-width:767px) {
+  .levels-row { grid-template-columns:32px minmax(0,1fr) auto; padding:var(--sp-3) var(--sp-4); }
+  .levels-row__threshold { grid-column:2 / -1; justify-items:start; }
+  .levels-row__edit { grid-column:3; grid-row:1; }
+  .levels-note { padding:var(--sp-3) var(--sp-4); }
+}
+
+/* Товары магазина: a compact card per bonus, price first, limits in one line. */
+.store-items { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr)); gap:var(--sp-4); }
+.store-item { display:flex; flex-direction:column; gap:var(--sp-3); min-width:0; padding:var(--sp-5); }
+.store-item.is-archived { opacity:.7; }
+.store-item__head { display:flex; align-items:flex-start; justify-content:space-between; gap:var(--sp-3); }
+.store-item__title { margin:0; font-size:var(--text-card-title); font-weight:600; line-height:1.35; overflow-wrap:anywhere; }
+.store-item__price { margin:0; color:var(--gold-text); font-size:26px; font-weight:700; letter-spacing:-.03em; font-variant-numeric:tabular-nums; }
+.store-item__price > span { margin-left:4px; font-size:13px; font-weight:500; letter-spacing:0; }
+.store-item__description { margin:0; color:var(--text-secondary); font-size:var(--text-secondary-size); line-height:1.5; white-space:pre-wrap; overflow-wrap:anywhere; }
+.store-item__facts { display:grid; gap:6px; margin:0; padding-top:var(--sp-3); border-top:1px solid var(--separator); font-size:var(--text-caption); }
+.store-item__facts > div { display:grid; grid-template-columns:110px minmax(0,1fr); gap:var(--sp-3); }
+.store-item__facts dt { color:var(--text-secondary); }
+.store-item__facts dd { margin:0; overflow-wrap:anywhere; }
+.store-item__actions { display:flex; gap:var(--sp-2); margin-top:auto; padding-top:var(--sp-2); }
+
+/* Экономика коинов: sources as lines with their share drawn under them. */
+.economy-month { min-width:200px; }
+.economy-kpis { grid-template-columns:repeat(3,minmax(0,1fr)); }
+.economy-lines { list-style:none; margin:0; padding:0 var(--sp-5) var(--sp-3); }
+.economy-lines > li { display:grid; grid-template-columns:minmax(0,1fr) auto 44px; align-items:baseline; gap:4px var(--sp-3); padding:var(--sp-3) 0; border-top:1px solid var(--separator); }
+.economy-lines > li:first-child { border-top:0; }
+.economy-lines__label { overflow-wrap:anywhere; }
+.economy-lines__value { font-weight:600; font-variant-numeric:tabular-nums; }
+.economy-lines__share { color:var(--text-secondary); font-size:var(--text-caption); text-align:right; font-variant-numeric:tabular-nums; }
+.economy-lines__bar { grid-column:1 / -1; display:block; height:4px; border-radius:2px; background:var(--surface-secondary); overflow:hidden; }
+.economy-lines__bar > span { display:block; height:100%; border-radius:inherit; background:var(--text-secondary); opacity:.5; }
+.economy-lines > li.is-empty { color:var(--text-tertiary); }
+.economy-lines > li.is-empty .economy-lines__value { font-weight:400; }
+@media(max-width:1200px) { .economy-kpis { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media(max-width:767px) { .economy-lines { padding:0 var(--sp-4) var(--sp-3); } .economy-month { min-width:0; } }
+.economy-lines > li.is-empty .economy-lines__bar { visibility:hidden; }
+
+/* Сундук дня: the switch in the rules' header, three short number fields in a row, a save bar that waits for changes. */
+.games-page > .segmented { align-self:flex-start; }
+.chest-settings .card__head { flex-wrap:wrap; gap:var(--sp-3); }
+.chest-settings__switch { position:relative; display:inline-flex; align-items:center; gap:10px; min-height:36px; font-size:var(--text-secondary-size); font-weight:600; cursor:pointer; }
+.chest-settings__switch input { position:absolute; width:1px; height:1px; opacity:0; }
+.chest-settings__track { flex:none; width:42px; height:26px; padding:3px; border-radius:20px; background:var(--text-tertiary); transition:background .15s; }
+.chest-settings__track > span { display:block; width:20px; height:20px; border-radius:50%; background:#fff; box-shadow:0 1px 3px #0002; transition:transform .15s; }
+.chest-settings__switch input:checked + .chest-settings__track { background:var(--status-success); }
+.chest-settings__switch input:checked + .chest-settings__track > span { transform:translateX(16px); }
+.chest-settings__switch input:focus-visible + .chest-settings__track { outline:2px solid var(--accent-primary); outline-offset:3px; }
+.chest-settings__switch:has(input:disabled) { cursor:default; opacity:.6; }
+.chest-settings__numbers { display:grid; grid-template-columns:repeat(3,minmax(0,220px)); gap:var(--sp-4) var(--sp-5); align-items:start; }
+.chest-settings__numbers .input { max-width:140px; font-variant-numeric:tabular-nums; }
+.chest-settings__warn { color:var(--status-warning-text); }
+.prize-table__remove { width:52px; text-align:right; }
+.prize-table__remove .icon-btn { color:var(--text-secondary); font-size:20px; }
+.prize-table__remove .icon-btn:hover:not(:disabled) { color:var(--status-danger-text); }
+.prize-table__add { display:flex; align-items:center; gap:var(--sp-3); padding:var(--sp-3) var(--sp-6) 0; }
+.chest-settings__save { display:flex; align-items:center; justify-content:flex-end; gap:var(--sp-3); flex-wrap:wrap; padding:var(--sp-3) var(--sp-4); border-radius:var(--radius-l); }
+.chest-settings__save > span { margin-right:auto; }
+.chest-settings__save.is-dirty { position:sticky; bottom:var(--sp-4); z-index:20; background:var(--surface-opaque); border:1px solid var(--border-strong); box-shadow:0 8px 30px #0001; }
+@media(max-width:767px) {
+  .chest-settings__numbers { grid-template-columns:1fr 1fr; }
+  .chest-settings__numbers .input { max-width:none; }
+  .prize-table__add { padding:var(--sp-3) var(--sp-4) 0; }
+  .chest-settings__save.is-dirty { bottom:calc(var(--tabbar-height) + 10px + var(--safe-bottom) + var(--sp-3)); }
+}
+@media(prefers-reduced-motion:reduce) { .chest-settings__track, .chest-settings__track > span { transition:none; } }
+.games-page .raffles-create { align-self:flex-start; }

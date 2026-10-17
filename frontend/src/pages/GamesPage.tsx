@@ -14,13 +14,14 @@ import { PrizeArt } from "./PrizeArt";
 import { PrizeStrip } from "./PrizeStrip";
 import { prizeChances, prizeSticker } from "./wheelPrizes";
 import "./games.css";
+import "./motivation.css";
 import "./learning.css";
 
 export function GamesPage({ administrative = false }: { administrative?: boolean }) {
   const [params, setParams] = useSearchParams(); const { atLeast } = useAuth();
   // Raffles stay for the staff who ran them; operators open the chest of the day.
   const tab = administrative && params.get("tab") === "raffles" ? "raffles" : "wheel";
-  return <div className="stack games-page"><div className="page-head"><div><h1 className="page-title">{administrative ? "Управление сундуком дня" : "Сундук дня"}</h1><p className="page-subtitle">{administrative ? "Призы сундука и платные сундуки" : "Ответьте на задания дня — и сундук откроется"}</p></div>{!administrative && atLeast("supervisor") && <Link className="btn btn--secondary" to="/admin/games">Управление</Link>}</div>{administrative && <SegmentedControl label="Раздел" value={tab} options={[{ value:"wheel",label:"Сундук дня" },{ value:"raffles",label:"Розыгрыши (архив)" }]} onChange={(value) => setParams({tab:value})} />}{tab === "wheel" ? administrative ? <WheelSettings /> : <Wheel /> : <Raffles administrative={administrative} />}</div>;
+  return <div className="stack games-page"><div className="page-head"><div><h1 className="page-title">Сундук дня</h1><p className="page-subtitle">{administrative ? "Правила и призы ежедневного сундука сотрудников" : "Ответьте на задания дня — и сундук откроется"}</p></div>{!administrative && atLeast("supervisor") && <Link className="btn btn--secondary" to="/admin/games">Управление</Link>}</div>{administrative && <SegmentedControl label="Раздел сундука" value={tab} options={[{ value:"wheel",label:"Сундук дня" },{ value:"raffles",label:"Розыгрыши (архив)" }]} onChange={(value) => setParams({tab:value})} />}{tab === "wheel" ? administrative ? <WheelSettings /> : <Wheel /> : <Raffles administrative={administrative} />}</div>;
 }
 export function invalidateRewards(client: ReturnType<typeof useQueryClient>) { for (const key of ["wheel","dashboard","wallet","coin-progress", "badges","notifications"]) void client.invalidateQueries({ queryKey:[key] }); }
 const MUTE_KEY = "puls:wheel-muted";

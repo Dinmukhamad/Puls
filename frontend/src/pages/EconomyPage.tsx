@@ -1,9 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { economy, type EconomyReport } from "../api/economy";
-import { Badge, Card, ErrorState, KPI, RowsSkeleton } from "../components/ui";
+import { Badge, Card, ErrorState, KPI, RowsSkeleton, Select } from "../components/ui";
 import { coins } from "../utils/format";
 import "./configuration.css";
+import "./motivation.css";
 
 const ISSUED: Record<keyof EconomyReport["issued"], string> = {
   results: "Показатели и дисциплина", contest: "Места и номинации месяца", gratitude: "Благодарности водителей",
@@ -36,7 +37,7 @@ export function EconomyPage() {
   const query = useQuery({ queryKey: ["economy-report", picked.year, picked.month], queryFn: () => economy.report(picked.year, picked.month) });
   return <div className="stack configuration-page">
     <div className="page-head"><div><h1 className="page-title">Экономика коинов</h1><p className="page-subtitle">Сколько коинов выпущено и сколько сгорело за месяц</p></div>
-      <label className="field"><span className="field__label">Месяц</span><select className="input" value={`${picked.year}-${picked.month}`} onChange={(e) => setPicked(options.find((o) => `${o.year}-${o.month}` === e.target.value) ?? options[0])}>{options.map((o) => <option key={o.label} value={`${o.year}-${o.month}`}>{o.label}</option>)}</select></label>
+      <label className="field economy-month"><span className="field__label">Месяц</span><Select aria-label="Месяц" value={`${picked.year}-${picked.month}`} options={options.map((o) => ({ value: `${o.year}-${o.month}`, label: o.label[0].toUpperCase() + o.label.slice(1) }))} onChange={(value) => setPicked(options.find((o) => `${o.year}-${o.month}` === value) ?? options[0])} /></label>
     </div>
     {query.isLoading && <RowsSkeleton />}
     {query.isError && <ErrorState error={query.error} onRetry={() => query.refetch()} />}
@@ -49,7 +50,7 @@ function Report({ data }: { data: EconomyReport }) {
   const budget = data.shop_budget_tenge;
   return <>
     <Card title={signal.title} action={<Badge tone={signal.tone}>{data.months_held === null ? "нет данных" : `баланс ≈ ${data.months_held.toLocaleString("ru-RU")} мес. дохода`}</Badge>}><p className="secondary">{signal.hint}</p></Card>
-    <div className="kpi-grid">
+    <div className="kpi-grid economy-kpis">
       <KPI label="Выпущено" value={coins(data.total_issued)} unit="коинов" tone="coin" />
       <KPI label="Сгорело" value={coins(data.total_burned)} unit="коинов" />
       <KPI label="Осталось на руках" value={`${data.net >= 0 ? "+" : ""}${coins(data.net)}`} unit="коинов" hint="Выпуск минус сжигание за месяц" />
@@ -58,16 +59,24 @@ function Report({ data }: { data: EconomyReport }) {
       <KPI label="Магазин, ₸" value={coins(data.shop_tenge)} unit={budget ? `из ${coins(budget)}` : "без бюджета"} hint={`Курс: 1 коин = ${data.coin_rate_tenge.toLocaleString("ru-RU")} ₸`} />
     </div>
     <div className="economy-split">
-      <Card title="Откуда пришли коины" padded={false}><Lines entries={Object.entries(data.issued).map(([key, value]) => [ISSUED[key as keyof EconomyReport["issued"]], value])} total={data.total_issued} /></Card>
-      <Card title="Куда ушли коины" padded={false}><Lines entries={Object.entries(data.burned).map(([key, value]) => [BURNED[key as keyof EconomyReport["burned"]], value])} total={data.total_burned} /></Card>
+      <Card title="Откуда пришли коины" subtitle={`Всего ${coins(data.total_issued)}`} padded={false}><Lines entries={Object.entries(data.issued).map(([key, value]) => [ISSUED[key as keyof EconomyReport["issued"]], value])} total={data.total_issued} /></Card>
+      <Card title="Куда ушли коины" subtitle={`Всего ${coins(data.total_burned)}`} padded={false}><Lines entries={Object.entries(data.burned).map(([key, value]) => [BURNED[key as keyof EconomyReport["burned"]], value])} total={data.total_burned} /></Card>
     </div>
     {data.fine_debt > 0 && <p className="secondary small">Штрафы, на которые не хватило коинов: {coins(data.fine_debt)}. Они спишутся при следующих закрытиях недель.</p>}
     <p className="secondary small">Цель: средний оператор зарабатывает около 1000 коинов в месяц; город сжигает около 70% (сезон длится месяц), магазин — около 15%, платные попытки и билеты — около 7%.</p>
   </>;
 }
 
+/** One line per source: its coins, its share, and the share drawn as a bar; the largest source first. */
 function Lines({ entries, total }: { entries: [string, number][]; total: number }) {
-  return <table className="table"><tbody>{entries.map(([label, value]) => <tr key={label}>
-    <td>{label}</td><td className="num">{coins(value)}</td><td className="num secondary">{total > 0 ? `${Math.round(value / total * 100)}%` : "—"}</td>
-  </tr>)}</tbody></table>;
+  const sorted = [...entries].sort((a, b) => b[1] - a[1]);
+  return <ul className="economy-lines">{sorted.map(([label, value]) => {
+    const share = total > 0 ? value / total * 100 : 0;
+    return <li key={label} className={value ? undefined : "is-empty"}>
+      <span className="economy-lines__label">{label}</span>
+      <span className="economy-lines__value">{coins(value)}</span>
+      <span className="economy-lines__share">{total > 0 ? `${Math.round(share)}%` : "—"}</span>
+      <span className="economy-lines__bar" aria-hidden="true"><span style={{ width: `${share}%` }} /></span>
+    </li>;
+  })}</ul>;
 }
