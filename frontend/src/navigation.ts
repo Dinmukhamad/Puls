@@ -24,9 +24,10 @@ export const ACCOUNT_SECTION = section("profile", "Профиль", UserIcon, [
 ]);
 const QR_ACCESS_SECTION = section("qr_access", "QR-доступ", QrIcon, [tab("/qr-access", "Сканер QR")]);
 const personal = [tab("/cabinet", "Мой кабинет"), tab("/progress", "Мой прогресс")];
-const learningTabs = [tab("/training/city", "Мой город · миссии")];
+const learningTabs = [tab("/training/city", "Мой город · миссии"), tab("/training/voice", "Голосовой тренажёр")];
 const staffLearning = section("training", "Обучение", SparkIcon, [
   tab("/admin/learning/city", "Миссии города"), tab("/training/city", "Город оператора"),
+  tab("/training/voice", "Голосовой тренажёр"),
   tab("/admin/learning-analytics", "Аналитика симулятора"),
 ]);
 const team = (admin = false, supervisor = false) => section("team", "Команда", UsersIcon, [
@@ -59,13 +60,13 @@ const staffHome = section("home", "Главная", HomeIcon, [tab("/admin/summa
 export const ROLE_NAVIGATION: Record<Role, readonly NavItem[]> = {
   trainee: [
     section("home", "Главная", HomeIcon, [tab("/trainee", "Подготовка к работе")]),
-    section("training", "Обучение", SparkIcon, [tab("/training/city", "Учебный город")]),
+    section("training", "Обучение", SparkIcon, [tab("/training/city", "Учебный город"), tab("/training/voice", "Голосовой тренажёр")]),
     ACCOUNT_SECTION,
   ],
   trainer: [
     section("home", "Главная", HomeIcon, [tab("/trainer", "Учебная сводка")]),
     section("team", "Команда", UsersIcon, [tab("/admin/users", "Операторы")]),
-    section("training", "Обучение", SparkIcon, [tab("/admin/learning/city", "Миссии города"), tab("/training/city", "Город оператора")]),
+    section("training", "Обучение", SparkIcon, [tab("/admin/learning/city", "Миссии города"), tab("/training/city", "Город оператора"), tab("/training/voice", "Голосовой тренажёр")]),
     section("driver", "Симулятор", SparkIcon, [tab("/admin/learning?kind=simulator", "Сценарии"), tab("/training/city?district=driver", "Тестовый запуск в городе")]),
     section("learning_analytics", "Аналитика", TrophyIcon, [tab("/admin/learning-analytics", "Аналитика симулятора")]),
     QR_ACCESS_SECTION,
@@ -99,7 +100,7 @@ export function defaultAccess(role: Role): AccessMap {
 export function routeSection(pathname: string, search = "", role: Role = "operator"): SectionCode | "account" | "access" | "developer" | "qr_access" | undefined {
   if (pathname === "/trainee") return "training";
   if (pathname === "/qr-access") return "qr_access";
-  if (pathname === "/training/work-sites" || pathname === "/training/city" || pathname.startsWith("/training/scenarios/")) return role === "operator" || role === "trainee" ? "training" : "learning_admin";
+  if (pathname === "/training/work-sites" || pathname === "/training/city" || pathname === "/training/voice" || pathname.startsWith("/training/voice/") || pathname.startsWith("/training/scenarios/")) return role === "operator" || role === "trainee" ? "training" : "learning_admin";
   const matches = (path: string) => pathname === path || pathname.startsWith(`${path}/`);
   if (pathname === "/trainer" || pathname === "/admin/learning-analytics") return "learning_admin";
   if (matches("/progress")) return role === "operator" ? "results" : "personal";
@@ -189,6 +190,7 @@ export function currentSection(role: Role, pathname: string, search = "", allowe
   // Bookmarked personal history stays under the cabinet without another tab.
   if (pathname === "/wallet") return sections.find(item => item.tabs.some(link => link.to === "/cabinet"));
   if (pathname === "/training/work-sites" || pathname.startsWith("/training/scenarios/")) return sections.find(item => item.tabs.some(tab => tab.to === "/training/city"));
+  if (pathname === "/training/voice" || pathname.startsWith("/training/voice/")) return sections.find(item => item.tabs.some(tab => tab.to === "/training/voice"));
   if (role === "trainer" && ["/admin/learning", "/training", "/simulator"].some(p => pathname === p || pathname.startsWith(p + "/"))) {
     const driver = pathname === "/admin/learning" || pathname.startsWith("/simulator") || (pathname === "/training/city" && new URLSearchParams(search).get("district") === "driver");
     return sections.find(item => item.id === (driver ? "driver" : "training"));

@@ -14,7 +14,7 @@ const OPENED_PAUSE_MS = 1400;
 
 export function WorkSitesGate({ children }: { children: ReactNode }) {
   const { user } = useAuth();
-  return user?.role === "operator" ? <OperatorGate key={user.id}>{children}</OperatorGate> : children;
+  return user && (user.role === "operator" || user.role === "trainee") ? <OperatorGate key={user.id}>{children}</OperatorGate> : children;
 }
 
 /**

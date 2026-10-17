@@ -71,5 +71,5 @@ test("the trainee's cabinet names the districts as the city does and opens them 
   assert.match(page, /<Link className="btn btn--plain btn--m" to=\{inCity\(current\.district, current\.key\)\}>Показать в городе<\/Link>/);
   assert.match(page, /title="Учебный город"/);
   assert.doesNotMatch(page, /CityMap|Показать карту|NAMES\[/);
-  assert.match(nav, /section\("training", "Обучение", SparkIcon, \[tab\("\/training\/city", "Учебный город"\)\]\)/);
+  assert.match(nav, /section\("training", "Обучение", SparkIcon, \[tab\("\/training\/city", "Учебный город"\), tab\("\/training\/voice", "Голосовой тренажёр"\)\]\)/);
 });

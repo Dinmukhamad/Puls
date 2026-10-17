@@ -10,7 +10,8 @@ const nav = await import(`data:text/javascript;base64,${Buffer.from(built.output
 test("trainees have three learning-only destinations even after explicit workplace grants", () => {
   const allowed = Object.fromEntries(["personal", "results", "training", "rewards", "overview", "team", "analytics", "performance", "learning_admin", "motivation", "reports", "system"].map(key => [key, true]));
   assert.deepEqual(nav.visibleNavigation("trainee", allowed).map(item => [item.label, item.to]), [["Главная", "/trainee"], ["Обучение", "/training/city"], ["Профиль", "/profile"]]);
-  for (const path of ["/trainee", "/training/city", "/training/work-sites?site=crm", "/simulator", "/profile", "/training/scenarios/business_park"]) assert.equal(nav.canVisit("trainee", path, allowed), true, path);
+  assert.deepEqual(nav.visibleNavigation("trainee", allowed).find(item => item.id === "training").tabs.map(item => item.to), ["/training/city", "/training/voice"]);
+  for (const path of ["/trainee", "/training/city", "/training/voice", "/training/voice/attempts/42", "/training/work-sites?site=crm", "/simulator", "/profile", "/training/scenarios/business_park"]) assert.equal(nav.canVisit("trainee", path, allowed), true, path);
   for (const path of ["/wallet", "/rating", "/shop", "/games", "/admin/users", "/admin/sessions", "/analytics", "/reports", "/qr-access"]) assert.equal(nav.canVisit("trainee", path, allowed), false, path);
   assert.equal(nav.canVisit("operator", "/trainee", allowed), false);
   assert.equal(nav.appEntryRedirect("/trainee", "/cabinet", () => false), "/cabinet");
@@ -50,6 +51,21 @@ test("scenario routes use learning management for staff and learning access for 
       assert.equal(nav.routeSection(path, "", role), "learning_admin");
       assert.equal(nav.canVisit(role, path, { ...nav.defaultAccess(role), training: false }), true);
       assert.equal(nav.canVisit(role, path, { ...nav.defaultAccess(role), learning_admin: false }), false);
+    }
+  }
+});
+
+test("voice training and resumed attempts stay discoverable under learning permissions", () => {
+  for (const role of ["trainee", "operator", "trainer", "supervisor", "head", "admin"]) {
+    for (const path of ["/training/voice", "/training/voice/attempts/42"]) {
+      const section = role === "operator" || role === "trainee" ? "training" : "learning_admin";
+      const allowed = nav.defaultAccess(role);
+      assert.equal(nav.routeSection(path, "", role), section);
+      assert.equal(nav.canVisit(role, path, allowed), true);
+      assert.equal(nav.canVisit(role, path, { ...allowed, [section]: false }), false);
+      const current = nav.currentSection(role, path);
+      assert.equal(current.id, "training");
+      assert.equal(nav.currentTab(current, path, "").to, "/training/voice");
     }
   }
 });
@@ -304,15 +320,15 @@ test("QR scanner is available to every non-operator and never granted to operato
 test("learning keeps the city and the simulator analytics, and only the trainer keeps scenarios", () => {
   for (const role of ["supervisor", "head", "admin"]) {
     const learning = nav.visibleNavigation(role).find((item) => item.id === "training");
-    assert.deepEqual(learning.tabs.map((tab) => tab.label), ["Миссии города", "Город оператора", "Аналитика симулятора"], role);
+    assert.deepEqual(learning.tabs.map((tab) => tab.label), ["Миссии города", "Город оператора", "Голосовой тренажёр", "Аналитика симулятора"], role);
     const can = (path) => nav.canVisit(role, path, nav.defaultAccess(role));
     assert.equal(can("/admin/learning"), false, `${role}: the studio is gone`);
     // A bookmarked studio opens the simulator analytics instead of an access error.
     assert.equal(nav.appEntryRedirect("/admin/learning", "/admin/summary", can), "/admin/learning-analytics", role);
   }
-  assert.deepEqual(nav.visibleNavigation("operator").find((item) => item.id === "training").tabs.map((tab) => tab.to), ["/training/city"]);
+  assert.deepEqual(nav.visibleNavigation("operator").find((item) => item.id === "training").tabs.map((tab) => tab.to), ["/training/city", "/training/voice"]);
   const trainer = nav.visibleNavigation("trainer");
-  assert.deepEqual(trainer.find((item) => item.id === "training").tabs.map((tab) => tab.label), ["Миссии города", "Город оператора"]);
+  assert.deepEqual(trainer.find((item) => item.id === "training").tabs.map((tab) => tab.label), ["Миссии города", "Город оператора", "Голосовой тренажёр"]);
   assert.deepEqual(trainer.find((item) => item.id === "driver").tabs.map((tab) => tab.label), ["Сценарии", "Тестовый запуск в городе"]);
   assert.deepEqual(trainer.find((item) => item.id === "learning_analytics").tabs.map((tab) => tab.label), ["Аналитика симулятора"]);
   const trainerCan = (path) => nav.canVisit("trainer", path, nav.defaultAccess("trainer"));
