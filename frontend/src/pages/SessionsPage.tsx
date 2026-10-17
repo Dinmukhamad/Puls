@@ -5,7 +5,9 @@ import type { Role } from "../api/types";
 import { useAuth } from "../auth/AuthContext";
 import { Sheet } from "../components/Sheet";
 import { useToast } from "../components/Toast";
-import { Badge, Button, Card, EmptyState, ErrorState, KPI, Select, Skeleton, SegmentedControl } from "../components/ui";
+import { GlassSurface } from "../components/GlassSurface";
+import { DisplayIcon, PhoneIcon } from "../components/icons";
+import { Avatar, Badge, Button, Card, EmptyState, ErrorState, KPI, Select, Skeleton } from "../components/ui";
 import { dateTime, parseTimestamp, plural, ROLE_LABELS } from "../utils/format";
 import "./workflow.css";
 import "./sessions.css";
@@ -13,6 +15,9 @@ import "./sessions.css";
 /** Строка User-Agent целиком нечитаема, а различать сеансы надо по браузеру и системе. */
 export function browserOf(agent: string) {
   if (/Edg\//.test(agent)) return "Edge";
+  if (/YaBrowser\//.test(agent)) return "Яндекс Браузер";
+  if (/OPR\//.test(agent)) return "Opera";
+  if (/SamsungBrowser\//.test(agent)) return "Samsung Internet";
   if (/Firefox\//.test(agent)) return "Firefox";
   if (/Chrome\//.test(agent)) return "Chrome";
   if (/Safari\//.test(agent)) return "Safari";
@@ -29,6 +34,19 @@ export function platformOf(agent: string) {
 }
 
 const MOBILE = new Set(["iOS", "Android"]);
+/** Сколько устройств сотрудника видно сразу; остальные — по «Показать ещё». */
+const FOLDED = 3;
+
+export function isPhone(agent: string) {
+  return MOBILE.has(platformOf(agent));
+}
+
+/** Одна строка на устройство: «Chrome · Windows», без пустых «Браузер · Другое». */
+export function deviceName(agent: string) {
+  const browser = browserOf(agent), platform = platformOf(agent);
+  if (browser === "Браузер" && platform === "Другое") return "Неизвестное устройство";
+  return platform === "Другое" ? browser : `${browser} · ${platform}`;
+}
 
 /**
  * Давность активности. Это главный признак на экране безопасности: вход
@@ -68,33 +86,27 @@ function relative(iso: string) {
 }
 
 export interface SessionFilters {
-  scope: "all" | "mine";
-  person: string;
   role?: string;
   platform: string;
   freshness: string;
   search: string;
   sort: SortKey;
-  meId?: number;
 }
 
 /**
  * Отбор и порядок строк. Вынесено из компонента намеренно: это единственное
- * место, где экран может соврать — показать чужой сеанс под «Мой аккаунт»
- * или потерять строку из-за регистра в поиске. Внутри useMemo такую логику
- * не проверить.
+ * место, где экран может соврать — показать сеанс не той роли или потерять
+ * строку из-за регистра в поиске. Внутри useMemo такую логику не проверить.
  */
 export function filterSessions(sessions: DeviceSession[], f: SessionFilters, now = Date.now()): DeviceSession[] {
   const needle = f.search.trim().toLowerCase();
   const rows = sessions.filter((s) => {
-    if (f.scope === "mine" && s.user_id !== f.meId) return false;
-    if (f.person && String(s.user_id) !== f.person) return false;
     if (f.role && s.role !== f.role) return false;
     if (f.platform && platformOf(s.device) !== f.platform) return false;
     if (f.freshness && freshnessOf(s.last_active_at, now) !== f.freshness) return false;
     if (!needle) return true;
     // Поиск идёт и по адресу: при разборе подозрительного входа ищут именно IP.
-    return [s.full_name, s.login, s.role, ROLE_LABELS[s.role], s.ip_address ?? "", browserOf(s.device), platformOf(s.device)]
+    return [s.full_name, s.login, s.role, ROLE_LABELS[s.role], s.ip_address ?? "", deviceName(s.device)]
       .join(" ")
       .toLowerCase()
       .includes(needle);
@@ -112,6 +124,31 @@ const SORTS: { value: SortKey; label: string }[] = [
   { value: "created", label: "Сначала новые входы" },
   { value: "name", label: "По имени" },
 ];
+
+export interface SessionGroup {
+  user_id: number;
+  full_name: string;
+  login: string;
+  role: Role;
+  sessions: DeviceSession[];
+}
+
+/**
+ * Сеансы одного сотрудника вместе: человек — главная единица на экране,
+ * устройства — его строки. Порядок людей задаёт уже отсортированный список:
+ * сотрудник стоит там, где стоит его первый сеанс, и устройства внутри
+ * идут в том же порядке.
+ */
+export function groupSessions(rows: DeviceSession[]): SessionGroup[] {
+  const groups = new Map<number, SessionGroup>();
+  for (const session of rows) {
+    const group = groups.get(session.user_id)
+      ?? { user_id: session.user_id, full_name: session.full_name, login: session.login, role: session.role, sessions: [] };
+    group.sessions.push(session);
+    groups.set(session.user_id, group);
+  }
+  return [...groups.values()];
+}
 
 export interface SessionTarget {
   title: string;
@@ -179,40 +216,37 @@ export function SessionsPage() {
   const [target, setTarget] = useState<SessionTarget | null>(null);
   const [keepCurrent, setKeepCurrent] = useState(true);
   const [selected, setSelected] = useState<string[]>([]);
-  const [scope, setScope] = useState<"all" | "mine">("all");
   const [search, setSearch] = useState("");
-  const [person, setPerson] = useState("");
   const [role, setRole] = useState("");
   const [platform, setPlatform] = useState("");
   const [freshness, setFreshness] = useState("");
   const [sort, setSort] = useState<SortKey>("active");
+  const [unfolded, setUnfolded] = useState<number[]>([]);
   const [notice, setNotice] = useState("");
 
   const sessions = useMemo(() => data.data ?? [], [data.data]);
-  const people = useMemo(() => {
-    const seen = new Map<number, DeviceSession>();
-    for (const session of sessions) seen.set(session.user_id, session);
-    return [...seen.values()].sort((a, b) => a.full_name.localeCompare(b.full_name, "ru"));
-  }, [sessions]);
   const platforms = useMemo(
     () => [...new Set(sessions.map((session) => platformOf(session.device)))].sort((a, b) => a.localeCompare(b, "ru")),
     [sessions],
   );
   const visible = useMemo(
-    () => filterSessions(sessions, { scope, person, role, platform, freshness, search, sort, meId: user?.id }),
-    [sessions, scope, person, role, platform, freshness, search, sort, user?.id],
+    () => filterSessions(sessions, { role, platform, freshness, search, sort }),
+    [sessions, role, platform, freshness, search, sort],
   );
+  const groups = useMemo(() => groupSessions(visible), [visible]);
   const chosen = selectedSessions(visible, selected);
   const allVisibleSelected = visible.length > 0 && chosen.length === visible.length;
-  const selectedPerson = people.find((employee) => String(employee.user_id) === person);
   const summary = target ? revocationSummary(target, keepCurrent) : null;
-  const filtered = Boolean(search || person || role || platform || freshness || scope === "mine");
+  const filtered = Boolean(search || role || platform || freshness);
+  const current = sessions.find((session) => session.current);
+  const myOthers = sessions.filter((session) => session.user_id === user?.id && !session.current);
+  const stale = useMemo(() => sessions.filter((session) => freshnessOf(session.last_active_at) === "stale"), [sessions]);
   const stats = useMemo(() => ({
     total: sessions.length,
     people: new Set(sessions.map((session) => session.user_id)).size,
-    mobile: sessions.filter((session) => MOBILE.has(platformOf(session.device))).length,
-    stale: sessions.filter((session) => freshnessOf(session.last_active_at) === "stale").length,
+    now: sessions.filter((session) => freshnessOf(session.last_active_at) === "now").length,
   }), [sessions]);
+  const roleSessions = role ? sessions.filter((session) => session.role === role) : [];
 
   const revoke = useMutation({
     mutationFn: (body: SessionBulkRevokeInput) => systemApi.revokeBulk(body),
@@ -238,11 +272,9 @@ export function SessionsPage() {
   function reset() {
     setSelected([]);
     setSearch("");
-    setPerson("");
     setRole("");
     setPlatform("");
     setFreshness("");
-    setScope("all");
   }
 
   function confirm(next: SessionTarget) {
@@ -255,23 +287,42 @@ export function SessionsPage() {
     confirm(sessionTarget(sessions, "user", `Все устройства: ${name}`, { userId }));
   }
 
-  function toggleSession(id: string, checked: boolean) {
-    setSelected((previous) => checked ? [...new Set([...previous, id])] : previous.filter((value) => value !== id));
+  function toggle(ids: string[], checked: boolean) {
+    setSelected((previous) => checked ? [...new Set([...previous, ...ids])] : previous.filter((value) => !ids.includes(value)));
   }
 
-  function selectVisible(checked: boolean) {
-    setSelected(checked ? visible.map((session) => session.id) : []);
+  function device(record: DeviceSession) {
+    const state = FRESHNESS[freshnessOf(record.last_active_at)];
+    const name = deviceName(record.device);
+    return <li key={record.id} className={`sessions-device${selected.includes(record.id) ? " is-selected" : ""}`}>
+      <input className="sessions-checkbox" type="checkbox" aria-label={`Выбрать сеанс ${record.full_name}: ${name}, ${record.ip_address ?? "IP не записан"}`} checked={selected.includes(record.id)} onChange={(event) => toggle([record.id], event.target.checked)} disabled={revoke.isPending} />
+      <span className="sessions-device__icon" aria-hidden="true">{isPhone(record.device) ? <PhoneIcon size={18} /> : <DisplayIcon size={18} />}</span>
+      <div className="sessions-device__main">
+        <div className="sessions-device__name"><strong>{name}</strong>{record.current && <Badge tone="success">Это устройство</Badge>}</div>
+        <span>{record.ip_address ?? "IP не записан"} · вход {dateTime(record.created_at)}</span>
+      </div>
+      <div className="sessions-device__activity"><Badge tone={state.tone}>{state.label}</Badge><span>{relative(record.last_active_at)}</span></div>
+      <Button className="sessions-device__end" size="s" variant="plain" disabled={revoke.isPending} onClick={() => confirm(sessionTarget(sessions, "selected", `Завершить сеанс: ${record.full_name}`, { ids: [record.id] }))}>Завершить</Button>
+    </li>;
   }
 
-  function sessionIdentity(record: DeviceSession) {
-    return <div className="sessions-identity"><strong>{record.full_name}</strong><span>{record.login} · {ROLE_LABELS[record.role] ?? record.role}</span>{record.current && <Badge tone="success">Текущая</Badge>}</div>;
-  }
-
-  function rowActions(record: DeviceSession) {
-    return <div className="sessions-row-actions">
-      <Button size="s" variant="destructive" disabled={revoke.isPending} onClick={() => confirm(sessionTarget(sessions, "selected", `Завершить сеанс: ${record.full_name}`, { ids: [record.id] }))}>Завершить</Button>
-      <Button size="s" disabled={revoke.isPending} onClick={() => confirmUser(record.user_id, record.full_name)}>Все устройства</Button>
-    </div>;
+  function person(group: SessionGroup) {
+    const ids = group.sessions.map((session) => session.id);
+    const picked = ids.filter((id) => selected.includes(id)).length;
+    const open = unfolded.includes(group.user_id);
+    const latest = group.sessions.reduce((a, b) => parseTimestamp(a.last_active_at) >= parseTimestamp(b.last_active_at) ? a : b);
+    const state = FRESHNESS[freshnessOf(latest.last_active_at)];
+    const count = group.sessions.length;
+    return <article key={group.user_id} className="sessions-person">
+      <header className="sessions-person__head">
+        <input className="sessions-checkbox" type="checkbox" aria-label={`Выбрать все показанные сеансы: ${group.full_name}`} checked={picked === count} ref={(input) => { if (input) input.indeterminate = picked > 0 && picked < count; }} onChange={(event) => { toggle(ids, event.target.checked); if (event.target.checked && count > FOLDED && !open) setUnfolded((list) => [...list, group.user_id]); }} disabled={revoke.isPending} />
+        <div className="cell-person"><Avatar name={group.full_name} id={group.user_id} size={36} /><span className="cell-person__text"><span className="cell-person__name">{group.full_name}{group.user_id === user?.id && <span className="sessions-you">Вы</span>}</span><span className="cell-person__meta">{group.login} · {ROLE_LABELS[group.role] ?? group.role}</span></span></div>
+        <div className="sessions-person__summary"><span>{count} {plural(count, "устройство", "устройства", "устройств")}</span><Badge tone={state.tone} dot>{state.label}</Badge></div>
+        <Button size="s" disabled={revoke.isPending} onClick={() => confirmUser(group.user_id, group.full_name)}>Выйти на всех устройствах</Button>
+      </header>
+      <ul className="sessions-devices">{(open ? group.sessions : group.sessions.slice(0, FOLDED)).map(device)}</ul>
+      {count > FOLDED && <button type="button" className="sessions-more" aria-expanded={open} onClick={() => setUnfolded((list) => open ? list.filter((id) => id !== group.user_id) : [...list, group.user_id])}>{open ? "Свернуть" : `Показать ещё ${count - FOLDED} ${plural(count - FOLDED, "устройство", "устройства", "устройств")}`}</button>}
+    </article>;
   }
 
   const canSubmit = summary != null && summary.count > 0 && (target?.sessions.length ?? 0) <= 5000;
@@ -279,11 +330,8 @@ export function SessionsPage() {
   return (
     <div className="stack sessions-page">
       <div className="page-head">
-        <div><h1 className="page-title">Сессии и устройства</h1><p className="page-subtitle">Управляйте входами одного сотрудника, роли или всей команды</p></div>
-        <div className="workflow-actions">
-          <Button disabled={data.isFetching || revoke.isPending} onClick={() => void data.refetch()}>{data.isFetching ? "Обновляем…" : "Обновить"}</Button>
-          <Button disabled={revoke.isPending || !sessions.some((session) => session.user_id === user?.id && !session.current)} onClick={() => confirm(sessionTarget(sessions.filter((session) => !session.current), "user", "Завершить мои другие сеансы", { userId: user?.id }))}>Завершить мои другие сеансы</Button>
-        </div>
+        <div><h1 className="page-title">Сессии и устройства</h1><p className="page-subtitle">{data.data ? `${stats.total} ${plural(stats.total, "активный сеанс", "активных сеанса", "активных сеансов")} у ${stats.people} ${plural(stats.people, "сотрудника", "сотрудников", "сотрудников")}` : "Кто вошёл в Puls и с каких устройств"}</p></div>
+        <div className="page-head__actions"><Button disabled={data.isFetching || revoke.isPending} onClick={() => void data.refetch()}>{data.isFetching ? "Обновляем…" : "Обновить"}</Button></div>
       </div>
 
       {notice && <p className="sessions-notice" role="status">{notice}</p>}
@@ -291,67 +339,53 @@ export function SessionsPage() {
       {data.isError && <ErrorState error={data.error} onRetry={() => void data.refetch()} />}
 
       {data.data && <>
+        {current && <Card className="sessions-me">
+          <div className="sessions-me__row">
+            <span className="sessions-me__icon" aria-hidden="true">{isPhone(current.device) ? <PhoneIcon /> : <DisplayIcon />}</span>
+            <div className="sessions-me__text"><span>Вы вошли с этого устройства</span><strong>{deviceName(current.device)}</strong><small>{current.ip_address ?? "IP не записан"} · вход {dateTime(current.created_at)}</small></div>
+            <div className="sessions-me__action"><span>{myOthers.length ? `Ещё ${myOthers.length} ${plural(myOthers.length, "ваш сеанс", "ваших сеанса", "ваших сеансов")} на других устройствах` : "Других ваших сеансов нет"}</span>
+              <Button disabled={revoke.isPending || myOthers.length === 0} onClick={() => confirm(sessionTarget(sessions.filter((session) => !session.current), "user", "Завершить мои другие сеансы", { userId: user?.id }))}>Выйти на других устройствах</Button></div>
+          </div>
+        </Card>}
+
         <div className="kpi-grid">
           <KPI label="Активных сеансов" value={stats.total} />
-          <KPI label="Пользователей" value={stats.people} hint="У одного человека может быть несколько устройств" />
-          <KPI label="С телефонов" value={stats.mobile} />
-          <KPI label="Без активности неделю" value={stats.stale} tone={stats.stale ? "accent" : "neutral"} hint="Такие сеансы стоит проверить" />
+          <KPI label="Сотрудников" value={stats.people} hint="У одного человека может быть несколько устройств" />
+          <KPI label="В сети сейчас" value={stats.now} hint="Активность за последние 5 минут" />
+          <KPI label="Без активности неделю" value={stale.length} tone={stale.length ? "accent" : "neutral"} hint="Такие сеансы стоит проверить" />
         </div>
 
-        <Card>
-          <div className="sessions-filter-grid">
-            <div className="field sessions-scope"><span className="field__label">Чьи сеансы</span><SegmentedControl value={scope} onChange={(value) => changeFilter(setScope, value)} options={[{ value: "all", label: "Все" }, { value: "mine", label: "Мои" }]} /></div>
-            <label className="field sessions-search"><span className="field__label">Поиск</span><input className="input" type="search" value={search} placeholder="Имя, логин, роль, IP или устройство" onChange={(event) => changeFilter(setSearch, event.target.value)} /></label>
-            <label className="field"><span className="field__label">Сотрудник</span><Select aria-label="Сотрудник" value={person} onChange={(value) => changeFilter(setPerson, value)} options={[{ value: "", label: "Все сотрудники" }, ...people.map((employee) => ({ value: employee.user_id, label: `${employee.full_name} · ${employee.login}` }))]} /></label>
-            <label className="field"><span className="field__label">Роль</span><Select aria-label="Роль" value={role} onChange={(value) => changeFilter(setRole, value)} options={[{ value: "", label: "Все роли" }, ...Object.entries(ROLE_LABELS).map(([value, label]) => ({ value, label }))]} /></label>
-            <label className="field"><span className="field__label">Платформа</span><Select aria-label="Платформа" value={platform} onChange={(value) => changeFilter(setPlatform, value)} options={[{ value: "", label: "Любая" }, ...platforms.map((name) => ({ value: name, label: name }))]} /></label>
-            <label className="field"><span className="field__label">Активность</span><Select aria-label="Активность" value={freshness} onChange={(value) => changeFilter(setFreshness, value)} options={[{ value: "", label: "Любая" }, ...Object.entries(FRESHNESS).map(([value, item]) => ({ value, label: item.label }))]} /></label>
-            <label className="field"><span className="field__label">Сортировка</span><Select aria-label="Сортировка" value={sort} onChange={(value) => changeFilter(setSort, SORTS.some((item) => item.value === value) ? value as SortKey : "active")} options={SORTS} /></label>
-            <Button disabled={!filtered} onClick={reset}>Сбросить</Button>
-          </div>
-        </Card>
+        {stale.length > 0 && freshness !== "stale" && <div className="sessions-attention" role="note">
+          <p><strong>{stale.length} {plural(stale.length, "сеанс", "сеанса", "сеансов")} без активности больше недели.</strong> Скорее всего, это забытые входы на чужих или старых устройствах.</p>
+          <div className="sessions-attention__actions"><Button size="s" onClick={() => changeFilter(setFreshness, "stale")}>Показать</Button><Button size="s" variant="destructive" disabled={revoke.isPending} onClick={() => confirm(sessionTarget(sessions, "selected", "Завершить сеансы без активности больше недели", { ids: stale.map((session) => session.id) }))}>Завершить их</Button></div>
+        </div>}
 
-        <Card title="Завершение по сотруднику или роли" subtitle="Эти действия охватывают все устройства выбранного сотрудника или роли, независимо от остальных фильтров.">
-          <div className="sessions-bulk-actions">
-            <Button disabled={!selectedPerson || revoke.isPending} onClick={() => selectedPerson && confirmUser(selectedPerson.user_id, selectedPerson.full_name)}>Все устройства сотрудника</Button>
-            <Button disabled={!role || revoke.isPending || !sessions.some((session) => session.role === role)} onClick={() => confirm(sessionTarget(sessions, "role", `Все сеансы роли «${ROLE_LABELS[role]}»`, { role: role as Role }))}>Все сеансы роли{role ? `: ${ROLE_LABELS[role]}` : ""}</Button>
-            <Button variant="destructive" disabled={sessions.length === 0 || revoke.isPending} onClick={() => confirm(sessionTarget(sessions, "all", "Завершить все сеансы"))}>Завершить все сеансы</Button>
-          </div>
-          <p className="workflow-note">Для действия по сотруднику или роли выберите их в фильтрах выше. Завершение сеанса требует повторного входа; аккаунт и устройство не блокируются.</p>
-        </Card>
+        <GlassSurface variant="regular" className="team-filterbar sessions-filterbar">
+          <label className="field team-search"><span className="field__label">Поиск</span><input className="input" type="search" value={search} placeholder="Имя, логин, IP или устройство" onChange={(event) => changeFilter(setSearch, event.target.value)} /></label>
+          <label className="field"><span className="field__label">Роль</span><Select aria-label="Роль" value={role} onChange={(value) => changeFilter(setRole, value)} options={[{ value: "", label: "Все роли" }, ...Object.entries(ROLE_LABELS).map(([value, label]) => ({ value, label }))]} /></label>
+          <label className="field"><span className="field__label">Платформа</span><Select aria-label="Платформа" value={platform} onChange={(value) => changeFilter(setPlatform, value)} options={[{ value: "", label: "Любая" }, ...platforms.map((name) => ({ value: name, label: name }))]} /></label>
+          <label className="field"><span className="field__label">Активность</span><Select aria-label="Активность" value={freshness} onChange={(value) => changeFilter(setFreshness, value)} options={[{ value: "", label: "Любая" }, ...Object.entries(FRESHNESS).map(([value, item]) => ({ value, label: item.label }))]} /></label>
+          <label className="field"><span className="field__label">Сортировка</span><Select aria-label="Сортировка" value={sort} onChange={(value) => changeFilter(setSort, SORTS.some((item) => item.value === value) ? value as SortKey : "active")} options={SORTS} /></label>
+          {filtered && <Button className="sessions-filterbar__reset" variant="plain" size="s" onClick={reset}>Сбросить фильтры</Button>}
+        </GlassSurface>
 
-        {sessions.length === 0 ? <EmptyState title="Активных сессий нет" hint="Никто не вошёл в систему с действующим сеансом." /> : visible.length === 0 ? <EmptyState title="Под фильтры ничего не попало" hint="Снимите часть условий, чтобы увидеть остальные сеансы." action={<Button onClick={reset}>Сбросить фильтры</Button>} /> : <Card title="Сеансы" subtitle={filtered ? `Показано ${visible.length} из ${sessions.length}` : `${sessions.length} ${plural(sessions.length, "сеанс", "сеанса", "сеансов")}`}>
-          <div className="sessions-selection">
-            <label className="sessions-check"><input type="checkbox" checked={allVisibleSelected} ref={(input) => { if (input) input.indeterminate = chosen.length > 0 && !allVisibleSelected; }} onChange={(event) => selectVisible(event.target.checked)} disabled={revoke.isPending} />Выбрать все показанные ({visible.length})</label>
-            <span className="secondary" role="status">Выбрано: {chosen.length}</span>
-            <div className="workflow-actions">
-              <Button variant="destructive" disabled={chosen.length === 0 || revoke.isPending} onClick={() => confirm(sessionTarget(visible, "selected", "Завершить выбранные сеансы", { ids: chosen.map((session) => session.id) }))}>Завершить выбранные ({chosen.length})</Button>
-              <Button disabled={revoke.isPending} onClick={() => confirm(sessionTarget(visible, "selected", "Завершить все показанные сеансы", { ids: visible.map((session) => session.id) }))}>Завершить показанные ({visible.length})</Button>
-            </div>
-          </div>
-          <div className="table-wrap sessions-desktop">
-            <table className="table sessions-table">
-              <thead><tr><th aria-label="Выбор" /><th>Сотрудник</th><th>Устройство</th><th>IP-адрес</th><th>Последняя активность</th><th>Вход</th><th aria-label="Действия" /></tr></thead>
-              <tbody>{visible.map((record) => {
-                const state = FRESHNESS[freshnessOf(record.last_active_at)];
-                return <tr key={record.id} className={selected.includes(record.id) ? "sessions-row-selected" : undefined}>
-                  <td><input className="sessions-checkbox" type="checkbox" aria-label={`Выбрать сеанс ${record.full_name}: ${browserOf(record.device)} · ${platformOf(record.device)}, ${record.ip_address ?? "IP не записан"}`} checked={selected.includes(record.id)} onChange={(event) => toggleSession(record.id, event.target.checked)} disabled={revoke.isPending} /></td>
-                  <td>{sessionIdentity(record)}</td><td>{browserOf(record.device)} · {platformOf(record.device)}</td><td>{record.ip_address ?? "Не записан"}</td>
-                  <td><Badge tone={state.tone}>{state.label}</Badge><div className="secondary">{relative(record.last_active_at)}</div></td><td>{dateTime(record.created_at)}</td><td>{rowActions(record)}</td>
-                </tr>;
-              })}</tbody>
-            </table>
-          </div>
-          <div className="sessions-mobile">{visible.map((record) => {
-            const state = FRESHNESS[freshnessOf(record.last_active_at)];
-            return <article key={record.id} className={`sessions-device-card${selected.includes(record.id) ? " sessions-row-selected" : ""}`}>
-              <div className="sessions-device-head"><label className="sessions-check"><input type="checkbox" aria-label={`Выбрать сеанс ${record.full_name}: ${browserOf(record.device)} · ${platformOf(record.device)}, ${record.ip_address ?? "IP не записан"}`} checked={selected.includes(record.id)} onChange={(event) => toggleSession(record.id, event.target.checked)} disabled={revoke.isPending} />{sessionIdentity(record)}</label></div>
-              <dl className="sessions-device-details"><div><dt>Устройство</dt><dd>{browserOf(record.device)} · {platformOf(record.device)}</dd></div><div><dt>IP-адрес</dt><dd>{record.ip_address ?? "Не записан"}</dd></div><div><dt>Активность</dt><dd><Badge tone={state.tone}>{state.label}</Badge> {relative(record.last_active_at)}</dd></div><div><dt>Вход</dt><dd>{dateTime(record.created_at)}</dd></div></dl>
-              {rowActions(record)}
-            </article>;
-          })}</div>
+        {sessions.length === 0 ? <EmptyState title="Активных сессий нет" hint="Никто не вошёл в систему с действующим сеансом." /> : visible.length === 0 ? <EmptyState title="Под фильтры ничего не попало" hint="Снимите часть условий, чтобы увидеть остальные сеансы." action={<Button onClick={reset}>Сбросить фильтры</Button>} />
+        : <Card className="sessions-list" padded={false} title="Сотрудники и устройства" subtitle={filtered ? `Показано ${visible.length} из ${sessions.length} сеансов · ${groups.length} ${plural(groups.length, "сотрудник", "сотрудника", "сотрудников")}` : `${groups.length} ${plural(groups.length, "сотрудник", "сотрудника", "сотрудников")} · ${visible.length} ${plural(visible.length, "сеанс", "сеанса", "сеансов")}`}
+          action={<div className="sessions-list__actions">
+            {role && <Button size="s" disabled={revoke.isPending || roleSessions.length === 0} onClick={() => confirm(sessionTarget(sessions, "role", `Все сеансы роли «${ROLE_LABELS[role]}»`, { role: role as Role }))}>Завершить сеансы роли «{ROLE_LABELS[role]}» ({roleSessions.length})</Button>}
+            {filtered && <Button size="s" disabled={revoke.isPending} onClick={() => confirm(sessionTarget(visible, "selected", "Завершить все показанные сеансы", { ids: visible.map((session) => session.id) }))}>Завершить показанные ({visible.length})</Button>}
+          </div>}>
+          <div className="sessions-list__select"><label className="sessions-check"><input className="sessions-checkbox" type="checkbox" checked={allVisibleSelected} ref={(input) => { if (input) input.indeterminate = chosen.length > 0 && !allVisibleSelected; }} onChange={(event) => setSelected(event.target.checked ? visible.map((session) => session.id) : [])} disabled={revoke.isPending} />Выбрать все показанные ({visible.length})</label></div>
+          <div className="sessions-people">{groups.map(person)}</div>
         </Card>}
-        <p className="sessions-refresh-note">Список обновляется каждые 30 секунд и при возвращении на страницу.</p>
+
+        {chosen.length > 0 && <GlassSurface variant="prominent" className="sessions-selection" role="region" aria-label="Выбранные сеансы">
+          <span role="status">Выбрано: {chosen.length} {plural(chosen.length, "сеанс", "сеанса", "сеансов")} · {new Set(chosen.map((session) => session.user_id)).size} {plural(new Set(chosen.map((session) => session.user_id)).size, "сотрудник", "сотрудника", "сотрудников")}</span>
+          <div className="sessions-selection__actions"><Button size="s" variant="plain" disabled={revoke.isPending} onClick={() => setSelected([])}>Снять выбор</Button><Button size="s" variant="destructive" disabled={revoke.isPending} onClick={() => confirm(sessionTarget(visible, "selected", "Завершить выбранные сеансы", { ids: chosen.map((session) => session.id) }))}>Завершить ({chosen.length})</Button></div>
+        </GlassSurface>}
+
+        {sessions.length > 0 && <Card className="sessions-danger" title="Завершить все сеансы" subtitle="Все сотрудники выйдут на всех устройствах и войдут заново со своими учётными данными. Ваш текущий сеанс по умолчанию сохраняется."
+          action={<Button variant="destructive" disabled={revoke.isPending} onClick={() => confirm(sessionTarget(sessions, "all", "Завершить все сеансы"))}>Завершить все ({sessions.length})</Button>}><p className="sessions-refresh-note">Список обновляется каждые 30 секунд и при возвращении на страницу. Завершение сеанса требует повторного входа; аккаунт и устройство не блокируются.</p></Card>}
       </>}
 
       {target && summary && <Sheet title={target.title} subtitle="Подтвердите завершение сеансов" onClose={() => { if (!revoke.isPending) setTarget(null); }} footer={<>
@@ -366,7 +400,7 @@ export function SessionsPage() {
           {keepCurrent && summary.count === 0 && <p className="workflow-note">Выбран только текущий сеанс. Чтобы завершить его, снимите отметку выше.</p>}
         </>}
         {target.sessions.length > 5000 && <p className="workflow-error" role="alert">За одно действие можно завершить до 5000 сеансов. Закройте окно и сузьте выбор.</p>}
-        <ul className="sessions-confirm-list">{summary.sessions.slice(0, 30).map((session) => <li key={session.id}><strong>{session.full_name}</strong><span>{session.login} · {ROLE_LABELS[session.role]} · {browserOf(session.device)} · {platformOf(session.device)} · {session.ip_address ?? "IP не записан"}{session.current ? " · Текущий сеанс" : ""}</span></li>)}</ul>
+        <ul className="sessions-confirm-list">{summary.sessions.slice(0, 30).map((session) => <li key={session.id}><strong>{session.full_name}</strong><span>{session.login} · {ROLE_LABELS[session.role]} · {deviceName(session.device)} · {session.ip_address ?? "IP не записан"}{session.current ? " · Текущий сеанс" : ""}</span></li>)}</ul>
         {summary.count > 30 && <p className="secondary">И ещё {summary.count - 30} сеансов.</p>}
         <p className="workflow-note">Будут завершены только сеансы из этого подтверждения. Новые входы не затрагиваются.</p>
         {revoke.isError && <ErrorState error={revoke.error} />}

@@ -43,7 +43,7 @@ const built = await transform(`${helpers}\n${roles}\n${head.replace(/^import[\s\
   format: "esm",
 });
 const mod = await import(`data:text/javascript;base64,${Buffer.from(built.code).toString("base64")}`);
-const { browserOf, platformOf, freshnessOf, filterSessions, selectedSessions, sessionTarget, revocationSummary, bulkRequestFor } = mod;
+const { browserOf, platformOf, deviceName, isPhone, freshnessOf, filterSessions, groupSessions, selectedSessions, sessionTarget, revocationSummary, bulkRequestFor } = mod;
 
 const NOW = Date.UTC(2026, 8, 21, 14, 0, 0);
 // Бэкенд отдаёт отметки без часового пояса — ровно так, как их пишет
@@ -66,7 +66,7 @@ const SESSIONS = [
     created_at: ago(5000), last_active_at: ago(600), expires_at: ago(-100), current: false },
 ];
 
-const BASE = { scope: "all", person: "", platform: "", freshness: "", search: "", sort: "active" };
+const BASE = { platform: "", freshness: "", search: "", sort: "active" };
 const ids = (rows) => rows.map((r) => r.id);
 
 /* ── Разбор User-Agent ──────────────────────────────────────── */
@@ -80,6 +80,29 @@ test("браузер и платформа читаются из строки а
   assert.equal(platformOf(SAFARI_IOS), "iOS");
   assert.equal(browserOf(FIREFOX_LINUX), "Firefox");
   assert.equal(platformOf(FIREFOX_LINUX), "Linux");
+});
+
+test("устройство называется одной строкой, без пустых «Браузер · Другое»", () => {
+  assert.equal(deviceName(CHROME_WIN), "Chrome · Windows");
+  assert.equal(deviceName(SAFARI_IOS), "Safari · iOS");
+  assert.equal(deviceName("curl/8.4.0"), "Неизвестное устройство");
+  assert.equal(deviceName("Mozilla/5.0 Firefox/130.0"), "Firefox");
+  assert.equal(browserOf("Mozilla/5.0 (Windows NT 10.0) Chrome/128.0 YaBrowser/24.10 Safari/537.36"), "Яндекс Браузер");
+  assert.equal(browserOf("Mozilla/5.0 (Windows NT 10.0) Chrome/128.0 Safari/537.36 OPR/114.0"), "Opera");
+  assert.equal(isPhone(SAFARI_IOS), true);
+  assert.equal(isPhone(CHROME_WIN), false);
+});
+
+test("сеансы собираются по сотрудникам в порядке списка", () => {
+  const groups = groupSessions(filterSessions(SESSIONS, BASE, NOW));
+  // Сотрудник стоит там, где его самый верхний сеанс; устройства внутри — в том же порядке.
+  assert.deepEqual(groups.map((g) => g.user_id), [1, 2, 3]);
+  assert.deepEqual(groups[0].sessions.map((s) => s.id), ["a", "c"]);
+  assert.equal(groups[0].full_name, "Тест Тестович");
+  assert.equal(groups[0].role, "operator");
+  assert.equal(groupSessions([]).length, 0);
+  // Отбор работает до группировки: скрытое фильтром устройство не попадает в группу.
+  assert.deepEqual(groupSessions(filterSessions(SESSIONS, { ...BASE, platform: "iOS" }, NOW))[0].sessions.map((s) => s.id), ["c"]);
 });
 
 test("незнакомый агент не ломает разбор", () => {
@@ -98,18 +121,13 @@ test("пороги давности совпадают с подписями ф�
 
 /* ── Отбор ─────────────────────────────────────────────────── */
 
-test("«Мой аккаунт» показывает только свои сеансы", () => {
-  const mine = filterSessions(SESSIONS, { ...BASE, scope: "mine", meId: 1 }, NOW);
-  assert.deepEqual(ids(mine).sort(), ["a", "c"]);
-});
-
-test("без выбранного сотрудника отбор по нему не срабатывает", () => {
-  // Пустая строка — это «все», а не пользователь с пустым идентификатором.
+test("пустые фильтры показывают все сеансы", () => {
+  // Пустая строка — это «любая», а не значение, которое ни с чем не совпадёт.
   assert.equal(filterSessions(SESSIONS, BASE, NOW).length, SESSIONS.length);
 });
 
-test("отбор по сотруднику и платформе складывается", () => {
-  const rows = filterSessions(SESSIONS, { ...BASE, person: "1", platform: "iOS" }, NOW);
+test("отбор по роли и платформе складывается", () => {
+  const rows = filterSessions(SESSIONS, { ...BASE, role: "operator", platform: "iOS" }, NOW);
   assert.deepEqual(ids(rows), ["c"]);
 });
 
@@ -196,7 +214,7 @@ test("порядок не зависит от того, есть ли в отм�
 test("фильтры сеансов — списки в стиле сайта, а не системные", () => {
   // Системный выпадающий список выглядел чужеродно рядом с остальными полями.
   assert.doesNotMatch(source, /<select|<option/);
-  for (const label of ["Сотрудник", "Роль", "Платформа", "Активность", "Сортировка"]) assert.match(source, new RegExp(`<Select\\s+aria-label="${label}"`));
+  for (const label of ["Роль", "Платформа", "Активность", "Сортировка"]) assert.match(source, new RegExp(`<Select\\s+aria-label="${label}"`));
 });
 
 
@@ -204,7 +222,7 @@ test("поиск находит логин и название роли, фил�
   assert.deepEqual(ids(filterSessions(SESSIONS, { ...BASE, search: "OPERATOR.TEST" }, NOW)).sort(), ["a", "c"]);
   assert.deepEqual(ids(filterSessions(SESSIONS, { ...BASE, search: "супервайзер" }, NOW)), ["d"]);
   assert.deepEqual(ids(filterSessions(SESSIONS, { ...BASE, role: "operator" }, NOW)).sort(), ["a", "c"]);
-  assert.equal(filterSessions(SESSIONS, { ...BASE, role: "operator", person: "3" }, NOW).length, 0);
+  assert.equal(filterSessions(SESSIONS, { ...BASE, role: "operator", search: "Козлова" }, NOW).length, 0);
 });
 
 test("скрытые и уже завершённые сеансы не попадают в выбор", () => {
