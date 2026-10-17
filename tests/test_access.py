@@ -21,6 +21,14 @@ async def test_scenarios_use_the_same_section_as_city(role):
         assert request_sections(path, "POST", role) == expected
 
 
+@pytest.mark.parametrize("role", list(Role))
+async def test_voice_training_uses_learning_permissions_for_every_action(role):
+    expected = ("training",) if role in (Role.OPERATOR, Role.TRAINEE) else ("learning_admin",)
+    for path in ("/learning/voice", "/learning/voice/start", "/learning/voice/attempts/7/answer", "/learning/voice/reviews"):
+        assert request_sections(path, "GET", role) == expected
+        assert request_sections(path, "POST", role) == expected
+
+
 async def administrator(client, session):
     admin = await make_user(session, login="acl-admin", role=Role.ADMIN)
     return admin, auth(await login(client, admin.login))

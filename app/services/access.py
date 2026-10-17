@@ -153,8 +153,8 @@ def request_sections(path: str, method: str, role: Role | None = None) -> tuple[
     if path == "/telemetry/city":
         # Whoever can open the city can report how smoothly it runs.
         return ("training",) if role in LEARNER_ROLES else ("learning_admin",)
-    if path in ("/learning/city", "/learning/scenarios") or path.startswith(
-        ("/learning/city/", "/learning/scenarios/")
+    if path in ("/learning/city", "/learning/scenarios", "/learning/voice") or path.startswith(
+        ("/learning/city/", "/learning/scenarios/", "/learning/voice/")
     ):
         return ("training",) if role in LEARNER_ROLES else ("learning_admin",)
     if path in ("/work-sites-access/status", "/work-sites-access/request"):
@@ -297,6 +297,7 @@ def trainee_path_allowed(path: str, method: str) -> bool:
             "/learning/oktell",
             "/learning/driver",
             "/learning/scenarios",
+            "/learning/voice",
             "/learning/attempts",
         )
     )
