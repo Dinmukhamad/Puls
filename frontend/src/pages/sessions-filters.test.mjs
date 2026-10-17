@@ -34,13 +34,16 @@ const helpers = ["parseTimestamp", "plural"]
   })
   .join("\n\n");
 
+const rolesAt = formats.indexOf("export const ROLE_LABELS");
+const roles = formats.slice(rolesAt, formats.indexOf("\n};", rolesAt) + 3).replace("export ", "");
+
 const head = source.slice(0, source.indexOf("export function SessionsPage"));
-const built = await transform(`${helpers}\n${head.replace(/^import[\s\S]*?;$/gm, "")}`, {
+const built = await transform(`${helpers}\n${roles}\n${head.replace(/^import[\s\S]*?;$/gm, "")}`, {
   loader: "tsx",
   format: "esm",
 });
 const mod = await import(`data:text/javascript;base64,${Buffer.from(built.code).toString("base64")}`);
-const { browserOf, platformOf, freshnessOf, filterSessions } = mod;
+const { browserOf, platformOf, freshnessOf, filterSessions, selectedSessions, sessionTarget, revocationSummary, bulkRequestFor } = mod;
 
 const NOW = Date.UTC(2026, 8, 21, 14, 0, 0);
 // Бэкенд отдаёт отметки без часового пояса — ровно так, как их пишет
@@ -53,13 +56,13 @@ const SAFARI_IOS = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0) Version/18.0 Mobile
 const FIREFOX_LINUX = "Mozilla/5.0 (X11; Linux x86_64; rv:130.0) Gecko/20100101 Firefox/130.0";
 
 const SESSIONS = [
-  { id: "a", user_id: 1, full_name: "Тест Тестович", device: CHROME_WIN, ip_address: "176.98.225.85",
+  { id: "a", user_id: 1, full_name: "Тест Тестович", login: "operator.test", role: "operator", device: CHROME_WIN, ip_address: "176.98.225.85",
     created_at: ago(30), last_active_at: ago(2), expires_at: ago(-100), current: false },
-  { id: "b", user_id: 2, full_name: "Dinmukhamad", device: CHROME_WIN, ip_address: "176.98.225.85",
+  { id: "b", user_id: 2, full_name: "Dinmukhamad", login: "developer", role: "admin", device: CHROME_WIN, ip_address: "176.98.225.85",
     created_at: ago(900), last_active_at: ago(70), expires_at: ago(-100), current: true },
-  { id: "c", user_id: 1, full_name: "Тест Тестович", device: SAFARI_IOS, ip_address: "10.0.0.7",
+  { id: "c", user_id: 1, full_name: "Тест Тестович", login: "operator.test", role: "operator", device: SAFARI_IOS, ip_address: "10.0.0.7",
     created_at: ago(20000), last_active_at: ago(15000), expires_at: ago(-100), current: false },
-  { id: "d", user_id: 3, full_name: "Анна Козлова", device: FIREFOX_LINUX, ip_address: null,
+  { id: "d", user_id: 3, full_name: "Анна Козлова", login: "anna.k", role: "supervisor", device: FIREFOX_LINUX, ip_address: null,
     created_at: ago(5000), last_active_at: ago(600), expires_at: ago(-100), current: false },
 ];
 
@@ -193,5 +196,57 @@ test("порядок не зависит от того, есть ли в отм�
 test("фильтры сеансов — списки в стиле сайта, а не системные", () => {
   // Системный выпадающий список выглядел чужеродно рядом с остальными полями.
   assert.doesNotMatch(source, /<select|<option/);
-  for (const label of ["Сотрудник", "Платформа", "Активность", "Сортировка"]) assert.match(source, new RegExp(`<Select\\s+aria-label="${label}"`));
+  for (const label of ["Сотрудник", "Роль", "Платформа", "Активность", "Сортировка"]) assert.match(source, new RegExp(`<Select\\s+aria-label="${label}"`));
+});
+
+
+test("поиск находит логин и название роли, фильтр роли не смешивает сотрудников", () => {
+  assert.deepEqual(ids(filterSessions(SESSIONS, { ...BASE, search: "OPERATOR.TEST" }, NOW)).sort(), ["a", "c"]);
+  assert.deepEqual(ids(filterSessions(SESSIONS, { ...BASE, search: "супервайзер" }, NOW)), ["d"]);
+  assert.deepEqual(ids(filterSessions(SESSIONS, { ...BASE, role: "operator" }, NOW)).sort(), ["a", "c"]);
+  assert.equal(filterSessions(SESSIONS, { ...BASE, role: "operator", person: "3" }, NOW).length, 0);
+});
+
+test("скрытые и уже завершённые сеансы не попадают в выбор", () => {
+  const visible = filterSessions(SESSIONS, { ...BASE, role: "operator" }, NOW);
+  assert.deepEqual(ids(selectedSessions(visible, ["a", "b", "expired"])), ["a"]);
+  assert.equal(selectedSessions(visible, []).length, 0);
+});
+
+test("подтверждение сотрудника охватывает все его устройства и сохраняет снимок", () => {
+  const records = SESSIONS.map((session) => ({ ...session }));
+  const target = sessionTarget(records, "user", "Сотрудник", { userId: 1 });
+  assert.deepEqual(ids(target.sessions), ["a", "c"]);
+  records[0].full_name = "Имя изменено";
+  records.push({ ...records[0], id: "new-login" });
+  assert.equal(target.sessions[0].full_name, "Тест Тестович");
+  assert.deepEqual(bulkRequestFor(target, true), { scope: "user", session_ids: ["a", "c"], user_id: 1, keep_current: true });
+});
+
+test("подтверждение роли не охватывает другие роли и не передаёт чужой контекст", () => {
+  const target = sessionTarget(SESSIONS, "role", "Роль", { role: "operator", userId: 3 });
+  assert.deepEqual(bulkRequestFor(target, true), { scope: "role", session_ids: ["a", "c"], role: "operator", keep_current: true });
+  assert.equal(revocationSummary(target, true).people, 1);
+});
+
+test("глобальное завершение защищает текущий сеанс до явного отказа от защиты", () => {
+  const target = sessionTarget(SESSIONS, "all", "Все", { userId: 1, role: "operator" });
+  assert.deepEqual(ids(revocationSummary(target, true).sessions), ["a", "c", "d"]);
+  assert.equal(revocationSummary(target, true).people, 2);
+  assert.equal(revocationSummary(target, false).count, 4);
+  assert.equal(revocationSummary(target, false).people, 3);
+  assert.deepEqual(bulkRequestFor(target, false), { scope: "all", session_ids: ["a", "b", "c", "d"], keep_current: false });
+});
+
+test("один текущий сеанс защищён, а выбранная группа не расширяется при подтверждении", () => {
+  const target = sessionTarget(SESSIONS, "selected", "Текущий", { ids: ["b", "missing"], userId: 1, role: "operator" });
+  assert.equal(revocationSummary(target, true).count, 0);
+  assert.equal(revocationSummary(target, false).count, 1);
+  assert.deepEqual(bulkRequestFor(target, false), { scope: "selected", session_ids: ["b"], keep_current: false });
+  assert.deepEqual(sessionTarget(SESSIONS, "selected", "Пусто").sessions, []);
+});
+
+test("неуказанная роль или сотрудник не превращаются в глобальное завершение", () => {
+  assert.equal(sessionTarget(SESSIONS, "user", "Не выбран").sessions.length, 0);
+  assert.equal(sessionTarget(SESSIONS, "role", "Не выбрана").sessions.length, 0);
 });

@@ -55,6 +55,17 @@ test("audit maps known actions and entities, and never exposes unknown action or
   assert.equal(auditActionLabel("constructor"), "Действие зарегистрировано");
 });
 
+test("bulk session audit shows scope, role and actual counts without session identifiers", () => {
+  assert.equal(auditActionLabel("session.revoke_bulk"), "Массовое завершение сеансов");
+  assert.deepEqual(auditBusinessChanges({ scope: "role", role: "operator", revoked_count: 4, user_count: 2, keep_current: true, session_ids: ["private-session"], user_ids: [112, 113] }), [
+    { label: "Область действия", value: "Роль" },
+    { label: "Роль", value: "Оператор" },
+    { label: "Завершено сеансов", value: "4" },
+    { label: "Затронуто сотрудников", value: "2" },
+    { label: "Сохранить текущий сеанс", value: "Да" },
+  ]);
+});
+
 test("unrecognized enum values and unsafe value shapes are suppressed without hiding valid amounts", () => {
   assert.deepEqual(auditBusinessChanges({ role: "internal_role", tx_type: "internal_transaction", status: "internal_status", title: { id: 7891 }, amount: 250, balance: 540, is_active: true }), [
     { label: "Количество", value: "250" }, { label: "Баланс", value: "540" }, { label: "Активен", value: "Да" },

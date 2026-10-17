@@ -13,6 +13,7 @@ export const AUDIT_ACTIONS: Record<string, string> = {
   "week.recalculate": "Подготовлен расчёт", "week.close": "Опубликованы итоги",
   "week.close_previous": "Закрыта прошлая неделя", "session.revoke": "Завершён сеанс",
   "session.revoke_others": "Завершены остальные сеансы",
+  "session.revoke_bulk": "Массовое завершение сеансов",
   "day.metrics_upload": "Загружены показатели по дням", "day.reports_upload": "Загружены месячные отчёты",
   "access.update": "Изменён доступ к разделам", "work_sites.approve": "Открыт доступ к рабочим сайтам",
   "rules.update": "Изменены правила начисления", "coins.manual": "Выполнена операция с коинами",
@@ -64,6 +65,7 @@ const numberFields: Record<string, string> = {
   xp: "Опыт", rank: "Место", target: "Цель", max_points: "Максимум баллов", weight: "Вес", min_coins: "Порог коинов",
   level: "Уровень", hq_level: "Уровень главного здания", cost: "Стоимость", refunded: "Возвращено коинов",
   changed_count: "Операторов переведено", updated_groups: "Команд обновлено", reconciled_operators: "Операторов проверено",
+  revoked_count: "Завершено сеансов", user_count: "Затронуто сотрудников",
   operators: "Операторов", days: "Дней", minutes: "Продолжительность в минутах", pass_percent: "Порог прохождения, %",
   daily_spins: "Попыток в день", count: "Количество", points_per_coin: "Баллов за один коин",
   rank1_bonus: "Бонус за первое место", rank2_bonus: "Бонус за второе место", rank3_bonus: "Бонус за третье место",
@@ -79,9 +81,11 @@ const booleanFields: Record<string, string> = {
   is_active: "Активен", enabled: "Доступно", replace: "Замена показателей", correct: "Ответ верный",
   requires_approval: "Требуется одобрение", discipline_requires_reported: "Бонусы только по загруженным показателям",
   rating_show_balance_to_operators: "Показывать баланс коллег в рейтинге",
+  keep_current: "Сохранить текущий сеанс",
 };
 const enumFields: Record<string, { label: string; values: Record<string, string> }> = {
   role: { label: "Роль", values: ROLE_LABELS },
+  scope: { label: "Область действия", values: { selected: "Выбранные сеансы", user: "Сотрудник", role: "Роль", all: "Все сотрудники" } },
   gender: { label: "Пол", values: { male: "Мужской", female: "Женский" } },
   status: { label: "Статус", values: { ...REQUEST_STATUS_LABELS, ...WEEK_STATUS_LABELS, draft: "Черновик", published: "Опубликован" } },
   tx_type: { label: "Операция", values: TX_LABELS },
