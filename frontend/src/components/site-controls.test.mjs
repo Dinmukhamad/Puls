@@ -84,7 +84,7 @@ test("files are dropped or chosen with the site's button, and their names are li
   assert.match(html, /class="btn btn--secondary btn--m file-drop__button">Выбрать файлы<\/label>/);
   assert.match(html, /<ul class="file-drop__files" aria-label="Выбранные файлы"><li>report_10\.xlsx<\/li><\/ul>/);
   assert.match(read("../pages/ReportsUpload.tsx"), /options=\{\[\{ value: "", label: "Из названий файлов" \}, \.\.\.monthOptions\(\)\]\}/);
-  assert.match(read("../pages/PeriodsPage.tsx"), /<DatePicker ariaLabel="Дата внутри новой недели" value=\{date\} onChange=\{setDate\}/);
+  assert.match(read("../pages/PeriodsPage.tsx"), /<DatePicker ariaLabel="Любой день недели" value=\{date\} onChange=\{setDate\}/);
 });
 
 test("the site's own pages use the site's controls, not the browser's", () => {

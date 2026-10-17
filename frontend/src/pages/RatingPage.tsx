@@ -148,7 +148,7 @@ function Leaderboard({ toggle }: { toggle?: ReactNode }) {
                   <tr>
                     <th className="num">Место</th>
                     <th>Оператор</th>
-                    <th>Группа</th>
+                    <th>Команда</th>
                     <th className="num">Баллы</th>
                     <th className="num">Коины за неделю</th>
                     {showBalances && <th className="num">Баланс</th>}
@@ -183,7 +183,7 @@ function Leaderboard({ toggle }: { toggle?: ReactNode }) {
                             {row.full_name}
                             {row.is_me && <span className="tag-me">это вы</span>}
                           </span>
-                          <span className="cell-person__meta">{row.group_name ?? "—"}</span>
+                          <span className="cell-person__meta">{row.group_name ?? "Без команды"}</span>
                         </span>
                       </span>
                       <CoinAmount value={row.coins_week} size="s" />
@@ -259,7 +259,7 @@ function RatingRow({ row, showBalance }: { row: RatingRowOut; showBalance: boole
           </span>
         </span>
       </td>
-      <td className="muted">{row.group_name ?? "—"}</td>
+      <td className="muted">{row.group_name ?? "Без команды"}</td>
       <td className="num">{points(row.points)}</td>
       <td className="num">{coins(row.coins_week)}</td>
       {showBalance && (
