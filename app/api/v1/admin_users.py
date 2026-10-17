@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Query, Response, status
+from fastapi import APIRouter, File, Query, Response, UploadFile, status
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -28,9 +28,10 @@ from app.core.security import hash_password
 from app.core.visibility import shop_request_output
 from app.models.coin import CoinTransaction
 from app.models.driver_auth import TelegramLink
-from app.models.enums import USER_VISIBILITY, Role
+from app.models.enums import LEARNER_ROLES, USER_VISIBILITY, Role
 from app.models.shop import ShopRequest
 from app.models.user import Group, User
+from app.schemas.avatar import AvatarOut
 from app.schemas.cabinet import DashboardOut, TransactionOut
 from app.schemas.common import Message, Page
 from app.schemas.shop import ShopRequestOut
@@ -49,8 +50,8 @@ from app.schemas.user import (
     UserUpdate,
     UserUpdatedOut,
 )
+from app.services import avatars, city_estate, city_world, supervisor_teams, telegram
 from app.services import cabinet as cabinet_service
-from app.services import city_estate, city_world, supervisor_teams, telegram
 from app.services import coins as coins_service
 from app.services import weekly as weekly_service
 from app.services.rules import write_audit
@@ -182,6 +183,39 @@ async def get_user(session: SessionDep, actor: DirectoryUser, user_id: int):
         except PermissionDeniedError:
             item.can_manage_credentials = False
     return item
+
+
+async def _avatar_target(session: SessionDep, actor: User, user_id: int) -> User:
+    target = await _visible_user(session, actor, user_id)
+    await session.refresh(target, with_for_update=True)
+    protect_developer_account(actor, target)
+    await ensure_can_manage(session, actor, target)
+    if target.role not in LEARNER_ROLES:
+        raise PermissionDeniedError("Здесь можно менять фото только оператора или стажёра")
+    return target
+
+
+@router.put(
+    "/users/{user_id}/avatar", response_model=AvatarOut, summary="Загрузить фото оператора"
+)
+async def upload_user_avatar(
+    session: SessionDep, actor: HeadUser, user_id: int, response: Response,
+    file: UploadFile = File(...),
+) -> AvatarOut:
+    target = await _avatar_target(session, actor, user_id)
+    response.headers["Cache-Control"] = "private, no-store"
+    return await avatars.set_avatar(session, actor, target, await avatars.read_upload(file))
+
+
+@router.delete(
+    "/users/{user_id}/avatar", response_model=AvatarOut, summary="Удалить фото оператора"
+)
+async def delete_user_avatar(
+    session: SessionDep, actor: HeadUser, user_id: int, response: Response
+) -> AvatarOut:
+    target = await _avatar_target(session, actor, user_id)
+    response.headers["Cache-Control"] = "private, no-store"
+    return await avatars.set_avatar(session, actor, target, None)
 
 
 @router.get(

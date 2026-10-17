@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 import jwt
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
@@ -23,6 +23,7 @@ from app.core.security import (
 )
 from app.models.session import LoginSession
 from app.models.user import User
+from app.schemas.avatar import AvatarOut
 from app.schemas.common import Message
 from app.schemas.user import (
     GuideUpdate,
@@ -32,6 +33,7 @@ from app.schemas.user import (
     Token,
     UserOut,
 )
+from app.services import avatars
 from app.services.rules import write_audit
 from app.services.sessions import (
     is_valid,
@@ -113,6 +115,33 @@ async def me(session: SessionDep, user: CurrentUser) -> User:
         select(User).options(selectinload(User.group)).where(User.id == user.id)
     )
     return loaded or user
+
+
+@router.get(
+    "/avatars/{user_id}", response_model=AvatarOut, summary="Аватар участника"
+)
+async def user_avatar(
+    session: SessionDep, user: CurrentUser, user_id: int, response: Response
+) -> AvatarOut:
+    # Deliberately returns no other account information and no existence signal.
+    response.headers["Cache-Control"] = "private, no-store"
+    return await avatars.get_avatar(session, user, user_id)
+
+
+@router.put("/avatar", response_model=AvatarOut, summary="Загрузить своё фото")
+async def upload_avatar(
+    session: SessionDep, user: CurrentUser, response: Response, file: UploadFile = File(...)
+) -> AvatarOut:
+    response.headers["Cache-Control"] = "private, no-store"
+    return await avatars.set_avatar(session, user, user, await avatars.read_upload(file))
+
+
+@router.delete("/avatar", response_model=AvatarOut, summary="Удалить своё фото")
+async def delete_avatar(
+    session: SessionDep, user: CurrentUser, response: Response
+) -> AvatarOut:
+    response.headers["Cache-Control"] = "private, no-store"
+    return await avatars.set_avatar(session, user, user, None)
 
 
 @router.put("/guide", response_model=UserOut, summary="Свой помощник в учебном городе")

@@ -1,4 +1,6 @@
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import { useContext, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { AvatarImage } from "./AvatarImage";
+import { AvatarViewerContext } from "./avatarContext";
 
 import { AlertIcon, ArrowDownIcon, ArrowUpIcon, CheckIcon } from "./icons";
 import { coins, signed } from "../utils/format";
@@ -439,11 +441,17 @@ export function Avatar({
   name,
   id,
   size = 40,
+  src,
+  photo = true,
 }: {
   name: string;
   id: number;
   size?: number;
+  src?: string;
+  /** False for decorative initials whose id is only a colour seed. */
+  photo?: boolean;
 }) {
+  const savedPhoto = useContext(AvatarViewerContext);
   const initials = name
     .split(/\s+/)
     .filter(Boolean)
@@ -463,6 +471,7 @@ export function Avatar({
       aria-hidden="true"
     >
       <span className="avatar__initials">{initials}</span>
+      {src ? <AvatarImage src={src} /> : photo && savedPhoto?.(id)}
     </span>
   );
 }

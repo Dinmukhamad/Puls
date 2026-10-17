@@ -8,6 +8,7 @@ import { useAuth } from "../auth/AuthContext";
 import { Sheet } from "../components/Sheet";
 import { useToast } from "../components/Toast";
 import { Avatar, Button, Card, EmptyState, ErrorState, KPI, Pagination, Skeleton } from "../components/ui";
+import { AvatarEditor } from "../components/AvatarEditor";
 import { ROLE_LABELS, REQUEST_STATUS_LABELS, coins, dateOnly, dateTime, points, signed } from "../utils/format";
 import { UserArchive, UserEditor, UserStatus } from "./UsersPage";
 import { LearningResults } from "./LearningStudioPage";
@@ -32,6 +33,7 @@ export function UserDetailPage() {
   const [archive, setArchive] = useState(false);
   const [password, setPassword] = useState(false);
   const [loginEditor, setLoginEditor] = useState(false);
+  const [avatarEditor, setAvatarEditor] = useState(false);
   const groups = useQuery({ queryKey: ["team-groups"], queryFn: team.groups, enabled: !trainer });
   const teams = useQuery({ queryKey: ["team-supervisor-teams", true], queryFn: ({ signal }) => team.supervisorTeams(true, signal), enabled: !trainer });
   const dashboard = useQuery({ queryKey: ["team-dashboard", id], queryFn: () => team.dashboard(id), enabled: user.isSuccess && !trainer && tab === "results" });
@@ -45,10 +47,11 @@ export function UserDetailPage() {
   const teamLabel = data.role === "supervisor" ? ownTeam ? `Своя команда · ${ownTeam.operator_count} операторов` : "Своя команда" : userTeamLabel(data, groups.data ?? []);
   const editable = atLeast("head") && (data.role !== "admin" || actor?.role === "admin") && (!data.is_developer || actor?.is_developer);
   const manageCredentials = canManageCredentials(actor, data) && (!data.is_developer || Boolean(actor?.is_developer));
+  const canEditAvatar = editable && data.is_active && (data.role === "operator" || data.role === "trainee");
   return <div className="stack team-page">
     <Link className="secondary" to="/admin/users">← Пользователи</Link>
     <Card><div className="team-detail-hero"><Avatar name={data.full_name} id={id} size={64} /><div className="team-detail-hero__body"><h1 className="page-title">{data.full_name}</h1><div className="team-meta"><span>{ROLE_LABELS[data.role]}</span>{!trainer && <span>{teamLabel}</span>}<UserStatus active={data.is_active} /></div></div>
-      <div className="team-actions">{editable && <Button onClick={() => setEditor(true)}>Изменить</Button>}{editable && actor?.id !== id && <Button onClick={() => setArchive(true)}>{data.is_active ? "Архивировать" : "Восстановить"}</Button>}{manageCredentials && <Button onClick={() => setLoginEditor(true)}>Сменить логин</Button>}{manageCredentials && <Button onClick={() => setPassword(true)}>Сбросить пароль</Button>}</div></div></Card>
+      <div className="team-actions">{canEditAvatar && <Button onClick={() => setAvatarEditor(true)}>Изменить фото</Button>}{editable && <Button onClick={() => setEditor(true)}>Изменить</Button>}{editable && actor?.id !== id && <Button onClick={() => setArchive(true)}>{data.is_active ? "Архивировать" : "Восстановить"}</Button>}{manageCredentials && <Button onClick={() => setLoginEditor(true)}>Сменить логин</Button>}{manageCredentials && <Button onClick={() => setPassword(true)}>Сбросить пароль</Button>}</div></div></Card>
     <nav className="team-section-nav" aria-label="Разделы карточки">{[["profile", "Профиль"], ["learning", "Обучение"], ["results", "Результаты"], ["coins", "Коины"], ["progress", "Прогресс"], ["simulator", "Симулятор"], ["purchases", "Покупки"]].filter(([key]) => (key !== "learning" || data.role === "trainee") && tabAllowed(key)).map(([key, label]) => <Button key={key} variant={tab === key ? "primary" : "secondary"} aria-current={tab === key ? "page" : undefined} onClick={() => setParams({ tab: key })}>{label}</Button>)}</nav>
     {tab === "learning" && <TraineeResults userId={id} />}
     {tab === "progress" && <CoinProgress key={id} userId={id} showDetails />}
@@ -59,6 +62,7 @@ export function UserDetailPage() {
     {tab === "coins" && <Card title="История коинов">{transactions.isLoading && <Skeleton height={180} />}{transactions.isError && <ErrorState error={transactions.error} onRetry={() => transactions.refetch()} />}{transactions.data?.items.length === 0 && <EmptyState title="Операций пока нет" />}{transactions.data?.items.map((tx) => <div className="team-timeline__row" key={tx.id}><div className="team-timeline__body"><strong>{tx.reason}</strong><span className="small secondary">{dateTime(tx.created_at)} · {tx.author_name ?? "Система"}</span></div><div className="team-timeline__amount"><strong>{signed(tx.amount)}</strong><span className="micro muted block">Баланс {coins(tx.balance_after)}</span></div></div>)}{transactions.data && <Pagination page={page} size={20} total={transactions.data.total} onChange={(p) => setParams({ tab, page: String(p) })} />}</Card>}
     {tab === "purchases" && <Card title="Покупки">{purchases.isLoading && <Skeleton height={180} />}{purchases.isError && <ErrorState error={purchases.error} onRetry={() => purchases.refetch()} />}{purchases.data?.items.length === 0 && <EmptyState title="Покупок пока нет" />}{purchases.data?.items.map((order) => <div className="team-timeline__row" key={order.id}><div className="team-timeline__body"><strong>{order.item.title}</strong><span className="small secondary">№{order.id} · {REQUEST_STATUS_LABELS[order.status]} · {dateTime(order.created_at)}</span>{order.decision_comment && <p>{order.decision_comment}</p>}</div><strong>{coins(order.price)} коинов</strong></div>)}{purchases.data && <Pagination page={page} size={20} total={purchases.data.total} onChange={(p) => setParams({ tab, page: String(p) })} />}</Card>}
     {editor && <UserEditor target={data} groups={groups.data ?? []} groupsReady={groups.isSuccess} onClose={() => setEditor(false)} />}
+    {avatarEditor && <AvatarEditor userId={id} name={data.full_name} staff onClose={() => setAvatarEditor(false)} />}
     {archive && <UserArchive target={data} onClose={() => setArchive(false)} />}
     {loginEditor && <ResetLogin id={id} current={data.login} onClose={() => setLoginEditor(false)} />}
     {password && <ResetPassword id={id} onClose={() => setPassword(false)} />}

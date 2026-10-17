@@ -5,6 +5,7 @@ export const AUDIT_ACTIONS: Record<string, string> = {
   "user.create": "Создан сотрудник", "user.update": "Изменён сотрудник",
   "user.login_reset": "Изменён логин сотрудника", "user.login_change": "Изменён логин",
   "user.password_reset": "Сброшен пароль", "user.password_change": "Изменён пароль",
+  "user.avatar_upload": "Обновлено фото сотрудника", "user.avatar_delete": "Удалено фото сотрудника",
   "group.create": "Создана команда", "group.update": "Изменена команда",
   "supervisor_team.assign": "Операторы назначены супервайзеру",
   "supervisor_team.remove": "Операторы сняты из команды",

@@ -17,6 +17,7 @@
 .profile-setting + .profile-setting { border-top: 1px solid var(--separator); }
 .profile-setting__icon { flex: none; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 10px; color: var(--text-secondary); background: var(--surface-secondary); }
 .profile-setting__text { flex: 1; min-width: 0; }
+.profile-setting > .avatar { flex: none; }
 .profile-setting__text h3 { font-size: var(--text-secondary-size); font-weight: 600; }
 .profile-setting__text p { font-size: var(--text-caption); color: var(--text-secondary); line-height: 1.4; margin-top: 3px; overflow-wrap: anywhere; }
 .profile-setting > .btn, .profile-identity > .btn { flex: none; }

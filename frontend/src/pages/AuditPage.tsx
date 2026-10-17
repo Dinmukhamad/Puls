@@ -83,7 +83,7 @@ export function AuditPage() {
           const expanded = open.includes(entry.id);
           return <li key={entry.id} className={`audit-event${expanded ? " is-open" : ""}`}>
             <time className="audit-event__time" dateTime={parseTimestamp(entry.created_at).toISOString()}>{time(entry.created_at)}</time>
-            <Avatar name={entry.actor_name ?? "Система"} id={tint(entry.actor_name ?? "Система")} size={32} />
+            <Avatar name={entry.actor_name ?? "Система"} id={tint(entry.actor_name ?? "Система")} size={32} photo={false} />
             <div className="audit-event__main">
               <p className="audit-event__title"><strong>{auditActionLabel(entry.action)}</strong><span>{auditEntityLabel(entry.entity_type)}</span></p>
               <p className="audit-event__meta"><span className="audit-event__time-inline">{time(entry.created_at)} · </span>{entry.actor_name ?? "Система"}{entry.ip_address ? ` · IP ${entry.ip_address}` : ""}</p>

@@ -12,6 +12,7 @@ import { AccessProvider } from "./auth/AccessContext";
 import { ToastProvider } from "./components/Toast";
 import { ThemeProvider } from "./theme/ThemeContext";
 import { PwaProvider } from "./pwa/PwaProvider";
+import { AvatarProvider } from "./components/AvatarProvider";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -37,7 +38,7 @@ createRoot(document.getElementById("root")!).render(
           <AuthProvider>
             <ToastProvider>
               <PwaProvider>
-                <AccessProvider><App /></AccessProvider>
+                <AvatarProvider><AccessProvider><App /></AccessProvider></AvatarProvider>
               </PwaProvider>
             </ToastProvider>
           </AuthProvider>

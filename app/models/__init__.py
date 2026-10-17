@@ -2,6 +2,7 @@
 
 from app.db.base import Base
 from app.models.access import AccessPolicy, AccessRule
+from app.models.avatar import UserAvatar
 from app.models.badge import BadgeDefinition, UserBadge
 from app.models.city import (
     CityAward,
@@ -138,6 +139,7 @@ __all__ = [
     "TelegramLink",
     "TxType",
     "User",
+    "UserAvatar",
     "UserBadge",
     "WeekStatus",
     "WheelConfig",
