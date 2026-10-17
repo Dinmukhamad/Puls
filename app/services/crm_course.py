@@ -173,6 +173,9 @@ async def start(session, user, key):
         speech = (
             "Хочу сменить номер телефона, звоню с другого номера. Как это сделать?"
             if key == KEYS[2]
+            # The driver names the same new number the practice checks.
+            else source["speech"].replace(source["driver"]["new_phone"], d["new_phone"])
+            if key == KEYS[4]
             else source["speech"]
         )
         snapshot = {**source, "driver": d, "incoming_phone": incoming, "speech": speech, "work": {}}

@@ -3,18 +3,23 @@
 .work-sites--call .crm-layout { display: block; }
 .work-sites--call .crm-layout > .crm-sidebar { display: none; }
 .work-sites--call .crm-main { padding: 14px 18px 0; }
-.work-sites--call > .crm-course-dock { position: static; width: auto; max-width: none; max-height: none; margin: 0 18px 14px; display: grid; grid-template-columns: 180px minmax(0, 1fr); box-shadow: none; border-radius: 10px; }
-.work-sites--call .crm-course-dock > header { border-bottom: 0; border-right: 1px solid #e8edf4; }
-.work-sites--call .crm-course-dock__body { padding: 10px 14px; display: flex; align-items: center; gap: 14px; }
-.work-sites--call .crm-course-dock__body > h2, .work-sites--call .crm-course-dock__body > details, .work-sites--call .crm-course-dock__body > button { display: none; }
-.work-sites--call .crm-course-current { flex: 1; padding: 0; background: none; border: 0; gap: 3px; }
-.work-sites--call .crm-course-current strong { font-size: 14px; }
+.work-sites--call > .crm-course-dock { position: static; width: auto; max-width: none; max-height: none; margin: 0 18px 14px; display: grid; grid-template-columns: 200px minmax(0, 1fr); box-shadow: none; border-radius: 10px; }
+.work-sites--call .crm-course-dock > header { align-items: flex-start; border-bottom: 0; border-right: 1px solid #e8edf4; }
+/* Above the windows the step and its instruction come first; the example and the options sit beside each other below. */
+.work-sites--call .crm-course-dock__body { padding: 12px 16px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); align-items: start; gap: 10px 16px; }
+.work-sites--call .crm-course-dock__body > :is(.crm-course-step, .crm-course-passed, [role=status], [role=alert]) { grid-column: 1 / -1; }
+.work-sites--call .crm-course-dock__body > button { justify-self: start; }
+.work-sites--call :is(.crm-course-lesson, .crm-course-more), .work-sites--call .crm-course-dock__body > .pulsar-text-button { display: none; }
+.work-sites--call .crm-course-step { padding: 12px 14px; }
+.work-sites--call .crm-course-step ol { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 6px 28px; }
 .crm-call-brief { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; padding: 16px 20px; border-bottom: 1px solid #dfe5ed; }
 .crm-call-brief span { font-size: 11px; color: #7a8698; }
 .crm-call-brief h2 { margin: 4px 0 7px; font-size: 18px; color: #26364a; }
 .crm-call-brief p { margin: 0; font-size: 13px; line-height: 1.5; color: #526075; }
 .crm-call-brief .crm-call-live { color: #23815a; white-space: nowrap; padding-top: 4px; }
 .crm-call-desktop-viewport { width: 100%; overflow: auto hidden; background: #e8e9eb; }
+/* The frame is the scaled size of the desktop and cannot scroll: a card opening on the right never pushes OKTEL out of view. */
+.crm-call-desktop-frame { overflow: clip; }
 .crm-call-desktop { display: grid; grid-template-columns: 480px 960px; width: 1440px; height: 720px; transform: scale(var(--crm-desktop-scale, 1)); transform-origin: top left; color: #191919; background: #fff; font: 14px/1.4 Arial, sans-serif; }
 .crm-call-oktell { min-width: 0; background: #fff; border-right: 2px solid #a5a7aa; }
 .crm-call-window-bar { display: flex; align-items: center; gap: 15px; height: 48px; padding: 0 18px; border-bottom: 1px solid #ddd; background: #f7f7f7; color: #353535; }
@@ -57,3 +62,12 @@
   .crm-call-desktop .fleet { grid-template-columns: 64px minmax(0, 1fr); }
   .crm-call-desktop .fleet-rail { display: flex; }
 }
+.crm-call-browser-bar .crm-call-copy { flex: none; min-width: 0; padding: 4px 10px; border: 1px solid #c9d3e2; border-radius: 14px; background: #fff; color: #33476a; font-size: 12px; white-space: nowrap; }
+.crm-call-browser-bar .crm-call-copy:disabled { color: #9aa3b1; border-color: #e0e4ea; cursor: default; }
+.crm-call-hint { margin: 0; padding: 9px 12px; border-radius: 8px; background: #f2f6fd; color: #2f3e57; font-size: 13px; line-height: 1.5; }
+.crm-call-capture .crm-call-hint { color: #2f3e57; font-size: 13px; }
+/* The call screen has its own way to the form; the example is for the form itself. */
+.work-sites--call .crm-course-dock__body > :is(.crm-course-go, .crm-course-example) { display: none; }
+.work-sites--call .crm-course-dock__body > .crm-course-checklist { grid-column: 1 / -1; }
+.work-sites--call .crm-course-checklist ol { display: block; columns: 3 260px; column-gap: 28px; }
+.work-sites--call .crm-course-checklist li { break-inside: avoid; margin-bottom: 6px; }

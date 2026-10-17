@@ -305,7 +305,11 @@ async def test_rework_uses_ticket_number_real_actions_comment_and_idempotency(cl
         await client.get(f"{BASE}/ticket-attachments/{file_id}", headers=other)
     ).status_code == 404
     assert (await client.get(f"{BASE}/ticket-attachments/{file_id}", headers=h)).content == png()
-    await finish_phone(client, h, KEYS[4])
+    practice, _ = await finish_phone(client, h, KEYS[4])
+    phone = task((await client.get(COURSE, headers=h)).json(), KEYS[1])["driver"]["new_phone"]
+    # The driver asks for the practice's own new number, the one the check expects.
+    assert practice["driver"]["new_phone"] != phone
+    assert practice["driver"]["new_phone"] in practice["speech"] and phone not in practice["speech"]
     state = (await client.get(COURSE, headers=h)).json()
     assert state["completed"] == 5 and state["active_task"] is None
 
