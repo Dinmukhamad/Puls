@@ -37,3 +37,9 @@ export function teamOf(user: UserOut, groups: TeamGroup[], teams: SupervisorTeam
   if (group && owner && namedAfter(group, owner)) return `${owner.full_name}${group.is_active ? "" : " · команда в архиве"}`;
   return userTeamLabel(user, groups);
 }
+
+/** The address of the employee window (`PersonWindow`) over the list that is open now; the list keeps its filters. */
+export function personSearch(search: string, id: number): string {
+  const next = new URLSearchParams(search); next.set("person", String(id));
+  return `?${next.toString()}`;
+}

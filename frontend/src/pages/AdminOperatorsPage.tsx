@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
 import { useAccess } from "../auth/AccessContext";
@@ -27,11 +27,12 @@ import {
   StatusIcon,
 } from "../components/ui";
 import { coins, points } from "../utils/format";
-import { operatorCount, teamTitles } from "./teamSection";
+import { operatorCount, personSearch, teamTitles } from "./teamSection";
 import "./operators.css";
 
 export function AdminOperatorsPage() {
   const toast = useToast();
+  const location = useLocation();
   const { can } = useAccess(); const { atLeast } = useAuth();
   const canOverview = can("overview");
   const canCredit = can("motivation") && atLeast("supervisor");
@@ -180,7 +181,7 @@ export function AdminOperatorsPage() {
                         <Rank row={row} available={!period || !!row.metrics_available} />
                       </td>
                       <td>
-                        <Link className="cell-person operators-person" to={`/admin/users/${row.user_id}`}>
+                        <Link className="cell-person operators-person" to={{ search: personSearch(location.search, row.user_id) }} state={{ person: true }}>
                           <Avatar name={row.full_name} id={row.user_id} size={32} />
                           <span className="cell-person__text">
                             <span className="cell-person__name">{row.full_name}</span>
@@ -214,7 +215,7 @@ export function AdminOperatorsPage() {
                 {operators.data.items.map((row) => (
                   <li key={row.user_id} className="list-card">
                     <div className="list-card__head">
-                      <Link className="cell-person operators-person" to={`/admin/users/${row.user_id}`}>
+                      <Link className="cell-person operators-person" to={{ search: personSearch(location.search, row.user_id) }} state={{ person: true }}>
                         <Avatar name={row.full_name} id={row.user_id} size={36} />
                         <span className="cell-person__text">
                           <span className="cell-person__name">{row.full_name}</span>

@@ -7,8 +7,7 @@ import { learning, attemptPath, DIFFICULTY, LEARNING_LABELS, type ContentInput, 
 import { useAuth } from "../auth/AuthContext";
 import { Sheet } from "../components/Sheet";
 import { useToast } from "../components/Toast";
-import { Badge, Button, Card, EmptyState, ErrorState, Pagination, RowsSkeleton } from "../components/ui";
-import { dateTime } from "../utils/format";
+import { Badge, Button, Card, EmptyState, ErrorState, RowsSkeleton } from "../components/ui";
 import "./learning.css";
 
 const STATUS = { draft: "Черновик", published: "Опубликовано", archived: "В архиве" };
@@ -92,12 +91,4 @@ function ContentEditor({ target, kind, onClose }: { target?: LearningContent; ki
     </form>
     {confirm && <Sheet title="Опубликовать обучение?" onClose={() => { if (!save.isPending) setConfirm(false); }} size="s" footer={<><Button onClick={() => setConfirm(false)} disabled={save.isPending}>Назад</Button><Button variant="primary" disabled={save.isPending} onClick={() => save.mutate()}>{save.isPending ? "Публикуем…" : "Опубликовать"}</Button></>}><div className="stack"><strong>{value.title}</strong><p>{value.steps.length} шагов · порог {value.pass_percent}%</p><p>За первое прохождение: {value.coins_reward} коинов.</p><p>Материал появится в обучении сотрудников.</p>{save.isError && <ErrorState error={save.error} />}</div></Sheet>}
   </Sheet>;
-}
-
-export function LearningResults({ userId, kind }: { userId?: number; kind?: LearningKind }) {
-  const [page, setPage] = useState(1);
-  const query = useQuery({ queryKey: ["learning-results", userId, kind, page], queryFn: () => learning.results({ user_id: userId, kind, page }) });
-  if (query.isLoading) return <RowsSkeleton />;
-  if (query.isError) return <ErrorState error={query.error} onRetry={() => query.refetch()} />;
-  return <div className="stack">{!query.data?.total && <EmptyState title="Попыток пока нет" hint="Результаты появятся, когда сотрудники начнут обучение." />}{query.data?.items.map((row) => <Card key={row.id} title={row.title} subtitle={row.full_name} action={<Badge tone={row.state === "passed" ? "success" : row.state === "failed" ? "warning" : "neutral"}>{row.state === "passed" ? "✓ Пройдено" : row.state === "failed" ? "Не пройдено" : "В процессе"}</Badge>}><p>{LEARNING_LABELS[row.kind]} · {row.answered} из {row.total} шагов{row.score !== null ? ` · ${row.score}%` : ""}</p>{row.finished_at && <p className="secondary small">{dateTime(row.finished_at)} · +{row.awarded_coins} коинов</p>}</Card>)}<Pagination page={page} size={20} total={query.data?.total ?? 0} onChange={setPage} /></div>;
 }

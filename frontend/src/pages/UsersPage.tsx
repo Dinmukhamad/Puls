@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 
 import { team, teamError, type TeamGroup, type TeamUserSaved, type TeamUserInput } from "../api/team";
 import type { TelegramInvitation } from "../api/telegram";
@@ -14,7 +14,7 @@ import { Avatar, Badge, Button, Card, EmptyState, ErrorState, Pagination, RowsSk
 import { dateOnly, dateTime, ROLE_LABELS } from "../utils/format";
 import { loadTelegramDraft, normalizeTelegramUsername, telegramUpdate, type TeamTelegramDraft } from "./teamTelegram";
 import { activeTeamGroups, destinationGroupId } from "./supervisorTeams";
-import { staffCount, teamOf, teamTitles } from "./teamSection";
+import { personSearch, staffCount, teamOf, teamTitles } from "./teamSection";
 import "./team.css";
 import "./users.css";
 
@@ -88,7 +88,7 @@ export function UsersPage() {
     </GlassSurface>
     {teams.isError && <ErrorState error={new Error("Не удалось загрузить команды супервайзеров")} onRetry={() => teams.refetch()} />}
     {groups.isError && <ErrorState error={new Error("Не удалось загрузить команды")} onRetry={() => groups.refetch()} />}
-    <Card title="Сотрудники" subtitle={trainer ? "Имя, роль и дата создания" : "Имя, роль и команда. Нажмите на строку — откроется карточка сотрудника."} padded={false} className="team-list">
+    <Card title="Сотрудники" subtitle={trainer ? "Имя, роль и дата создания. Нажмите на строку — откроется окно сотрудника." : "Имя, роль и команда. Нажмите на строку — откроется окно сотрудника."} padded={false} className="team-list">
       {users.isLoading && <div className="card__body"><RowsSkeleton /></div>}
       {users.isError && <ErrorState error={new Error(teamError(users.error, "Не удалось загрузить сотрудников"))} onRetry={() => users.refetch()} />}
       {users.data && users.data.items.length === 0 && <EmptyState title="Сотрудники не найдены" hint="Попробуйте изменить фильтры или создайте первую учётную запись." action={page > 1 ? <Button onClick={() => filter("page", "1")}>На первую страницу</Button> : undefined} />}
@@ -106,11 +106,12 @@ export function UsersPage() {
 
 /**
  * A person in a list of «Команда» (docs/TEAM_SECTION.md): photo, name, login and hire date, role and team. The whole row
- * opens the employee's card; the actions on the right stay buttons of their own.
+ * opens the employee window over the list; the actions on the right stay buttons of their own.
  */
 export function TeamPersonRow({ person, role = true, team, actions }: { person: UserOut; role?: boolean; team?: ReactNode; actions?: ReactNode }) {
+  const location = useLocation();
   return <li className={`team-row${person.is_active ? "" : " is-archived"}`}>
-    <Link className="team-row__person" to={`/admin/users/${person.id}`}>
+    <Link className="team-row__person" to={{ search: personSearch(location.search, person.id) }} state={{ person: true }}>
       <Avatar name={person.full_name} id={person.id} size={40} />
       <span className="team-row__text">
         <span className="team-row__name">{person.full_name}{!person.is_active && <Badge tone="neutral">В архиве</Badge>}</span>

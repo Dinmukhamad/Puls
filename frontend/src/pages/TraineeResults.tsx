@@ -1,12 +1,25 @@
 import { useQuery } from "@tanstack/react-query";
 import { city } from "../api/city";
-import { Card, ErrorState, Skeleton } from "../components/ui";
+import { Badge, ErrorState, Progress, Skeleton } from "../components/ui";
+import { plural } from "../utils/format";
 
+/** A trainee's preparation in the employee window: how far, then each mission in one line with its state. */
 export function TraineeResults({ userId }: { userId: number }) {
   const query = useQuery({ queryKey: ["trainee-results", userId], queryFn: ({ signal }) => city.operator(userId, signal) });
-  if (query.isPending) return <Skeleton height={220} />;
-  if (query.isError) return <ErrorState error={query.error} onRetry={() => void query.refetch()} />;
-  const missions = query.data.missions.filter(m => m.enabled || m.state === "completed");
+  const missions = query.data?.missions.filter(m => m.enabled || m.state === "completed") ?? [];
   const done = missions.filter(m => m.state === "completed" || m.state === "ready").length;
-  return <Card title="Подготовка стажёра" subtitle="Результаты проверяются по действиям в учебных тренажёрах"><p>Пройдено этапов: {done} из {missions.length}</p><progress value={done} max={missions.length || 1} aria-label="Подготовка стажёра" style={{ width: "100%" }} /><div className="workflow-results">{missions.map(m => <div key={m.key} className="workflow-result"><div><strong>{m.title}</strong><p className="secondary small">{m.objective}</p></div><span>{m.state === "completed" || m.state === "ready" ? "Пройдено" : m.state === "in_progress" ? `${m.current} из ${m.target}` : m.state === "unavailable" ? "На паузе" : "Не пройдено"}</span></div>)}</div></Card>;
+  return <section className="employee__section" aria-labelledby={`employee-preparation-${userId}`}>
+    <h3 id={`employee-preparation-${userId}`}>Подготовка стажёра</h3>
+    {query.isPending ? <Skeleton height={120} /> : query.isError ? <ErrorState error={query.error} onRetry={() => void query.refetch()} /> : <>
+      <div className="employee-level">
+        <p><strong>{done} из {missions.length} {plural(missions.length, "миссии", "миссий", "миссий")}</strong><span>Засчитываются по действиям в учебных тренажёрах</span></p>
+        <Progress value={missions.length ? done / missions.length : 0} tone="accent" label="Подготовка стажёра" />
+      </div>
+      <ul className="employee-list">{missions.map(m => {
+        const passed = m.state === "completed" || m.state === "ready";
+        return <li key={m.key}><span><strong>{m.title}</strong><small>{m.objective}</small></span>
+          <Badge tone={passed ? "success" : "neutral"}>{passed ? "Пройдено" : m.state === "in_progress" ? `${m.current} из ${m.target}` : m.state === "unavailable" ? "На паузе" : "Не пройдено"}</Badge></li>;
+      })}</ul>
+    </>}
+  </section>;
 }

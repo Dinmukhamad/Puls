@@ -20,7 +20,7 @@ import { RatingPage } from "./pages/RatingPage";
 import { ShopPage } from "./pages/ShopPage";
 import { UsersPage } from "./pages/UsersPage";
 import { GroupsPage } from "./pages/GroupsPage";
-import { UserDetailPage } from "./pages/UserDetailPage";
+import { PersonWindow, UserDetailPage } from "./pages/UserDetailPage";
 import { PeriodsPage } from "./pages/PeriodsPage";
 import { SessionsPage } from "./pages/SessionsPage";
 import { AuditPage } from "./pages/AuditPage";
@@ -114,15 +114,15 @@ export function App() {
         <Route path="/admin/settings" element={<SettingsPage />} />
         <Route path="/admin/economy" element={<EconomyPage />} />
         <Route path="/admin/store" element={<StoreAdminPage />} />
-        <Route path="/admin/users" element={<UsersPage />} />
+        <Route path="/admin/users" element={<><UsersPage /><PersonWindow /></>} />
         <Route path="/admin/users/:userId" element={<UserDetailPage />} />
-        <Route path="/admin/groups" element={<GroupsPage />} />
+        <Route path="/admin/groups" element={<><GroupsPage /><PersonWindow /></>} />
         <Route path="/admin/periods" element={<PeriodsPage />} />
         <Route path="/admin/sessions" element={access.isDeveloper ? <SessionsPage /> : <AccessPage />} />
         <Route path="/admin/audit" element={atLeast("admin") ? <AuditPage /> : <AccessPage />} />
         <Route
           path="/admin/operators"
-          element={<AdminOperatorsPage />}
+          element={<><AdminOperatorsPage /><PersonWindow /></>}
         />
         <Route
           path="/admin/requests"

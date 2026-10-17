@@ -1,15 +1,7 @@
-import { DriverTripReviews } from "./DriverTripReviews";
 import { useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { driverShift, type DriverScenario } from "../api/driverShift";
-import { Button, Card, ErrorState, RowsSkeleton } from "../components/ui";
-import { dateTime } from "../utils/format";
-
-export function DriverTeamResults({ userId }: { userId?: number } = {}) {
-  const [page, setPage] = useState(1);
-  const query = useQuery({ queryKey: ["driver-team-results", userId, page], queryFn: () => driverShift.results(page, userId) });
-  return <Card title="Driver Simulator · смены команды"><div className="stack">{query.isLoading ? <RowsSkeleton /> : query.isError ? <ErrorState error={query.error} onRetry={() => query.refetch()} /> : query.data?.items.length ? query.data.items.map(x => <details key={x.id}><summary>{x.full_name} · {x.finished_at ? x.result?.score == null ? "Свободная практика" : `${x.result.score}/100` : `В работе · ${x.completed} заказов`}</summary><p>{x.title} · {dateTime(x.created_at)}</p><DriverTripReviews trips={x.result?.trips} />{x.result?.checks.map(check => <p className="small" key={check.key}>{check.done ? "✓" : "○"} {check.title} · {check.path}</p>)}</details>) : <p className="secondary">Смены сотрудников появятся после запуска тренажёра.</p>}<div className="row"><Button disabled={page <= 1} onClick={() => setPage(page - 1)}>Назад</Button><span>{page}</span><Button disabled={page * 20 >= (query.data?.total ?? 0)} onClick={() => setPage(page + 1)}>Далее</Button></div></div></Card>;
-}
+import { Button, ErrorState } from "../components/ui";
 
 export function ScenarioForm({ initial, parks, readOnly, onSave = driverShift.saveConfig, saveLabel = "Сохранить сценарий новых смен" }: { initial: DriverScenario; parks: { id: string; name: string }[]; readOnly: boolean; onSave?: (value: DriverScenario) => Promise<DriverScenario>; saveLabel?: string }) {
   const [value, setValue] = useState(() => structuredClone(initial));

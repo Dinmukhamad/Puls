@@ -3,38 +3,11 @@
 .team-status-filter { width: 180px; }
 .team-desktop-filters { display: flex; align-items: end; gap: 12px; flex-wrap: wrap; }
 .team-desktop-filters .field { min-width: 180px; flex: 1; }
-.team-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 .team-mobile-filter-button { display: none; }
-.team-meta { display: flex; gap: 10px 16px; flex-wrap: wrap; align-items: center; color: var(--text-secondary); font-size: 13px; }
 .team-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .team-form-error { padding: 12px 16px; border-radius: var(--radius-s); color: var(--status-danger-text); background: var(--status-danger-tint); font-size: 14px; }
 .team-password { display: flex; gap: 8px; }
 .team-password .input { min-width: 0; flex: 1; }
-.team-group-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 20px; align-items: stretch; }
-.team-group-card { min-width: 0; display: flex; flex-direction: column; }
-.team-group-card .card__body { display: flex; flex-direction: column; flex: 1; gap: 18px; }
-.team-group-card__head { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; align-items: center; gap: 12px; }
-.team-group-card__identity { min-width: 0; }
-.team-group-card__head .badge { align-self: start; margin-top: 4px; white-space: nowrap; }
-.team-group-card h2 { overflow-wrap: anywhere; }
-.team-group-card__summary { display: flex; align-items: baseline; gap: 12px; padding: 16px 0; border-bottom: 1px solid var(--border-subtle); }
-.team-group-card__count { font-size: 32px; line-height: 1; font-weight: 700; letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
-.team-group-card__summary .secondary { font-size: 14px; }
-.team-group-card__section-label { margin-bottom: 6px; color: var(--text-tertiary); font-size: 12px; font-weight: 600; }
-.team-group-card .team-owned-groups { gap: 0; }
-.team-group-card .team-owned-group { display: grid; grid-template-columns: minmax(0, 1fr) auto; flex-wrap: nowrap; padding: 12px 0; }
-.team-group-card .team-owned-group strong { display: block; font-size: 14px; font-weight: 550; }
-.team-group-card .team-owned-group .small { margin-top: 4px; }
-.team-group-card .team-owned-group .btn { white-space: nowrap; }
-.team-group-card .field__note { margin: 0; }
-.team-group-card__actions { display: grid; gap: 10px; margin-top: auto; padding-top: 16px; border-top: 1px solid var(--border-subtle); }
-.team-group-card__secondary-actions { display: flex; gap: 8px; }
-.team-group-card__secondary-actions > .btn { flex: 1; padding-inline: 12px; }
-.team-group-card__supervisor { display: flex; align-items: center; gap: 10px; min-height: 40px; }
-.team-owned-groups { display: grid; gap: 10px; }
-.team-owned-group { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border-subtle); overflow-wrap: anywhere; flex-wrap: wrap; }
-.team-owned-group > :first-child { min-width: 0; }
-.team-owned-group:last-child { border-bottom: 0; }
 .team-selection-toggle { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; line-height: 1.5; cursor: pointer; }
 .team-selection-toggle input { margin-top: 4px; flex-shrink: 0; accent-color: var(--accent-primary); }
 .team-assignment-list { display: grid; gap: 8px; }
@@ -48,40 +21,13 @@
 .team-selected-operators { display: flex; gap: 8px; flex-wrap: wrap; }
 .team-selected-operator { display: inline-flex; align-items: center; gap: 10px; min-height: 36px; padding: 7px 10px; border: 1px solid var(--border-subtle); border-radius: var(--radius-s); background: var(--surface-hover); color: var(--text-primary); font: inherit; font-size: 13px; cursor: pointer; max-width: 100%; overflow-wrap: anywhere; text-align: left; }
 .team-selected-operator span { font-size: 18px; flex-shrink: 0; }
-.team-detail-hero { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
-.team-detail-hero__body { flex: 1; min-width: 200px; overflow-wrap: anywhere; }
-.team-detail-hero .team-meta { margin-top: 12px; }
-.team-section-nav { display: flex; gap: 8px; overflow-x: auto; padding: 4px 0 10px; }
-.team-section-nav .btn { flex-shrink: 0; }
-.team-detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
-.team-definition-list { display: grid; grid-template-columns: minmax(100px, 1fr) 2fr; gap: 18px; font-size: 14px; }
-.team-definition-list dt { color: var(--text-secondary); }
-.team-definition-list dd { margin: 0; overflow-wrap: anywhere; }
-.team-metric-row { display: flex; justify-content: space-between; gap: 20px; padding: 14px 0; border-bottom: 1px solid var(--border-subtle); }
-.team-metric-row:last-child { border-bottom: 0; }
-.team-metric-row__value { text-align: right; flex-shrink: 0; }
-.team-timeline { display: grid; gap: 0; }
-.team-timeline__row { display: flex; justify-content: space-between; gap: 20px; padding: 18px 0; border-bottom: 1px solid var(--border-subtle); }
-.team-timeline__row:last-child { border-bottom: 0; }
-.team-timeline__body { min-width: 0; display: grid; gap: 6px; overflow-wrap: anywhere; }
-.team-timeline__amount { text-align: right; flex-shrink: 0; }
 @media (max-width: 767px) {
   .team-desktop-filters { display: none; }
   .team-mobile-filter-button { display: inline-flex; }
   .team-filterbar { padding: 12px; gap: 10px; }
   .team-search { min-width: 150px; }
   .team-status-filter { width: 100%; }
-  .team-group-grid { gap: 16px; }
-  .team-group-card__head { gap: 10px; }
-  .team-group-card__head .badge { grid-column: 2 / -1; margin-top: 0; justify-self: start; }
-  .team-group-card__identity { grid-column: 2 / -1; }
-  .team-group-card__actions .btn { min-height: 44px; }
-  .team-detail-grid, .team-form-grid { grid-template-columns: 1fr; }
-  .team-detail-hero { gap: 14px; }
-  .team-detail-hero__body { min-width: 170px; }
-  .team-definition-list { grid-template-columns: minmax(80px, 1fr) 2fr; gap: 14px; }
-  .team-timeline__row { gap: 12px; }
-  .team-actions .btn { min-height: 44px; }
+  .team-form-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 767px) { .team-search { flex-basis: 100%; } }
