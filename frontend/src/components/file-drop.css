@@ -1,0 +1,13 @@
+.file-drop { display: grid; justify-items: center; gap: var(--sp-2); padding: var(--sp-6) var(--sp-5); border: 1.5px dashed var(--border-strong); border-radius: var(--radius-l); background: var(--surface-secondary); text-align: center; transition: border-color var(--motion-fast) var(--ease-standard), background var(--motion-fast) var(--ease-standard); }
+.file-drop.is-over { border-color: var(--accent-primary); background: var(--accent-tint); }
+.file-drop.is-disabled { opacity: .6; }
+.file-drop__icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: var(--surface-opaque); color: var(--text-secondary); transform: rotate(180deg); }
+.file-drop__title { font-size: var(--text-body); font-weight: 600; }
+.file-drop__hint { max-width: 460px; color: var(--text-secondary); font-size: var(--text-caption); line-height: 1.5; }
+.file-drop__input { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.file-drop__button { margin-top: var(--sp-1); cursor: pointer; }
+.file-drop.is-disabled .file-drop__button { pointer-events: none; }
+.file-drop__input:focus-visible + .file-drop__button { outline: 2px solid var(--accent-primary); outline-offset: 3px; }
+.file-drop__files { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin: var(--sp-1) 0 0; padding: 0; list-style: none; }
+.file-drop__files li { max-width: 100%; padding: 3px 10px; border-radius: 999px; background: var(--surface-opaque); color: var(--text-secondary); font-size: var(--text-caption); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 767px) { .file-drop { padding: var(--sp-5) var(--sp-4); } }

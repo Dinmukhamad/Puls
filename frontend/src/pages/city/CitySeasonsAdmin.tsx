@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { citySeasons, SEASONS_QUERY, type CitySeasons, type SeasonPeriod } from "../../api/citySeasons";
 import { Badge, Button, Card, ErrorState, KPI, Skeleton } from "../../components/ui";
+import { DateTimePicker } from "../../components/DateRangePicker";
 import { Select } from "../../components/Select";
 import { Sheet } from "../../components/Sheet";
 import { useToast } from "../../components/Toast";
@@ -100,7 +101,7 @@ function Schedule({ data }: { data: CitySeasons }) {
             if (!next) setEndsAt("");
           }} /></label>
         <label className="field"><span className="field__label">Следующий сброс</span>
-          <input className="input" type="datetime-local" value={endsAt} disabled={!data.can_manage || !period || save.isPending} required={!!period} onChange={event => { setEndsAt(event.target.value); setDirty(true); }} /></label>
+          <DateTimePicker ariaLabel="Конец сезона" value={endsAt} disabled={!data.can_manage || !period || save.isPending} defaultTime="00:00" onChange={next => { setEndsAt(next); setDirty(true); }} /></label>
       </div>
       {data.can_manage && <FormFooter status={<FormStatus error={save.error} saved={!dirty && save.isSuccess ? "Расписание сохранено" : undefined}
         note={period ? `Город будет сбрасываться ${PERIOD_EVERY[period]}. За ${daysText(data.warn_days)} до сброса операторы видят предупреждение.` : "Пока расписания нет, город сбрасывается только кнопкой «Сбросить сейчас»."} />}>

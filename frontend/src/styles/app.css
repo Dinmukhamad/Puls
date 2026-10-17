@@ -462,11 +462,15 @@ a {
   color: var(--accent-primary);
 }
 
+/*
+ * Аватар 36px стоит по центру той же колонки, что и иконки пунктов: 9px + 24px / 2 = 1px рамки + 2px + 36px / 2.
+ * В свёрнутом меню он ровно посередине, в раскрытом — на одной линии с иконками.
+ */
 .sidebar__user {
   display: flex;
   align-items: center;
   gap: var(--sp-3);
-  padding: var(--sp-2);
+  padding: var(--sp-2) var(--sp-2) var(--sp-2) 2px;
   border-radius: var(--radius-m);
   color: inherit;
   transition: background var(--motion-fast) var(--ease-standard);

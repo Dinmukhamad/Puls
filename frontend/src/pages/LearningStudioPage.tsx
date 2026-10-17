@@ -7,7 +7,8 @@ import { learning, attemptPath, DIFFICULTY, LEARNING_LABELS, type ContentInput, 
 import { useAuth } from "../auth/AuthContext";
 import { Sheet } from "../components/Sheet";
 import { useToast } from "../components/Toast";
-import { Badge, Button, Card, EmptyState, ErrorState, RowsSkeleton } from "../components/ui";
+import { Badge, Button, Card, EmptyState, ErrorState, RowsSkeleton, Select } from "../components/ui";
+import { DatePicker } from "../components/DateRangePicker";
 import "./learning.css";
 
 const STATUS = { draft: "Черновик", published: "Опубликовано", archived: "В архиве" };
@@ -72,10 +73,10 @@ function ContentEditor({ target, kind, onClose }: { target?: LearningContent; ki
       <div className="stack" hidden={view !== "settings"}>
         <label className="field"><span className="field__label">Название</span><input className="input" maxLength={180} required value={value.title} onChange={(e) => update("title", e.target.value)} /></label>
         <label className="field"><span className="field__label">Описание</span><textarea className="input" rows={3} maxLength={4000} value={value.description} onChange={(e) => update("description", e.target.value)} /></label>
-        <div className="learning-form-grid"><label className="field"><span className="field__label">Тема / мир</span><input className="input" required maxLength={80} value={value.world} onChange={(e) => update("world", e.target.value)} /></label><label className="field"><span className="field__label">Сложность</span><select className="input" value={value.difficulty} onChange={(e) => update("difficulty", e.target.value as ContentInput["difficulty"])}>{Object.entries(DIFFICULTY).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
+        <div className="learning-form-grid"><label className="field"><span className="field__label">Тема / мир</span><input className="input" required maxLength={80} value={value.world} onChange={(e) => update("world", e.target.value)} /></label><label className="field"><span className="field__label">Сложность</span><Select aria-label="Сложность" value={value.difficulty} onChange={(next) => update("difficulty", next as ContentInput["difficulty"])} options={Object.entries(DIFFICULTY).map(([key, label]) => ({ value: key, label }))} /></label>
         {([{ key: "minutes", label: "Ориентировочное время, мин", min: 1, max: 180 }, { key: "pass_percent", label: "Порог прохождения, %", min: 1, max: 100 }, { key: "coins_reward", label: "Награда в коинах", min: 0, max: 10000 }] as const).filter(field => user?.role !== "trainer" || field.key !== "coins_reward").map((field) => <label className="field" key={field.key}><span>{field.label}</span><input className="input" type="number" required min={field.min} max={field.max} step={1} value={value[field.key]} onChange={(e) => update(field.key, Number(e.target.value))} /></label>)}
-        <label className="field"><span className="field__label">Статус</span><select className="input" value={value.status} onChange={(e) => update("status", e.target.value as ContentInput["status"])}>{Object.entries(STATUS).map(([key,label]) => <option key={key} value={key}>{label}</option>)}</select></label>
-        <label className="field"><span className="field__label">Пройти до (необязательно)</span><input className="input" type="date" value={value.deadline?.slice(0,10) ?? ""} onChange={(e) => update("deadline", e.target.value ? `${e.target.value}T23:59:59Z` : null)} /></label></div>
+        <label className="field"><span className="field__label">Статус</span><Select aria-label="Статус" value={value.status} onChange={(next) => update("status", next as ContentInput["status"])} options={Object.entries(STATUS).map(([key, label]) => ({ value: key, label }))} /></label>
+        <label className="field"><span className="field__label">Пройти до (необязательно)</span><DatePicker ariaLabel="Пройти до" value={value.deadline?.slice(0,10) ?? ""} clearable placeholder="Без срока" onChange={(next) => update("deadline", next ? `${next}T23:59:59Z` : null)} /></label></div>
         <label className="learning-check"><input type="checkbox" checked={value.is_required} onChange={(e) => update("is_required", e.target.checked)} />Обязательное обучение</label><label className="learning-check"><input type="checkbox" checked={value.allow_back} onChange={(e) => update("allow_back", e.target.checked)} />Разрешить изменение предыдущих ответов</label>
         <p className="secondary small">Награда выдаётся за первое успешное прохождение материала. Уже начатые попытки сохраняют свою версию вопросов и условий.</p>
       </div>

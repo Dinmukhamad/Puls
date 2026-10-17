@@ -80,3 +80,13 @@ export function moveCalendarMonth(value: string, amount: number): string {
   const lastDay = shiftDays(next, -1).getUTCDate();
   return `${month}-${String(Math.min(date.getUTCDate(), lastDay)).padStart(2, "0")}`;
 }
+
+/** Months for a list, newest first: `ahead` coming months, this one and `back` past ones, as «Октябрь 2026». */
+export function monthOptions(today = todayDateKey(), back = 24, ahead = 1): { value: string; label: string }[] {
+  const [year, month] = today.slice(0, 7).split("-").map(Number);
+  return Array.from({ length: back + ahead + 1 }, (_, index) => {
+    const date = new Date(Date.UTC(year, month - 1 + ahead - index, 1));
+    const label = date.toLocaleDateString("ru-RU", { month: "long", year: "numeric", timeZone: "UTC" }).replace(/\s*г\.$/, "");
+    return { value: date.toISOString().slice(0, 7), label: label.charAt(0).toUpperCase() + label.slice(1) };
+  });
+}

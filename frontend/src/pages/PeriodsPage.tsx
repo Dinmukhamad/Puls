@@ -8,6 +8,9 @@ import { Sheet } from "../components/Sheet";
 import { useToast } from "../components/Toast";
 import { Badge, Button, Card, EmptyState, ErrorState, KPI, Select, Skeleton } from "../components/ui";
 import { weekRange } from "../components/weekCalendar";
+import { DatePicker } from "../components/DateRangePicker";
+import { todayDateKey } from "../components/dateRange";
+import { FileDrop } from "../components/FileDrop";
 import { coins, points, periodLabel, WEEK_STATUS_LABELS } from "../utils/format";
 import { ReportsUpload } from "./ReportsUpload";
 import "./workflow.css";
@@ -34,12 +37,10 @@ function PeriodWorkspace() {
     queryFn: () => periods.preview(selected!), enabled: !!selected });
   const queryClient = useQueryClient();
   const toast = useToast();
-  const [date, setDate] = useState(() => new Date().toLocaleDateString("en-CA"));
+  const [date, setDate] = useState(() => todayDateKey());
   const [inspected, setInspected] = useState<ImportPreview | null>(null);
   const [applied, setApplied] = useState(false);
-  const [dragging, setDragging] = useState(false);
   const [confirmPublish, setConfirmPublish] = useState(false);
-  const fileInput = useRef<HTMLInputElement>(null);
   const generation = useRef(0);
   const closed = week?.status === "closed";
 
@@ -52,7 +53,6 @@ function PeriodWorkspace() {
     setParams(id ? { week: String(id) } : {});
     setInspected(null); setApplied(false); setConfirmPublish(false);
     inspect.reset(); apply.reset(); calculate.reset(); publish.reset();
-    if (fileInput.current) fileInput.current.value = "";
   };
   const create = useMutation({ mutationFn: () => periods.create(date), onSuccess: (created) => {
     refresh(); selectWeek(created.id); toast.success("Период открыт");
@@ -92,7 +92,7 @@ function PeriodWorkspace() {
           <Select aria-label="Отчётный период" value={selected ?? ""} disabled={busy || weeks.isLoading} onChange={(value) => selectWeek(Number(value) || undefined)}
             options={[{ value: "", label: "Выберите период" }, ...(weeks.data ?? []).map(item => ({ value: item.id, label: `${weekRange(item)} · ${WEEK_STATUS_LABELS[item.status]}` }))]} /></label>
         {canImport && <><label className="field"><span className="field__label">Дата внутри новой недели</span>
-          <input type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} disabled={create.isPending || busy} /></label>
+          <DatePicker ariaLabel="Дата внутри новой недели" value={date} onChange={setDate} disabled={create.isPending || busy} /></label>
         <Button disabled={!date || create.isPending || busy} onClick={() => create.mutate()}>{create.isPending ? "Открываем…" : "Открыть неделю"}</Button></>}
       </div>
       {weeks.isLoading && <Skeleton height={44} />}
@@ -103,13 +103,8 @@ function PeriodWorkspace() {
     {!selected ? <EmptyState title="Выберите период для работы" hint="Можно открыть новую неделю или продолжить ранее созданную" /> : <>
       <ol className="workflow-steps" aria-label="Этапы расчёта">{steps.map((label, index) => <li key={label} className="workflow-step" aria-current={index === step ? "step" : undefined}><span>{index + 1}</span>{label}</li>)}</ol>
       {!closed && canImport && <Card title="1. Загрузка показателей" subtitle="CSV или XLSX. Повторная загрузка обновляет только переданные значения.">
-        <div className={`upload-zone${dragging ? " is-dragging" : ""}`}
-          onDragOver={(e) => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)}
-          onDrop={(e) => { e.preventDefault(); setDragging(false); inspectFile(e.dataTransfer.files[0]); }}>
-          <strong>{inspect.isPending ? "Проверяем строки и сотрудников…" : "Перетащите файл сюда"}</strong>
-          <label className="field"><span className="field__label">или выберите на устройстве</span>
-            <input ref={fileInput} type="file" accept=".csv,.xlsx" disabled={busy} onChange={(e) => inspectFile(e.target.files?.[0])} /></label>
-        </div>
+        <FileDrop accept=".csv,.xlsx" disabled={busy} onFiles={list => inspectFile(list[0])}
+          title="Перетащите файл сюда" busy={inspect.isPending && "Проверяем строки и сотрудников…"} hint="CSV или XLSX с колонкой «Логин»." />
         <details className="workflow-note ui-note"><summary>Как подготовить файл</summary>
           <p>Первая строка — названия колонок. Укажите логин сотрудника в колонке «Логин». Его можно посмотреть в карточке сотрудника.</p>
           <p>Можно использовать колонки «Логин», «Показатель», «Значение»: в показателе укажите его название из настроек. Или создайте отдельную колонку с названием каждого показателя. Пустая ячейка означает отсутствие данных.</p>

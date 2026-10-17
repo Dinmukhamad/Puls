@@ -4,7 +4,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { auth } from "../api/endpoints";
 import { useAccess } from "../auth/AccessContext";
 import { useAuth } from "../auth/AuthContext";
-import { DisplayIcon, LogoutIcon, MoonIcon, SunIcon, UserIcon, LockIcon, DownloadIcon } from "../components/icons";
+import { CameraIcon, DisplayIcon, LogoutIcon, MoonIcon, SunIcon, UserIcon, LockIcon, DownloadIcon } from "../components/icons";
 import { Avatar, Badge, Button } from "../components/ui";
 import { AvatarEditor } from "../components/AvatarEditor";
 import { useTheme, type ThemePreference } from "../theme/ThemeContext";
@@ -50,7 +50,7 @@ export function ProfilePage() {
   return <div className="profile-page">
     <header className="profile-heading"><h1 className="page-title">Профиль</h1><p>Ваш аккаунт, связь и настройки</p></header>
     <section ref={node => { panelTriggers.current.details = node; }} className="profile-identity" aria-label="Ваш аккаунт" data-tour="profile">
-      <Avatar name={user.full_name} id={user.id} size={52} />
+      <button type="button" className="profile-identity__photo" aria-label="Изменить фото профиля" onClick={() => open("avatar")}><Avatar name={user.full_name} id={user.id} size={52} /><span className="profile-identity__camera" aria-hidden="true"><CameraIcon size={13} /></span></button>
       <div className="profile-identity__text"><h2>{user.full_name}</h2><p>{isDeveloper ? "Разработчик Puls" : ROLE_LABELS[user.role]}{user.group ? ` · ${user.group.name}` : ""}</p><Badge tone={user.is_active ? "success" : "neutral"} dot>{user.is_active ? "Аккаунт активен" : "Аккаунт отключён"}</Badge></div>
       <Button size="s" onClick={() => open("details")}>Мои данные</Button>
     </section>

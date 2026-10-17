@@ -6,6 +6,7 @@ import { team, teamError, type TeamGroup, type TeamUserSaved, type TeamUserInput
 import type { TelegramInvitation } from "../api/telegram";
 import type { Gender, Role, UserOut } from "../api/types";
 import { useAuth } from "../auth/AuthContext";
+import { DatePicker } from "../components/DateRangePicker";
 import { GlassSurface } from "../components/GlassSurface";
 import { Sheet } from "../components/Sheet";
 import { useToast } from "../components/Toast";
@@ -241,7 +242,7 @@ export function UserEditor({ target, groups, groupsReady, initialRole = "operato
       <h3 id="user-editor-profile" className="user-editor__section-title">Данные сотрудника</h3>
       <label className="field"><span className="field__label">ФИО</span><input className="input" autoComplete="name" value={fullName} onChange={(e) => setFullName(e.target.value)} required minLength={3} maxLength={255} /></label>
       <fieldset className="field team-gender"><legend className="field__label">Пол персонажа</legend><div className="segmented" role="radiogroup">{([["female", "Женский"], ["male", "Мужской"]] as const).map(([value, label]) => <label key={value} className={gender === value ? "segmented__item is-active" : "segmented__item"}><input type="radio" name="team-gender" value={value} checked={gender === value} required={!target} onChange={() => setGender(value)} />{label}</label>)}</div></fieldset>
-      {role !== "trainee" ? <label className="field"><span className="field__label">Дата приёма · необязательно</span><input className="input" type="date" value={hiredOn} onChange={(e) => setHiredOn(e.target.value)} /></label> : <p className="field__note">Стажёр ещё не работает. Дату выхода можно указать при переводе в операторы.</p>}
+      {role !== "trainee" ? <label className="field"><span className="field__label">Дата приёма · необязательно</span><DatePicker ariaLabel="Дата приёма" value={hiredOn} onChange={setHiredOn} clearable placeholder="Не указана" /></label> : <p className="field__note">Стажёр ещё не работает. Дату выхода можно указать при переводе в операторы.</p>}
       </section>
       <section className="user-editor__section" aria-labelledby="user-editor-contacts">
       <h3 id="user-editor-contacts" className="user-editor__section-title">Контакты</h3>

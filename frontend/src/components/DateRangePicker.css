@@ -39,3 +39,5 @@
   .date-range-picker__popup { padding: 12px 10px 10px; }
   .date-range-picker__day { width: 36px; height: 36px; }
 }
+/* A date and its time side by side: the calendar takes the room, the half hours a narrow list. */
+.date-time-picker { display: grid; grid-template-columns: minmax(0, 1fr) 112px; gap: 8px; }

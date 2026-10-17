@@ -130,7 +130,9 @@ test("seasons: one schedule, a guarded reset and every past season with its date
   assert.match(html, /Город сбрасывался<\/span>.*2 раза/s);
   assert.match(html, /<h2 class="card__title">Расписание<\/h2><p class="card__subtitle">Одно для Техподдержки и ОП<\/p>/);
   assert.match(html, /role="combobox"[^>]*aria-label="Как часто сбрасывать город"/);
-  assert.match(html, /<input class="input" type="datetime-local" required="" value="2026-11-01T\d\d:00"\/>/);
+  // The next reset in the site's calendar and a list of half hours, not the browser's field.
+  assert.match(html, /<div class="date-time-picker"><div class="date-range-picker date-picker"><button type="button" class="date-range-picker__trigger" aria-label="Конец сезона: 01\.11\.2026\. Открыть календарь"/);
+  assert.match(html, /aria-label="Конец сезона: время"><span class="puls-select__value">\d\d:00<\/span>/);
   assert.match(html, /Город будет сбрасываться раз в месяц\. За 3 дня до сброса операторы видят предупреждение\./);
   assert.match(html, /<button type="button" class="btn btn--destructive btn--m">Сбросить город сейчас<\/button>/);
   assert.match(html, /<td><strong>Сезон 2<\/strong><\/td>.*<span class="badge badge--neutral">По расписанию<\/span>.*34 здания · 210 клеток благоустройства · строили 12 человек/s);
