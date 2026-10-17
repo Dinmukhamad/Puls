@@ -341,7 +341,7 @@ class RuntimeElement extends EventTarget {
   contains(node) { return node === this || this.children.some(child => child.contains?.(node)); }
   getBoundingClientRect() { return { left: 0, top: 0, right: this.clientWidth, bottom: this.clientHeight, width: this.clientWidth, height: this.clientHeight }; }
 }
-function startupFixture(t) {
+function startupFixture(t, overrides = {}) {
   const names = ['document', 'window', 'ResizeObserver', 'HTMLElement', 'Node', '__pulsCityStartup', 'setTimeout'];
   const originals = new Map(names.map(name => [name, Object.getOwnPropertyDescriptor(globalThis, name)])), timers = [];
   const rendererReady = deferred(), modelsReady = deferred(), modelsRequested = deferred(), compiled = deferred(), calls = [];
@@ -371,7 +371,7 @@ function startupFixture(t) {
     if (name === 'createLoop') { state.render = args[0].render; return piece(); }
     if (name === 'createQuality') return piece({ settings: { fps: 60, resolution: 1 }, onChange: () => noop });
     if (name === 'createSky') return piece({ sun: null });
-    if (name === 'createDistricts') { const hit = new startupCity.THREE.Object3D(); hit.userData.district = 'crm'; state.pickables = [hit]; return piece({ anchors: new Map(), pickables: state.pickables, startGrowth() { calls.push(['growth']); return 'crm'; } }); }
+    if (name === 'createDistricts') { calls.push(['districts', args[1].grown]); const hit = new startupCity.THREE.Object3D(); hit.userData.district = 'crm'; state.pickables = [hit]; return piece({ anchors: new Map(), pickables: state.pickables, startGrowth() { calls.push(['growth']); return 'crm'; } }); }
     if (name === 'createPicker') { state.learningPickables = args[2]; state.learningPickerHandlers = args[3]; return piece(); }
     if (name === 'createMascot') return piece({ nameAnchor: new startupCity.THREE.Vector3(), focusPoint: new startupCity.THREE.Vector3() });
     if (name === 'createDepartmentWorld') return piece({
@@ -383,7 +383,7 @@ function startupFixture(t) {
     return piece();
   };
   const host = new RuntimeElement(), options = page({ world: 'x4', onReady: () => calls.push(['ready']), onLost: () => calls.push(['lost']),
-    onRestored: () => { calls.push(['restored']); state.restoration?.resolve(); },
+    onRestored: () => { calls.push(['restored']); state.restoration?.resolve(); }, ...overrides,
   }).options;
   const control = startupCity.createCity(host, options);
   t.after(() => {
@@ -495,6 +495,21 @@ test('context restoration rebuilds the real runtime and returns to the last esta
   assert.ok(restoredCalls.findIndex(call => call[0] === 'ready') > focusIndex);
   s.frame();
   assert.equal(s.calls.slice(beforeRestore).filter(call => call[0] === 'estate-focus').length, 1, 'the restored destination is consumed once');
+  assert.equal(s.calls.some(call => call[0] === 'lost'), false);
+});
+
+test('a district grows once: a scene rebuilt after a restored context stands it already grown', async t => {
+  const s = startupFixture(t, { grown: ['crm'] }), built = () => s.calls.filter(call => call[0] === 'districts').map(call => call[1]);
+  s.rendererReady.resolve(); await s.modelsRequested.promise;
+  await s.finishModels(); s.frame();
+  assert.deepEqual(built(), [['crm']], 'the first scene waits to grow it');
+  assert.equal(s.calls.filter(call => call[0] === 'growth').length, 1);
+  await s.restore(); s.frame();
+  assert.deepEqual(built().at(-1), [], 'the restored scene does not celebrate it again');
+  // A level-up during the visit grows live, and is not replayed by a later restoration either.
+  s.control.setLevels({ crm: 2 }, ['crm']);
+  await s.restore(); s.frame();
+  assert.deepEqual(built().at(-1), []);
   assert.equal(s.calls.some(call => call[0] === 'lost'), false);
 });
 

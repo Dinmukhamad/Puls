@@ -107,6 +107,47 @@ async def test_city_reads_never_award_and_server_rejects_forged_progress(client,
     assert (await client.get(ADMIN + "/participants", headers=headers)).status_code == 403
 
 
+async def test_seen_district_stages_belong_to_the_account_and_only_go_up(
+    client, session, operator, head
+):
+    # Another browser of the same operator reads what the first one already celebrated.
+    first = auth(await login(client, operator.login))
+    second = auth(await login(client, operator.login))
+    assert (await client.get(BASE, headers=first)).json()["levels_seen"] is None
+    # A record without learning districts is still a record: the city does not ask again.
+    empty = await client.post(BASE + "/levels/seen", headers=first, json={"levels": {}})
+    assert empty.json() == {"levels_seen": {}}
+    assert (await client.get(BASE, headers=first)).json()["levels_seen"] == {}
+    seen = await client.post(
+        BASE + "/levels/seen", headers=first, json={"levels": {"dispatch": 3, "crm": 1}}
+    )
+    assert seen.json() == {"levels_seen": {"dispatch": 3, "crm": 1}}
+    assert (await client.get(BASE, headers=second)).json()["levels_seen"] == {
+        "dispatch": 3,
+        "crm": 1,
+    }
+    # An older tab cannot bring a celebration back; unknown districts are not kept.
+    older = await client.post(
+        BASE + "/levels/seen", headers=second, json={"levels": {"dispatch": 2, "nowhere": 4}}
+    )
+    assert older.json() == {"levels_seen": {"dispatch": 3, "crm": 1}}
+    grown = await client.post(BASE + "/levels/seen", headers=second, json={"levels": {"crm": 2}})
+    assert grown.json()["levels_seen"] == {"dispatch": 3, "crm": 2}
+    for wrong in ({"dispatch": 6}, {"dispatch": 0}, {"x" * 41: 2}):
+        bad = await client.post(BASE + "/levels/seen", headers=first, json={"levels": wrong})
+        assert bad.status_code == 422
+    # Staff previews and an inspected operator's city neither read nor write it.
+    staff = auth(await login(client, head.login))
+    assert (await client.get(BASE, headers=staff)).json()["levels_seen"] is None
+    assert (await client.get(f"{ADMIN}/operators/{operator.id}", headers=staff)).json()[
+        "levels_seen"
+    ] is None
+    denied = await client.post(BASE + "/levels/seen", headers=staff, json={"levels": {"crm": 5}})
+    assert denied.status_code == 403
+    await session.refresh(operator)
+    assert operator.city_levels_seen == {"dispatch": 3, "crm": 2}
+
+
 @pytest.mark.parametrize("home_city", [None, "sales", "support"])
 async def test_scenarios_district_follows_assigned_operator_city(
     client, session, operator, supervisor, head, home_city

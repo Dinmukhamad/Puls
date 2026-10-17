@@ -242,6 +242,8 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
         if (!ready && !loading) {
           ready = true; everReady = true; sceneReady = true; stats.markFirstFrame(); options.onProgress?.(1);
           const grown = districts.startGrowth(), d = grown ? world.districts.find(item => item.id === grown) : null;
+          // Celebrated: a scene rebuilt later (a restored GPU context) shows the building grown, not growing again.
+          options.grown = [];
           if (d && department === "support") rig.focus(d.x, d.z, 48);
           if (requestedEstateFocus) focusEstate(requestedEstateFocus);
           options.onReady();
@@ -360,6 +362,7 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
         p.districts.setLevels(levels, grown);
         if (everReady) {
           const id = p.districts.startGrowth(), d = world.districts.find(item => item.id === id);
+          options.grown = [];
           if (d && department === "support") p.rig.focus(d.x, d.z, 48);
         }
       });

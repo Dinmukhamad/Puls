@@ -57,6 +57,19 @@ class ClaimInput(BaseModel):
     revision: int = Field(ge=0)
 
 
+class LevelsSeen(BaseModel):
+    """The district building stages the operator's city has just shown (1–5 per district)."""
+
+    model_config = ConfigDict(extra="forbid")
+    levels: dict[str, int] = Field(max_length=20)
+
+    @model_validator(mode="after")
+    def stages(self):
+        if any(not 1 <= level <= 5 or len(key) > 40 for key, level in self.levels.items()):
+            raise ValueError("Ступень здания района — от 1 до 5")
+        return self
+
+
 class BuildInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     item: str = Field(min_length=1, max_length=40)

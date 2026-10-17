@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import type { CityDistrict, CityMission, CityPlot, CityQuest, DistrictId } from "../../api/city";
 import type { CityBuildView, CityControl, CityControlScheme, CityEstateView, CityLabelInfo, CityMascot, EstatePick, EstateTarget, TimeOfDay } from "../../city3d/types";
 import { CONTROL_SCHEMES } from "./cityControls";
-import { completedDistrictMissions, districtLevel, grownDistricts } from "./cityLevels";
+import { completedDistrictMissions, districtLevel, grownDistricts, newToAccount, seenLevels } from "./cityLevels";
 import { useAuth } from "../../auth/AuthContext";
 import type { CityWorld, DepartmentId } from "../../api/cityWorld";
 import type { JourneyPhase } from "../../city3d/types";
@@ -13,14 +13,15 @@ import { watchCityStartup } from "./startupDeadline";
 
 /**
  * The 3D city fills the whole screen behind the glass panels. `.city-frame` marks the part the panels
- * leave free, and the camera centres the city there. `progressKey` remembers the levels this viewer has
- * seen, so an upgrade is celebrated once.
+ * leave free, and the camera centres the city there. `progressKey` remembers in this browser the levels this viewer
+ * has seen, `levelsSeen` are the ones the account has seen on any device and `onLevelsSeen` records new ones, so an
+ * upgrade is celebrated once.
  */
-export function CityMap({ department = "support", departmentWorld, onWorldPick, onArrival, onJourney, worldAction, estates, build = null, onEstate, estateFocus, sceneIdentity, districts, missions, labels, selected, onSelect, progressKey, mascot, forceWebGL = false, focusRequest = 0, plots = [], onPlot, plotFocus, quests = [], onQuest, questFocus, controls = "orbit", onControls, controlsOpen = false, onStatus, onRetry }: { department?: DepartmentId; departmentWorld?: CityWorld; onWorldPick?: (id: string) => void; onArrival?: (id: DepartmentId) => void; onJourney?: (phase: JourneyPhase) => void; worldAction?: { kind: "travel" | "skip" | "focus"; target: string; at: number };
+export function CityMap({ department = "support", departmentWorld, onWorldPick, onArrival, onJourney, worldAction, estates, build = null, onEstate, estateFocus, sceneIdentity, districts, missions, labels, selected, onSelect, progressKey, levelsSeen = null, onLevelsSeen, mascot, forceWebGL = false, focusRequest = 0, plots = [], onPlot, plotFocus, quests = [], onQuest, questFocus, controls = "orbit", onControls, controlsOpen = false, onStatus, onRetry }: { department?: DepartmentId; departmentWorld?: CityWorld; onWorldPick?: (id: string) => void; onArrival?: (id: DepartmentId) => void; onJourney?: (phase: JourneyPhase) => void; worldAction?: { kind: "travel" | "skip" | "focus"; target: string; at: number };
   /** Team district land of both cities, the build mode, taps on the land; `estateFocus` flies there when it changes. */
   estates?: Partial<Record<DepartmentId, CityEstateView>>; build?: CityBuildView | null; onEstate?: (pick: EstatePick) => void;
   estateFocus?: EstateTarget & { at: number };
-  sceneIdentity: string; districts: CityDistrict[]; missions: CityMission[]; labels: CityLabelInfo[]; selected: DistrictId; onSelect: (id: DistrictId) => void; progressKey?: string; mascot?: CityMascot; forceWebGL?: boolean; focusRequest?: number;
+  sceneIdentity: string; districts: CityDistrict[]; missions: CityMission[]; labels: CityLabelInfo[]; selected: DistrictId; onSelect: (id: DistrictId) => void; progressKey?: string; levelsSeen?: Record<string, number> | null; onLevelsSeen?: (levels: Record<string, number>) => void; mascot?: CityMascot; forceWebGL?: boolean; focusRequest?: number;
   /** The operator's plots; `onPlot` (when the viewer may build) opens the catalogue; `plotFocus` flies to a plot when it changes. */
   plots?: CityPlot[]; onPlot?: (key: string) => void; plotFocus?: { key: string; at: number };
   /** Today's situations; `onQuest` (the operator themself) opens one from its "!"; `questFocus` flies to one. */
@@ -65,13 +66,18 @@ export function CityMap({ department = "support", departmentWorld, onWorldPick, 
   const levelKey = JSON.stringify(levels);
   const levelsRef = useRef(levels); levelsRef.current = levels;
   const growthRef = useRef<() => DistrictId[]>(() => []);
+  // What this visit has already shown: the account's record may arrive with the next poll.
+  const shownRef = useRef<Record<string, number> | null>(null);
   growthRef.current = () => {
     if (!progressKey) return [];
     const current = Object.fromEntries(districts.map(d => [d.id, districtLevel(levelsRef.current[d.id] ?? 0, d.soon)]));
-    try {
-      const grown = grownDistricts(JSON.parse(localStorage.getItem(progressKey) ?? "null"), current) as DistrictId[];
-      localStorage.setItem(progressKey, JSON.stringify(current)); return grown;
-    } catch { return []; }
+    let browser: Record<string, number> | null = null;
+    try { browser = JSON.parse(localStorage.getItem(progressKey) ?? "null"); } catch { /* The account's record still counts. */ }
+    const grown = grownDistricts(seenLevels(levelsSeen, browser, shownRef.current), current) as DistrictId[];
+    shownRef.current = current;
+    try { localStorage.setItem(progressKey, JSON.stringify(current)); } catch { /* Stored on the server below. */ }
+    if (newToAccount(levelsSeen, current)) onLevelsSeen?.(current);
+    return grown;
   };
   const labelsKey = JSON.stringify(labels), labelsRef = useRef(labels);
   labelsRef.current = labels;

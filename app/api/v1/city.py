@@ -10,6 +10,7 @@ from app.schemas.city import (
     BuildInput,
     ClaimInput,
     EconomyInput,
+    LevelsSeen,
     QuestAnswer,
     SettingsInput,
     SituationsInput,
@@ -52,6 +53,11 @@ async def own_city(session: SessionDep, user: CurrentUser, response: Response):
 @router.post("/learning/city/missions/{key}/claim")
 async def claim(key: str, body: ClaimInput, session: SessionDep, user: CurrentUser):
     return await city.claim(session, user, key, body.revision)
+
+
+@router.post("/learning/city/levels/seen")
+async def see_levels(body: LevelsSeen, session: SessionDep, user: CurrentUser):
+    return await city.see_levels(session, user, body.levels)
 
 
 @router.post("/learning/city/plots/{plot}/build")

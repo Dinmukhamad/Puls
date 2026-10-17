@@ -501,6 +501,8 @@ async def dashboard(session, user, *, inspecting=False):
         "preview": not operator,
         "inspecting": inspecting,
         "can_claim": operator and not inspecting,
+        # Stages already seen grow, on any device: the city celebrates only the rest, once.
+        "levels_seen": user.city_levels_seen if operator and not inspecting else None,
         "districts": [
             {
                 **district,
@@ -604,6 +606,26 @@ async def build(session, user, plot_key, item_key):
         "price": item["price"],
         "balance": transaction.balance_after,
     }
+
+
+async def see_levels(session, user, levels):
+    """
+    Remembers the district building stages the operator's city showed, so a district that levelled
+    up is celebrated once per account, not once per browser. Stages only go up: an older tab cannot
+    bring back a celebration already seen.
+    """
+    if user.role != Role.OPERATOR:
+        raise PermissionDeniedError("В предварительном просмотре город не запоминает увиденное")
+    known = {district["id"] for district in DISTRICTS}
+    seen = dict(user.city_levels_seen or {})
+    for key, level in levels.items():
+        if key in known and level > seen.get(key, 0):
+            seen[key] = level
+    # Even an empty record is kept: a city without learning districts is not asked again.
+    if seen != user.city_levels_seen:
+        user.city_levels_seen = seen
+        await session.commit()
+    return {"levels_seen": seen}
 
 
 async def claim(session, user, key, revision):

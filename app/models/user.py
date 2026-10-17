@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, Date, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Boolean, Date, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.developer import is_developer
@@ -64,6 +64,9 @@ class User(Base, TimestampMixin):
     # Как оператор двигает камеру в городе: "orbit" — как раньше, "map" — как карту.
     # Пусто — ещё не выбрал, город спросит при входе.
     city_controls: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    # Ступени зданий учебных районов, рост которых оператор уже видел ({район: ступень}): город
+    # празднует рост один раз, с какого бы устройства оператор ни зашёл. Пусто — ещё не заходил.
+    city_levels_seen: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     group: Mapped[Group | None] = relationship(
         "Group", foreign_keys=[group_id], back_populates="members"
