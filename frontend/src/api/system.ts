@@ -10,5 +10,11 @@ export const systemApi = {
   revoke: (id: string, admin = false) => request(`/api/v1/${admin ? "admin" : "me"}/sessions/${id}/revoke`, { method: "POST" }),
   revokeOthers: () => request("/api/v1/me/sessions/revoke-others", { method: "POST" }),
   revokeBulk: (body: SessionBulkRevokeInput) => request<SessionBulkRevokeResult>("/api/v1/admin/sessions/revoke-bulk", { method: "POST", json: body }),
-  audit: (filters: Record<string, unknown>) => request<Page<AuditEntry>>(`/api/v1/admin/audit${buildQuery(filters)}`),
+  /** `prefix`: the journal's section, a list of action prefixes sent as repeated parameters. */
+  audit: ({ prefix, ...filters }: Record<string, unknown> & { prefix?: readonly string[] }) => {
+    const query = new URLSearchParams(buildQuery(filters).slice(1));
+    for (const code of prefix ?? []) query.append("prefix", code);
+    const text = query.toString();
+    return request<Page<AuditEntry>>(`/api/v1/admin/audit${text ? `?${text}` : ""}`);
+  },
 };

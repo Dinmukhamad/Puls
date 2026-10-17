@@ -3,9 +3,9 @@
 from datetime import UTC, datetime
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StringConstraints, model_validator
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import selectinload
 
 from app.core.deps import AdminUser, DeveloperUser, PaginationDep, SessionDep
@@ -257,10 +257,27 @@ async def audit(
     entity_type: str | None = None,
     date_from: datetime | None = None,
     date_to: datetime | None = None,
+    prefix: Annotated[
+        list[str] | None, Query(max_length=20, description="Начало кода действия: раздел журнала")
+    ] = None,
+    actor: Annotated[
+        str | None, Query(max_length=150, description="Имя или логин того, кто действовал")
+    ] = None,
 ):
     conditions = []
     if action:
         conditions.append(AuditLog.action.ilike(f"%{action}%"))
+    if prefix:
+        conditions.append(
+            or_(*(AuditLog.action.startswith(code, autoescape=True) for code in prefix))
+        )
+    if actor and actor.strip():
+        needle = f"%{actor.strip()}%"
+        conditions.append(
+            AuditLog.actor_id.in_(
+                select(User.id).where(or_(User.full_name.ilike(needle), User.login.ilike(needle)))
+            )
+        )
     if entity_type:
         conditions.append(AuditLog.entity_type == entity_type)
     if date_from:

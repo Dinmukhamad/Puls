@@ -1,4 +1,4 @@
-import { REQUEST_STATUS_LABELS, ROLE_LABELS, TX_LABELS, WEEK_STATUS_LABELS } from "../utils/format";
+import { parseTimestamp, REQUEST_STATUS_LABELS, ROLE_LABELS, TX_LABELS, WEEK_STATUS_LABELS } from "../utils/format";
 
 export const AUDIT_ACTIONS: Record<string, string> = {
   "auth.login": "Вход в систему", "auth.logout": "Выход из системы",
@@ -115,3 +115,36 @@ export function auditBusinessChanges(changes: unknown): AuditChange[] {
     return mapped ? [{ label, value: mapped }] : [];
   });
 }
+
+/** Sections of the journal: a section is the set of action prefixes the server narrows by. */
+export const AUDIT_GROUPS: { key: string; label: string; prefixes: string[] }[] = [
+  { key: "auth", label: "Вход и сеансы", prefixes: ["auth.", "session."] },
+  { key: "people", label: "Сотрудники и команды", prefixes: ["user.", "group.", "supervisor_team.", "telegram."] },
+  { key: "access", label: "Доступ", prefixes: ["access.", "work_sites."] },
+  { key: "results", label: "Показатели и итоги", prefixes: ["week.", "day.", "metric.", "nomination."] },
+  { key: "rewards", label: "Коины и награды", prefixes: ["coins.", "rules.", "badge.", "progress.", "shop_item.", "wheel.", "raffle.", "scenario."] },
+  { key: "learning", label: "Обучение", prefixes: ["learning.", "driver."] },
+  { key: "city", label: "Город", prefixes: ["city."] },
+];
+
+/** The actions a section holds, for the «Действие» list once a section is chosen. */
+export function auditActionsOf(group?: string): [string, string][] {
+  const prefixes = AUDIT_GROUPS.find(item => item.key === group)?.prefixes;
+  return Object.entries(AUDIT_ACTIONS).filter(([key]) => !prefixes || prefixes.some(prefix => key.startsWith(prefix)));
+}
+
+/** One line under the event: its first understood changes, so most rows need no opening. */
+export function auditSummary(changes: unknown, limit = 2): string {
+  return auditBusinessChanges(changes).slice(0, limit).map(item => `${item.label}: ${item.value}`).join(" · ");
+}
+
+/** The day heading an event falls under: «Сегодня», «Вчера» or the date itself. */
+export function auditDay(iso: string, now = new Date()): string {
+  const day = parseTimestamp(iso);
+  const start = (value: Date) => new Date(value.getFullYear(), value.getMonth(), value.getDate()).getTime();
+  const days = Math.round((start(now) - start(day)) / 86_400_000);
+  if (days === 0) return "Сегодня";
+  if (days === 1) return "Вчера";
+  return day.toLocaleDateString("ru-RU", { day: "numeric", month: "long", ...(day.getFullYear() === now.getFullYear() ? {} : { year: "numeric" }) });
+}
+

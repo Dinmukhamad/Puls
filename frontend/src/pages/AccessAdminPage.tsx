@@ -108,13 +108,13 @@ function PolicyEditor({ policy }: { policy: AccessPolicy }) {
             const decision = preview.data!.sections[section.code];
             return <article className={`access-rule${changes[section.code] ? " is-changed" : ""}`} key={section.code}>
               <div className="access-rule-description"><div className="access-rule-title"><h3>{section.title}</h3>{changes[section.code] && <Badge tone="accent">Изменено</Badge>}</div><p>{section.description}</p>
-                <p className="access-source">{sourceDescription(decision.sources)}</p>
+                <p className="access-source">{sourceDescription(decision.sources).replace(/\.$/, "")}{!changes[section.code] && preview.data!.total > 0 ? ` · открыт у ${decision.after_allowed} из ${preview.data!.total}` : ""}</p>
                 {section.admin_only && <p className="access-restriction">Только администраторы. Другим ролям открыть нельзя.</p>}
                 <AccessImpact decision={decision} total={preview.data!.total} dirty={!!changes[section.code]} />
               </div>
               <div className="access-rule-controls">
                 <AccessSwitch title={section.title} state={changes[section.code] === "allow" ? "on" : changes[section.code] === "deny" ? "off" : decision.state} disabled={save.isPending || !ready || decision.locked} onChange={enabled => update(section.code, enabled ? "allow" : "deny")} />
-                <button type="button" className="access-inherit" disabled={save.isPending || !ready || !decision.has_override} onClick={() => update(section.code, "inherit")}>Вернуть наследование</button>
+                {decision.has_override && changes[section.code] !== "inherit" && <button type="button" className="access-inherit" disabled={save.isPending || !ready} onClick={() => update(section.code, "inherit")}>Вернуть наследование</button>}
                 {changes[section.code] && <button type="button" className="access-undo" disabled={save.isPending} onClick={() => setChanges(previous => { const next = { ...previous }; delete next[section.code]; return next; })}>Отменить для раздела</button>}
               </div>
             </article>;
@@ -122,18 +122,19 @@ function PolicyEditor({ policy }: { policy: AccessPolicy }) {
         </>}
       </>}
     </Card>
-    <section className={`access-save-panel${dirty ? " is-dirty" : ""}`} aria-label="Сохранение прав">
+    {(dirty || message || save.isError || conflict) && <section className={`access-save-panel${dirty ? " is-dirty" : ""}`} aria-label="Сохранение прав">
       {dirty ? <><div className="access-save-heading"><strong>Изменений: {Object.keys(changes).length}</strong><span>{audience}</span></div><ul className="access-change-list">{policy.sections.filter(section => changes[section.code]).map(section => <li key={section.code}><span>{section.title}</span><strong>{effectLabels[changes[section.code]!]}</strong></li>)}</ul></> : <p className="secondary">Все изменения сохранены. Переключите доступ у нужного раздела.</p>}
       {save.isError && <ErrorState error={save.error} />}
       {conflict && <Button disabled={save.isPending} onClick={reload}>Загрузить актуальные правила и сбросить черновик</Button>}
       {message && <p className="access-saved" role="status">{message}</p>}
       <div className="access-actions"><Button variant="primary" disabled={!dirty || !ids.length || save.isPending || !ready} onClick={() => save.mutate(payload)}>{save.isPending ? "Сохраняем…" : "Сохранить изменения"}</Button><Button disabled={!dirty || save.isPending} onClick={discard}>Отменить изменения</Button></div>
-    </section></div>
+    </section>}</div>
   </div>;
 }
 
 function AccessImpact({ decision, total, dirty }: { decision: AccessPreviewSection; total: number; dirty: boolean }) {
-  return <div className="access-rule-impact">{total > 0 && <p>{dirty ? `Доступ сейчас: ${decision.before_allowed} из ${total} → после сохранения: ${decision.after_allowed} из ${total}. Изменится у ${decision.changed} аккаунтов.` : `Доступ открыт: ${decision.after_allowed} из ${total}.`}</p>}{decision.exceptions > 0 && <p>Более точные правила сохранятся у {decision.exceptions} аккаунтов. Для изменения выберите этих сотрудников или их группы.</p>}{decision.state === "mixed" && <p>У выбранных получателей разные настройки. Включение откроет раздел на выбранном уровне; выключение закроет его.</p>}</div>;
+  if (!(dirty && total > 0) && !decision.exceptions && decision.state !== "mixed") return null;
+  return <div className="access-rule-impact">{dirty && total > 0 && <p>{`Доступ сейчас: ${decision.before_allowed} из ${total} → после сохранения: ${decision.after_allowed} из ${total}. Изменится у ${decision.changed} аккаунтов.`}</p>}{decision.exceptions > 0 && <p>Более точные правила сохранятся у {decision.exceptions} аккаунтов. Для изменения выберите этих сотрудников или их группы.</p>}{decision.state === "mixed" && <p>У выбранных получателей разные настройки. Включение откроет раздел на выбранном уровне; выключение закроет его.</p>}</div>;
 }
 
 function SubjectOption({ item, checked, disabled, onChange }: { item: AccessSubject; checked: boolean; disabled: boolean; onChange: () => void }) {
