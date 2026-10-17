@@ -17,6 +17,7 @@ import { AdminOperatorsPage } from "./pages/AdminOperatorsPage";
 import { AdminRequestsPage } from "./pages/AdminRequestsPage";
 import { CabinetPage } from "./pages/CabinetPage";
 import { RatingPage } from "./pages/RatingPage";
+import { RacePage } from "./pages/RacePage";
 import { ShopPage } from "./pages/ShopPage";
 import { UsersPage } from "./pages/UsersPage";
 import { GroupsPage } from "./pages/GroupsPage";
@@ -99,6 +100,7 @@ export function App() {
         <Route path="/reports" element={<ReportsPage />} />
         <Route path="/cabinet" element={<CabinetPage />} />
         <Route path="/rating" element={<RatingPage />} />
+        <Route path="/race" element={<RacePage />} />
         <Route path="/shop" element={<ShopPage />} />
         <Route path="/profile" element={<Suspense fallback={<Skeleton height={300} />}><ProfilePage /></Suspense>} />
         <Route path="/sessions" element={<Navigate to="/admin/sessions" replace />} />

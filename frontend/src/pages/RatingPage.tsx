@@ -1,6 +1,6 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";
-import { Navigate, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useSearchParams } from "react-router-dom";
 
 import { ApiError } from "../api/client";
 import { rating } from "../api/endpoints";
@@ -237,6 +237,7 @@ export function PersonalRatingCard({ data }: { data: RatingOut }) {
         <p>До призового результата — <strong>{points(data.my_gap_to_podium)} баллов</strong></p>
         <p className="secondary small">При равном количестве баллов операторы делят место. Разница рассчитана по выбранной неделе.</p>
       </div>}
+      {data.view_mode === "personal" && <p className="rating-personal__race"><Link to={`/race?week=${header.week_id}`}>Кого догнать и что подтянуть — в «Гонке недели» →</Link></p>}
     </div>
   </Card>;
 }

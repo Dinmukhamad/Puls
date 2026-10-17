@@ -17,6 +17,8 @@
 .cabinet-progress__stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-4); margin-top: var(--sp-5); padding-top: var(--sp-4); border-top: 1px solid var(--separator); }
 .cabinet-progress__stats > div { display: grid; align-content: start; gap: var(--sp-1); }
 .cabinet-progress__stats strong { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--sp-2); font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.cabinet-progress__race { color: var(--text-secondary); text-decoration: underline; text-underline-offset: 3px; width: fit-content; }
+.cabinet-progress__race:hover { color: var(--text-primary); }
 .cabinet-wallet { border-color: color-mix(in srgb, var(--coin-color) 30%, var(--separator)); background: linear-gradient(140deg, var(--coin-tint), transparent 75%), var(--surface-primary); scroll-margin-top: var(--sp-5); }
 .cabinet-wallet__title { display: inline-flex; align-items: center; gap: var(--sp-2); }
 .cabinet-wallet__title svg { color: var(--gold-text); }

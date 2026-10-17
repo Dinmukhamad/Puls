@@ -236,6 +236,72 @@ export interface RatingOut {
   my_podium_state: "uncalculated" | "not_participating" | "on_podium" | "outside_podium";
 }
 
+/* --- «Гонка недели» (GET /rating/race) --- */
+
+/** An operator in the week's race; the others are named «Имя Ф.». gap = their points − mine. */
+export interface RacePlace {
+  rank: number;
+  name: string;
+  points: number;
+  gap: number | null;
+  rank_delta: number | null;
+  is_me: boolean;
+}
+
+export interface RaceMetric {
+  code: string;
+  title: string;
+  unit: string | null;
+  direction: string;
+  value: number | null;
+  target: number;
+  points: number;
+  max_points: number;
+  /** Points the metric still lacks to its maximum. */
+  lost: number;
+  reported: boolean;
+  /** Points one unit more brings, for "more is better" metrics up to the target. */
+  per_unit: number | null;
+}
+
+/** Raising one metric: the value to show and the points it really adds. */
+export interface RaceOption {
+  code: string;
+  title: string;
+  unit: string | null;
+  value: number | null;
+  need: number;
+  gain: number;
+}
+
+export interface RacePlan {
+  reachable: boolean;
+  steps: RaceOption[];
+  gain: number;
+}
+
+export interface RaceOut {
+  week: { id: number; label: string; starts_on: string; ends_on: string; status: WeekStatus } | null;
+  /** The week is not calculated: the places come from the metrics loaded so far. */
+  live: boolean;
+  /** "month": prizes once a month; "week": the week's places pay `prizes`. */
+  period: string;
+  prizes: number[];
+  participants: number;
+  max_points: number;
+  me: { rank: number; points: number; rank_delta: number | null; shared_with: string[] } | null;
+  next: RacePlace | null;
+  behind: (RacePlace & { lead: number }) | null;
+  podium: { place: number; name: string; points: number; gap: number | null; reached: boolean }[];
+  standings: RacePlace[];
+  metrics: RaceMetric[];
+  advice: {
+    room: number;
+    next: { rank: number; name: string; gap: number; options: RaceOption[]; plan: RacePlan } | null;
+    podium: { place: number; name: string; gap: number; plan: RacePlan } | null;
+  } | null;
+}
+
 /* --- магазин --- */
 
 export interface ShopItemOut {

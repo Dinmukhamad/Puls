@@ -74,7 +74,7 @@ export const ROLE_NAVIGATION: Record<Role, readonly NavItem[]> = {
   ],
   operator: [
     section("home", "Главная", HomeIcon, personal.filter((item) => item.to !== "/progress")),
-    section("results", "Результаты", TrophyIcon, [tab("/rating?tab=board", "Рейтинг"), tab("/progress", "Мой прогресс")]),
+    section("results", "Результаты", TrophyIcon, [tab("/rating?tab=board", "Рейтинг"), tab("/race", "Гонка недели"), tab("/progress", "Мой прогресс")]),
     section("training", "Обучение", SparkIcon, learningTabs),
     // Лента удачи вынесена отдельным пунктом «Удача»: это ежедневное действие
     // на минуту, и третьей вкладкой внутри «Наград» его каждый раз приходилось искать.
@@ -109,7 +109,7 @@ export function routeSection(pathname: string, search = "", role: Role = "operat
   if (matches("/admin/access")) return "access";
   if (matches("/admin/settings")) return new URLSearchParams(search).get("tab") === "badges" ? "motivation" : "performance";
   const routes: [SectionCode, string[]][] = [
-    ["personal", ["/cabinet", "/wallet"]], ["results", ["/rating"]],
+    ["personal", ["/cabinet", "/wallet"]], ["results", ["/rating", "/race"]],
     ["training", ["/training", "/simulator"]], ["rewards", ["/shop", "/games"]],
     ["overview", ["/admin/summary"]], ["team", ["/admin/users", "/admin/groups", "/admin/operators"]],
     ["analytics", ["/analytics"]], ["performance", ["/admin/periods"]], ["learning_admin", ["/admin/learning"]],

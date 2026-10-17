@@ -108,3 +108,116 @@ class RatingOut(BaseModel):
     my_podium_state: Literal[
         "uncalculated", "not_participating", "on_podium", "outside_podium"
     ] = "not_participating"
+
+
+# --------------------------------------------------------------------------- #
+# «Гонка недели» (services/race.py)
+# --------------------------------------------------------------------------- #
+
+
+class RaceWeek(BaseModel):
+    id: int
+    label: str
+    starts_on: date
+    ends_on: date
+    status: WeekStatus
+
+
+class RacePlace(BaseModel):
+    """An operator in the week's race; others are named «Имя Ф.»."""
+
+    rank: int
+    name: str
+    points: float
+    gap: float | None = Field(default=None, description="Их баллы минус мои: выше - больше нуля")
+    rank_delta: int | None = None
+    is_me: bool = False
+
+
+class RaceBehind(RacePlace):
+    lead: float = Field(description="Мой отрыв от ближайшего оператора ниже")
+
+
+class RaceMe(BaseModel):
+    rank: int
+    points: float
+    rank_delta: int | None = None
+    shared_with: list[str] = Field(default_factory=list, description="С кем место поделено поровну")
+
+
+class RacePodiumPlace(BaseModel):
+    place: int
+    name: str
+    points: float
+    gap: float | None = None
+    reached: bool = False
+
+
+class RaceMetric(BaseModel):
+    code: str
+    title: str
+    unit: str | None = None
+    direction: str
+    value: float | None = None
+    target: float
+    points: float
+    max_points: float
+    lost: float = Field(description="Сколько баллов показатель недобирает до максимума")
+    reported: bool
+    per_unit: float | None = Field(
+        default=None, description="Баллов за единицу показателя «больше - лучше» до цели"
+    )
+
+
+class RaceOption(BaseModel):
+    code: str
+    title: str
+    unit: str | None = None
+    value: float | None = None
+    need: float = Field(description="Значение, которое нужно показать")
+    gain: float = Field(description="Сколько баллов это добавит")
+
+
+class RacePlan(BaseModel):
+    reachable: bool
+    steps: list[RaceOption]
+    gain: float
+
+
+class RaceNextAdvice(BaseModel):
+    rank: int
+    name: str
+    gap: float
+    options: list[RaceOption]
+    plan: RacePlan
+
+
+class RacePodiumAdvice(BaseModel):
+    place: int
+    name: str
+    gap: float
+    plan: RacePlan
+
+
+class RaceAdvice(BaseModel):
+    room: float = Field(description="Сколько баллов ещё не набрано по всем показателям")
+    next: RaceNextAdvice | None = None
+    podium: RacePodiumAdvice | None = None
+
+
+class RaceOut(BaseModel):
+    """«Гонка недели»: место оператора среди всех, отставание и что подтянуть."""
+
+    week: RaceWeek | None = None
+    live: bool = Field(default=False, description="Неделя не рассчитана: места по загрузке")
+    period: str = Field(description="month - призы раз в месяц, week - за места недели")
+    prizes: list[int] = Field(default_factory=list, description="Бонусы за 1-3 места недели")
+    participants: int
+    max_points: float
+    me: RaceMe | None = None
+    next: RacePlace | None = None
+    behind: RaceBehind | None = None
+    podium: list[RacePodiumPlace]
+    standings: list[RacePlace]
+    metrics: list[RaceMetric]
+    advice: RaceAdvice | None = None

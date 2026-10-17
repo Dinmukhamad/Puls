@@ -15,6 +15,7 @@ from app.models.enums import Role, WeekStatus
 from app.schemas.rating import (
     NominationOut,
     PodiumEntry,
+    RaceOut,
     RatingHeader,
     RatingOut,
     RatingProgress,
@@ -22,6 +23,7 @@ from app.schemas.rating import (
     RatingRowOut,
     WeekOut,
 )
+from app.services import race as race_service
 from app.services import rating as rating_service
 from app.services import weekly as weekly_service
 from app.services.rules import get_rules
@@ -84,6 +86,15 @@ async def my_progress(
             )
         )
     return RatingProgress(points=timeline)
+
+
+@router.get("/race", response_model=RaceOut, summary="Гонка недели: место и что подтянуть")
+async def race(session: SessionDep, user: CurrentUser, week_id: int | None = None) -> dict:
+    """
+    The operator's week among all operators: the place, the gaps to the next one and to the
+    podium, the lead over the one behind, and which metrics close the gaps. Operators only.
+    """
+    return await race_service.race(session, user, week_id)
 
 
 def _to_row(row: rating_service.RatingRow) -> RatingRowOut:
