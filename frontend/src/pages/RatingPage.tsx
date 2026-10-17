@@ -36,7 +36,7 @@ export function RatingPage() {
   if (params.get("tab") === "progress") return <Navigate to="/progress" replace />;
   // The contest is monthly (docs/COIN_ECONOMY.md); the weeks stay one tap away.
   const view = params.get("view") === "weeks" || params.has("week") ? "weeks" : "month";
-  const toggle = <SegmentedControl label="Период рейтинга" value={view} options={[{ value: "month", label: "Конкурс месяца" }, { value: "weeks", label: "Недели" }]} onChange={(value) => { const next = new URLSearchParams(params); next.delete("week"); next.delete("page"); if (value === "weeks") next.set("view", "weeks"); else next.delete("view"); setParams(next); }} />;
+  const toggle = <div data-tour="rating-views"><SegmentedControl label="Период рейтинга" value={view} options={[{ value: "month", label: "Конкурс месяца" }, { value: "weeks", label: "Недели" }]} onChange={(value) => { const next = new URLSearchParams(params); next.delete("week"); next.delete("page"); if (value === "weeks") next.set("view", "weeks"); else next.delete("view"); setParams(next); }} /></div>;
   return view === "month"
     ? <div className="stack"><RatingHeading month />{toggle}<MonthContest /></div>
     : <Leaderboard toggle={toggle} />;

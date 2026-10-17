@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { useGuide } from "../../guide";
 import { PulsarFace } from "./PulsarGuide";
 import { coachLayout, type CoachStep } from "./coachTours";
@@ -15,13 +15,17 @@ function shown(selector: string) {
  * an action waits until it is done, and until the tour ends only the lit element answers.
  * `extra` renders what Pulsar hands over inside his bubble, e.g. the courier's code.
  */
-export function PulsarCoach({ steps, onClose, extra }: { steps: CoachStep[]; onClose: (finished: boolean) => void; extra?: (step: CoachStep) => ReactNode }) {
+export function PulsarCoach({ steps, onClose, extra, onStep }: { steps: CoachStep[]; onClose: (finished: boolean) => void; extra?: (step: CoachStep) => ReactNode;
+  /** Each step the tour comes to, a skipped one too: the page can note how far the operator got. */
+  onStep?: (step: CoachStep) => void }) {
   const guide = useGuide();
   const [index, setIndex] = useState(0), [missing, setMissing] = useState(false), [flying, setFlying] = useState(true);
   // «done»: the step's action is already done (the operator came back to it), so «Дальше» may move on.
   const [done, setDone] = useState(false), [nudge, setNudge] = useState(0), [top, setTop] = useState(false), [mistake, setMistake] = useState("");
   const mascotRef = useRef<HTMLDivElement>(null), bubbleRef = useRef<HTMLDivElement>(null), handRef = useRef<HTMLDivElement>(null), spotRef = useRef<HTMLDivElement>(null), rootRef = useRef<HTMLDivElement>(null);
   const step = steps[index], last = index === steps.length - 1;
+  const reached = useRef(onStep); reached.current = onStep;
+  useEffect(() => { if (step) reached.current?.(step); }, [index]); // eslint-disable-line react-hooks/exhaustive-deps
   // Steps that do not apply are skipped in the direction the operator is moving.
   const direction = useRef(1);
   // The steps the operator has actually seen: the counter shows them and «Назад» walks them back.
@@ -38,6 +42,13 @@ export function PulsarCoach({ steps, onClose, extra }: { steps: CoachStep[]; onC
   const back = (from = index) => { const to = previous(from); if (to === undefined) return false; direction.current = -1; setIndex(to); return true; };
   const [canBack, setCanBack] = useState(false);
   const forward = () => { direction.current = 1; if (last) onClose(true); else setIndex(index + 1); };
+  // A step that does not apply is passed by before it is drawn, so its bubble never flashes on the way (the per-frame
+  // check below still catches a step that stops applying later, and the last one).
+  useLayoutEffect(() => {
+    if (!step || last || !((step.when && !shown(step.when)) || (step.skipWhen && shown(step.skipWhen)))) return;
+    if (direction.current < 0 && back()) return;
+    forward();
+  }, [step, index]); // eslint-disable-line react-hooks/exhaustive-deps
   // The page lock reads the current step through refs; it lives as long as the tour.
   const lit = useRef<Element | null>(null), stepRef = useRef(step), actions = useRef({ used: () => {}, escape: () => {} });
   // The element the operator pressed on an `untilGone` step: the step ends when it is gone.

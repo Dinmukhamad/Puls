@@ -32,6 +32,8 @@ export const city = {
   operator: (id: number, signal?: AbortSignal) => request<CityData>(`/api/v1/admin/learning/city/operators/${id}`, { signal, timeoutMs: CITY_READ_TIMEOUT_MS }),
   claim: (key: string, revision: number) => request<CityReward>(`/api/v1/learning/city/missions/${key}/claim`, { method: "POST", json: { revision } }),
   levelsSeen: (levels: Record<string, number>) => request<{ levels_seen: Record<string, number> }>("/api/v1/learning/city/levels/seen", { method: "POST", json: { levels } }),
+  /** Pulsar's tour of the site reached its end: the Academy's «Как устроен Puls» can be claimed. */
+  finishTour: () => request<{ site_tour: boolean }>("/api/v1/learning/city/tour/finish", { method: "POST" }),
   answer: (slot: number, answer: number) => request<CityQuest>(`/api/v1/learning/city/quests/${slot}/answer`, { method: "POST", json: { answer } }),
   economy: () => request<CityEconomy>("/api/v1/admin/learning/city/economy"),
   saveEconomy: ({ catalogue: _catalogue, can_edit: _canEdit, ...json }: CityEconomy) => request<CityEconomy>("/api/v1/admin/learning/city/economy", { method: "PUT", json }),

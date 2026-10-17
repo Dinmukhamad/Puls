@@ -60,6 +60,12 @@ async def see_levels(body: LevelsSeen, session: SessionDep, user: CurrentUser):
     return await city.see_levels(session, user, body.levels)
 
 
+@router.post("/learning/city/tour/finish")
+async def finish_tour(session: SessionDep, user: CurrentUser):
+    """Pulsar's tour of the site reached its end: «Как устроен Puls» can be claimed."""
+    return await city.finish_tour(session, user)
+
+
 @router.post("/learning/city/plots/{plot}/build")
 async def build(plot: str, body: BuildInput, session: SessionDep, user: CurrentUser):
     return await city.build(session, user, plot, body.item)

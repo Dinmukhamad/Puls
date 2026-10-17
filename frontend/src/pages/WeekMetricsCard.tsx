@@ -10,6 +10,7 @@ export function WeekMetricsCard({ week }: { week: WeekMetricsBlock }) {
   return (
     <Card
       title="Показатели недели"
+      tour="cabinet-week"
       subtitle={week.starts_on && week.ends_on ? periodLabel(week.starts_on, week.ends_on) : undefined}
       action={week.week_id ? <Badge tone={week.is_final ? "success" : "accent"} dot>{week.is_final ? "Итог опубликован" : "Предварительный результат"}</Badge> : undefined}
     >

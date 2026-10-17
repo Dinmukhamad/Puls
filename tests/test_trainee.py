@@ -152,6 +152,9 @@ async def test_trainee_city_has_only_learning_and_cannot_self_complete(client, s
     assert data["plots"] == data["buildings"] == [] and data["quests"] is None
     assert all(m["coins"] == m["xp"] == 0 for m in data["missions"])
     assert data["balance"] == data["available"] == 0
+    # The tour of the operator's site is not on a trainee's way, and cannot be finished by one.
+    assert "site_tour" not in {m["key"] for m in data["missions"]}
+    assert (await client.post("/api/v1/learning/city/tour/finish", headers=own)).status_code == 403
     response = await client.post(
         "/api/v1/learning/city/missions/driver_five/claim",
         headers=own,

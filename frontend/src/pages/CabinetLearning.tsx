@@ -39,7 +39,7 @@ export function CabinetLearning() {
     : mission?.state === "in_progress" ? "Продолжить миссию"
     : mission ? "Открыть миссию" : "Открыть мой город";
 
-  return <Card title="Продолжить обучение" action={<SparkIcon size={20} />} className="cabinet-learning">
+  return <Card title="Продолжить обучение" action={<SparkIcon size={20} />} className="cabinet-learning" tour="cabinet-learning">
     {loading ? <div className="cabinet-learning__loading" role="status">
       <span className="secondary small">Загружаем задание…</span>
       <Skeleton height={24} width="85%" />

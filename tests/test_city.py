@@ -12,7 +12,7 @@ from app.models.crm import CrmAppeal
 from app.models.driver import DriverOrder, DriverProfile
 from app.models.driver_shift import DriverShift
 from app.models.enums import Role
-from app.models.user import CoinAccount
+from app.models.user import CoinAccount, User
 from app.services.city import default_missions
 from app.services.crm_catalog import default_categories
 from tests.conftest import auth, login, make_group, make_user
@@ -844,3 +844,48 @@ async def test_trainers_edit_the_situations_and_new_days_use_them(client, sessio
     # Today's deal (the first read) uses the enabled situations only.
     rows = (await client.get(BASE, headers=me)).json()["quests"]["items"]
     assert sorted(q["text"] for q in rows) == [f"Своя ситуация номер {i}" for i in range(3)]
+
+
+async def test_site_tour_is_ready_once_the_tour_is_finished_and_pays_once(
+    client, session, operator, supervisor
+):
+    headers = auth(await login(client, operator.login))
+    finish = lambda h: client.post(f"{BASE}/tour/finish", headers=h)  # noqa: E731
+
+    async def tour():
+        data = (await client.get(BASE, headers=headers)).json()
+        return next(m for m in data["missions"] if m["key"] == "site_tour"), data
+
+    row, data = await tour()
+    # The Academy's second mission, right after the welcome, and started from the city itself.
+    assert [m["key"] for m in data["missions"]][:2] == ["welcome", "site_tour"]
+    assert row["district"] == "academy" and row["state"] == "locked"
+    assert row["path"] == "/training/city?district=academy&mission=site_tour"
+    assert (row["title"], row["target"], row["xp"], row["coins"]) == (
+        "Как устроен Puls",
+        1,
+        40,
+        50,
+    )
+    assert (await claim(client, headers, "welcome")).status_code == 200
+    row, _ = await tour()
+    assert row["state"] == "available" and row["current"] == 0
+    assert (await claim(client, headers, "site_tour")).status_code == 409
+    # The first finish counts; going round again keeps it.
+    assert (await finish(headers)).json() == {"site_tour": True}
+    first = (await session.get(User, operator.id, populate_existing=True)).site_tour_at
+    assert first is not None
+    assert (await finish(headers)).status_code == 200
+    assert (await session.get(User, operator.id, populate_existing=True)).site_tour_at == first
+    row, _ = await tour()
+    assert row["state"] == "ready" and row["current"] == 1
+    claimed = await claim(client, headers, "site_tour")
+    assert claimed.status_code == 200 and claimed.json()["coins"] == 50
+    assert (await claim(client, headers, "site_tour")).json()["already_claimed"] is True
+    account = await session.get(CoinAccount, operator.id, populate_existing=True)
+    assert account.balance == 50
+    row, _ = await tour()
+    assert row["state"] == "completed"
+    # Staff look round the site without the operator's mission.
+    staff = auth(await login(client, supervisor.login))
+    assert (await finish(staff)).status_code == 403

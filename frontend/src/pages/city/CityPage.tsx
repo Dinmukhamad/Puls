@@ -30,6 +30,7 @@ import { CityGuideSetup, GUIDE_AVATAR } from "./CityGuideSetup";
 import { CityControlsSetup } from "./CityControlsSetup";
 import { CityBuildEntry } from "./CityBuildEntry";
 import { CityPeekPanel } from "./CityPeekPanel";
+import { useSiteTour } from "../../tour/SiteTour";
 import { CitySkillsPanel } from "./CitySkillsPanel";
 import { CityToolbar, CityToolbarButton, CityToolbarProvider, useCityToolbarState } from "./CityToolbar";
 import "./cityPanelLayout.css";
@@ -285,10 +286,13 @@ export function CityPage() {
   }
   const rank = data.level < 2 ? "Новый житель" : data.level < 4 ? "Исследователь" : "Мастер города";
   const actionable = (m: CityMission) => !["locked", "unavailable"].includes(m.state);
+  const siteTour = useSiteTour();
   /** The mission's main button: take the reward, go to the task, practise again, or say why it cannot. */
   function missionAction(m: CityMission, d: CityDistrict) {
     if (d.id === "scenarios") return actionable(m) && !data.inspecting ? <Link className="city-action" to={m.path}>{m.state === "completed" ? "Повторить для практики →" : "Пройти сценарий →"}</Link> : <button className="city-action" disabled>{m.state === "unavailable" ? "Сценарий на паузе" : "Просмотр прогресса"}</button>;
     if (m.state === "ready" && data.can_claim) return <button className="city-action" disabled={claim.isPending} onClick={() => claim.mutate(m.key)}>{claim.isPending ? "Проверяем результат…" : m.key === "welcome" ? "Начать свой путь →" : "Завершить и получить награду →"}</button>;
+    // «Как устроен Puls»: Pulsar's tour starts right here and walks the real site (tour/siteTour.ts).
+    if (m.key === "site_tour" && actionable(m) && !data.inspecting) return <button className="city-action" disabled={!siteTour.available || siteTour.running} onClick={siteTour.start}>{m.state === "completed" ? "Пройти экскурсию ещё раз →" : "Начать экскурсию →"}</button>;
     if (actionable(m) && m.key !== "welcome" && !data.inspecting) {
       const text = m.state === "completed" ? "Вернуться к практике →" : "Перейти к заданию →";
       return d.id === "driver" ? <button className="city-action" onClick={() => setDriverLaunch(true)}>{text}</button> : <Link className="city-action" to={m.path}>{text}</Link>;
@@ -296,7 +300,7 @@ export function CityPage() {
     return <button className="city-action" disabled>{m.state === "unavailable" ? "Миссия на паузе" : data.inspecting ? "Просмотр прогресса" : data.preview ? "Предпросмотр без наград" : m.state === "completed" ? "Миссия пройдена" : "Завершите предыдущую миссию"}</button>;
   }
   // The mission's main button already leads to the district's tool: the second link to it is left out.
-  const opensTool = (m: CityMission, d: CityDistrict) => !d.soon && d.id !== "scenarios" && actionable(m) && m.key !== "welcome" && !data.inspecting && !(m.state === "ready" && data.can_claim);
+  const opensTool = (m: CityMission, d: CityDistrict) => !d.soon && d.id !== "scenarios" && actionable(m) && m.key !== "welcome" && m.key !== "site_tour" && !data.inspecting && !(m.state === "ready" && data.can_claim);
   function districtTool(d: CityDistrict, primary: boolean) {
     if (data.inspecting) return null;
     const look = primary ? "city-action" : "city-secondary";

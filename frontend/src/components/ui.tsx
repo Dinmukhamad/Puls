@@ -77,6 +77,7 @@ export function Card({
   padded = true,
   variant = "standard",
   className = "",
+  tour,
 }: {
   id?: string;
   title?: ReactNode;
@@ -86,9 +87,11 @@ export function Card({
   padded?: boolean;
   variant?: "standard" | "elevated" | "highlight";
   className?: string;
+  /** Where Pulsar's tour of the site points at this card (`data-tour`, see tour/siteTour.ts). */
+  tour?: string;
 }) {
   return (
-    <section id={id} className={`card card--${variant} ${className}`.trim()}>
+    <section id={id} className={`card card--${variant} ${className}`.trim()} data-tour={tour}>
       {(title || action) && (
         <header className="card__head">
           <div className="card__titles">

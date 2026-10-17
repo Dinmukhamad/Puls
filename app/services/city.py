@@ -6,13 +6,14 @@ from sqlalchemy import case, func, literal, or_, select, union_all, update
 from sqlalchemy.exc import IntegrityError
 
 from app.core.errors import ConflictError, NotFoundError, PermissionDeniedError
+from app.db.base import utcnow
 from app.models.city import CityAward, CityBuild, CitySettings
 from app.models.crm_training import CrmTrainingAttempt
 from app.models.driver import DriverOrder, DriverProfile
 from app.models.driver_shift import DriverShift
 from app.models.enums import LEARNER_ROLES, Role, TxType
 from app.models.progress import Notification
-from app.models.user import CoinAccount, Group
+from app.models.user import CoinAccount, Group, User
 from app.services.coins import post_transaction
 from app.services.dispatch import mission_facts, solved_calls
 from app.services.dispatch_data import MISSION_CALLS
@@ -38,6 +39,13 @@ DEFERRED_OKTELL_MISSIONS = frozenset(
 )
 TEMPLATES = {
     "welcome": ("academy", "welcome", "/training/city", "Знакомство с городом"),
+    # Pulsar's tour of the real site; the operator starts it from the mission («Начать экскурсию»).
+    "site_tour": (
+        "academy",
+        "site_tour",
+        "/training/city?district=academy&mission=site_tour",
+        "Экскурсия по сайту пройдена",
+    ),
     "driver_profile": ("driver", "profile", "/simulator", "Учебный профиль водителя готов"),
     "driver_first": ("driver", "orders", "/simulator", "Завершённые учебные заказы"),
     "driver_five": ("driver", "orders", "/simulator", "Завершённые учебные заказы"),
@@ -105,6 +113,18 @@ def default_missions():
             25,
             0,
             None,
+        ),
+        (
+            "site_tour",
+            "Как устроен Puls",
+            "Пройди с Пульсаром по настоящему сайту: кабинет и кошелёк, рейтинг, сундук дня, "
+            "магазин бонусов, профиль и стройка в районе.",
+            "Я покажу каждый раздел прямо на сайте. Нажимай туда, куда я показываю, — "
+            "так всё запомнится с первого раза.",
+            1,
+            40,
+            50,
+            "welcome",
         ),
         (
             "driver_profile",
@@ -330,6 +350,7 @@ async def settings(session):
 def empty_facts():
     return {
         "welcome": 1,
+        "site_tour": 0,
         "profile": 0,
         "orders": 0,
         "appeals": 0,
@@ -368,6 +389,11 @@ async def evidence(session, user_ids):
             passed_scenarios,
         )
     )
+    toured = await session.execute(
+        select(User.id).where(User.id.in_(user_ids), User.site_tour_at.is_not(None))
+    )
+    for (uid,) in toured:
+        result[uid]["site_tour"] = 1
     for uid, stage, scenario_count in profiles:
         if stage is None:
             result[uid]["scenario_business_park"] = scenario_count
@@ -489,6 +515,10 @@ async def dashboard(session, user, *, inspecting=False):
         else {}
     )
     rows = mission_rows(config, facts, awards)
+    # «Как устроен Puls» walks the operator's sections (cabinet, rewards, building): a trainee has
+    # none of them, so the tour is not on their way.
+    if trainee:
+        rows = [row for row in rows if row["key"] != "site_tour"]
     # A staff preview includes the curriculum. An inspected operator keeps their own
     # assignment boundary, so sales and unassigned operators never see a TP scenario.
     scenarios_visible = (
@@ -662,6 +692,19 @@ async def see_levels(session, user, levels):
         user.city_levels_seen = seen
         await session.commit()
     return {"levels_seen": seen}
+
+
+async def finish_tour(session, user):
+    """
+    Pulsar's tour of the site reached its end: the Academy's «Как устроен Puls» is ready to claim.
+    The first finish counts; going round again changes nothing.
+    """
+    if user.role != Role.OPERATOR:
+        raise PermissionDeniedError("Экскурсия по сайту засчитывается только операторам")
+    if user.site_tour_at is None:
+        user.site_tour_at = utcnow()
+        await session.commit()
+    return {"site_tour": True}
 
 
 async def claim(session, user, key, revision):

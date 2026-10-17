@@ -22,7 +22,7 @@ test("ready operators have a named district, visible text button and a short con
   assert.match(html, /<h2[^>]*>Застройка района<\/h2>/);
   assert.match(html, /Район команды Гаухар/);
   assert.match(html, /Проложи дороги → выбери место → построй/);
-  assert.match(html, /<button[^>]+class="city-action city-build-entry__button">Строить в районе<\/button>/);
+  assert.match(html, /<button[^>]+class="city-action city-build-entry__button" data-tour="build-open">Строить в районе<\/button>/);
   assert.doesNotMatch(html, /disabled|city-hud__wide|Как открыть стройку|Проверяем/);
 });
 

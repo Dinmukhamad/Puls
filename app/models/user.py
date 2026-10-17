@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import JSON, Boolean, Date, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Boolean, Date, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.developer import is_developer
@@ -67,6 +67,9 @@ class User(Base, TimestampMixin):
     # Ступени зданий учебных районов, рост которых оператор уже видел ({район: ступень}): город
     # празднует рост один раз, с какого бы устройства оператор ни зашёл. Пусто — ещё не заходил.
     city_levels_seen: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # Когда оператор прошёл экскурсию Пульсара по сайту: миссия Академии «Как устроен Puls»
+    # засчитывается с этого момента. Пусто — ещё не проходил.
+    site_tour_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     group: Mapped[Group | None] = relationship(
         "Group", foreign_keys=[group_id], back_populates="members"
