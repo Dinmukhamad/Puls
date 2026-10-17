@@ -4,6 +4,7 @@ import { cityEstate, operationKey, type DistrictEstate, type MyEstate, type Oper
 import { PLOT_LEVELS, PROJECT_LEVELS, isDecorFamily, plotFootprint, projectFootprint } from "../../city3d/world/estateGrid";
 import type { EstateTarget } from "../../city3d/types";
 import { DistrictSwatch } from "./DistrictSwatch";
+import { SegmentedControl } from "../../components/ui";
 import { isOfficeBuilding } from "../../city3d/world/officeBuildings";
 import { DistrictBuildProgress } from "./DistrictBuildProgress";
 import { DistrictLandmarkCard } from "./DistrictLandmarkCard";
@@ -16,6 +17,8 @@ import type { ChosenCell } from "../../city3d/types";
 import "./estate.css";
 
 export type { EstateTarget };
+/** The dock's three parts: the shop, one's own buildings, the district's progress. */
+type DockTab = "build" | "mine" | "district";
 export type { Choice };
 /** Build mode as the page keeps it: the city scene gets everything but `spot` and `project` (city3d/types.ts CityBuildView). */
 export interface BuildState {
@@ -64,9 +67,10 @@ export function CityEstateDock({ mine, land, build, setBuild, onClose, onFocus, 
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const [notice, setNotice] = useState<string | null>(null), [problem, setProblem] = useState<string | null>(null);
-  // Why the arrows could not move the things chosen holds only for those cells.
+  const [tab, setTab] = useState<DockTab>("build");
+  // Why the arrows could not move the things chosen holds only for those cells; cells tapped on the map open the shop.
   const chosenKey = JSON.stringify(build.choice?.cells.map(c => [c.block, c.col, c.row]) ?? []);
-  useEffect(() => { setProblem(null); }, [chosenKey]);
+  useEffect(() => { setProblem(null); if (build.choice?.cells.length) setTab("build"); }, [chosenKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const plots = new Map(mine.catalogue.map(c => [c.family, c])), projects = new Map(mine.projects.map(c => [c.family, c])), decor = new Map((mine.decor ?? []).map(c => [c.family, c]));
   const own = mine.objects, placed = own.filter(o => o.state === "placed"), stored = own.filter(o => o.state === "stored");
   const ready = mine.status === "ready" && !build.project && build.district === mine.district?.id;
@@ -190,25 +194,29 @@ export function CityEstateDock({ mine, land, build, setBuild, onClose, onFocus, 
     const busy = new Set(land?.projects.map(p => projects.get(p.family)?.project).filter(Boolean));
     body = <ProjectList catalogue={mine.projects} busy={busy} onChoose={family => { act.reset(); setNotice(null); setBuild({ ...build, area: "public", placing: { family, rotation: 0, moving: null }, spot: null, selected: null }); }} />;
   } else body = <>
+    <SegmentedControl block label="Разделы стройки" value={tab} onChange={setTab}
+      options={[{ value: "build", label: "Строить" }, { value: "mine", label: own.length ? `Мои · ${own.length}` : "Мои постройки" }, { value: "district", label: "Район" }]} />
     {mine.status !== "ready" && <p className="estate-note">{mine.message}</p>}
-    {mapDataReady && ready && land!.land!.taken >= land!.land!.cells && <p className="estate-note">Вся земля района занята. Открой свою постройку, чтобы посмотреть доступные улучшения.</p>}
-    {mapDataReady && <CellShop choice={build.choice} plots={mine.catalogue} decor={mine.decor ?? []} landPrices={mine.land_prices} available={mine.available} batch={mine.decor_batch}
-      ready={ready} message={mine.message} pending={pending} error={act.error} onBuy={buy} onRemove={takeAway} arrange={arrange}
-      onChoice={choice => { act.reset(); setProblem(null); setBuild({ ...build, choice }); }}
-      onChooseFree={onChooseFree && (() => { if (!ready || pending) return; act.reset(); setNotice(null); onChooseFree(); })} />}
-    {stored.length > 0 && <section className="estate-section"><h3>Инвентарь</h3><p className="secondary small">Постройки после перевода в другой район или после перестройки клеток: уровень и всё вложенное сохранились. Поставь их на свободные клетки — бесплатно, вместе с землёй.</p>
-      <ul className="estate-list">{stored.map(o => { const c = plots.get(o.family)!; return <li key={o.id}><span aria-hidden="true">{c.icon}</span><span><strong>{c.levels[o.level - 1].name}</strong><small>{c.name} · {sizeText(plotFootprint(o.family, 0))}</small></span><button type="button" className="city-secondary" disabled={!ready} onClick={() => place(o)}>Поставить</button></li>; })}</ul></section>}
-    {placed.length > 0 && <section className="estate-section"><h3>Мои постройки · {placed.length}</h3>
-      <ul className="estate-list">{placed.map(o => { const c = plots.get(o.family)!; return <li key={o.id}><span aria-hidden="true">{c.icon}</span><span><strong>{c.levels[o.level - 1].name}</strong><small>{c.name}{c.levels.length > 1 ? ` · ступень ${o.level} из ${c.levels.length}` : ""}</small></span><button type="button" className="city-secondary" onClick={() => { setBuild({ ...build, selected: o.id, choice: spent(build) }); onFocus({ district: o.district_id, kind: "object", object: o.id }); }}>Открыть</button></li>; })}</ul></section>}
-    {mapDataReady && land?.land && <DistrictBuildProgress land={land.land} />}
-    {mapDataReady && land?.landmark && <DistrictLandmarkCard landmark={land.landmark} compact />}
-    {mine.legacy.count > 0 && <p className="estate-note">Прежние постройки ({mine.legacy.count}) остаются на участках у учебных центров.</p>}
+    {tab === "build" ? <>
+      {mapDataReady && ready && land!.land!.taken >= land!.land!.cells && <p className="estate-note">Вся земля района занята. Открой свою постройку во вкладке «Мои постройки», чтобы посмотреть доступные улучшения.</p>}
+      {mapDataReady && <CellShop choice={build.choice} plots={mine.catalogue} decor={mine.decor ?? []} landPrices={mine.land_prices} available={mine.available} batch={mine.decor_batch}
+        ready={ready} message={mine.message} pending={pending} error={act.error} onBuy={buy} onRemove={takeAway} arrange={arrange}
+        onChoice={choice => { act.reset(); setProblem(null); setBuild({ ...build, choice }); }}
+        onChooseFree={onChooseFree && (() => { if (!ready || pending) return; act.reset(); setNotice(null); onChooseFree(); })} />}
+    </> : tab === "mine" ? <>
+      {stored.length > 0 && <section className="estate-section"><h3>Ждут места · {stored.length}</h3><p className="secondary small">Постройки после перевода в другой район или после перестройки клеток: уровень и всё вложенное сохранились. Поставь их на свободные клетки — бесплатно, вместе с землёй.</p>
+        <ul className="estate-list">{stored.map(o => { const c = plots.get(o.family)!; return <li key={o.id}><span aria-hidden="true">{c.icon}</span><span><strong>{c.levels[o.level - 1].name}</strong><small>{c.name} · {sizeText(plotFootprint(o.family, 0))}</small></span><button type="button" className="city-secondary" disabled={!ready} onClick={() => place(o)}>Поставить</button></li>; })}</ul></section>}
+      {placed.length > 0 ? <section className="estate-section"><h3>На земле района · {placed.length}</h3>
+        <ul className="estate-list">{placed.map(o => { const c = plots.get(o.family)!; return <li key={o.id}><span aria-hidden="true">{c.icon}</span><span><strong>{c.levels[o.level - 1].name}</strong><small>{c.name}{c.levels.length > 1 ? ` · ступень ${o.level} из ${c.levels.length}` : ""}</small></span><button type="button" className="city-secondary" onClick={() => { setBuild({ ...build, selected: o.id, choice: spent(build) }); onFocus({ district: o.district_id, kind: "object", object: o.id }); }}>Открыть</button></li>; })}</ul></section>
+        : !stored.length && <div className="estate-empty"><p>Здесь появятся твои дома, офисы и скверы. Дороги, деревья и фонари видны прямо на карте.</p><button type="button" className="city-action" onClick={() => setTab("build")}>Выбрать, что построить</button></div>}
+      {mine.legacy.count > 0 && <p className="estate-note">Прежние постройки ({mine.legacy.count}) остаются на участках у учебных центров.</p>}
+    </> : <DistrictTab land={mapDataReady ? land : null} onShow={() => onFocus({ district: build.district, kind: "district" })} />}
   </>;
 
   return <aside className="estate-dock glass glass--regular" aria-label="Стройка в районе">
     <header className="estate-dock__head">
-      <div><span className="city-eyebrow"><DistrictSwatch district={build.district} />{showComplex ? "ГЛАВНОЕ ЗДАНИЕ РАЙОНА" : build.project ? "ПЛОЩАДЬ КОМАНДЫ" : "ЛИЧНЫЕ ПОСТРОЙКИ"} · {land?.name ?? mine.district?.name ?? "район"}</span>
-        {!build.project && !showComplex && <p>Можно потратить <strong>◈ {coins(mine.available)}</strong>{mine.available < mine.balance ? " · часть в резерве магазина" : ""}</p>}</div>
+      <div><span className="city-eyebrow"><DistrictSwatch district={build.district} />{showComplex ? "ГЛАВНОЕ ЗДАНИЕ РАЙОНА" : build.project ? "ПЛОЩАДЬ КОМАНДЫ" : "СТРОЙКА"} · {land?.name ?? mine.district?.name ?? "район"}</span>
+        {!build.project && !showComplex && <p>На счёте <strong>◈ {coins(mine.available)}</strong>{mine.available < mine.balance ? " · часть в резерве магазина" : ""}</p>}</div>
       <button type="button" className="estate-dock__close" onClick={onClose} aria-label="Закрыть стройку">×</button>
     </header>
     <div className="estate-dock__body">
@@ -224,10 +232,19 @@ export function CityEstateDock({ mine, land, build, setBuild, onClose, onFocus, 
       </section> : !mapDataReady && <p className="estate-note" role="status">Загружаем карту и свободные клетки района…</p>}
       {notice && <p className="estate-ok" role="status">{notice}</p>}
       {body}
-      {!build.placing && !build.project && !showComplex && <button type="button" className="city-secondary" disabled={!mapDataReady} onClick={() => onFocus({ district: build.district, kind: "district" })}>Показать район на карте</button>}
-      {!showComplex && <p className="city-fine">{build.project ? "Операторы видят общий прогресс сбора, но не чужие взносы." : "Соседи видят, что и какой ступени стоит на земле района, но не цену, баланс и имя."}</p>}
+      {build.project && !showComplex && <p className="city-fine">Операторы видят общий прогресс сбора, но не чужие взносы.</p>}
     </div>
   </aside>;
+}
+
+/** «Район»: how much of the land is taken, the main building's growth, and the whole district on the map once it is loaded. */
+export function DistrictTab({ land, onShow }: { land: DistrictEstate | null; onShow: () => void }) {
+  return <>
+    {land?.land && <DistrictBuildProgress land={land.land} />}
+    {land?.landmark && <DistrictLandmarkCard landmark={land.landmark} compact />}
+    <button type="button" className="city-secondary" disabled={!land?.land} onClick={onShow}>Показать весь район на карте</button>
+    <p className="city-fine">Соседи видят, что и какой ступени стоит на земле района, но не цену, баланс и имя.</p>
+  </>;
 }
 
 const cellText = ([w, h]: [number, number]) => `${w} × ${h} ${w * h === 1 ? "клетка" : "клетки"}`;

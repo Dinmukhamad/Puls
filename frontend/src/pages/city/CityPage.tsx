@@ -8,7 +8,7 @@ import { CityEstateDock, type BuildState, type EstateTarget } from "./CityEstate
 import { CitySandboxDock } from "./CitySandboxDock";
 import { DEFAULT_SCREEN, type ScreenWays } from "./decorArrange";
 import type { CityEstateView, EstatePick, JourneyPhase, PlotAddress } from "../../city3d/types";
-import { NO_CHOICE, spacing } from "./cellChoice";
+import { NO_CHOICE, isBuilding, spacing } from "./cellChoice";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -143,10 +143,11 @@ export function CityPage() {
     [homeEstate?.id, homeEstate?.city, ownLand, estateQuery.data?.status]);
   function chooseFreePlot() {
     if (!homeEstate || !suggestedPlot || building?.district !== homeEstate.id || estateQuery.data?.status !== "ready") return;
-    // The middle cell of the free 3 × 3, with a house chosen: the map shows the house on all nine.
+    // The middle cell of the free 3 × 3, with the building chosen (a house when none is): the map shows it there.
     const middle = { block: suggestedPlot.block, col: suggestedPlot.col + 1, row: suggestedPlot.row + 1 };
+    const family = building.choice?.family && isBuilding(building.choice.family) ? building.choice.family : "house";
     setBuilding({ ...building, area: "plots", placing: null, selected: null, spot: null, project: false,
-      choice: { ...(building.choice ?? NO_CHOICE), cells: [{ ...middle, band: suggestedPlot.band, state: "free" }], family: "house", at: null } });
+      choice: { ...(building.choice ?? NO_CHOICE), cells: [{ ...middle, band: suggestedPlot.band, state: "free" }], family, shape: "cell", at: null } });
     focusLand({ district: homeEstate.id, kind: "plot", plot: middle });
   }
   useEffect(() => {
@@ -192,7 +193,10 @@ export function CityPage() {
     setParams(next);
     setWorldSelected(null); toolbar.setActive(null);
     setBuilding({ district: home.id, area: "plots", placing: null, selected: null, choice: null, spot: null, project: false });
-    focusLand({ district: home.id, kind: "district" });
+    // Close enough to see the cells: at what the operator built last, else at free land, so the first tap lands on it.
+    const last = estateQuery.data?.objects.filter(o => o.state === "placed" && o.district_id === home.id).at(-1);
+    const free = home.id === homeEstate?.id && suggestedPlot ? { block: suggestedPlot.block, col: suggestedPlot.col + 1, row: suggestedPlot.row + 1 } : null;
+    focusLand(last ? { district: home.id, kind: "object", object: last.id } : free ? { district: home.id, kind: "plot", plot: free } : { district: home.id, kind: "public" });
     void estateQuery.refetch();
     void (home.city === "sales" ? salesLand : supportLand).refetch();
   }

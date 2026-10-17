@@ -16,7 +16,7 @@ async function load(path) {
 }
 const { districtBuildProgress } = await load("./districtProgress.ts");
 const { DistrictBuildProgress } = await load("./DistrictBuildProgress.tsx");
-const { CityEstateDock } = await load("./CityEstateDock.tsx");
+const { CityEstateDock, DistrictTab } = await load("./CityEstateDock.tsx");
 const { CityDistrictSheet } = await load("./CityDistrictSheet.tsx");
 
 const land = { cells: 90, taken: 31, built: 27, open_band: 2, bands: [{ band: 1, cells: 20, taken: 18 }, { band: 2, cells: 30, taken: 12 }, { band: 3, cells: 40, taken: 1 }] };
@@ -79,12 +79,11 @@ test("purchase shows full land plus building price and respects spendable coins"
   const selected = { ...buildState, choice: choice(2) };
   const prices = { ...mine, land_prices: [20, 15, 10] };
   const html = render(CityEstateDock, { ...dockProps, mine: prices, build: selected });
-  assert.match(html, /<strong>Выбрано: 1 клетка<\/strong>/);
-  assert.match(html, /<strong>Дом<\/strong><small>3 × 3 клетки · ◈ 435<\/small>/);
+  assert.match(html, /<strong>Дом<\/strong><span>3 × 3 клетки<\/span><b>◈\s435<\/b>/);
   assert.match(html, /Земля 9 × ◈ 15 = ◈ 135 \+ дом ◈ 300/);
   assert.match(html, /<button type="button" class="city-action">Купить · ◈ 435<\/button>/);
   // The front looks to a road beside the house, or where the operator turns it.
-  assert.match(html, />Повернуть фасад<\/button>/);
+  assert.match(html, />↻ Повернуть фасад<\/button>/);
   assert.doesNotMatch(html, /пояс|Квартал/);
   const insufficient = render(CityEstateDock, { ...dockProps, mine: { ...prices, available: 400 }, build: selected });
   assert.match(insufficient, /disabled="">Не хватает 35<\/button>/);
@@ -96,13 +95,16 @@ test("purchase shows full land plus building price and respects spendable coins"
   assert.match(occupied, /disabled="">Купить · ◈ 390<\/button>/);
 });
 
-test("building opens on the shop with one district progress bar", () => {
+test("building opens on the shop; the district's land and its one progress bar wait in their own tab", () => {
   const html = render(CityEstateDock, dockProps);
   assert.match(html, /<section class="estate-shop" aria-label="Магазин района">/);
-  assert.match(html, /Можно потратить <strong>◈ 850<\/strong>/);
-  assert.match(html, /Весь район открыт/);
-  assert.match(html, /Свободно 59 клеток/);
-  assert.match(html, /застройте ещё 14 клеток/);
-  assert.equal((html.match(/role="progressbar"/g) ?? []).length, 1);
-  assert.doesNotMatch(html, /Пояса района|Пояс \d|estate-bands|Этап застройки|70 %|estate-steps|Дорогах и благоустройстве/);
+  assert.match(html, /На счёте <strong>◈ 850<\/strong>/);
+  assert.match(html, />Строить<\/button><button[^>]+>Мои постройки<\/button><button[^>]+>Район<\/button>/);
+  assert.doesNotMatch(html, /role="progressbar"|Весь район открыт|Показать весь район/);
+  const tab = render(DistrictTab, { land: district, onShow: noop });
+  assert.match(tab, /Весь район открыт/);
+  assert.match(tab, /Свободно 59 клеток/);
+  assert.match(tab, /застройте ещё 14 клеток/);
+  assert.equal((tab.match(/role="progressbar"/g) ?? []).length, 1);
+  assert.doesNotMatch(tab, /Пояса района|Пояс \d|estate-bands|Этап застройки|70 %|estate-steps|Дорогах и благоустройстве/);
 });
