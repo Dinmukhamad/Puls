@@ -7,6 +7,15 @@ import { build } from "esbuild";
 const built = await build({ entryPoints: [fileURLToPath(new URL("./navigation.ts", import.meta.url))], bundle: true, platform: "node", format: "esm", write: false });
 const nav = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString("base64")}`);
 
+test("trainees have three learning-only destinations even after explicit workplace grants", () => {
+  const allowed = Object.fromEntries(["personal", "results", "training", "rewards", "overview", "team", "analytics", "performance", "learning_admin", "motivation", "reports", "system"].map(key => [key, true]));
+  assert.deepEqual(nav.visibleNavigation("trainee", allowed).map(item => [item.label, item.to]), [["Главная", "/trainee"], ["Обучение", "/training/city"], ["Профиль", "/profile"]]);
+  for (const path of ["/trainee", "/training/city", "/training/work-sites?site=crm", "/simulator", "/profile", "/training/scenarios/business_park"]) assert.equal(nav.canVisit("trainee", path, allowed), true, path);
+  for (const path of ["/wallet", "/rating", "/shop", "/games", "/admin/users", "/admin/sessions", "/analytics", "/reports", "/qr-access"]) assert.equal(nav.canVisit("trainee", path, allowed), false, path);
+  assert.equal(nav.canVisit("operator", "/trainee", allowed), false);
+  assert.equal(nav.appEntryRedirect("/trainee", "/cabinet", () => false), "/cabinet");
+});
+
 test("management analytics offers the shared dashboards and a groups dashboard only to leadership", () => {
   for (const role of ["supervisor", "head", "admin"]) {
     const tabs = nav.currentSection(role, "/analytics").tabs.map(item => item.to);

@@ -10,7 +10,7 @@ from app.models.city import CityAward, CityBuild, CitySettings
 from app.models.crm_training import CrmTrainingAttempt
 from app.models.driver import DriverOrder, DriverProfile
 from app.models.driver_shift import DriverShift
-from app.models.enums import Role, TxType
+from app.models.enums import LEARNER_ROLES, Role, TxType
 from app.models.progress import Notification
 from app.models.user import CoinAccount, Group
 from app.services.coins import post_transaction
@@ -471,7 +471,8 @@ async def dashboard(session, user, *, inspecting=False):
     from app.services.scenarios import support_group_ids
 
     config = await settings(session)
-    operator = user.role == Role.OPERATOR
+    operator = user.role in LEARNER_ROLES
+    trainee = user.role == Role.TRAINEE
     # The operator's active group decides whether the scenarios show (app/services/scenarios.py).
     group = (
         await session.get(Group, user.group_id) if operator and user.group_id is not None else None
@@ -490,11 +491,15 @@ async def dashboard(session, user, *, inspecting=False):
     rows = mission_rows(config, facts, awards)
     # A staff preview includes the curriculum. An inspected operator keeps their own
     # assignment boundary, so sales and unassigned operators never see a TP scenario.
-    scenarios_visible = not operator or bool(
-        user.is_active
-        and group
-        and group.is_active
-        and user.group_id in await support_group_ids(session, config=department_config)
+    scenarios_visible = (
+        trainee
+        or not operator
+        or bool(
+            user.is_active
+            and group
+            and group.is_active
+            and user.group_id in await support_group_ids(session, config=department_config)
+        )
     )
     if not scenarios_visible:
         rows = [row for row in rows if row["district"] != "scenarios"]
@@ -546,19 +551,21 @@ async def dashboard(session, user, *, inspecting=False):
             for district in DISTRICTS
             if scenarios_visible or district["id"] != "scenarios"
         ],
-        "missions": rows,
+        "missions": [{**m, "coins": 0, "xp": 0} for m in rows] if trainee else rows,
         "xp": xp,
         "level": xp // 300 + 1,
         "level_progress": xp % 300,
         "level_target": 300,
-        "balance": balance,
+        "balance": 0 if trainee else balance,
         # Coins reserved for shop requests cannot pay for a building.
-        "available": account.available if account else 0,
-        "plots": plot_rows(rows, builds),
-        "buildings": [{**item, "price": prices[key]} for key, item in BUILDINGS.items()],
-        "can_build": operator and not inspecting and not moved,
+        "available": account.available if account and not trainee else 0,
+        "plots": [] if trainee else plot_rows(rows, builds),
+        "buildings": []
+        if trainee
+        else [{**item, "price": prices[key]} for key, item in BUILDINGS.items()],
+        "can_build": user.role == Role.OPERATOR and not inspecting and not moved,
         "plots_moved": moved,
-        "quests": await quests(session, user, inspecting=inspecting),
+        "quests": None if trainee else await quests(session, user, inspecting=inspecting),
     }
 
 
@@ -658,7 +665,7 @@ async def see_levels(session, user, levels):
 
 
 async def claim(session, user, key, revision):
-    if user.role != Role.OPERATOR:
+    if user.role not in LEARNER_ROLES:
         raise PermissionDeniedError("В предварительном просмотре награды не начисляются")
     if key not in TEMPLATES:
         raise NotFoundError("Миссия не найдена")
@@ -694,6 +701,8 @@ async def claim(session, user, key, revision):
     if mission["state"] != "ready":
         raise ConflictError("Сначала выполните условия миссии и предыдущие задания маршрута.")
     definition = deepcopy(config["missions"][key])
+    if user.role == Role.TRAINEE:
+        definition.update(xp=0, coins=0)
     session.add(
         CityAward(
             user_id=user.id,

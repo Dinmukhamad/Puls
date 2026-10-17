@@ -15,7 +15,7 @@ from tests.conftest import auth, login, make_group, make_user
 
 @pytest.mark.parametrize("role", list(Role))
 async def test_scenarios_use_the_same_section_as_city(role):
-    expected = ("training",) if role == Role.OPERATOR else ("learning_admin",)
+    expected = ("training",) if role in (Role.OPERATOR, Role.TRAINEE) else ("learning_admin",)
     for path in ("/learning/scenarios", "/learning/scenarios/business_park/start", "/learning/scenarios/attempts/7/finish"):
         assert request_sections(path, "GET", role) == expected
         assert request_sections(path, "POST", role) == expected
@@ -51,14 +51,14 @@ async def test_role_defaults(client, session, role):
     assert set(allowed) == {section.code for section in SECTIONS}
     for section in ("personal", "training", "rewards"):
         assert allowed[section] is (
-            role == Role.OPERATOR or (role == Role.TRAINER and section == "training")
+            role == Role.OPERATOR or (role in (Role.TRAINER, Role.TRAINEE) and section == "training")
         )
-    assert allowed["team"] is (role != Role.OPERATOR)
+    assert allowed["team"] is (role not in (Role.OPERATOR, Role.TRAINEE))
     assert allowed["system"] is (role == Role.ADMIN)
     for path in ("/me/dashboard", "/me/wallet", "/me/progress", "/learning", "/shop/items"):
         result = await client.get(f"/api/v1{path}", headers=headers)
         assert result.status_code == (
-            200 if role == Role.OPERATOR or (role == Role.TRAINER and path == "/learning") else 403
+            200 if role == Role.OPERATOR or (role in (Role.TRAINER, Role.TRAINEE) and path == "/learning") else 403
         ), result.text
     assert (await client.get("/api/v1/auth/me", headers=headers)).status_code == 200
     assert (await client.get("/api/v1/me/sessions", headers=headers)).status_code == 403

@@ -17,7 +17,7 @@ import { watchCityStartup } from "./startupDeadline";
  * has seen, `levelsSeen` are the ones the account has seen on any device and `onLevelsSeen` records new ones, so an
  * upgrade is celebrated once.
  */
-export function CityMap({ department = "support", departmentWorld, onWorldPick, onArrival, onJourney, worldAction, estates, build = null, onEstate, estateFocus, sceneIdentity, districts, missions, labels, selected, onSelect, progressKey, levelsSeen = null, onLevelsSeen, mascot, forceWebGL = false, focusRequest = 0, plots = [], quests = [], onQuest, questFocus, controls = "orbit", onControls, controlsOpen = false, onStatus, onRetry }: { department?: DepartmentId; departmentWorld?: CityWorld; onWorldPick?: (id: string) => void; onArrival?: (id: DepartmentId) => void; onJourney?: (phase: JourneyPhase) => void; worldAction?: { kind: "travel" | "skip" | "focus"; target: string; at: number };
+export function CityMap({ learningOnly = false, department = "support", departmentWorld, onWorldPick, onArrival, onJourney, worldAction, estates, build = null, onEstate, estateFocus, sceneIdentity, districts, missions, labels, selected, onSelect, progressKey, levelsSeen = null, onLevelsSeen, mascot, forceWebGL = false, focusRequest = 0, plots = [], quests = [], onQuest, questFocus, controls = "orbit", onControls, controlsOpen = false, onStatus, onRetry }: { learningOnly?: boolean; department?: DepartmentId; departmentWorld?: CityWorld; onWorldPick?: (id: string) => void; onArrival?: (id: DepartmentId) => void; onJourney?: (phase: JourneyPhase) => void; worldAction?: { kind: "travel" | "skip" | "focus"; target: string; at: number };
   /** Team district land of both cities, the build mode, taps on the land; `estateFocus` flies there when it changes. */
   estates?: Partial<Record<DepartmentId, CityEstateView>>; build?: CityBuildView | null; onEstate?: (pick: EstatePick) => void;
   estateFocus?: EstateTarget & { at: number };
@@ -144,6 +144,7 @@ export function CityMap({ department = "support", departmentWorld, onWorldPick, 
     try { localStorage.setItem("puls.city.time-of-day", timeOfDay); } catch { /* Scene controls also work without storage. */ }
   }, [timeOfDay]);
   useEffect(() => { control.current?.select(selected); }, [selected, focusRequest]);
+  useEffect(() => { if (learningOnly && ready) { control.current?.select(selected); control.current?.zoom(1.5); } }, [learningOnly, ready, selected]);
   useEffect(() => { if (mascot) control.current?.setMascot(mascot); }, [mascot?.gender, mascot?.name]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { control.current?.setLabels(JSON.parse(labelsKey)); }, [labelsKey]);
   useEffect(() => { control.current?.setTraffic(traffic); }, [traffic]);
@@ -158,16 +159,16 @@ export function CityMap({ department = "support", departmentWorld, onWorldPick, 
   }
   const live = !failed && ready;
   // The mouse moves the camera as the operator chose (city3d/engine/camera.ts mouseGesture).
-  return <section className={`city-world${failed ? " city-world--fallback" : ""}${live ? " is-ready" : ""}`} aria-label="Карта твоего города">
+  return <section className={`city-world${failed ? " city-world--fallback" : ""}${live ? " is-ready" : ""}`} aria-label={learningOnly ? "Учебная карта" : "Карта твоего города"}>
     <div ref={mount} className="city-mount" style={{ position: "absolute", inset: 0 }} onKeyDown={key} />
     {!failed && !ready && <div className="city-loading" role="status"><span>{progress < .3 ? "Запускаем карту…" : progress < .75 ? "Загружаем здания…" : "Подготавливаем город…"} {Math.round(progress * 100)}%</span></div>}
-    {failed && <div className="city-fallback" role="status"><span aria-hidden="true">🏙️</span><strong>Не удалось загрузить карту города</strong><small>Попробуй загрузить карту ещё раз. Навыки и задания — на панели сверху.</small>{onRetry && <button type="button" className="city-secondary" onClick={() => reloadRequired ? window.location.reload() : onRetry()}>Повторить загрузку карты</button>}</div>}
-    {live && <span className="city-map-hint" key={controls}>{CONTROL_SCHEMES[controls].hint}</span>}
+    {failed && <div className="city-fallback" role="status"><span aria-hidden="true">🏙️</span><strong>Не удалось загрузить карту города</strong><small>{learningOnly ? "Учебные инструменты доступны по кнопкам под картой и в плане подготовки." : "Попробуй загрузить карту ещё раз. Навыки и задания — на панели сверху."}</small>{onRetry && <button type="button" className="city-secondary" onClick={() => reloadRequired ? window.location.reload() : onRetry()}>Повторить загрузку карты</button>}</div>}
+    {live && !learningOnly && <span className="city-map-hint" key={controls}>{CONTROL_SCHEMES[controls].hint}</span>}
     {live && build && <div className="city-turn glass glass--regular" role="group" aria-label="Повернуть карту">
       <button type="button" aria-label="Повернуть карту против часовой стрелки" title="Повернуть карту против часовой стрелки" onClick={() => control.current?.rotate(-TURN)}>↺</button>
       <button type="button" aria-label="Повернуть карту по часовой стрелке" title="Повернуть карту по часовой стрелке" onClick={() => control.current?.rotate(TURN)}>↻</button>
     </div>}
-    {!failed && <CityPeekPanel label="Управление картой" compactLabel="Карта" toolbarSlot="tools" icon={<span aria-hidden="true">⚙</span>} className="city-map-peek">
+    {!failed && !learningOnly && <CityPeekPanel label="Управление картой" compactLabel="Карта" toolbarSlot="tools" icon={<span aria-hidden="true">⚙</span>} className="city-map-peek">
       <div className="city-map-tools glass glass--regular" role="toolbar" aria-label="Управление картой" aria-orientation="horizontal">
       <button type="button" className="city-time-toggle" aria-label={timeOfDay === "day" ? "Включить ночной режим" : "Включить дневной режим"} title={timeOfDay === "day" ? "Включить ночной режим" : "Включить дневной режим"} aria-pressed={timeOfDay === "night"} onClick={() => setTimeOfDay(value => value === "day" ? "night" : "day")}><span aria-hidden="true">{timeOfDay === "day" ? "☀" : "☾"}</span><small>{timeOfDay === "day" ? "День" : "Ночь"}</small></button>
       <button type="button" aria-label="Посмотреть помощника" disabled={department !== "support"} onClick={() => control.current?.focusMascot()}>♙</button>

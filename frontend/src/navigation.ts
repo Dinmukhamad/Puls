@@ -57,6 +57,11 @@ const staffHome = section("home", "Главная", HomeIcon, [tab("/admin/summa
 /** Only major destinations enter the sidebar. Future modules extend tabs inside these sections.
  * Section names are one or two short words and are the same on desktop and in the phone tab bar, so they must fit a tab. */
 export const ROLE_NAVIGATION: Record<Role, readonly NavItem[]> = {
+  trainee: [
+    section("home", "Главная", HomeIcon, [tab("/trainee", "Подготовка к работе")]),
+    section("training", "Обучение", SparkIcon, [tab("/training/city", "Учебная карта")]),
+    ACCOUNT_SECTION,
+  ],
   trainer: [
     section("home", "Главная", HomeIcon, [tab("/trainer", "Учебная сводка")]),
     section("team", "Команда", UsersIcon, [tab("/admin/users", "Операторы")]),
@@ -85,14 +90,16 @@ export const ROLE_NAVIGATION: Record<Role, readonly NavItem[]> = {
 };
 
 export function defaultAccess(role: Role): AccessMap {
+  if (role === "trainee") return { training: true };
   if (role === "trainer") return { team: true, training: true, learning_admin: true };
   const staff = role !== "operator";
   return { personal: !staff, results: true, training: !staff, rewards: !staff, overview: staff, team: staff, analytics: staff, performance: staff, learning_admin: staff, motivation: staff, reports: role === "head" || role === "admin", system: role === "admin" };
 }
 
 export function routeSection(pathname: string, search = "", role: Role = "operator"): SectionCode | "account" | "access" | "developer" | "qr_access" | undefined {
+  if (pathname === "/trainee") return "training";
   if (pathname === "/qr-access") return "qr_access";
-  if (pathname === "/training/work-sites" || pathname === "/training/city" || pathname.startsWith("/training/scenarios/")) return role === "operator" ? "training" : "learning_admin";
+  if (pathname === "/training/work-sites" || pathname === "/training/city" || pathname.startsWith("/training/scenarios/")) return role === "operator" || role === "trainee" ? "training" : "learning_admin";
   const matches = (path: string) => pathname === path || pathname.startsWith(`${path}/`);
   if (pathname === "/trainer" || pathname === "/admin/learning-analytics") return "learning_admin";
   if (matches("/progress")) return role === "operator" ? "results" : "personal";
@@ -114,6 +121,8 @@ export function routeSection(pathname: string, search = "", role: Role = "operat
 export function canVisit(role: Role, to: string, allowed: AccessMap, isDeveloper = false): boolean {
   if (to === "/") return true;
   const [path, search = ""] = to.split("#")[0].split("?");
+  if (path === "/trainee" && role !== "trainee") return false;
+  if (role === "trainee" && !["/trainee", "/profile", "/notifications", "/training", "/simulator"].some(p => path === p || path.startsWith(p + "/"))) return false;
   if (role === "trainer" && !["/qr-access", "/profile", "/notifications", "/trainer", "/admin/learning-analytics", "/admin/learning", "/training", "/simulator", "/admin/users"].some(p => path === p || path.startsWith(p + "/"))) return false;
   if (role === "operator" && path.startsWith("/admin/users")) return false;
   // Сценарии Driver Simulator ведёт только тренер, у остальных студии нет.
@@ -128,6 +137,10 @@ export function canVisit(role: Role, to: string, allowed: AccessMap, isDeveloper
 }
 
 export function visibleNavigation(role: Role, allowed: AccessMap = defaultAccess(role), isDeveloper = false): readonly NavItem[] {
+  if (role === "trainee") return ROLE_NAVIGATION.trainee.flatMap(item => {
+    const tabs = item.tabs.filter(link => canVisit(role, link.to, allowed));
+    return tabs.length ? [{ ...item, tabs, to: tabs[0].to }] : [];
+  });
   if (role === "trainer") return ROLE_NAVIGATION.trainer.flatMap(item => {
     const tabs = item.tabs.filter(link => canVisit(role, link.to, allowed));
     return tabs.length ? [{ ...item, tabs, to: tabs[0].to }] : [];
@@ -220,6 +233,7 @@ export function mobileNavigation(items: readonly NavItem[]) {
 
 /** Migrate old app launch URLs after authentication and access have finished loading. */
 export function appEntryRedirect(pathname: string, home: string, canPath: (path: string) => boolean): string | null {
+  if (pathname === "/trainee" && !canPath("/trainee")) return home;
   if (pathname === "/cabinet" && !canPath("/cabinet")) return home;
   // Учебных материалов больше нет: их страницы ведут в город, а студия у сотрудников — в аналитику симулятора.
   if (pathname === "/training" || pathname.startsWith("/training/attempts/")) return canPath("/training/city") ? "/training/city" : home;

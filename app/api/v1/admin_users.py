@@ -293,6 +293,8 @@ async def create_user(
         payload.group_id is not None or payload.supervisor_id is not None
     ):
         raise PermissionDeniedError("Тренер не назначает группы")
+    if payload.role == Role.TRAINEE and payload.hired_on is not None:
+        raise DomainError("У стажёра нет даты выхода на работу")
     if payload.supervisor_id is not None and payload.role != Role.OPERATOR:
         raise DomainError("Супервайзеру можно назначить только оператора")
     if payload.role == Role.SUPERVISOR or (
@@ -410,6 +412,10 @@ async def update_user(
 
     changes = payload.model_dump(exclude_unset=True)
     changes.pop("supervisor_id", None)
+    if changes.get("role", user.role) == Role.TRAINEE:
+        if changes.get("hired_on") is not None:
+            raise DomainError("У стажёра нет даты выхода на работу")
+        changes["hired_on"] = None
     if supervisor_requested:
         if payload.supervisor_id is not None and changes.get("role", user.role) != Role.OPERATOR:
             raise DomainError("Супервайзеру можно назначить только оператора")

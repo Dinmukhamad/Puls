@@ -1,0 +1,61 @@
+.trainee-page { display:grid; gap:24px; padding-bottom:24px; }
+.trainee-heading h1 { font-size:clamp(26px,3vw,38px); line-height:1.15; margin:16px 0 8px; letter-spacing:-.035em; }
+.trainee-heading p { margin:0; color:var(--text-secondary); font-size:16px; }
+.trainee-eyebrow { display:flex; align-items:center; gap:16px; color:var(--text-secondary); font-size:13px; }
+.trainee-top { display:grid; grid-template-columns:minmax(0,2fr) minmax(240px,1fr); gap:20px; }
+.trainee-resume,.trainee-map-card,.trainee-plan { border:1px solid var(--separator); border-radius:24px; background:var(--surface-primary); overflow:hidden; }
+.trainee-resume { display:flex; align-items:center; gap:24px; padding:28px; background:radial-gradient(ellipse at 95% 10%,#6c51801c,transparent 65%),var(--surface-primary); }
+.trainee-resume>div:first-child { flex:1; min-width:0; }
+.trainee-kicker { color:var(--text-secondary); font-size:11px; font-weight:650; letter-spacing:.07em; }
+.trainee-resume h2 { font-size:25px; line-height:1.2; margin:12px 0; letter-spacing:-.025em; }
+.trainee-resume p { color:var(--text-secondary); line-height:1.5; margin:0 0 24px; }
+.trainee-resume .btn { white-space:normal; }
+.trainee-progress { display:grid; gap:18px; }
+.trainee-progress>strong { font-size:54px; line-height:1; letter-spacing:-.04em; }
+.trainee-progress>span { color:var(--text-secondary); font-size:13px; }
+.trainee-progress progress { appearance:none; border:0; width:100%; height:12px; border-radius:20px; background:var(--surface-secondary); overflow:hidden; }
+.trainee-progress progress::-webkit-progress-bar { background:var(--surface-secondary); }
+.trainee-progress progress::-webkit-progress-value { background:#4bc889; border-radius:20px; }
+.trainee-progress progress::-moz-progress-bar { background:#4bc889; border-radius:20px; }
+.trainee-illustration { position:relative; flex:0 0 160px; height:142px; padding:14px; border:1px solid #8589c650; border-radius:16px; background:linear-gradient(145deg,#333b59,#1c2238); box-shadow:0 20px 40px #0002; transform:rotate(5deg); color:#fff; }
+.trainee-screen-label { display:block; margin-bottom:18px; font-size:12px; }
+.trainee-screen-avatar { float:left; width:28px; height:28px; margin-right:12px; border-radius:50%; background:#9bacc780; }
+.trainee-illustration i { display:block; height:5px; margin:8px 0; border-radius:10px; background:#a8bad060; }
+.trainee-illustration b { display:block; float:right; margin-top:12px; width:32px; height:28px; border-radius:8px; color:#78f0b4; background:#56c99430; text-align:center; }
+.trainee-columns { display:grid; grid-template-columns:minmax(0,1.8fr) minmax(300px,1fr); gap:20px; align-items:start; }
+.trainee-map-card>header { padding:24px 24px 16px; display:flex; justify-content:space-between; gap:16px; align-items:start; }
+.trainee-map-card h2,.trainee-plan h2 { font-size:21px; margin:0 0 8px; letter-spacing:-.025em; }
+.trainee-map-card p,.trainee-plan>p { color:var(--text-secondary); font-size:13px; margin:0; line-height:1.5; }
+.trainee-map { height:390px; position:relative; isolation:isolate; overflow:hidden; }
+.trainee-map .city-world { position:absolute; inset:0; border-radius:0; }
+.trainee-map .city-loading,.trainee-map .city-fallback { position:absolute; inset:0; }
+.trainee-map .city-map-peek,.trainee-map .city-map-hint,.trainee-map .city-label__level { display:none; }
+.trainee-map-links { display:flex; flex-wrap:wrap; gap:8px; padding:16px 24px; }
+.trainee-map-links button { display:flex; gap:8px; align-items:center; padding:9px 12px; border:1px solid var(--separator); border-radius:10px; color:var(--text-primary); background:var(--surface-secondary); font:inherit; font-size:12px; cursor:pointer; }
+.trainee-map-links button[aria-pressed=true] { border-color:#4bc889; }
+.trainee-map-open { display:flex; justify-content:space-between; margin:0 24px 24px; padding:13px 16px; color:var(--text-primary); border:1px solid var(--separator); border-radius:12px; font-size:14px; font-weight:600; text-decoration:none; }
+.trainee-plan { padding:24px; }
+.trainee-plan-list,.trainee-lessons { list-style:none; padding:0; margin:20px 0 0; display:grid; gap:10px; }
+.trainee-plan-list button { width:100%; display:flex; gap:12px; align-items:center; padding:15px 12px; text-align:left; font:inherit; color:var(--text-primary); border:1px solid var(--separator); border-radius:14px; background:transparent; cursor:pointer; }
+.trainee-plan-list button>span:nth-child(2) { flex:1; min-width:0; }
+.trainee-plan-list strong { font-size:13px; }
+.trainee-plan-list small { display:block; font-size:11px; color:var(--text-secondary); margin-top:5px; }
+.trainee-step-mark { flex:none; display:grid; place-items:center; width:32px; height:32px; border:1px solid var(--separator); border-radius:50%; color:var(--text-secondary); }
+.trainee-step-mark.is-done { color:#fff; background:#299f69; border-color:transparent; }
+.trainee-step-mark.is-active { color:#4bc889; border:2px solid #4bc889; }
+.trainee-state { font-size:10px; color:var(--text-secondary); white-space:nowrap; }
+.trainee-state.is-done { color:var(--status-success,#299f69); }
+.trainee-lessons>li { padding:16px; border:1px solid var(--separator); border-radius:14px; }
+.trainee-lessons>li>div { display:flex; gap:12px; align-items:center; }
+.trainee-lessons h3 { margin:0 0 5px; font-size:14px; }
+.trainee-lessons span,.trainee-lessons small { font-size:12px; color:var(--text-secondary); }
+.trainee-lessons p { color:var(--text-secondary); font-size:13px; line-height:1.55; }
+.trainee-lessons .btn { font-size:12px; white-space:normal; }
+.trainee-lessons li[data-state=completed] .trainee-step-mark { color:#4bc889; }
+.trainee-tool { margin-top:20px; width:100%; }
+.trainee-plan-progress { margin-top:24px; padding-top:20px; border-top:1px solid var(--separator); }
+.trainee-plan-progress h3 { font-size:14px; margin:0 0 18px; }
+.trainee-empty { margin-top:20px!important; }
+@media(max-width:1150px) { .trainee-illustration { display:none; }.trainee-columns { grid-template-columns:minmax(0,1.3fr) minmax(285px,1fr); } }
+@media(max-width:850px) { .trainee-columns { grid-template-columns:minmax(0,1fr); }.trainee-top { grid-template-columns:minmax(0,1.7fr) minmax(180px,1fr); }.trainee-map { height:350px; } }
+@media(max-width:550px) { .trainee-top { grid-template-columns:minmax(0,1fr); }.trainee-resume,.trainee-plan { padding:20px; }.trainee-heading p { font-size:14px; }.trainee-resume h2 { font-size:22px; }.trainee-progress>strong { font-size:40px; }.trainee-map { height:300px; }.trainee-map-card>header { padding:20px 20px 12px; flex-wrap:wrap; }.trainee-map-links { padding:16px; }.trainee-page { gap:20px; } }

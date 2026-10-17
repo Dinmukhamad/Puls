@@ -36,7 +36,7 @@ export function AppLayout() {
   const { primary, overflow } = mobileNavigation(items);
   const separateProfile = !items.some((item) => item.id === "profile");
   // «Мой город» занимает весь экран: меню сжимается до плавающих карточек поверх карты.
-  const immersive = location.pathname === "/training/city";
+  const immersive = location.pathname === "/training/city" && user?.role !== "trainee";
   const overflowActive = overflow.some((item) => item.id === active?.id) || (separateProfile && active?.id === "profile");
 
   useEffect(() => { try { localStorage.setItem(COLLAPSE_KEY, collapsed ? "1" : "0"); } catch { /* Optional preference. */ } }, [collapsed]);

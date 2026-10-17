@@ -7,7 +7,7 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ConflictError, DomainError, NotFoundError
-from app.models.enums import Role, TxType
+from app.models.enums import LEARNER_ROLES, Role, TxType
 from app.models.learning import LearningAttempt, LearningAward, LearningContent
 from app.models.progress import Notification
 from app.models.user import User
@@ -86,7 +86,7 @@ async def start_attempt(session: AsyncSession, user_id: int, content_id: int, *,
     await lock_learner(session, user_id)
     content = await session.get(LearningContent, content_id)
     user = await session.get(User, user_id)
-    preview = preview or user.role != Role.OPERATOR
+    preview = preview or user.role not in LEARNER_ROLES
     if content is None or (content.status != "published" and not preview):
         raise NotFoundError("Учебный материал недоступен")
     if content.driver_config:
@@ -142,7 +142,8 @@ async def finish_attempt(session, user_id: int, attempt_id: int):
     attempt = await own_attempt(session, user_id, attempt_id)
     if attempt.state != "in_progress":
         return attempt
-    if (await session.get(User, user_id)).role != Role.OPERATOR:
+    user = await session.get(User, user_id)
+    if user.role not in LEARNER_ROLES:
         attempt.is_preview = True
     steps = attempt.snapshot["steps"]
     if len(attempt.answers) != len(steps):
@@ -167,7 +168,7 @@ async def finish_attempt(session, user_id: int, attempt_id: int):
         )
         title = attempt.snapshot["title"]
         key = f"learning:{user_id}:{attempt.content_id}"
-        if coins := attempt.snapshot["coins_reward"]:
+        if user.role == Role.OPERATOR and (coins := attempt.snapshot["coins_reward"]):
             await post_transaction(
                 session,
                 user_id=user_id,
@@ -178,7 +179,8 @@ async def finish_attempt(session, user_id: int, attempt_id: int):
             )
             attempt.awarded_coins = coins
         await session.flush()
-        await award_achievements(session, user_id)
+        if user.role == Role.OPERATOR:
+            await award_achievements(session, user_id)
         session.add(
             Notification(
                 user_id=user_id,

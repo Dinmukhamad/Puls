@@ -36,11 +36,13 @@ from app.api.v1 import (
     system,
     telegram,
     telemetry,
+    trainee,
     wallet,
     work_sites_access,
 )
 
 api_router = APIRouter()
+api_router.include_router(trainee.router)
 api_router.include_router(city.router)
 api_router.include_router(city_estate.router)
 api_router.include_router(city_sandbox.router)

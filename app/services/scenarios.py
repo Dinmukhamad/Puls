@@ -10,7 +10,7 @@ from sqlalchemy import func, select
 from app.core.errors import ConflictError, DomainError, NotFoundError, PermissionDeniedError
 from app.models.city import CityAward
 from app.models.crm import CrmAppeal
-from app.models.enums import Role, TxType
+from app.models.enums import LEARNER_ROLES, Role, TxType
 from app.models.progress import Notification
 from app.models.scenario import ScenarioAttempt
 from app.models.user import Group
@@ -38,7 +38,9 @@ async def support_group_ids(session, *, config=None) -> set[int]:
 
 
 async def support_allowed(session, user) -> bool:
-    if not user.is_active or user.role != Role.OPERATOR or user.group_id is None:
+    if user.role == Role.TRAINEE:
+        return user.is_active
+    if not user.is_active or user.role not in LEARNER_ROLES or user.group_id is None:
         return False
     active = await session.scalar(select(Group.is_active).where(Group.id == user.group_id))
     return bool(active and user.group_id in await support_group_ids(session))
@@ -55,7 +57,14 @@ async def require_scope(session, user):
             ),
             code="scenario_city_required",
         )
-    if user.role not in (Role.OPERATOR, Role.TRAINER, Role.SUPERVISOR, Role.HEAD, Role.ADMIN):
+    if user.role not in (
+        Role.TRAINEE,
+        Role.OPERATOR,
+        Role.TRAINER,
+        Role.SUPERVISOR,
+        Role.HEAD,
+        Role.ADMIN,
+    ):
         raise PermissionDeniedError("Предварительный просмотр недоступен")
 
 
@@ -181,14 +190,14 @@ async def catalog(session, user):
             ScenarioAttempt.user_id == user.id,
             ScenarioAttempt.scenario_key == KEY,
             ScenarioAttempt.revision == data["revision"],
-            ScenarioAttempt.is_preview == (user.role != Role.OPERATOR),
+            ScenarioAttempt.is_preview == (user.role not in LEARNER_ROLES),
         )
         .order_by(ScenarioAttempt.id.desc())
         .limit(1)
     )
     completed = (
         bool(await session.get(CityAward, (user.id, MISSION_KEY)))
-        if user.role == Role.OPERATOR
+        if user.role in LEARNER_ROLES
         else bool(
             await session.scalar(
                 select(ScenarioAttempt.id)
@@ -205,7 +214,7 @@ async def catalog(session, user):
     mission = (await settings(session))["missions"][MISSION_KEY]
     return {
         "city": "support",
-        "is_preview": user.role != Role.OPERATOR,
+        "is_preview": user.role not in LEARNER_ROLES,
         "items": [
             {
                 **{
@@ -220,7 +229,7 @@ async def catalog(session, user):
                         "critical_required",
                     )
                 },
-                "coins_reward": mission["coins"],
+                "coins_reward": 0 if user.role == Role.TRAINEE else mission["coins"],
                 "enabled": mission["enabled"],
                 "completed": completed,
                 "attempt_id": latest.id if latest else None,
@@ -237,7 +246,7 @@ async def start(session, user, key):
     await lock_learner(session, user.id)
     await session.refresh(user)
     await require_scope(session, user)
-    preview = user.role != Role.OPERATOR
+    preview = user.role not in LEARNER_ROLES
     snapshot = definition()
     attempt = await session.scalar(
         select(ScenarioAttempt)
@@ -276,6 +285,8 @@ async def start(session, user, key):
             "перед началом сценария."
         )
     snapshot["reward"] = deepcopy(mission)
+    if user.role == Role.TRAINEE:
+        snapshot["reward"].update(coins=0, xp=0)
     snapshot["driver"] = {
         "id": driver["id"],
         "name": dispatch.full_name(driver),
@@ -342,7 +353,7 @@ async def own_attempt(session, user, attempt_id, *, lock=False):
     )
     if attempt is None:
         raise NotFoundError("Попытка сценария не найдена")
-    if attempt.is_preview != (user.role != Role.OPERATOR):
+    if attempt.is_preview != (user.role not in LEARNER_ROLES):
         raise PermissionDeniedError("Роль изменилась. Начните новую попытку для текущей роли.")
     return attempt
 
@@ -690,6 +701,8 @@ async def finish(session, user, attempt_id):
     reward = deepcopy(attempt.snapshot["reward"])
     # XP is deliberately zero for consultation training: reward is configurable coins only.
     reward["xp"] = 0
+    if user.role == Role.TRAINEE:
+        reward["coins"] = 0
     session.add(
         CityAward(
             user_id=user.id, mission_key=MISSION_KEY, snapshot=reward, xp=0, coins=reward["coins"]

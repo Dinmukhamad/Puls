@@ -16,9 +16,9 @@ import { activeTeamGroups, destinationGroupId, userTeamLabel } from "./superviso
 import "./team.css";
 import "./users.css";
 
-const roles: Role[] = ["operator", "trainer", "supervisor", "head", "admin"];
+const roles: Role[] = ["trainee", "operator", "trainer", "supervisor", "head", "admin"];
 export function visibleRoles(role: Role = "operator"): Role[] {
-  return role === "admin" ? roles : role === "head" ? ["operator", "trainer", "supervisor"] : role === "supervisor" ? ["operator", "supervisor"] : role === "trainer" ? ["operator"] : [];
+  return role === "admin" ? roles : role === "head" ? ["trainee", "operator", "trainer", "supervisor"] : role === "supervisor" ? ["trainee", "operator", "supervisor"] : role === "trainer" ? ["trainee", "operator"] : [];
 }
 
 export function UsersPage() {
@@ -85,8 +85,8 @@ export function UsersPage() {
   </div>;
 
   return <div className="stack team-page users-page">
-    <div className="page-head"><div><h1 className="page-title">Пользователи</h1><p className="page-subtitle">{users.data ? `${users.data.total} сотрудников по выбранным фильтрам` : "Сотрудники и доступы"}{trainer ? " · Только операторы" : ""}</p></div>
-      {(atLeast("head") || trainer) && <div className="page-head__actions"><Button variant="primary" onClick={() => setEditor("new")}>{trainer ? "Создать оператора" : "Создать пользователя"}</Button></div>}
+    <div className="page-head"><div><h1 className="page-title">Пользователи</h1><p className="page-subtitle">{users.data ? `${users.data.total} сотрудников по выбранным фильтрам` : "Сотрудники и доступы"}{trainer ? " · Стажёры и операторы" : ""}</p></div>
+      {(atLeast("head") || trainer) && <div className="page-head__actions"><Button variant="primary" onClick={() => setEditor("new")}>{trainer ? "Создать участника" : "Создать пользователя"}</Button></div>}
     </div>
     <GlassSurface variant="regular" className="team-filterbar users-filterbar">
       <label className="field team-search"><span className="field__label">Поиск</span><input className="input" type="search" placeholder="ФИО или логин" value={search} onChange={(e) => filter("search", e.target.value)} /></label>
@@ -127,7 +127,7 @@ export function UserEditor({ target, groups, groupsReady, initialRole = "operato
   const [login, setLogin] = useState("");
   const [email, setEmail] = useState(target?.email ?? "");
   const [phone, setPhone] = useState(target?.phone ?? "");
-  const [role, setRole] = useState<Role>(target?.role ?? (trainer ? "operator" : initialRole));
+  const [role, setRole] = useState<Role>(target?.role ?? (trainer ? "trainee" : initialRole));
   const [groupId, setGroupId] = useState(target?.group ? String(target.group.id) : "");
   const [supervisorId, setSupervisorId] = useState(() => { const owner = groups.find(g => g.id === target?.group?.id)?.supervisor; return owner ? String(owner.id) : target?.group ? "legacy" : ""; });
   const [teamSelectionTouched, setTeamSelectionTouched] = useState(false);
@@ -171,7 +171,7 @@ export function UserEditor({ target, groups, groupsReady, initialRole = "operato
   const save = useMutation({
     mutationFn: (): Promise<TeamUserSaved> => {
       const groupChanged = !target || role !== target.role || teamSelectionTouched || (role !== "operator" && role !== "supervisor" && groupId !== String(target.group?.id ?? ""));
-      const data: TeamUserInput = { full_name: fullName.trim(), email: email.trim() || null, phone: phone.trim() || null, role: trainer ? "operator" : role, ...(groupChanged ? { group_id: trainer || role === "supervisor" ? null : role === "operator" ? selectedGroupId : groupId ? Number(groupId) : null } : {}), ...(!trainer && role === "operator" && !keepCurrentTeam && supervisorId !== "legacy" ? { supervisor_id: Number(supervisorId) || null } : {}), hired_on: hiredOn || null, ...(gender ? { gender } : {}) };
+      const data: TeamUserInput = { full_name: fullName.trim(), email: email.trim() || null, phone: phone.trim() || null, role, ...(groupChanged ? { group_id: trainer || role === "supervisor" ? null : role === "operator" ? selectedGroupId : groupId ? Number(groupId) : null } : {}), ...(!trainer && role === "operator" && !keepCurrentTeam && supervisorId !== "legacy" ? { supervisor_id: Number(supervisorId) || null } : {}), hired_on: role === "trainee" ? null : hiredOn || null, ...(gender ? { gender } : {}) };
       return target ? team.updateUser(target.id, { ...data, ...telegramUpdate(telegramDraft, ownAccount) }) : team.createUser({ ...data, login: login.trim(), password, telegram_username: normalizedTelegram || null });
     },
     onSuccess: (data) => {
@@ -229,7 +229,7 @@ export function UserEditor({ target, groups, groupsReady, initialRole = "operato
       <h3 id="user-editor-profile" className="user-editor__section-title">Данные сотрудника</h3>
       <label className="field"><span className="field__label">ФИО</span><input className="input" autoComplete="name" value={fullName} onChange={(e) => setFullName(e.target.value)} required minLength={3} maxLength={255} /></label>
       <fieldset className="field team-gender"><legend className="field__label">Пол персонажа</legend><div className="segmented" role="radiogroup">{([["female", "Женский"], ["male", "Мужской"]] as const).map(([value, label]) => <label key={value} className={gender === value ? "segmented__item is-active" : "segmented__item"}><input type="radio" name="team-gender" value={value} checked={gender === value} required={!target} onChange={() => setGender(value)} />{label}</label>)}</div></fieldset>
-      <label className="field"><span className="field__label">Дата приёма · необязательно</span><input className="input" type="date" value={hiredOn} onChange={(e) => setHiredOn(e.target.value)} /></label>
+      {role !== "trainee" ? <label className="field"><span className="field__label">Дата приёма · необязательно</span><input className="input" type="date" value={hiredOn} onChange={(e) => setHiredOn(e.target.value)} /></label> : <p className="field__note">Стажёр ещё не работает. Дату выхода можно указать при переводе в операторы.</p>}
       </section>
       <section className="user-editor__section" aria-labelledby="user-editor-contacts">
       <h3 id="user-editor-contacts" className="user-editor__section-title">Контакты</h3>

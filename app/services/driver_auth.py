@@ -11,7 +11,7 @@ from app.db.base import utcnow
 from app.models.driver import DriverProfile
 from app.models.driver_auth import DriverDevice, TelegramLink
 from app.models.driver_shift import DriverShift
-from app.models.enums import Role
+from app.models.enums import LEARNER_ROLES
 from app.models.user import User
 from app.services import telegram
 
@@ -36,7 +36,7 @@ async def device_state(session, user_id, token):
         and device.telegram_version == link.version
     )
     verified = bool(matches and telegram.future(device.valid_until))
-    preview = user.role != Role.OPERATOR and bool(
+    preview = user.role not in LEARNER_ROLES and bool(
         await session.scalar(
             select(DriverShift.id)
             .where(DriverShift.user_id == user_id, DriverShift.is_preview.is_(True))

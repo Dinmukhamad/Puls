@@ -2,6 +2,7 @@ import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { lazy, Suspense, useLayoutEffect } from "react";
 import { retainedCity } from "./pages/city/retainedCity";
 import { CityRoute } from "./pages/city/CityRoute";
+const TraineePage = lazy(() => import("./pages/TraineePage").then(module => ({ default: module.TraineePage })));
 
 import { useAuth } from "./auth/AuthContext";
 import { useAccess } from "./auth/AccessContext";
@@ -83,7 +84,8 @@ export function App() {
       <Route path="/simulator" element={<SectionGuard><DriverSimulator app={<Suspense fallback={<div className="boot"><Skeleton height={44} width={220} /></div>}><DriverAppPage /></Suspense>} /></SectionGuard>} />
       <Route path="/simulator/attempts/:attemptId" element={<SectionGuard><Suspense fallback={<Skeleton height={300} />}><SimulatorPage /></Suspense></SectionGuard>} />
       <Route element={<AppLayout />}>
-        <Route path="/training/city" element={<CityRoute />} />
+        <Route path="/trainee" element={<Suspense fallback={<Skeleton height={400} />}><TraineePage /></Suspense>} />
+        <Route path="/training/city" element={user.role === "trainee" ? <Suspense fallback={<Skeleton height={400} />}><TraineePage learning /></Suspense> : <CityRoute />} />
         <Route path="/training/scenarios/:key" element={<Suspense fallback={<Skeleton height={400} />}><ScenarioPage /></Suspense>} />
         <Route path="/training/scenarios/attempts/:attemptId" element={<Suspense fallback={<Skeleton height={400} />}><ScenarioPage /></Suspense>} />
         <Route path="/admin/learning/city" element={<Suspense fallback={<Skeleton height={400} />}><CityAdminPage /></Suspense>} />

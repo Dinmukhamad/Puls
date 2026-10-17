@@ -12,6 +12,7 @@ import { ROLE_LABELS, REQUEST_STATUS_LABELS, coins, dateOnly, dateTime, points, 
 import { UserArchive, UserEditor, UserStatus } from "./UsersPage";
 import { LearningResults } from "./LearningStudioPage";
 import { DriverTeamResults } from "./DriverScenarioEditor";
+import { TraineeResults } from "./TraineeResults";
 import { CoinProgress } from "../components/CoinProgress";
 import { userTeamLabel } from "./supervisorTeams";
 import "./team.css";
@@ -22,7 +23,8 @@ export function UserDetailPage() {
   const trainer = actor?.role === "trainer";
   const [params, setParams] = useSearchParams();
   const { can } = useAccess();
-  const tabAllowed = (key: string) => ["test", "mission"].includes(key) ? false : trainer ? ["profile", "simulator"].includes(key) : ["progress", "coins", "purchases"].includes(key) ? can("motivation") : ["test", "mission", "simulator"].includes(key) ? can("learning_admin") : true;
+  const user = useQuery({ queryKey: ["team-user", id], queryFn: () => team.user(id), enabled: Number.isInteger(id) && id > 0 });
+  const tabAllowed = (key: string) => user.data?.role === "trainee" ? ["profile", "learning", "simulator"].includes(key) : ["test", "mission"].includes(key) ? false : trainer ? ["profile", "simulator"].includes(key) : ["progress", "coins", "purchases"].includes(key) ? can("motivation") : ["test", "mission", "simulator"].includes(key) ? can("learning_admin") : true;
   const requestedTab = params.get("tab") ?? "profile";
   const tab = tabAllowed(requestedTab) ? requestedTab : "profile";
   const page = Math.max(1, Number(params.get("page")) || 1);
@@ -30,7 +32,6 @@ export function UserDetailPage() {
   const [archive, setArchive] = useState(false);
   const [password, setPassword] = useState(false);
   const [loginEditor, setLoginEditor] = useState(false);
-  const user = useQuery({ queryKey: ["team-user", id], queryFn: () => team.user(id), enabled: Number.isInteger(id) && id > 0 });
   const groups = useQuery({ queryKey: ["team-groups"], queryFn: team.groups, enabled: !trainer });
   const teams = useQuery({ queryKey: ["team-supervisor-teams", true], queryFn: ({ signal }) => team.supervisorTeams(true, signal), enabled: !trainer });
   const dashboard = useQuery({ queryKey: ["team-dashboard", id], queryFn: () => team.dashboard(id), enabled: user.isSuccess && !trainer && tab === "results" });
@@ -48,7 +49,8 @@ export function UserDetailPage() {
     <Link className="secondary" to="/admin/users">← Пользователи</Link>
     <Card><div className="team-detail-hero"><Avatar name={data.full_name} id={id} size={64} /><div className="team-detail-hero__body"><h1 className="page-title">{data.full_name}</h1><div className="team-meta"><span>{ROLE_LABELS[data.role]}</span>{!trainer && <span>{teamLabel}</span>}<UserStatus active={data.is_active} /></div></div>
       <div className="team-actions">{editable && <Button onClick={() => setEditor(true)}>Изменить</Button>}{editable && actor?.id !== id && <Button onClick={() => setArchive(true)}>{data.is_active ? "Архивировать" : "Восстановить"}</Button>}{manageCredentials && <Button onClick={() => setLoginEditor(true)}>Сменить логин</Button>}{manageCredentials && <Button onClick={() => setPassword(true)}>Сбросить пароль</Button>}</div></div></Card>
-    <nav className="team-section-nav" aria-label="Разделы карточки">{[["profile", "Профиль"], ["results", "Результаты"], ["coins", "Коины"], ["progress", "Прогресс"], ["simulator", "Симулятор"], ["purchases", "Покупки"]].filter(([key]) => tabAllowed(key)).map(([key, label]) => <Button key={key} variant={tab === key ? "primary" : "secondary"} aria-current={tab === key ? "page" : undefined} onClick={() => setParams({ tab: key })}>{label}</Button>)}</nav>
+    <nav className="team-section-nav" aria-label="Разделы карточки">{[["profile", "Профиль"], ["learning", "Обучение"], ["results", "Результаты"], ["coins", "Коины"], ["progress", "Прогресс"], ["simulator", "Симулятор"], ["purchases", "Покупки"]].filter(([key]) => (key !== "learning" || data.role === "trainee") && tabAllowed(key)).map(([key, label]) => <Button key={key} variant={tab === key ? "primary" : "secondary"} aria-current={tab === key ? "page" : undefined} onClick={() => setParams({ tab: key })}>{label}</Button>)}</nav>
+    {tab === "learning" && <TraineeResults userId={id} />}
     {tab === "progress" && <CoinProgress key={id} userId={id} showDetails />}
     {tab === "simulator" && <DriverTeamResults userId={id} />}
     {(tab === "simulator") && <LearningResults key={`${id}-${tab}`} userId={id} kind={tab} />}
@@ -63,7 +65,7 @@ export function UserDetailPage() {
   </div>;
 }
 
-const ROLE_ORDER: Record<Role, number> = { operator: 0, trainer: 0, supervisor: 1, head: 2, admin: 3 };
+const ROLE_ORDER: Record<Role, number> = { trainee: -1, operator: 0, trainer: 0, supervisor: 1, head: 2, admin: 3 };
 
 /**
  * Повторяет серверное правило: администратор меняет учётные данные любому,

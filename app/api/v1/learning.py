@@ -14,7 +14,7 @@ from app.core.deps import (
 )
 from app.core.errors import ConflictError, DomainError, NotFoundError, PermissionDeniedError
 from app.models.driver_shift import DriverShift
-from app.models.enums import Role
+from app.models.enums import LEARNER_ROLES, Role
 from app.models.learning import LearningAssignment, LearningAttempt, LearningContent
 from app.models.user import User
 from app.schemas.common import Page
@@ -90,7 +90,7 @@ async def catalog(session: SessionDep, user: CurrentUser):
             select(LearningAttempt)
             .where(
                 LearningAttempt.user_id == user.id,
-                LearningAttempt.is_preview == (user.role != Role.OPERATOR),
+                LearningAttempt.is_preview == (user.role not in LEARNER_ROLES),
             )
             .order_by(LearningAttempt.id.desc())
         )
@@ -108,13 +108,15 @@ async def catalog(session: SessionDep, user: CurrentUser):
             .where(
                 DriverShift.user_id == user.id,
                 DriverShift.content_id.is_not(None),
-                DriverShift.is_preview == (user.role != Role.OPERATOR),
+                DriverShift.is_preview == (user.role not in LEARNER_ROLES),
             )
             .order_by(DriverShift.created_at.desc())
         )
     )
     for content in contents:
         data = learning.content_data(content)
+        if user.role == Role.TRAINEE:
+            data["coins_reward"] = 0
         assigned = assignments.get(content.id)
         data["assigned"] = assigned is not None
         if assigned:
@@ -268,7 +270,7 @@ async def results(
 ):
     conditions = [
         await visible_users_filter(session, actor),
-        User.role == Role.OPERATOR,
+        User.role.in_(LEARNER_ROLES),
         LearningAttempt.is_preview.is_(False),
     ]
     if user_id is not None:
