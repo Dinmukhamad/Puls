@@ -1,4 +1,5 @@
 import type { CrmTaskKey, CrmTrainingTask } from "../../api/crmTraining";
+import { digits, fieldMatch, linkMatch } from "./accountData";
 
 /**
  * The agreed operator instruction (17.10.2026) laid over the course: for each lesson and each server step,
@@ -215,31 +216,50 @@ export const COURSE_GUIDE: Partial<Record<CrmTaskKey, CourseLessonGuide>> = {
     ],
   },
   crm_practice_v2: {
-    lead: "Оформи смену номера для нового случая самостоятельно, без пошаговых подсказок. Новый номер бери из текущего задания.",
+    lead: "Оформи смену номера самостоятельно по данным задания. Скриншот двух окон добавится в обращение сам, когда оно будет заполнено.",
     steps: {
-      inspect: { place: "lesson", how: [] },
-      capture: { place: "lesson", how: [] },
       form: { place: "form", how: [] },
       save: { place: "form", how: [] },
-      ticket: { place: "appeal", how: [] },
     },
-    done: "Система подтверждает выполнение по сохранённым данным и реальным действиям. Устного ответа или своей отметки «Я выполнил» недостаточно.",
-    recap: ["Смену номера ты оформил самостоятельно: проверка номеров, снимок, обращение и связанный тикет."],
+    done: "Урок засчитывается, когда система проверила сохранённое обращение: данные водителя, тема, комментарий и скриншот. Своей отметки «Я выполнил» недостаточно.",
+    recap: ["Смену номера ты оформил самостоятельно: нашёл водителя, заполнил обращение, приложил скриншот и отправил запрос."],
   },
 };
 
 export const PRACTICE_CHECKLIST = [
-  "Найден правильный водитель и открыта его карточка.",
-  "Входящий номер совпадает с номером регистрации.",
-  "Создан один снимок, на котором видны оба окна и оба номера.",
-  "Скопирована ссылка на правильный аккаунт.",
-  "Указаны текущий телефон, ВУ, таксопарк и город.",
-  "Выбран канал «Звонок» и полный путь категории «Смена номера».",
-  "В комментарии есть новый номер и полная ссылка на аккаунт.",
-  "Прикреплён актуальный снимок двух окон.",
-  "Выбрано формирование тикета; обращение сохранено и отправлено.",
-  "Открыт связанный тикет по его номеру.",
+  "Найди водителя во вкладке «Диспетчерская» и открой его карточку.",
+  "Сверь: входящий номер совпадает с номером регистрации.",
+  "Скопируй ссылку на аккаунт водителя.",
+  "В обращении укажи текущий телефон, ВУ, таксопарк и город.",
+  "Выбери канал «Звонок» и тему до «Смена номера».",
+  "В комментарии напиши новый номер и вставь ссылку на аккаунт.",
+  "Дождись скриншота внизу формы и нажми «Сохранить и отправить».",
 ];
+
+export interface PracticeForm { channel: string; phone: string; license_number: string; park: string; city: string; comment: string }
+
+const PHONE = /(?:\+?[78][\s(-]*)?\(?\d{3}\)?[\s-]*\d{3}[\s-]*\d{2}[\s-]*\d{2}/g;
+const FLEET_LINK = /(?:https?:\/\/)?fleet\.yandex\.kz\/contractors\/[^\s<>]+/gi;
+
+/**
+ * What the practice's appeal still lacks before its screenshot is added: the same rules the server checks
+ * after saving (app/services/crm_course.py autograde), read from the form while it is filled. `path` is the
+ * chosen category labels.
+ */
+export function practiceReadiness(task: CrmTrainingTask, form: PracticeForm, path: string[]) {
+  const d = task.driver;
+  const park = (() => { try { return new URL(d.link).searchParams.get("park_id") ?? undefined; } catch { return undefined; } })();
+  const account = { id: d.id, phone: d.phone, license: d.license, park };
+  const newPhone = digits(d.new_phone ?? "").slice(-10);
+  const named = (form.comment.replace(FLEET_LINK, "").match(PHONE) ?? []).some(phone => digits(phone).slice(-10) === newPhone);
+  return [
+    { key: "channel", label: "Канал «Звонок»", ok: form.channel === "Звонок" },
+    { key: "driver", label: "Текущий телефон и ВУ водителя", ok: fieldMatch("phone", form.phone, [account]) === "true" && fieldMatch("license_number", form.license_number, [account]) === "true" },
+    { key: "park", label: "Таксопарк и город водителя", ok: form.park === d.park && form.city === d.city },
+    { key: "category", label: "Тема до «Смена номера»", ok: path.length > 0 && JSON.stringify(path) === JSON.stringify(task.category_path) },
+    { key: "comment", label: "Новый номер и ссылка на аккаунт в комментарии", ok: !!newPhone && named && linkMatch(form.comment, [account]) === "ok" },
+  ];
+}
 
 export const COURSE_RULES = [
   "Начни с первого доступного урока и выполняй действие текущего шага — нужная кнопка или ссылка на странице подсвечена.",

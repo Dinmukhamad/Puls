@@ -185,3 +185,26 @@
 .crm-course-dock li::marker { color: #6a7d9c; font-weight: 600; }
 .work-sites .crm-course-dock__body .crm-primary { height: auto; min-height: 38px; white-space: normal; line-height: 1.4; }
 .work-sites .crm-course-passed .crm-primary { width: 100%; }
+/* The practice's screenshot: what is still missing, then the picture itself, right above saving. */
+.crm-practice-snapshot { display: grid; gap: 10px; margin: 0 0 20px 190px; padding: 14px 16px; border: 1px dashed #b9c8e6; border-radius: 10px; background: #fbfcff; color: #2f3e57; font-size: 13px; line-height: 1.5; }
+.crm-practice-snapshot[data-state=attached] { border-style: solid; border-color: #c8e6d7; background: #f3fbf6; }
+.crm-practice-snapshot > strong { font-size: 14px; color: #1f3462; }
+.crm-practice-snapshot p { margin: 0; }
+.crm-practice-snapshot ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.crm-practice-snapshot li { display: flex; gap: 8px; color: #6a778b; }
+.crm-practice-snapshot li[data-ok=true] { color: #19734d; }
+.crm-practice-snapshot li > span { width: 14px; flex: none; text-align: center; }
+.crm-practice-snapshot img { display: block; width: 100%; max-width: 600px; border: 1px solid #d9e2ee; border-radius: 8px; }
+.crm-practice-snapshot > button { justify-self: start; }
+.crm-practice-snapshot .crm-help-link { display: inline; margin: 0; font-size: 13px !important; }
+/* Drawn off screen for the screenshot only; nobody sees or reaches it. */
+.crm-practice-stage { position: fixed; left: -20000px; top: 0; width: 1440px; height: 720px; overflow: hidden; pointer-events: none; }
+@media (max-width: 700px) { .crm-practice-snapshot { margin-left: 0; } }
+.crm-course-practice { display: grid; gap: 8px; padding: 12px 14px; border: 1px solid #d5e2ff; border-radius: 12px; background: #f6f9ff; color: #2f3e57; font-size: 13px; line-height: 1.5; }
+.crm-course-practice > strong { color: #1f3462; }
+.crm-course-practice dl { display: grid; gap: 4px; margin: 0; }
+.crm-course-practice dl > div { display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: 8px; }
+.crm-course-practice dt { color: #6a778b; }
+.crm-course-practice dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; user-select: text; }
+.crm-course-practice p { margin: 0; color: #45536a; }
+.crm-course-dock .crm-course-practice dl > div { grid-template-columns: 1fr; gap: 0; }

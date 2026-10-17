@@ -31,7 +31,7 @@ export function CrmCourseDock({ data, loading, error, busy, actionError, locatio
       {loading && <p role="status">Восстанавливаем обучение…</p>}
       {!!error && <div role="alert"><p>Не удалось загрузить обучение. Проверь соединение и повтори.</p><button className="crm-secondary" onClick={onReload}>Повторить</button></div>}
       {data && <>
-        {passed && !active ? <Passed task={passed} number={number(passed.key)} next={next} nextNumber={number(next?.key)} busy={busy} onStart={key => { onDismissPassed?.(); onStart(key); }} />
+        {passed && !active ? <Passed task={passed} number={number(passed.key)} next={next} nextNumber={number(next?.key)} busy={busy} onStart={key => { onDismissPassed?.(); onStart(key); }} onCity={onCity} />
         : task ? <>
           <div className="crm-course-lesson"><small>Урок {number(task.key)} из {total}</small><h2>{task.title}</h2><p>{COURSE_GUIDE[task.key]?.lead ?? task.goal}</p>
             {COURSE_GUIDE[task.key]?.terms && <dl className="crm-course-terms">{COURSE_GUIDE[task.key]!.terms!.map(([term, text]) => <div key={term}><dt>{term}</dt><dd>{text}</dd></div>)}</dl>}</div>
@@ -73,7 +73,8 @@ function Current({ task, location, onShow }: { task: CrmTrainingTask; location?:
     </section>
     {task.key === "crm_mismatch_v2" && current?.step.key === "advice" && <table className="crm-course-table"><caption>Что можно предложить</caption><tbody>{ADVICE_OPTIONS.map(([n, text]) => <tr key={n}><th scope="row">{n}</th><td>{text}</td></tr>)}</tbody></table>}
     {!practice && lesson?.example && ["form", "advice", "comment"].includes(current?.step.key ?? "") && <Example title={lesson.example.title} text={lesson.example.text.replace("[новый номер из задания]", task.driver?.new_phone ?? "[новый номер из задания]")} />}
-    {practice ? <details className="crm-course-checklist" open><summary>Контрольный список перед отправкой</summary><ol>{PRACTICE_CHECKLIST.map(item => <li key={item}>{item}</li>)}</ol></details>
+    {practice && <CoursePracticeTask task={task} />}
+    {practice ? <details className="crm-course-checklist" open><summary>Как пройти урок</summary><ol>{PRACTICE_CHECKLIST.map(item => <li key={item}>{item}</li>)}</ol></details>
       : <details><summary>Все шаги урока</summary><ol className="crm-course-step-list">{task.steps.map(s => <li key={s.key} data-done={s.status === "passed"}>{s.status === "passed" ? "✓ " : ""}{s.label}</li>)}</ol></details>}
   </>;
 }
@@ -82,10 +83,10 @@ function Example({ title, text }: { title: string; text: string }) {
   return <div className="crm-course-example"><small>{title}</small><p>{text}</p></div>;
 }
 
-function Passed({ task, number, next, nextNumber, busy, onStart }: { task: CrmTrainingTask; number: number; next?: CrmTrainingTask; nextNumber: number; busy: boolean; onStart: (key: CrmTaskKey) => void }) {
+function Passed({ task, number, next, nextNumber, busy, onStart, onCity }: { task: CrmTrainingTask; number: number; next?: CrmTrainingTask; nextNumber: number; busy: boolean; onStart: (key: CrmTaskKey) => void; onCity: () => void }) {
   return <section className="crm-course-passed" role="status"><small>✓ Урок {number} пройден</small><h2>{task.title}</h2>
     <ul>{(COURSE_GUIDE[task.key]?.recap ?? []).map(line => <li key={line}>{line}</li>)}</ul>
-    {next ? <button className="crm-primary" disabled={busy} onClick={() => onStart(next.key)}>{busy ? "Открываем…" : `Начать урок ${nextNumber}: ${next.title}`}</button> : <p>Это был последний урок курса.</p>}
+    {next ? <button className="crm-primary" disabled={busy} onClick={() => onStart(next.key)}>{busy ? "Открываем…" : `Начать урок ${nextNumber}: ${next.title}`}</button> : <><p>Это был последний урок курса: все пять уроков подтверждены системой.</p><button className="crm-primary" onClick={onCity}>Вернуться в город</button></>}
   </section>;
 }
 
@@ -112,6 +113,16 @@ export function CourseLessonDone({ task, next, busy, onStart, onList }: { task?:
     {lesson ? <ul>{lesson.recap.map(line => <li key={line}>{line}</li>)}</ul> : <p>Выбери следующий урок в панели обучения.</p>}
     {lesson?.example && task?.key === "crm_mismatch_v2" && <Example title={lesson.example.title} text={lesson.example.text} />}
     <div className="crm-training-start-actions">{next && <button className="crm-primary" disabled={busy} onClick={() => onStart(next.key)}>{busy ? "Открываем…" : `Начать урок: ${next.title}`}</button>}<button className="crm-secondary" onClick={onList}>К обращениям</button></div>
+  </section>;
+}
+
+/** The practice's data: whom to find and what the driver asks for; the rest is in the driver's card. */
+export function CoursePracticeTask({ task, className = "" }: { task: CrmTrainingTask; className?: string }) {
+  const d = task.driver;
+  return <section className={`crm-course-practice ${className}`.trim()} aria-label="Данные задания">
+    <strong>Данные задания</strong>
+    <dl><div><dt>Водитель</dt><dd>{d.name}</dd></div><div><dt>Звонит с номера</dt><dd>{task.incoming_phone ?? d.phone}</dd></div><div><dt>Просит новый номер</dt><dd>{d.new_phone}</dd></div></dl>
+    <p>Найди водителя во вкладке «Диспетчерская»: ВУ, таксопарк, город и ссылка на аккаунт — в его карточке. Скриншот добавится внизу формы сам, когда обращение будет заполнено.</p>
   </section>;
 }
 

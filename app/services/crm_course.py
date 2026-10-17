@@ -48,7 +48,8 @@ GOALS = dict(
             "Сверь номер звонка и регистрации. Сделай снимок двух окон и оформи смену номера.",
             "Проверь номер звонка и объясни водителю три способа смены номера.",
             "Открой тикет по номеру, выполни действия модерации и дополни комментарий ссылкой.",
-            "Оформи смену номера самостоятельно: проверка, снимок, обращение и связанный тикет.",
+            "Найди водителя по данным задания и оформи смену номера. "
+            "Скриншот добавится сам — останется сохранить.",
         ),
         strict=True,
     )
@@ -203,6 +204,12 @@ def steps_for(attempt, key):
         steps = [
             ("inspect", "Найди водителя и сравни номера", w.get("inspected")),
             ("advice", "Предложи три допустимых способа смены", w.get("advice")),
+        ]
+    elif key == KEYS[4]:
+        # Practice: the screenshot is added to the appeal by itself, the saved appeal completes it.
+        steps = [
+            ("form", "Найди водителя и заполни обращение о смене номера", checks_ok),
+            ("save", "Сохрани обращение со скриншотом", saved and checks_ok),
         ]
     elif key == KEYS[3]:
         steps = [
@@ -459,6 +466,8 @@ async def autograde(session, user, key, row, uploads):
     a.checks = checks
     if all(c["ok"] for c in checks):
         await ticket_for(session, row)
+        if key == KEYS[4]:
+            pass_attempt(a)
     await session.flush()
     return await state(session, user)
 

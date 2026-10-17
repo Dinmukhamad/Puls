@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type Ref } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { FleetState } from "../../api/dispatch";
 import { crmTraining, crmTrainingKey, type CrmTrainingTask } from "../../api/crmTraining";
@@ -84,25 +84,9 @@ export function CrmCallWorkspace({ task, fleet, userId, onForm }: { task: CrmTra
     <div className="crm-call-brief"><div><span>Учебный звонок</span><h2>{task.title}</h2><p>«{task.speech}»</p></div><span className="crm-call-live">● Водитель на линии</span></div>
     <div className="crm-call-desktop-viewport" ref={viewport} style={{ height: HEIGHT * scale, "--crm-desktop-scale": scale } as CSSProperties}>
       <div className="crm-call-desktop-frame" style={{ width: WIDTH * scale, height: HEIGHT * scale }}>
-      <div className="crm-call-desktop" ref={desktop}>
-        <section className="crm-call-oktell" aria-label="OKTEL — учебное окно">
-          <header className="crm-call-window-bar"><span>☰</span><strong>OKTEL</strong><small>Учебный звонок</small></header>
-          <div className="crm-oktell-form">
-            <p className="crm-oktell-park">{park?.name ?? d.park}</p>
-            <div className="crm-oktell-identity"><label htmlFor="crm-call-phone">Номер телефона</label><label htmlFor="crm-call-name">ФИО</label>
-              <input id="crm-call-phone" value={task.incoming_phone ?? ""} readOnly />
-              <input id="crm-call-name" value={d.name} readOnly />
-            </div>
-            <label htmlFor="crm-call-note">Заметка</label><input id="crm-call-note" value={note} onChange={e => setNote(e.target.value)} onBlur={() => saveCall.mutate()} placeholder="Ссылка на аккаунт водителя" />
-            <label htmlFor="crm-call-result">Результат звонка</label><select id="crm-call-result" value={result} onChange={e => setResult(e.target.value)} onBlur={() => saveCall.mutate()}><option>Успешный звонок</option><option>Перезвонить</option><option>Не удалось связаться</option></select>
-          </div>
-          <div className="crm-oktell-request"><strong>Просьба водителя</strong><p>{mismatch ? "Смена номера при звонке с другого телефона" : <>Новый номер: <b>{d.new_phone}</b></>}</p></div>
-        </section>
-        <section className="crm-call-dispatch" aria-label="Диспетчерская — учебное окно">
-          <div className="crm-call-browser-bar"><button type="button" aria-label="Назад к исполнителям" disabled={route.page === "contractors"} onClick={() => go("contractors")}>←</button><span className="crm-call-browser-address" title={address}>▣ {address.replace("https://", "")}</span><button type="button" className={`crm-call-copy${guided && task.capture && !copied ? " is-due" : ""}`} data-course="copy-link" aria-label={copied ? "Ссылка скопирована" : "Скопировать ссылку на аккаунт"} title="Скопировать ссылку на аккаунт" disabled={!selected} onClick={() => void copyText(address).then(ok => setCopied(ok))}>{copied ? "✓ Скопировано" : "⧉ Скопировать ссылку"}</button></div>
-          <DispatchSite route={route} parkId={parkId} go={go} onResult={() => {}} />
-        </section>
-      </div>
+      <CallDesktop desktopRef={desktop} task={task} parkName={park?.name ?? d.park} address={address} route={route} parkId={parkId} go={go}
+        note={note} onNote={setNote} result={result} onResult={setResult} onSave={() => saveCall.mutate()}
+        copy={<button type="button" className={`crm-call-copy${guided && task.capture && !copied ? " is-due" : ""}`} data-course="copy-link" aria-label={copied ? "Ссылка скопирована" : "Скопировать ссылку на аккаунт"} title="Скопировать ссылку на аккаунт" disabled={!selected} onClick={() => void copyText(address).then(ok => setCopied(ok))}>{copied ? "✓ Скопировано" : "⧉ Скопировать ссылку"}</button>} />
       </div>
     </div>
     <p className="crm-call-small-screen">На узком экране рабочие окна можно прокручивать по горизонтали.</p>
@@ -112,4 +96,36 @@ export function CrmCallWorkspace({ task, fleet, userId, onForm }: { task: CrmTra
       {task.capture && preview && <img src={task.capture.data_url} alt="Снимок рабочих окон: OKTEL слева и карточка водителя справа" />}
     </div>}
   </section>;
+}
+
+/**
+ * The call's two work windows: OKTEL with the incoming number on the left, the Диспетчерская on the right.
+ * The lesson shows them; the practice draws them unseen for its screenshot. Without `onNote` the OKTEL
+ * fields are read only.
+ */
+export function CallDesktop({ desktopRef, task, parkName, address, route, parkId, go, note = "", result = "Успешный звонок", onNote, onResult, onSave, copy }: {
+  desktopRef?: Ref<HTMLDivElement>; task: CrmTrainingTask; parkName: string; address: string; route: FleetRoute; parkId: string;
+  go: (path: string, park?: string) => void; note?: string; result?: string;
+  onNote?: (value: string) => void; onResult?: (value: string) => void; onSave?: () => void; copy?: ReactNode;
+}) {
+  const d = task.driver;
+  return <div className="crm-call-desktop" ref={desktopRef}>
+    <section className="crm-call-oktell" aria-label="OKTEL — учебное окно">
+      <header className="crm-call-window-bar"><span>☰</span><strong>OKTEL</strong><small>Учебный звонок</small></header>
+      <div className="crm-oktell-form">
+        <p className="crm-oktell-park">{parkName}</p>
+        <div className="crm-oktell-identity"><label htmlFor="crm-call-phone">Номер телефона</label><label htmlFor="crm-call-name">ФИО</label>
+          <input id="crm-call-phone" value={task.incoming_phone ?? ""} readOnly />
+          <input id="crm-call-name" value={d.name} readOnly />
+        </div>
+        <label htmlFor="crm-call-note">Заметка</label><input id="crm-call-note" value={note} readOnly={!onNote} onChange={e => onNote?.(e.target.value)} onBlur={onSave} placeholder="Ссылка на аккаунт водителя" />
+        <label htmlFor="crm-call-result">Результат звонка</label><select id="crm-call-result" value={result} disabled={!onResult} onChange={e => onResult?.(e.target.value)} onBlur={onSave}><option>Успешный звонок</option><option>Перезвонить</option><option>Не удалось связаться</option></select>
+      </div>
+      <div className="crm-oktell-request"><strong>Просьба водителя</strong><p>{task.key === "crm_mismatch_v2" ? "Смена номера при звонке с другого телефона" : <>Новый номер: <b>{d.new_phone}</b></>}</p></div>
+    </section>
+    <section className="crm-call-dispatch" aria-label="Диспетчерская — учебное окно">
+      <div className="crm-call-browser-bar"><button type="button" aria-label="Назад к исполнителям" disabled={route.page === "contractors"} onClick={() => go("contractors")}>←</button><span className="crm-call-browser-address" title={address}>▣ {address.replace("https://", "")}</span>{copy}</div>
+      <DispatchSite route={route} parkId={parkId} go={go} onResult={() => {}} />
+    </section>
+  </div>;
 }

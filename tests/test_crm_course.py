@@ -10,6 +10,7 @@ from sqlalchemy import select
 
 from app.models.city import CityAward
 from app.models.crm import CrmTicketEvent
+from app.models.crm_training import CrmTrainingAttempt
 from app.services.crm_catalog import category_id
 from app.services.crm_course import KEYS
 from tests.conftest import auth, login, login_with_work_sites, make_user
@@ -113,7 +114,10 @@ async def finish_phone(client, h, key=KEYS[1]):
     t = await start(client, h, key)
     data = await capture(client, h, t)
     saved = await save_phone(client, h, t, data)
-    assert task(saved["training_state"], key)["state"] == "in_progress"
+    # The guided lesson ends at the linked ticket; the practice ends once the right appeal is saved.
+    assert task(saved["training_state"], key)["state"] == (
+        "passed" if key == KEYS[4] else "in_progress"
+    )
     assert all(c["ok"] for c in task(saved["training_state"], key)["checks"])
     await client.get(f"{BASE}/appeals/{saved['id']}", headers=h)
     opened = await client.get(f"{BASE}/tickets/{saved['ticket_id']}", headers=h)
@@ -312,6 +316,35 @@ async def test_rework_uses_ticket_number_real_actions_comment_and_idempotency(cl
     assert practice["driver"]["new_phone"] in practice["speech"] and phone not in practice["speech"]
     state = (await client.get(COURSE, headers=h)).json()
     assert state["completed"] == 5 and state["active_task"] is None
+
+
+async def test_practice_ends_at_saved_appeal_and_stays_fixable(client, session):
+    user, h = await headers(client, session)
+    for key in KEYS[:4]:
+        session.add(
+            CrmTrainingAttempt(
+                user_id=user.id, task_key=key, revision=2, snapshot={"work": {}}, phase="passed"
+            )
+        )
+    await session.commit()
+    t = await start(client, h, KEYS[4])
+    steps = [s["key"] for s in t["steps"]]
+    assert steps == ["form", "save"]
+    data = await capture(client, h, t)
+    saved = await save_phone(client, h, t, data, phone=t["driver"]["new_phone"])
+    state = task(saved["training_state"], KEYS[4])
+    assert state["state"] == "in_progress" and saved["ticket_id"] is None
+    assert {c["key"] for c in state["checks"] if not c["ok"]} == {"phone"}
+    update = payload(t, revision=saved["revision"])
+    r = await client.patch(
+        f"{BASE}/appeals/{saved['id']}", headers=h, data={"payload": json.dumps(update)}
+    )
+    assert r.status_code == 200, r.text
+    # No ticket to open: the right saved appeal completes the practice.
+    done = task(r.json()["training_state"], KEYS[4])
+    assert done["state"] == "passed" and all(s["status"] == "passed" for s in done["steps"])
+    assert r.json()["ticket_id"]
+    assert (await client.get(COURSE, headers=h)).json()["completed"] == 5
 
 
 async def test_old_city_award_does_not_skip_new_course(client, session):
