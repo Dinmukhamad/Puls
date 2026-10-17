@@ -1,5 +1,6 @@
 """Draft mutations are serialized per learner and committed by the caller."""
 
+import re
 from datetime import UTC
 from uuid import uuid4
 
@@ -18,7 +19,20 @@ MAX_FILE = 2 * 1024 * 1024
 
 
 def scope(task):
-    if task not in (None, "crm_first", "crm_phone", "crm_closed"):
+    # Only the owned-ticket endpoints create these internal scopes.
+    if isinstance(task, str) and re.fullmatch(r"ticket:[1-9][0-9]*", task):
+        return task
+    if task not in (
+        None,
+        "crm_first",
+        "crm_phone",
+        "crm_closed",
+        "crm_intro_v2",
+        "crm_phone_v2",
+        "crm_mismatch_v2",
+        "crm_rework_v2",
+        "crm_practice_v2",
+    ):
         raise HTTPException(422, "Неизвестное учебное задание")
     return task or "general"
 

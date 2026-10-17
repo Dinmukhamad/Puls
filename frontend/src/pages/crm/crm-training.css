@@ -54,3 +54,79 @@
 .crm-training-list { margin-bottom: 14px; color: #596579; font-size: 12px; }
 .crm-training-list > summary { cursor: pointer; padding: 3px 0 10px; font-weight: 600; }
 .crm-training-list .crm-training-tasks { margin-bottom: 0; }
+
+.crm-course-dock { position: fixed; top: 18px; right: 18px; z-index: 42; width: 310px; max-height: calc(100dvh - 36px); overflow: auto; color: #273449; background: #fff; border: 1px solid #dce3ee; border-radius: 16px; box-shadow: 0 12px 36px #162d4b1a; }
+.crm-course-dock > header { display: flex; align-items: center; justify-content: space-between; padding: 16px; border-bottom: 1px solid #e8edf4; }
+.crm-course-dock > header div { display: grid; gap: 4px; }
+.crm-course-dock small { color: #6a778b; font-size: 12px; }
+.crm-course-dock > header button { border: 0; border-radius: 8px; min-width: 36px; height: 36px; background: #eff3f9; color: #34465e; font-size: 20px; cursor: pointer; }
+.crm-course-dock__body { padding: 16px; display: grid; gap: 16px; font-size: 13px; line-height: 1.6; }
+.crm-course-dock h2 { margin: 0; font-size: 19px; line-height: 1.35; }
+.crm-course-dock p { margin: 0; }
+.crm-course-dock details > summary { cursor: pointer; font-size: 12px; color: #53677f; }
+.crm-course-dock details p { margin-top: 10px; }
+.crm-course-program ol { padding: 0; list-style: none; display: grid; gap: 9px; }
+.crm-course-program li { display: flex; align-items: baseline; gap: 9px; font-size: 12px; }
+.crm-course-program [data-state=locked] { color: #8a94a2; }
+.crm-course-program [data-state=passed] { color: #18794e; }
+.crm-course-current { display: grid; gap: 8px; padding: 14px; border-radius: 12px; background: #f0f5ff; border: 1px solid #dbe7ff; }
+.crm-course-current strong { font-size: 15px; line-height: 1.5; }
+.crm-course-step-list { padding-left: 20px; display: grid; gap: 8px; }
+.crm-course-step-list [data-done=true] { color: #18794e; }
+.crm-course-feedback { margin: 12px 0; padding: 12px 14px; border-radius: 10px; color: #9d382a; background: #fff2ee; font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+.crm-call-windows { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 20px; }
+.crm-call-window { min-width: 0; border: 1px solid #dfe6ef; border-radius: 12px; overflow: hidden; background: #fff; }
+.crm-call-window > header { background: #293d58; color: #fff; padding: 14px 16px; font-size: 14px; font-weight: 600; }
+.crm-call-window > label { display: grid; gap: 8px; margin: 16px; font-size: 12px; }
+.work-sites .crm-call-window input { width: 100%; padding: 10px; border: 1px solid #cad5e3; border-radius: 7px; color: #24344d; background: #fff; }
+.crm-call-window > p, .crm-call-window > dl { margin: 16px; font-size: 13px; line-height: 1.6; }
+.crm-call-account { padding: 0 16px 16px; }
+.crm-call-account h3 { font-size: 17px; }
+.crm-call-window dl { display: grid; gap: 12px; }
+.crm-call-window dt { color: #738197; font-size: 12px; }
+.crm-call-window dd { margin: 4px 0 0; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.crm-call-link { font-size: 11px; word-break: break-all; color: #4166c4; line-height: 1.6; }
+.crm-call-incoming { display: grid; gap: 12px; padding: 24px 16px; background: #f1f8f4; }
+.crm-call-incoming strong { font-size: 23px; overflow-wrap: anywhere; }
+.crm-call-incoming small { color: #718497; }
+.crm-call-incoming span { color: #18794e; font-size: 12px; }
+.crm-call-search { display: grid; margin: 0 16px 16px; gap: 7px; }
+.crm-call-search button { display: grid; gap: 6px; padding: 12px; border: 1px solid #dae3ef; background: #f6f8fc; text-align: left; border-radius: 8px; color: #283b56; cursor: pointer; }
+.crm-call-search span { font-size: 12px; }
+.crm-call-capture, .crm-course-advice { display: grid; gap: 14px; padding: 20px; border-top: 1px solid #e5ebf2; }
+.crm-call-capture img, .crm-course-attach img { display: block; width: 100%; border: 1px solid #d9e2ee; border-radius: 8px; }
+.crm-call-capture > button { justify-self: start; }
+.crm-call-capture p { font-size: 12px; color: #718197; }
+.crm-course-advice h3 { margin: 0; }
+.crm-course-advice label { display: flex; gap: 10px; align-items: baseline; font-size: 13px; }
+.crm-course-attach { margin: 0 0 20px 190px; display: grid; gap: 12px; font-size: 13px; }
+.crm-course-attach img { max-width: 600px; }
+.crm-course-attach button { justify-self: start; }
+.crm-ticket-columns { display: grid; grid-template-columns: 2fr 1fr; gap: 24px; }
+.crm-ticket-columns .crm-detail-grid { grid-template-columns: 1fr; }
+.crm-ticket-history { list-style: none; padding: 0; font-size: 12px; display: grid; gap: 12px; }
+.crm-ticket-history small { display: block; color: #738197; margin-top: 4px; }
+.crm-ticket-actions, .crm-ticket-comments-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.crm-ticket-comments-heading { margin-top: 24px; border-bottom: 1px solid #dce4ee; padding-bottom: 12px; }
+.crm-ticket-comment { display: grid; grid-template-columns: 150px 1fr auto; gap: 16px; padding: 20px 0; border-bottom: 1px solid #e7edf4; font-size: 12px; }
+.crm-ticket-comment p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.crm-ticket-comment small { color: #738197; }
+.crm-ticket-overlay { position: fixed; inset: 0; z-index: 150; background: #0006; display: grid; place-items: center; padding: 20px; }
+.crm-ticket-dialog { width: min(740px, 100%); max-height: calc(100dvh - 40px); overflow: auto; background: #fff; padding: 24px; box-shadow: 0 15px 60px #0003; border-radius: 9px; }
+.crm-ticket-dialog h2 { margin: 0 0 22px; text-align: center; font-size: 18px; color: #273449; }
+.crm-ticket-dialog form { display: grid; gap: 16px; }
+.crm-ticket-dialog label { display: grid; gap: 10px; color: #64748b; font-size: 13px; }
+.crm-ticket-dialog textarea { width: 100%; min-height: 110px; resize: vertical; padding: 12px; border: 1px solid #b8c9eb; border-radius: 5px; font: inherit; color: #26364d; background: #fff; }
+.crm-ticket-dialog .crm-paste-zone { margin: 0; }
+.crm-ticket-dialog footer { display: flex; justify-content: flex-end; gap: 12px; }
+@media (max-width: 1099px) {
+  .crm-course-dock { top: auto; bottom: 12px; right: 12px; max-height: 240px; width: 340px; max-width: calc(100vw - 24px); }
+  .crm-course-dock > header { padding: 10px 14px; }
+  .work-sites:has(.crm-course-dock.is-open) { padding-bottom: 270px; }
+}
+@media (max-width: 700px) {
+  .crm-call-windows, .crm-ticket-columns { grid-template-columns: 1fr; }
+  .crm-course-attach { margin-left: 0; }
+  .crm-call-windows { padding: 14px; gap: 12px; }
+  .crm-ticket-comment { grid-template-columns: 1fr; gap: 8px; }
+}

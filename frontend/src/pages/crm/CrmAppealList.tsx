@@ -1,11 +1,12 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { crm, CRM_STATUS, type CrmCatalog } from "../../api/crm";
 
 export const crmDate = (value: string) => new Date(value.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(value) ? value : value + "Z").toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
-export function CrmAppealList({ catalog, onOpen, onCreate }: { catalog: CrmCatalog; onOpen: (id: number) => void; onCreate: () => void }) {
+export function CrmAppealList({ catalog, onOpen, onCreate, onReady }: { onReady?: () => void; catalog: CrmCatalog; onOpen: (id: number) => void; onCreate: () => void }) {
   const [search, setSearch] = useState(""), [q, setQ] = useState(""), [status, setStatus] = useState(""), [park, setPark] = useState(""), [channel, setChannel] = useState(""), [page, setPage] = useState(1);
   const query = useQuery({ queryKey: ["crm-appeals", q, status, park, channel, page], queryFn: () => crm.list({ q, status, park, channel, page }), refetchInterval: 30000 });
+  useEffect(() => { if (query.data) onReady?.(); }, [query.data, onReady]);
   const counts = query.data?.counts;
   return <><div className="crm-overview"><div><span>Общая история</span><strong>{counts ? Object.values(counts).reduce((sum, count) => sum + count, 0) : "—"}</strong><small>обращений за всё время</small></div><div><span>Новые тикеты</span><strong>{counts ? counts.new ?? 0 : "—"}</strong><small>ожидают обработки</small></div><div><span>В работе</span><strong>{counts ? counts.in_progress ?? 0 : "—"}</strong><small>на учебной обработке</small></div><div><span>Закрытые тикеты</span><strong>{counts ? counts.closed ?? 0 : "—"}</strong><small>работа завершена</small></div></div>
   <section className="crm-panel"><div className="crm-panel-heading"><div><h2>Обращения</h2><p>Все участники · вся история</p></div><button className="crm-primary" data-coach="create" onClick={onCreate}>＋ Создать обращение</button></div>

@@ -19,7 +19,19 @@ class AppealInput(BaseModel):
     details: dict[str, str] = Field(default_factory=dict, max_length=10)
     comment: str = Field(default="", max_length=10000)
     is_ticket: bool = False
-    training_task: Literal["crm_first", "crm_phone", "crm_closed"] | None = None
+    training_task: (
+        Literal[
+            "crm_first",
+            "crm_phone",
+            "crm_closed",
+            "crm_intro_v2",
+            "crm_phone_v2",
+            "crm_mismatch_v2",
+            "crm_rework_v2",
+            "crm_practice_v2",
+        ]
+        | None
+    ) = None
     draft_key: str | None = Field(default=None, min_length=1, max_length=36)
     draft_revision: int | None = Field(default=None, ge=0)
     revision: int | None = Field(default=None, ge=1)

@@ -22,6 +22,12 @@ export interface CrmDraftWrite {
 }
 const path = (task?: string) => `/api/v1/learning/crm/draft${buildQuery({ task })}`;
 export const crmDraftApi = {
+  loadTicket: (id: number) => request<CrmDraft>(`/api/v1/learning/crm/tickets/${id}/draft`),
+  saveTicket: (id: number, write: CrmDraftWrite, files: File[]) => {
+    const multipart = new FormData(); multipart.append("payload", JSON.stringify({ ...write, task: undefined }));
+    files.forEach(file => multipart.append("files", file));
+    return request<CrmDraft>(`/api/v1/learning/crm/tickets/${id}/draft`, { method: "PUT", multipart });
+  },
   load: (task?: string) => request<CrmDraft>(path(task)),
   save: (write: CrmDraftWrite, files: File[]) => {
     const multipart = new FormData();

@@ -17,7 +17,7 @@ from app.db.base import utcnow
 from app.models.crm import CrmAppeal, CrmAttachment, CrmCategory, CrmInstruction
 from app.models.crm_training import CrmTrainingAttempt
 from app.schemas.crm import AppealInput, CategoryInput, InstructionInput, StatusInput
-from app.services import crm_draft, crm_training
+from app.services import crm_course, crm_draft, crm_training
 from app.services.crm_catalog import CITIES, PARKS, category_id, default_categories
 from app.services.crm_instructions import default_instructions
 from app.services.learning import lock_learner
@@ -146,8 +146,12 @@ async def detail(session, row):
     files = await session.scalars(
         select(CrmAttachment).where(CrmAttachment.appeal_id == row.id).order_by(CrmAttachment.id)
     )
+    ticket = await session.scalar(
+        select(crm_course.CrmTicket).where(crm_course.CrmTicket.appeal_id == row.id)
+    )
     return dict(
         **brief(row),
+        ticket_id=ticket.id if ticket else None,
         attachments=[{"id": f.id, "name": f.name, "mime": f.mime, "size": f.size} for f in files],
     )
 
@@ -214,6 +218,10 @@ async def get_appeal(appeal_id: int, session: SessionDep, user: CurrentUser):
     row = await session.get(CrmAppeal, appeal_id)
     if not row:
         raise HTTPException(404, "Обращение не найдено")
+    if row.training_task in crm_course.KEYS and row.author_id == user.id:
+        await lock_learner(session, user.id)
+        await crm_course.opened_appeal(session, user, row)
+        await session.commit()
     return await detail(session, row)
 
 
@@ -344,6 +352,9 @@ async def require_started_training(session, user, key):
     """Only an explicit, unfinished start may accept a new training proof."""
     if key is None:
         return
+    if key in crm_course.KEYS:
+        await crm_course.require_started(session, user, key)
+        return
     attempts, awards = await crm_training._records(session, user)
     if crm_training._passed(key, attempts, awards):
         raise HTTPException(409, "Это учебное задание уже пройдено")
@@ -357,7 +368,8 @@ async def require_started_training(session, user, key):
 async def saved_result(session, user, row, state=None):
     result = await detail(session, row)
     if row.training_task:
-        result["training_state"] = state or await crm_training.state(session, user)
+        service = crm_course if row.training_task in crm_course.KEYS else crm_training
+        result["training_state"] = state or await service.state(session, user)
     return result
 
 
@@ -444,7 +456,8 @@ async def create_appeal(
         await session.flush()
         training_state = None
         if body.training_task:
-            training_state = await crm_training.autograde(
+            service = crm_course if body.training_task in crm_course.KEYS else crm_training
+            training_state = await service.autograde(
                 session, user, body.training_task, row, uploads
             )
         await crm_draft.consume_loaded(session, draft)
@@ -544,7 +557,8 @@ async def correct_appeal(
     await session.flush()
     training_state = None
     if task:
-        training_state = await crm_training.autograde(
+        service = crm_course if task in crm_course.KEYS else crm_training
+        training_state = await service.autograde(
             session, user, task, row, [*kept_uploads, *uploads]
         )
     await crm_draft.consume_loaded(session, draft)

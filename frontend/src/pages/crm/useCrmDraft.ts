@@ -4,10 +4,10 @@ import { crmDraftApi } from "../../api/crmDraft";
 import { browserDraftBackup } from "./crmDraftBackup";
 import { CrmDraftController, crmDraftIdentity, type DraftSnapshot } from "./crmDraft";
 
-export function useCrmDraft({ enabled, userId, task, appealId, initial, initialDirty }: {
-  enabled: boolean; userId?: number; task?: string; appealId?: number; initial: CrmInput; initialDirty?: boolean;
+export function useCrmDraft({ enabled, userId, task, appealId, ticketId, initial, initialDirty }: {
+  enabled: boolean; userId?: number; task?: string; appealId?: number; ticketId?: number; initial: CrmInput; initialDirty?: boolean;
 }) {
-  const identity = { userId: userId ?? 0, task, appealId };
+  const identity = { userId: userId ?? 0, task: ticketId ? `ticket:${ticketId}` : task, appealId };
   const key = crmDraftIdentity(identity);
   const initialSnapshot: DraftSnapshot = { form: initial, files: [], attachments: [], draftKey: null,
     revision: 0, status: "loading", error: "", removedAppealAttachmentIds: [], ready: false };
@@ -16,7 +16,7 @@ export function useCrmDraft({ enabled, userId, task, appealId, initial, initialD
   useEffect(() => {
     if (!enabled || !userId) return;
     const session = new CrmDraftController({ identity, initial, initialDirty,
-      transport: { load: () => crmDraftApi.load(task), save: (write, files) => crmDraftApi.save(write, files) },
+      transport: { load: () => ticketId ? crmDraftApi.loadTicket(ticketId) : crmDraftApi.load(task), save: (write, files) => ticketId ? crmDraftApi.saveTicket(ticketId, write, files) : crmDraftApi.save(write, files) },
       backup: browserDraftBackup(identity),
     });
     current.current = session;

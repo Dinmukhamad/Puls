@@ -4,7 +4,16 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-Task = Literal["crm_first", "crm_phone", "crm_closed"]
+Task = Literal[
+    "crm_first",
+    "crm_phone",
+    "crm_closed",
+    "crm_intro_v2",
+    "crm_phone_v2",
+    "crm_mismatch_v2",
+    "crm_rework_v2",
+    "crm_practice_v2",
+]
 
 
 class DraftForm(BaseModel):
