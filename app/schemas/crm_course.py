@@ -10,9 +10,13 @@ CourseTask = Literal[
 
 class CourseAction(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    action: Literal["list", "appeal", "ticket", "inspect", "advice"]
+    action: Literal["list", "appeal", "ticket", "inspect", "advice", "call_form"]
     driver_id: str | None = Field(default=None, max_length=80)
     choices: list[str] = Field(default_factory=list, max_length=5)
+    note: str = Field(default="", max_length=2000)
+    call_result: Literal["Успешный звонок", "Перезвонить", "Не удалось связаться"] = (
+        "Успешный звонок"
+    )
 
 
 class TicketAction(BaseModel):

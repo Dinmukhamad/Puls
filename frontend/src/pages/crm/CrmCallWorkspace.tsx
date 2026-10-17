@@ -1,8 +1,11 @@
-import { useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { FleetState } from "../../api/dispatch";
-import { crmTraining, crmTrainingKey, type CrmTrainingDriver, type CrmTrainingTask } from "../../api/crmTraining";
+import { crmTraining, crmTrainingKey, type CrmTrainingTask } from "../../api/crmTraining";
+import { DispatchSite } from "../dispatch/DispatchSite";
+import { fleetLink, fullName, parseRoute, type FleetRoute } from "../dispatch/fleetNav";
 import { copyText } from "./accountData";
+import "./crm-call-desktop.css";
 
 const ADVICE = [
   ["registered_call", "Позвонить с номера регистрации"],
@@ -10,72 +13,95 @@ const ADVICE = [
   ["whatsapp", "Написать в WhatsApp для смены номера"],
   ["change_now", "Оформить смену номера по текущему звонку"],
 ];
+const WIDTH = 1440, HEIGHT = 720;
 
-/** Draw the same two training cards as one PNG; only this course capture is accepted as proof. */
-export async function callSnapshot(driver: CrmTrainingDriver, incoming: string): Promise<Blob> {
-  const canvas = document.createElement("canvas"); canvas.width = 1440; canvas.height = 720;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Не удалось сделать снимок. Попробуй другой браузер.");
-  ctx.fillStyle = "#edf1f7"; ctx.fillRect(0, 0, 1440, 720);
-  const text = (value: string, x: number, y: number, size = 24, color = "#202b3c") => {
-    ctx.font = `${size}px Arial, sans-serif`; ctx.fillStyle = color; ctx.fillText(value, x, y, 610);
-  };
-  [[24, "ДИСПЕТЧЕРСКАЯ"], [732, "OKTEL · ВХОДЯЩИЙ ЗВОНОК"]].forEach(([x, title]) => {
-    ctx.fillStyle = "#fff"; ctx.fillRect(Number(x), 28, 684, 652);
-    ctx.fillStyle = "#273c59"; ctx.fillRect(Number(x), 28, 684, 74);
-    text(String(title), Number(x) + 24, 75, 25, "#fff");
+/** Capture the rendered work windows, including their current fields, rather than redraw their data. */
+export async function callSnapshot(desktop: HTMLElement): Promise<Blob> {
+  const { toBlob } = await import("html-to-image");
+  const image = await toBlob(desktop, {
+    width: WIDTH, height: HEIGHT, canvasWidth: WIDTH, canvasHeight: HEIGHT,
+    pixelRatio: 1, backgroundColor: "#ffffff", skipFonts: true,
+    style: { transform: "none", transformOrigin: "top left" },
   });
-  text("Аккаунт водителя", 52, 154, 20, "#64748b"); text(driver.name, 52, 201, 28);
-  text("Номер регистрации", 52, 263, 20, "#64748b"); text(driver.phone, 52, 310, 36);
-  text(`ВУ: ${driver.license}`, 52, 375); text(`Таксопарк: ${driver.park}`, 52, 425);
-  text(`Город: ${driver.city}`, 52, 475); text(`ID: ${driver.id}`, 52, 532, 17);
-  text(driver.link, 52, 590, 13);
-  text("Номер входящего звонка", 760, 154, 20, "#64748b"); text(incoming, 760, 215, 36);
-  text("Звонок на линии", 760, 290, 25, "#18794e"); text("Просьба: сменить номер телефона", 760, 356);
-  text("Учебные данные · практика CRM", 52, 650, 16, "#64748b");
-  return new Promise((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error("Не удалось сделать снимок")), "image/png"));
+  if (!image) throw new Error("Не удалось сделать снимок. Повтори попытку.");
+  return image;
 }
 
 export function CrmCallWorkspace({ task, fleet, userId, onForm }: { task: CrmTrainingTask; fleet?: FleetState; userId?: number; onForm: () => void }) {
-  const [search, setSearch] = useState(""), [selected, setSelected] = useState<CrmTrainingDriver | null>(null);
+  const [route, setRoute] = useState<FleetRoute>({ page: "contractors" });
+  const [parkId, setParkId] = useState(fleet?.drivers.find(d => d.id === task.driver?.id)?.park ?? "itaxi-krg");
   const [choices, setChoices] = useState<string[]>([]), [copied, setCopied] = useState(false);
+  const [note, setNote] = useState(task.call_form?.note ?? "");
+  const [result, setResult] = useState(task.call_form?.result ?? "Успешный звонок");
+  const [scale, setScale] = useState(1), [preview, setPreview] = useState(false);
+  const viewport = useRef<HTMLDivElement>(null), desktop = useRef<HTMLDivElement>(null);
   const client = useQueryClient();
   const update = (value: Awaited<ReturnType<typeof crmTraining.state>>) => client.setQueryData(crmTrainingKey(userId), value);
-  const inspect = useMutation({ mutationFn: (driver: CrmTrainingDriver) => crmTraining.action(task.key, { action: "inspect", driver_id: driver.id }), onSuccess: update });
+  const inspect = useMutation({ mutationFn: (id: string) => crmTraining.action(task.key, { action: "inspect", driver_id: id }), onSuccess: update });
+  const saveCall = useMutation({ mutationFn: () => crmTraining.action(task.key, { action: "call_form", note, call_result: result }), onSuccess: () => { void client.invalidateQueries({ queryKey: crmTrainingKey(userId) }); } });
+  const selected = route.page === "driver" ? fleet?.drivers.find(d => d.id === route.id && d.park === parkId) : undefined;
+  const park = fleet?.parks.find(p => p.id === parkId);
+  const address = selected ? fleetLink(selected, park) : `fleet.yandex.kz/contractors · ${park?.name ?? "Таксопарк"}`;
+  const details = !!selected && (route.tab ?? "details") === "details";
+  const correct = details && selected.id === task.driver?.id;
   const capture = useMutation({ mutationFn: async () => {
-    if (!selected || selected.id !== task.driver.id) throw new Error("Открой аккаунт водителя из звонка.");
-    await inspect.mutateAsync(selected);
-    return crmTraining.capture(task.key, await callSnapshot(selected, task.incoming_phone!));
-  }, onSuccess: update });
+    if (!correct || !desktop.current) throw new Error("Открой вкладку «Детали» нужного водителя.");
+    const phone = desktop.current.querySelector<HTMLInputElement>('[data-coach="driver-phone"] input');
+    const licence = desktop.current.querySelector<HTMLInputElement>('[data-coach="driver-license"] input');
+    if (!phone || !licence) throw new Error("Дождись загрузки карточки водителя.");
+    if (phone.value.replace(/\D/g, "").slice(-10) !== task.incoming_phone?.replace(/\D/g, "").slice(-10)) throw new Error("Номера не совпадают. По этому звонку нельзя оформить смену номера.");
+    await inspect.mutateAsync(selected.id);
+    await saveCall.mutateAsync();
+    desktop.current.querySelector<HTMLElement>(".fleet-main")?.scrollTo({ top: 0 });
+    const image = await callSnapshot(desktop.current);
+    return crmTraining.capture(task.key, image);
+  }, onSuccess: value => { update(value); setPreview(false); } });
   const advice = useMutation({ mutationFn: () => crmTraining.action(task.key, { action: "advice", choices }), onSuccess: update });
+  useEffect(() => {
+    const node = viewport.current;
+    if (!node) return;
+    const observer = new ResizeObserver(() => setScale(Math.max(.65, Math.min(1, node.clientWidth / WIDTH))));
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+  function go(path: string, nextPark = parkId) {
+    const next = parseRoute(path); setRoute(next); setParkId(nextPark); setCopied(false);
+    if (next.page === "driver" && next.id && (next.tab ?? "details") === "details") inspect.mutate(next.id);
+  }
   const d = task.driver;
   if (!d) return <p>Начни урок, чтобы открыть учебный звонок.</p>;
-  const drivers = (fleet?.drivers ?? []).map(row => {
-    if (row.id === d.id) return d;
-    const park = fleet?.parks.find(p => p.id === row.park);
-    return { id: row.id, name: [row.last_name, row.first_name, row.middle_name].filter(Boolean).join(" "), phone: row.phone, license: row.license, park: park?.name ?? "", city: park?.city ?? "", link: "" };
-  });
-  const needle = search.toLowerCase().replace(/[+()\s-]/g, "");
-  const found = needle ? drivers.filter(row => `${row.name} ${row.phone} ${row.license}`.toLowerCase().replace(/[+()\s-]/g, "").includes(needle)).slice(0, 6) : [];
   const mismatch = task.key === "crm_mismatch_v2";
-  const error = capture.error ?? inspect.error ?? advice.error;
+  const error = capture.error ?? inspect.error ?? advice.error ?? saveCall.error;
+  const busy = capture.isPending || inspect.isPending;
   return <section className="crm-panel crm-call-workspace" aria-label="Учебный звонок и диспетчерская">
-    <div className="crm-panel-heading"><div><h2>{task.title}</h2><p>{task.speech}</p></div></div>
-    <div className="crm-call-windows">
-      <section className="crm-call-window" aria-label="Диспетчерская — учебное окно"><header>Диспетчерская</header>
-        <label>Поиск водителя<input aria-label="Найти водителя по телефону, имени или ВУ" value={search} onChange={e => setSearch(e.target.value)} placeholder="Телефон, имя или ВУ" /></label>
-        {!needle && !selected && <p>Найди водителя по данным звонка.</p>}
-        {needle && <div className="crm-call-search">{found.map(row => <button key={row.id} disabled={inspect.isPending} onClick={() => { setSelected(row); setSearch(""); inspect.mutate(row); }}><strong>{row.name}</strong><span>{row.phone}</span></button>)}{!found.length && <p>Водитель не найден. Проверь введённые данные.</p>}</div>}
-        {selected && <div className="crm-call-account"><h3>{selected.name}</h3><dl>{[["Номер регистрации", selected.phone], ["ВУ", selected.license], ["Таксопарк", selected.park], ["Город", selected.city]].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
-          {selected.link && <><p className="crm-call-link">{selected.link}</p><button className="crm-secondary" onClick={() => void copyText(selected.link).then(ok => setCopied(ok))}>{copied ? "Ссылка скопирована" : "Скопировать ссылку на аккаунт"}</button></>}
-        </div>}
-      </section>
-      <section className="crm-call-window" aria-label="OKTEL — учебное окно"><header>OKTEL</header><div className="crm-call-incoming"><small>Входящий звонок</small><strong>{task.incoming_phone}</strong><span>● На линии</span></div><p>«{task.speech}»</p>{!mismatch && <dl><dt>Водитель просит указать новый номер</dt><dd>{d.new_phone}</dd></dl>}{mismatch && <p>Данные для поиска: {d.name}, ВУ {d.license}.</p>}</section>
+    <div className="crm-call-brief"><div><span>Учебный звонок</span><h2>{task.title}</h2><p>«{task.speech}»</p></div><span className="crm-call-live">● Водитель на линии</span></div>
+    <div className="crm-call-desktop-viewport" ref={viewport} style={{ height: HEIGHT * scale, "--crm-desktop-scale": scale } as CSSProperties}>
+      <div className="crm-call-desktop" ref={desktop}>
+        <section className="crm-call-oktell" aria-label="OKTEL — учебное окно">
+          <header className="crm-call-window-bar"><span>☰</span><strong>OKTEL</strong><small>Учебный звонок</small></header>
+          <div className="crm-oktell-form">
+            <p className="crm-oktell-park">{park?.name ?? d.park}</p>
+            <div className="crm-oktell-identity"><label htmlFor="crm-call-phone">Номер телефона</label><label htmlFor="crm-call-name">ФИО</label>
+              <input id="crm-call-phone" value={task.incoming_phone ?? ""} readOnly />
+              <input id="crm-call-name" value={d.name} readOnly />
+            </div>
+            <label htmlFor="crm-call-note">Заметка</label><input id="crm-call-note" value={note} onChange={e => setNote(e.target.value)} onBlur={() => saveCall.mutate()} placeholder="Ссылка на аккаунт водителя" />
+            <label htmlFor="crm-call-result">Результат звонка</label><select id="crm-call-result" value={result} onChange={e => setResult(e.target.value)} onBlur={() => saveCall.mutate()}><option>Успешный звонок</option><option>Перезвонить</option><option>Не удалось связаться</option></select>
+          </div>
+          <div className="crm-oktell-request"><strong>Просьба водителя</strong><p>{mismatch ? "Смена номера при звонке с другого телефона" : <>Новый номер: <b>{d.new_phone}</b></>}</p></div>
+        </section>
+        <section className="crm-call-dispatch" aria-label="Диспетчерская — учебное окно">
+          <div className="crm-call-browser-bar"><button type="button" aria-label="Назад к исполнителям" disabled={route.page === "contractors"} onClick={() => go("contractors")}>←</button><span className="crm-call-browser-address" title={address}>▣ {address.replace("https://", "")}</span><button type="button" aria-label={copied ? "Ссылка скопирована" : "Скопировать ссылку на аккаунт"} title="Скопировать ссылку на аккаунт" disabled={!selected} onClick={() => void copyText(address).then(ok => setCopied(ok))}>{copied ? "✓" : "⧉"}</button></div>
+          <DispatchSite route={route} parkId={parkId} go={go} onResult={() => {}} />
+        </section>
+      </div>
     </div>
+    <p className="crm-call-small-screen">На узком экране рабочие окна можно прокручивать по горизонтали.</p>
     {!!error && <p role="alert" className="crm-course-feedback">{error instanceof Error ? error.message : "Не удалось выполнить действие. Повтори."}</p>}
-    {mismatch ? <div className="crm-course-advice"><h3>Что предложишь водителю?</h3>{ADVICE.map(([key, label]) => <label key={key}><input type="checkbox" checked={choices.includes(key)} onChange={e => setChoices(values => e.target.checked ? [...values, key] : values.filter(v => v !== key))} />{label}</label>)}<button className="crm-primary" disabled={advice.isPending || !selected || inspect.isPending} onClick={() => advice.mutate()}>Ответить водителю</button></div>
-    : <div className="crm-call-capture"><button className="crm-primary" disabled={!selected || selected.id !== d.id || capture.isPending || inspect.isPending} onClick={() => capture.mutate()}>{capture.isPending ? "Делаем снимок…" : task.capture ? "Снимок сохранён" : "Сделать снимок"}</button>
-      {task.capture && <><img src={task.capture.data_url} alt="Один снимок диспетчерской и OKTEL с номерами водителя" /><button className="crm-primary" onClick={onForm}>Перейти к оформлению обращения</button><p>В форме прикрепи этот снимок кнопкой «Прикрепить снимок двух окон».</p></>}
+    {mismatch ? <div className="crm-course-advice"><h3>Что предложишь водителю?</h3>{ADVICE.map(([key, label]) => <label key={key}><input type="checkbox" checked={choices.includes(key)} onChange={e => setChoices(values => e.target.checked ? [...values, key] : values.filter(v => v !== key))} />{label}</label>)}<button className="crm-primary" disabled={advice.isPending || !correct || inspect.isPending} onClick={() => advice.mutate()}>Ответить водителю</button></div>
+    : <div className="crm-call-capture"><div className="crm-call-capture-actions"><button className="crm-primary" disabled={!correct || busy} onClick={() => capture.mutate()}>{capture.isPending ? "Делаем снимок…" : task.capture ? "Сделать новый снимок" : "Сделать снимок"}</button>{task.capture && <><button className="crm-secondary" onClick={() => setPreview(v => !v)} aria-expanded={preview}>{preview ? "Скрыть снимок" : "Посмотреть снимок"}</button><button className="crm-primary" onClick={onForm}>{task.appeal_id ? "Заменить снимок в обращении" : "Перейти к оформлению обращения"}</button></>}</div>
+      <p>{!correct ? "Справа найди водителя из звонка и открой его карточку → «Детали»." : !task.capture ? `Сравни номер телефона в OKTEL слева и в карточке ${fullName(selected!)} справа. Затем сделай один снимок.` : "Снимок сохранён. Прикрепи его в форме обращения."}</p>
+      {task.capture && preview && <img src={task.capture.data_url} alt="Снимок рабочих окон: OKTEL слева и карточка водителя справа" />}
     </div>}
   </section>;
 }

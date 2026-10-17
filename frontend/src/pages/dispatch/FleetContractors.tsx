@@ -20,7 +20,7 @@ export function ContractorsPage() {
       {SEGMENTS.map(([id, label]) => <button key={id} className={`fleet-chip${segment === id ? " is-on" : ""}`} aria-pressed={segment === id} data-coach={`segment-${id}`} onClick={() => setSegment(s => s === id ? "" : id)}>{label} <small>{all.filter(d => d.segment === id).length}</small>{segment === id && <Icon name="close" />}</button>)}
     </div>
     <div className="fleet-toolbar">
-      <label className="fleet-inline-search" data-coach="list-search"><span className="fleet-count"><Icon name="people" />{rows.length}</span><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Поиск по имени, ВУ или позывному" aria-label="Поиск по имени, ВУ или позывному" /></label>
+      <label className="fleet-inline-search" data-coach="list-search"><span className="fleet-count"><Icon name="people" />{rows.length}</span><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Поиск по имени, телефону, ВУ или позывному" aria-label="Поиск по имени, телефону, ВУ или позывному" /></label>
       <button className="fleet-chip" disabled title="Фильтры в обучении не нужны"><Icon name="plus" /> Фильтры</button>
       <button className="fleet-chip fleet-toolbar-end" onClick={() => notify("Список уже отсортирован по фамилии.")}>Сортировка ⇅</button>
     </div>

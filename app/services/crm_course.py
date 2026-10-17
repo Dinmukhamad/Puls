@@ -257,6 +257,10 @@ async def state(session, user):
                 "speech": snapshot.get("speech", ""),
                 "driver": snapshot.get("driver"),
                 "incoming_phone": snapshot.get("incoming_phone"),
+                "call_form": {
+                    "note": snapshot.get("work", {}).get("call_note", ""),
+                    "result": snapshot.get("work", {}).get("call_result", "Успешный звонок"),
+                },
                 "category_path": snapshot.get("category_path", []),
                 "steps": steps_for(a, key),
                 "checks": a.checks if a else [],
@@ -266,7 +270,7 @@ async def state(session, user):
                 "passed_at": crm_training._iso(a.passed_at) if a else None,
                 "capture": {
                     "id": capture.id,
-                    "name": f"crm-call-{capture.id}.png",
+                    "name": f"crm-call-{capture.id}-{capture.digest[:8]}.png",
                     "data_url": "data:image/png;base64," + base64.b64encode(capture.data).decode(),
                 }
                 if capture
@@ -285,7 +289,11 @@ async def action(session, user, key, body):
     a = await own_attempt(session, user, key)
     if a.phase == "passed":
         return await state(session, user)
-    if body.action == "inspect":
+    if body.action == "call_form":
+        if key not in (KEYS[1], KEYS[2], KEYS[4]):
+            raise HTTPException(409, "Открой текущий учебный звонок")
+        remember(a, call_note=body.note, call_result=body.call_result)
+    elif body.action == "inspect":
         if key not in (KEYS[1], KEYS[2], KEYS[4]):
             raise HTTPException(409, "Открой обращение текущего задания")
         if body.driver_id != a.snapshot["driver"]["id"]:
@@ -346,6 +354,21 @@ async def capture(session, user, key, image):
                 data=image,
             )
         )
+    else:
+        if existing.digest != hashlib.sha256(image).hexdigest():
+            a.checks = [
+                {
+                    **check,
+                    "ok": False,
+                    "message": "Снимок обновлён. Замени вложение в обращении новым снимком.",
+                }
+                if check["key"] == "capture"
+                else check
+                for check in a.checks
+            ]
+        existing.digest = hashlib.sha256(image).hexdigest()
+        existing.data = image
+        existing.created_at = utcnow()
     remember(a, capture=True)
     await session.flush()
     return await state(session, user)

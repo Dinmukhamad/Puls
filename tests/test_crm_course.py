@@ -316,3 +316,42 @@ async def test_old_city_award_does_not_skip_new_course(client, session):
     await session.commit()
     state = (await client.get(COURSE, headers=h)).json()
     assert state["completed"] == 0
+
+
+async def test_call_form_and_retaken_screenshot_are_persisted(client, session):
+    _, h = await headers(client, session)
+    await finish_intro(client, h)
+    t = await start(client, h, KEYS[1])
+    result = await action(
+        client, h, t["key"], action="call_form", note=t["driver"]["link"], call_result="Перезвонить"
+    )
+    assert result.status_code == 200, result.text
+    restored = task((await client.get(COURSE, headers=h)).json(), t["key"])
+    assert restored["call_form"] == {"note": t["driver"]["link"], "result": "Перезвонить"}
+    first = await capture(client, h, t, png(100))
+    old = task((await client.get(COURSE, headers=h)).json(), t["key"])["capture"]
+    newest = await capture(client, h, t, png(200))
+    new = task((await client.get(COURSE, headers=h)).json(), t["key"])["capture"]
+    assert old["id"] == new["id"] and old["name"] != new["name"]
+    saved = await save_phone(client, h, t, first)
+    assert not next(
+        c for c in task(saved["training_state"], t["key"])["checks"] if c["key"] == "capture"
+    )["ok"]
+    update = payload(
+        t, revision=saved["revision"], remove_attachment_ids=[saved["attachments"][0]["id"]]
+    )
+    fixed = await client.patch(
+        f"{BASE}/appeals/{saved['id']}",
+        headers=h,
+        data={"payload": json.dumps(update)},
+        files={"files": ("new.png", newest, "image/png")},
+    )
+    assert fixed.status_code == 200, fixed.text
+    assert all(c["ok"] for c in task(fixed.json()["training_state"], t["key"])["checks"])
+    # Replacing a shot after a valid save invalidates that proof until the attachment is replaced.
+    await capture(client, h, t, png(50))
+    after_retake = task((await client.get(COURSE, headers=h)).json(), t["key"])
+    assert not next(c for c in after_retake["checks"] if c["key"] == "capture")["ok"]
+    await client.get(f"{BASE}/appeals/{fixed.json()['id']}", headers=h)
+    await client.get(f"{BASE}/tickets/{fixed.json()['ticket_id']}", headers=h)
+    assert task((await client.get(COURSE, headers=h)).json(), t["key"])["state"] == "in_progress"
