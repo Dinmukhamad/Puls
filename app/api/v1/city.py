@@ -4,12 +4,13 @@ from sqlalchemy import func, or_, select
 from app.core.deps import CurrentUser, HeadUser, LearningEditor, LearningReader, SessionDep
 from app.core.errors import NotFoundError
 from app.models.city import CityAward
-from app.models.enums import Role
+from app.models.enums import LEARNER_ROLES, Role
 from app.models.user import User
 from app.schemas.city import (
     BuildInput,
     ClaimInput,
     EconomyInput,
+    LevelsSeen,
     QuestAnswer,
     SettingsInput,
     SituationsInput,
@@ -52,6 +53,17 @@ async def own_city(session: SessionDep, user: CurrentUser, response: Response):
 @router.post("/learning/city/missions/{key}/claim")
 async def claim(key: str, body: ClaimInput, session: SessionDep, user: CurrentUser):
     return await city.claim(session, user, key, body.revision)
+
+
+@router.post("/learning/city/levels/seen")
+async def see_levels(body: LevelsSeen, session: SessionDep, user: CurrentUser):
+    return await city.see_levels(session, user, body.levels)
+
+
+@router.post("/learning/city/tour/finish")
+async def finish_tour(session: SessionDep, user: CurrentUser):
+    """Pulsar's tour of the site reached its end: «Как устроен Puls» can be claimed."""
+    return await city.finish_tour(session, user)
 
 
 @router.post("/learning/city/plots/{plot}/build")
@@ -104,7 +116,7 @@ async def configure_situations(body: SituationsInput, session: SessionDep, user:
 @router.get("/admin/learning/city/operators/{user_id}")
 async def operator_city(user_id: int, session: SessionDep, user: LearningReader):
     operator = await session.scalar(
-        select(User).where(User.id == user_id, User.role == Role.OPERATOR)
+        select(User).where(User.id == user_id, User.role.in_(LEARNER_ROLES))
     )
     if not operator:
         raise NotFoundError("Оператор не найден")
@@ -119,7 +131,7 @@ async def participants(
     page: int = Query(1, ge=1),
     size: int = Query(25, ge=1, le=50),
 ):
-    conditions = [User.role == Role.OPERATOR, User.is_active.is_(True)]
+    conditions = [User.role.in_(LEARNER_ROLES), User.is_active.is_(True)]
     if q.strip():
         term = q.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         conditions.append(

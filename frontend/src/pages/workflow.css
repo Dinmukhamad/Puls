@@ -5,9 +5,6 @@
 .workflow-step span { display:grid; place-items:center; width:32px; height:32px; border-radius:50%; background:var(--surface-secondary); font-variant-numeric:tabular-nums; }
 .workflow-step[aria-current="step"] { color:var(--accent-primary); font-weight:650; }
 .workflow-step[aria-current="step"] span { background:var(--accent-primary); color:var(--text-on-accent, #fff); }
-.upload-zone { display:flex; flex-direction:column; align-items:center; gap:var(--sp-3); padding:var(--sp-8); border:2px dashed var(--separator); border-radius:var(--radius-l); text-align:center; background:var(--surface-secondary); }
-.upload-zone.is-dragging { border-color:var(--accent-primary); }
-.upload-zone input { max-width:100%; }
 .workflow-note { color:var(--text-secondary); line-height:1.6; margin:var(--sp-3) 0; }
 .workflow-issues { padding-left:var(--sp-5); display:grid; gap:var(--sp-3); line-height:1.5; }
 .workflow-results { display:grid; gap:var(--sp-3); }
@@ -16,19 +13,68 @@
 .workflow-stats { display:flex; flex-wrap:wrap; gap:var(--sp-4); font-variant-numeric:tabular-nums; }
 .workflow-actions { display:flex; flex-wrap:wrap; gap:var(--sp-3); }
 .workflow-error { padding:var(--sp-4); border-radius:var(--radius-m); background:var(--surface-secondary); color:var(--text-primary); border-left:3px solid var(--status-danger); }
-.period-controls { display:grid; grid-template-columns:minmax(0, 1fr) minmax(0, 1fr) auto; align-items:end; gap:16px; }
-.period-controls .field { display:grid; grid-template-rows:18px 44px; gap:8px; min-width:0; margin:0; }
-.period-controls .field__label { height:18px; line-height:18px; margin:0; }
-.period-controls :is(.input, .btn) { height:44px; min-height:44px; }
 .periods-page .card__title { line-height:1.4; }
 .periods-page .page-head { align-items:center; }
-@media(max-width:900px) { .period-controls { grid-template-columns:repeat(2, minmax(0, 1fr)); }.period-controls > .btn { grid-column:1 / -1; width:100%; } }
-@media(max-width:600px) { .period-controls { grid-template-columns:minmax(0, 1fr); gap:16px; }.period-controls > .btn { grid-column:auto; width:100%; }.period-controls .field { min-width:0; } }
-@media(max-width:767px) { .workflow-toolbar .field { min-width:100%; } .upload-zone { padding:var(--sp-5); } .workflow-steps { gap:var(--sp-2); } .workflow-step { font-size:12px; } .workflow-step span { width:24px; height:24px; } }
-.period-controls.period-controls--readonly { grid-template-columns:minmax(0, 1fr); }
+@media(max-width:767px) { .workflow-toolbar .field { min-width:100%; } .workflow-steps { gap:var(--sp-2); } .workflow-step { font-size:12px; } .workflow-step span { width:24px; height:24px; } }
 /* Sessions: who and what to find on the first line, the four lists and the reset on the second. */
 .sessions-filters { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)) auto; align-items:end; }
 .sessions-filters .field { min-width:0; }
 .sessions-filters > :nth-child(2) { grid-column:2 / -1; }
 @media(max-width:900px) { .sessions-filters { grid-template-columns:repeat(2, minmax(0, 1fr)); } .sessions-filters > :nth-child(2) { grid-column:auto; } .sessions-filters > .btn { grid-column:1 / -1; } }
 @media(max-width:767px) { .sessions-filters { grid-template-columns:minmax(0, 1fr); } .sessions-filters > .btn { grid-column:auto; } }
+/* Monthly reports: the files, then the month when their names do not say it. */
+.reports-upload { display:grid; gap:var(--sp-4); }
+.reports-upload__month { max-width:340px; margin:0; }
+
+/*
+ * «Расчёт и история периодов» (docs/PERFORMANCE_SECTION.md): the weeks as rows, newest first; a week opens with its
+ * status and the actions at the top, its steps, the upload and its check, then the results as a table.
+ */
+.period-rows { list-style:none; margin:0; padding:0; }
+.period-rows > li + li { border-top:1px solid var(--separator); }
+.period-row { display:grid; grid-template-columns:minmax(0,1fr) auto 16px; align-items:center; gap:var(--sp-4); width:100%; padding:var(--sp-3) var(--sp-5); border:0; background:none; color:var(--text-primary); font:inherit; text-align:left; cursor:pointer; }
+.period-row:hover { background:var(--surface-hover); }
+.period-row:focus-visible { outline:2px solid var(--accent-primary); outline-offset:-2px; border-radius:var(--radius-m); }
+.period-row > svg { color:var(--text-tertiary); }
+.period-row__main { display:grid; gap:2px; min-width:0; }
+.period-row__main strong { font-weight:600; font-variant-numeric:tabular-nums; }
+.period-row__main span { color:var(--text-secondary); font-size:var(--text-caption); }
+.periods-back { justify-self:start; align-self:flex-start; padding:0; border:0; background:none; color:var(--text-secondary); font:inherit; font-size:var(--text-secondary-size); cursor:pointer; }
+.periods-back:hover { color:var(--text-primary); }
+.period-head .card__body { display:flex; align-items:center; justify-content:space-between; gap:var(--sp-4); flex-wrap:wrap; }
+.period-head__main { display:grid; gap:var(--sp-1); min-width:0; }
+.period-head__title { display:flex; align-items:center; gap:var(--sp-3); flex-wrap:wrap; }
+.period-head__title h2 { margin:0; font-size:22px; font-weight:650; letter-spacing:-.02em; font-variant-numeric:tabular-nums; }
+.period-head__main p, .period-head__note { margin:0; color:var(--text-secondary); font-size:var(--text-secondary-size); }
+.period-head__actions { display:flex; gap:var(--sp-2); flex-wrap:wrap; }
+.workflow-step.is-done { color:var(--text-primary); }
+.workflow-step.is-done span { background:var(--status-success-tint, var(--accent-tint)); color:var(--status-success-text, var(--accent-ink)); }
+.period-check { display:grid; gap:var(--sp-4); margin-top:var(--sp-5); }
+.period-check__save { display:flex; align-items:center; justify-content:space-between; gap:var(--sp-3); flex-wrap:wrap; color:var(--text-secondary); font-size:var(--text-secondary-size); }
+.period-results-summary { display:grid; gap:var(--sp-4); }
+.period-results-summary .workflow-error { margin:0; }
+.period-results { list-style:none; margin:0; padding:0; }
+.period-result { display:grid; grid-template-columns:48px minmax(0,1fr) 110px minmax(150px,auto); align-items:center; gap:var(--sp-4); padding:var(--sp-2) var(--sp-5); border-top:1px solid var(--separator); }
+.period-result--head { padding-block:var(--sp-2); color:var(--text-tertiary); font-size:var(--text-micro); font-weight:600; text-transform:uppercase; letter-spacing:.04em; }
+.period-result--head > :nth-child(3), .period-result--head > :nth-child(4) { text-align:right; }
+.period-result__rank { display:grid; place-items:center; width:32px; height:32px; border-radius:50%; background:var(--surface-secondary); color:var(--text-secondary); font-size:var(--text-caption); font-weight:650; font-variant-numeric:tabular-nums; }
+.period-result__rank.is-top { background:var(--coin-tint); color:var(--gold-text); }
+.period-result__person { display:flex; align-items:center; gap:var(--sp-3); min-width:0; }
+.period-result__person > span:last-child { display:grid; gap:2px; min-width:0; }
+.period-result__person strong { font-weight:550; overflow-wrap:anywhere; }
+.period-result__missing { color:var(--status-warning-text, var(--text-secondary)); font-size:var(--text-caption); }
+.period-result__points { text-align:right; font-variant-numeric:tabular-nums; color:var(--text-secondary); }
+.period-result__coins { display:grid; justify-items:end; gap:2px; text-align:right; }
+.period-result__coins strong { color:var(--gold-text); font-weight:650; font-variant-numeric:tabular-nums; }
+.period-result__coins small { color:var(--text-tertiary); font-size:var(--text-caption); }
+@media(max-width:767px) {
+  .period-row { padding:var(--sp-3) var(--sp-4); }
+  .period-head__actions, .period-head__actions .btn { width:100%; }
+  .period-head__actions .btn { flex:1; }
+  .period-result { grid-template-columns:36px minmax(0,1fr) auto; gap:var(--sp-2) var(--sp-3); padding:var(--sp-2) var(--sp-4); }
+  .period-result--head { display:none; }
+  .period-result__points { grid-column:2; grid-row:2; text-align:left; font-size:var(--text-caption); }
+  .period-result__points::after { content:" баллов"; }
+  .period-result__coins { grid-column:3; grid-row:1 / span 2; }
+  .period-result__coins small { display:none; }
+}

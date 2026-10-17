@@ -289,6 +289,7 @@ function MissionEditor({initial,canEdit}:{initial:CitySettings;canEdit:boolean})
   useEffect(()=>{if(!dirty)return;const warn=(e:BeforeUnloadEvent)=>{e.preventDefault();e.returnValue='';};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);},[dirty]);
   const mission=draft.missions[selected];
   const scenario=selected.startsWith('scenario_');
+  const crmExercise=['crm_first','crm_phone','crm_closed'].includes(selected);
   function change(patch:Partial<typeof mission>){setSaved(false);setDraft(d=>({...d,missions:{...d.missions,[selected]:{...d.missions[selected],...patch}}}));}
   const missionOptions=Object.entries(draft.missions).map(([key,m])=>({value:key,label:m.title}));
   const prerequisites=[{value:'',label:'Без предыдущего задания'},...Object.entries(draft.missions).filter(([key])=>key!==selected&&!key.startsWith('scenario_')).map(([key,m])=>({value:key,label:m.title}))];
@@ -303,10 +304,11 @@ function MissionEditor({initial,canEdit}:{initial:CitySettings;canEdit:boolean})
         <label className="field"><span className="field__label">Задание для оператора</span><textarea className="input" rows={3} value={mission.description} minLength={5} maxLength={2000} required onChange={e=>change({description:e.target.value})}/></label>
         <label className="field"><span className="field__label">Подсказка Пульсара</span><textarea className="input" rows={3} value={mission.pulsar} minLength={5} maxLength={1200} required onChange={e=>change({pulsar:e.target.value})}/></label>
         <div className="city-admin-grid city-admin-grid--three">
-          <label className="field"><span className="field__label">{scenario?'Цель: успешное прохождение':'Цель: количество действий'}</span><input className="input" type="number" min={1} max={scenario||['welcome','driver_profile'].includes(selected)?1:DISPATCH_TARGETS[selected]??100} value={mission.target} disabled={scenario} required onChange={e=>change({target:Number(e.target.value)})}/></label>
+          <label className="field"><span className="field__label">{scenario||crmExercise?'Цель: успешное прохождение':'Цель: количество действий'}</span><input className="input" type="number" min={1} max={scenario||crmExercise||['welcome','driver_profile'].includes(selected)?1:DISPATCH_TARGETS[selected]??100} value={mission.target} disabled={scenario||crmExercise} required onChange={e=>change({target:Number(e.target.value)})}/></label>
           <label className="field"><span className="field__label">Опыт города, XP</span><input className="input" type="number" min={0} max={1000} value={mission.xp} disabled={scenario} required onChange={e=>change({xp:Number(e.target.value)})}/></label>
           <label className="field"><span className="field__label">{scenario?'Награда за сценарий, коины':'Награда, коины'}</span><input className="input" type="number" min={0} max={selected==='welcome'?0:1000} value={mission.coins} required onChange={e=>change({coins:Number(e.target.value)})}/></label>
         </div>
+        {crmExercise&&<p className="city-admin-card-note">Цель CRM — одно успешно проверенное задание. Результат подтверждается сохранённым обращением; количество обращений и ручные отметки его не заменяют.</p>}
         {scenario&&<p className="city-admin-card-note">От 0 до 1000 коинов за первое успешное прохождение. 0 — сценарий без награды. Повторная тренировка не начисляет коины. Цель — одно успешное прохождение; XP не начисляется. Изменение награды не переписывает уже выданные коины.</p>}
         <label className="field"><span className="field__label">Открыть после миссии</span><Select aria-label="Открыть после миссии" value={mission.prerequisite??''} disabled={scenario||selected==='welcome'} options={prerequisites} onChange={value=>change({prerequisite:value||null})}/></label>
         <Switch checked={mission.enabled} onChange={value=>change({enabled:value})}>Миссия доступна операторам</Switch>

@@ -73,7 +73,7 @@ function ProgressCard({ balance }: {
 }) {
   const progress = useQuery({ queryKey: ["coin-progress", "me"], queryFn: () => progressApi.summary() });
   return (
-    <Card title="Мой прогресс" className="cabinet-progress" action={<Link hideWhenDenied className="cabinet-text-link" to="/progress">Подробнее →</Link>}>
+    <Card title="Мой прогресс" className="cabinet-progress" tour="cabinet-progress" action={<Link hideWhenDenied className="cabinet-text-link" to="/progress">Подробнее →</Link>}>
       {progress.isLoading && <Skeleton height={150} />}
       {progress.isError && <ErrorState error={progress.error} onRetry={() => progress.refetch()} />}
       {progress.data && <div className="cabinet-progress__content">

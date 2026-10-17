@@ -1,0 +1,32 @@
+.avatar-editor { display: grid; justify-items: center; gap: 14px; }
+/* The circle is the frame: what is inside it is what colleagues see. */
+.avatar-editor__stage { position: relative; width: 240px; height: 240px; border-radius: 50%; overflow: hidden; background: var(--surface-secondary); box-shadow: 0 0 0 4px var(--surface-primary), 0 0 0 5px var(--separator); touch-action: none; user-select: none; }
+.avatar-editor__stage.is-framing { cursor: grab; }
+.avatar-editor__stage.is-framing:active { cursor: grabbing; }
+.avatar-editor__stage.is-dropping { box-shadow: 0 0 0 4px var(--surface-primary), 0 0 0 6px var(--accent-primary); }
+.avatar-editor__stage:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 6px; }
+.avatar-editor__stage > img { position: absolute; top: 50%; left: 50%; max-width: none; pointer-events: none; }
+.avatar-editor__empty { position: relative; display: block; width: 100%; height: 100%; padding: 0; border: 0; border-radius: 50%; background: none; cursor: pointer; }
+.avatar-editor__empty:disabled { cursor: default; }
+.avatar-editor__empty:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 6px; }
+.avatar-editor__empty .avatar img { width: 100%; height: 100%; object-fit: cover; }
+.avatar-editor__veil { position: absolute; inset: auto 0 0; display: flex; align-items: center; justify-content: center; gap: 8px; height: 64px; padding-bottom: 6px; color: #fff; background: linear-gradient(transparent, rgba(0, 0, 0, .55)); font-size: var(--text-secondary-size); font-weight: 600; }
+.avatar-editor__zoom { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 12px; width: min(100%, 280px); color: var(--text-secondary); font-size: var(--text-caption); }
+.avatar-editor__zoom input { width: 100%; accent-color: var(--accent-primary); }
+.avatar-editor__picker { position: relative; display: grid; justify-items: center; min-width: 0; }
+.avatar-editor__input { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.avatar-editor__input:focus-visible + .avatar-editor__choose { outline: 2px solid var(--accent-primary); outline-offset: 3px; }
+.avatar-editor__choose { display: inline-flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; }
+.avatar-editor__choose--disabled { cursor: default; opacity: .5; pointer-events: none; }
+.avatar-editor__hint { max-width: 320px; margin: 0; color: var(--text-secondary); font-size: var(--text-caption); line-height: 1.5; text-align: center; }
+.avatar-editor__error { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; color: var(--text-secondary); font-size: var(--text-caption); }
+.avatar-editor .field__error { margin: 0; text-align: center; }
+.avatar-editor__footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; flex-wrap: wrap; }
+.avatar-editor__actions { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
+.avatar-editor__footer .btn { min-height: 44px; }
+@media (max-width: 480px) {
+  .avatar-editor__footer { align-items: stretch; }
+  .avatar-editor__footer > .btn { width: 100%; }
+  .avatar-editor__actions { width: 100%; }
+  .avatar-editor__actions > .btn { flex: 1; }
+}

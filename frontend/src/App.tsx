@@ -2,6 +2,8 @@ import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { lazy, Suspense, useLayoutEffect } from "react";
 import { retainedCity } from "./pages/city/retainedCity";
 import { CityRoute } from "./pages/city/CityRoute";
+const TraineePage = lazy(() => import("./pages/TraineePage").then(module => ({ default: module.TraineePage })));
+const TraineeCity = lazy(() => import("./pages/city/TraineeCity").then(module => ({ default: module.TraineeCity })));
 
 import { useAuth } from "./auth/AuthContext";
 import { useAccess } from "./auth/AccessContext";
@@ -18,7 +20,7 @@ import { RatingPage } from "./pages/RatingPage";
 import { ShopPage } from "./pages/ShopPage";
 import { UsersPage } from "./pages/UsersPage";
 import { GroupsPage } from "./pages/GroupsPage";
-import { UserDetailPage } from "./pages/UserDetailPage";
+import { PersonWindow, UserDetailPage } from "./pages/UserDetailPage";
 import { PeriodsPage } from "./pages/PeriodsPage";
 import { SessionsPage } from "./pages/SessionsPage";
 import { AuditPage } from "./pages/AuditPage";
@@ -47,6 +49,7 @@ const WorkSitesGate = lazy(() => import("./pages/qr/WorkSitesGate").then(module 
 const QrAccessPage = lazy(() => import("./pages/qr/QrAccessPage").then(module => ({ default: module.QrAccessPage })));
 const CityAdminPage = lazy(() => import("./pages/city/CityAdminPage").then(module => ({ default: module.CityAdminPage })));
 const ScenarioPage = lazy(() => import("./pages/scenarios/ScenarioPage").then(module => ({ default: module.ScenarioPage })));
+const VoiceTrainingPage = lazy(() => import("./pages/voice/VoiceTrainingPage").then(module => ({ default: module.VoiceTrainingPage })));
 
 export function App() {
   const { user, loading, atLeast, restoreError, retryRestore } = useAuth();
@@ -83,7 +86,10 @@ export function App() {
       <Route path="/simulator" element={<SectionGuard><DriverSimulator app={<Suspense fallback={<div className="boot"><Skeleton height={44} width={220} /></div>}><DriverAppPage /></Suspense>} /></SectionGuard>} />
       <Route path="/simulator/attempts/:attemptId" element={<SectionGuard><Suspense fallback={<Skeleton height={300} />}><SimulatorPage /></Suspense></SectionGuard>} />
       <Route element={<AppLayout />}>
-        <Route path="/training/city" element={<CityRoute />} />
+        <Route path="/trainee" element={<Suspense fallback={<Skeleton height={400} />}><TraineePage /></Suspense>} />
+        <Route path="/training/city" element={user.role === "trainee" ? <Suspense fallback={<div className="city-immersive city-immersive--empty" />}><TraineeCity /></Suspense> : <CityRoute />} />
+        <Route path="/training/voice" element={<Suspense fallback={<Skeleton height={400} />}><VoiceTrainingPage /></Suspense>} />
+        <Route path="/training/voice/attempts/:attemptId" element={<Suspense fallback={<Skeleton height={400} />}><VoiceTrainingPage /></Suspense>} />
         <Route path="/training/scenarios/:key" element={<Suspense fallback={<Skeleton height={400} />}><ScenarioPage /></Suspense>} />
         <Route path="/training/scenarios/attempts/:attemptId" element={<Suspense fallback={<Skeleton height={400} />}><ScenarioPage /></Suspense>} />
         <Route path="/admin/learning/city" element={<Suspense fallback={<Skeleton height={400} />}><CityAdminPage /></Suspense>} />
@@ -111,15 +117,15 @@ export function App() {
         <Route path="/admin/settings" element={<SettingsPage />} />
         <Route path="/admin/economy" element={<EconomyPage />} />
         <Route path="/admin/store" element={<StoreAdminPage />} />
-        <Route path="/admin/users" element={<UsersPage />} />
+        <Route path="/admin/users" element={<><UsersPage /><PersonWindow /></>} />
         <Route path="/admin/users/:userId" element={<UserDetailPage />} />
-        <Route path="/admin/groups" element={<GroupsPage />} />
+        <Route path="/admin/groups" element={<><GroupsPage /><PersonWindow /></>} />
         <Route path="/admin/periods" element={<PeriodsPage />} />
         <Route path="/admin/sessions" element={access.isDeveloper ? <SessionsPage /> : <AccessPage />} />
         <Route path="/admin/audit" element={atLeast("admin") ? <AuditPage /> : <AccessPage />} />
         <Route
           path="/admin/operators"
-          element={<AdminOperatorsPage />}
+          element={<><AdminOperatorsPage /><PersonWindow /></>}
         />
         <Route
           path="/admin/requests"

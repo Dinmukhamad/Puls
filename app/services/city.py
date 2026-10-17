@@ -6,15 +6,15 @@ from sqlalchemy import case, func, literal, or_, select, union_all, update
 from sqlalchemy.exc import IntegrityError
 
 from app.core.errors import ConflictError, NotFoundError, PermissionDeniedError
+from app.db.base import utcnow
 from app.models.city import CityAward, CityBuild, CitySettings
-from app.models.crm import CrmAppeal
+from app.models.crm_training import CrmTrainingAttempt
 from app.models.driver import DriverOrder, DriverProfile
 from app.models.driver_shift import DriverShift
-from app.models.enums import Role, TxType
+from app.models.enums import LEARNER_ROLES, Role, TxType
 from app.models.progress import Notification
-from app.models.user import CoinAccount, Group
+from app.models.user import CoinAccount, Group, User
 from app.services.coins import post_transaction
-from app.services.crm_catalog import default_categories
 from app.services.dispatch import mission_facts, solved_calls
 from app.services.dispatch_data import MISSION_CALLS
 from app.services.learning import lock_learner
@@ -31,6 +31,7 @@ DISTRICTS = [
 # Conditions and destinations are server-owned. Editors can tune the curriculum,
 # but cannot inject arbitrary URLs or client-side completion rules.
 DISPATCH = "/training/work-sites?site=dispatch"
+CRM_TASK_KEYS = ("crm_first", "crm_phone", "crm_closed")
 # Keep legacy award keys identifiable while the Oktell curriculum is deferred. They are
 # excluded from all effective settings, prerequisites and claims; persisted awards stay intact.
 DEFERRED_OKTELL_MISSIONS = frozenset(
@@ -38,12 +39,29 @@ DEFERRED_OKTELL_MISSIONS = frozenset(
 )
 TEMPLATES = {
     "welcome": ("academy", "welcome", "/training/city", "Знакомство с городом"),
+    # Pulsar's tour of the real site; the operator starts it from the mission («Начать экскурсию»).
+    "site_tour": (
+        "academy",
+        "site_tour",
+        "/training/city?district=academy&mission=site_tour",
+        "Экскурсия по сайту пройдена",
+    ),
     "driver_profile": ("driver", "profile", "/simulator", "Учебный профиль водителя готов"),
     "driver_first": ("driver", "orders", "/simulator", "Завершённые учебные заказы"),
     "driver_five": ("driver", "orders", "/simulator", "Завершённые учебные заказы"),
-    "crm_first": ("crm", "appeals", "/training/work-sites?view=create", "Сохранённые обращения"),
-    "crm_phone": ("crm", "phone", "/training/work-sites?view=create", "Обращения «Смена номера»"),
-    "crm_closed": ("crm", "closed", "/training/work-sites", "Тикеты, закрытые сотрудником"),
+    "crm_first": (
+        "crm",
+        "appeals",
+        "/training/work-sites?task=crm_first",
+        "Знакомство с CRM пройдено",
+    ),
+    "crm_phone": ("crm", "phone", "/training/work-sites?task=crm_phone", "Смена номера проверена"),
+    "crm_closed": (
+        "crm",
+        "closed",
+        "/training/work-sites?task=crm_closed",
+        "Запрос в таксопарк проверен",
+    ),
     # Dispatch missions count the mascot's calls the operator solved (app/services/dispatch.py).
     "dispatch_driver": ("dispatch", "dispatch_driver", DISPATCH, "Решённые звонки водителей"),
     "dispatch_car": ("dispatch", "dispatch_car", DISPATCH, "Тарифы и оклейка сохранены"),
@@ -51,7 +69,9 @@ TEMPLATES = {
     "dispatch_support": ("dispatch", "dispatch_support", DISPATCH, "Обращение в поддержку Яндекса"),
     "dispatch_limit": ("dispatch", "dispatch_limit", DISPATCH, "Разобранные лимиты на вывод"),
     "scenario_business_park": (
-        "scenarios", "scenario_business_park", "/training/scenarios/business_park",
+        "scenarios",
+        "scenario_business_park",
+        "/training/scenarios/business_park",
         "Консультация по тарифу «Бизнес» через парк завершена",
     ),
 }
@@ -95,6 +115,18 @@ def default_missions():
             None,
         ),
         (
+            "site_tour",
+            "Как устроен Puls",
+            "Пройди с Пульсаром по настоящему сайту: кабинет и кошелёк, рейтинг, сундук дня, "
+            "магазин бонусов, профиль и стройка в районе.",
+            "Я покажу каждый раздел прямо на сайте. Нажимай туда, куда я показываю, — "
+            "так всё запомнится с первого раза.",
+            1,
+            40,
+            50,
+            "welcome",
+        ),
+        (
             "driver_profile",
             "Готов к первой смене",
             "Открой Driver Simulator, выбери сервис и таксопарк и заверши вход в учебный профиль.",
@@ -126,10 +158,9 @@ def default_missions():
         ),
         (
             "crm_first",
-            "Первое обращение",
-            "Получив QR-допуск, заполни и сохрани своё первое обращение в учебной CRM.",
-            "Выбери все уровни категории и заполни обязательные поля. Сохранённое "
-            "обращение останется в общей истории.",
+            "Знакомство с CRM",
+            "Познакомься с обращениями и открой связанный тикет по его номеру.",
+            "Открой учебное обращение. В его карточке нажми на номер тикета.",
             1,
             100,
             30,
@@ -138,10 +169,9 @@ def default_missions():
         (
             "crm_phone",
             "На связи. На твоей стороне",
-            "Создай обращение категории «Смена номера»: укажи старый и новый номера и "
-            "приложи необходимый скриншот.",
-            "Открой инструкцию «Смена номера» в CRM. Обращение засчитается после "
-            "проверки обязательных полей и сохранения.",
+            "Сверь номера в диспетчерской и OKTEL, сделай один снимок двух окон "
+            "и оформи обращение на смену номера.",
+            "В поле телефона — текущий номер; в комментарии — новый номер и ссылка на аккаунт.",
             1,
             180,
             80,
@@ -149,11 +179,9 @@ def default_missions():
         ),
         (
             "crm_closed",
-            "Довести дело до конца",
-            "Создай учебный тикет. После проверки тренер, руководитель или "
-            "администратор должен закрыть его в CRM.",
-            "Сохранить тикет — первый шаг. Эта миссия завершится, когда сотрудник "
-            "переведёт его в статус «Закрыт».",
+            "Доработка после ООЗ",
+            "Открой тикет по номеру и дополни обращение на снятие лимита по замечанию ООЗ.",
+            "Модерация → Вернуть на доработку → Добавить комментарий → Отправить.",
             1,
             200,
             100,
@@ -249,6 +277,64 @@ async def settings(session):
     # Missions added after a trainer saved the curriculum start with their defaults.
     missions = {**default_missions(), **(row.missions if row else {})}
     missions = deepcopy({key: missions[key] for key in TEMPLATES})
+    # Each fixed CRM exercise has one accepted proof. Old count-based goals must
+    # not make the new three-step curriculum impossible; award snapshots stay as-is.
+    for key in CRM_TASK_KEYS:
+        missions[key]["target"] = 1
+    # Older saved curricula carry the shipped wording. Refresh those exact
+    # defaults only; trainer-authored instructions and historical awards stay intact.
+    legacy = {
+        "crm_first": {
+            "description": "Получив QR-допуск, заполни и сохрани своё первое обращение "
+            "в учебной CRM.",
+            "pulsar": "Выбери все уровни категории и заполни обязательные поля. "
+            "Сохранённое обращение останется в общей истории.",
+        },
+        "crm_phone": {
+            "description": "Создай обращение категории «Смена номера»: укажи старый и новый "
+            "номера и приложи необходимый скриншот.",
+            "pulsar": "Открой инструкцию «Смена номера» в CRM. Обращение засчитается после "
+            "проверки обязательных полей и сохранения.",
+        },
+        "crm_closed": {
+            "description": "Создай учебный тикет. После проверки тренер, руководитель или "
+            "администратор должен закрыть его в CRM.",
+            "pulsar": "Сохранить тикет — первый шаг. Эта миссия завершится, когда сотрудник "
+            "переведёт его в статус «Закрыт».",
+        },
+    }
+    defaults = default_missions()
+    previous_program = {
+        "crm_first": {
+            "title": "Первое обращение",
+            "description": "Начни первое задание CRM и самостоятельно сохрани "
+            "консультацию по тарифам. Система проверит сохранённое обращение "
+            "по данным учебного водителя.",
+            "pulsar": "Галочки в памятке не подтверждают выполнение. Заполни обращение сам: "
+            "проверка покажет ошибки, а сохранённую работу можно исправить.",
+        },
+        "crm_phone": {
+            "description": "Пройди задание «Смена номера»: укажи данные водителя, старый и новый "
+            "номера, ссылку на аккаунт и приложи скриншот.",
+            "pulsar": "Система проверит настоящую сохранённую запись и вложение. Исправления "
+            "сохраняются в том же учебном обращении.",
+        },
+        "crm_closed": {
+            "title": "Довести дело до конца",
+            "description": "Создай запрос в таксопарк на снятие лимита и пройди серверную проверку "
+            "данных, категории и комментария.",
+            "pulsar": "Учебное задание завершится после проверки сохранённого тикета. "
+            "Закрытие сотрудником не требуется; рабочий статус тикета не меняется.",
+        },
+    }
+    for key, fields in previous_program.items():
+        for field, text in fields.items():
+            if missions[key][field] == text:
+                missions[key][field] = defaults[key][field]
+    for key, fields in legacy.items():
+        for field, text in fields.items():
+            if missions[key][field] == text:
+                missions[key][field] = defaults[key][field]
     # A previous editor could make an unrelated mission depend on an Oktell exercise.
     # Removing the deferred prerequisite keeps the surviving route usable without touching
     # the saved curriculum or any historic reward snapshot.
@@ -264,6 +350,7 @@ async def settings(session):
 def empty_facts():
     return {
         "welcome": 1,
+        "site_tour": 0,
         "profile": 0,
         "orders": 0,
         "appeals": 0,
@@ -272,36 +359,6 @@ def empty_facts():
         "scenario_business_park": 0,
         **mission_facts(set()),
     }
-
-
-def crm_evidence_query(user_ids, phone_ids, dialect):
-    """Count appeals once per operator; an exact category match counts once per appeal."""
-    if dialect == "postgresql":
-        categories = (
-            func.json_array_elements_text(CrmAppeal.category_ids)
-            .table_valued("value")
-            .render_derived()
-        )
-    else:
-        categories = func.json_each(CrmAppeal.category_ids).table_valued("value")
-    phone = (
-        select(1).select_from(categories)
-        .where(categories.c.value.in_(phone_ids))
-        .correlate(CrmAppeal).exists()
-    )
-    return (
-        select(
-            CrmAppeal.author_id,
-            func.count(),
-            func.sum(case((phone, 1), else_=0)),
-            func.sum(case((CrmAppeal.is_ticket.is_(True), 1), else_=0)),
-            func.sum(case(
-                ((CrmAppeal.is_ticket.is_(True) & (CrmAppeal.status == "closed")), 1), else_=0,
-            )),
-        )
-        .where(CrmAppeal.author_id.in_(user_ids))
-        .group_by(CrmAppeal.author_id)
-    )
 
 
 async def evidence(session, user_ids):
@@ -332,6 +389,11 @@ async def evidence(session, user_ids):
             passed_scenarios,
         )
     )
+    toured = await session.execute(
+        select(User.id).where(User.id.in_(user_ids), User.site_tour_at.is_not(None))
+    )
+    for (uid,) in toured:
+        result[uid]["site_tour"] = 1
     for uid, stage, scenario_count in profiles:
         if stage is None:
             result[uid]["scenario_business_park"] = scenario_count
@@ -361,12 +423,25 @@ async def evidence(session, user_ids):
         result[uid]["active_orders"] = active
         if count or active:
             result[uid]["profile"] = 1
-    phone_ids = {n["id"] for n in default_categories() if "phone_change" in n["rules"]}
-    appeals = await session.execute(crm_evidence_query(
-        user_ids, phone_ids, session.get_bind().dialect.name,
-    ))
-    for uid, count, phone, tickets, closed in appeals:
-        result[uid].update(appeals=count, phone=phone, tickets=tickets, closed=closed)
+    # Ordinary saves remain in shared history but are not proof of a particular
+    # training task. Historical CityAward rows remain authoritative in mission_rows.
+    attempts = await session.scalars(
+        select(CrmTrainingAttempt).where(CrmTrainingAttempt.user_id.in_(user_ids))
+    )
+    conditions = {
+        "crm_first": "appeals",
+        "crm_phone": "phone",
+        "crm_closed": "closed",
+        "crm_intro_v2": "appeals",
+        "crm_phone_v2": "phone",
+        "crm_rework_v2": "closed",
+    }
+    for attempt in attempts:
+        condition = conditions.get(attempt.task_key)
+        if condition and attempt.phase == "passed":
+            result[attempt.user_id][condition] = 1
+        if attempt.task_key in ("crm_closed", "crm_rework_v2"):
+            result[attempt.user_id]["tickets"] = 1
     return result
 
 
@@ -422,7 +497,8 @@ async def dashboard(session, user, *, inspecting=False):
     from app.services.scenarios import support_group_ids
 
     config = await settings(session)
-    operator = user.role == Role.OPERATOR
+    operator = user.role in LEARNER_ROLES
+    trainee = user.role == Role.TRAINEE
     # The operator's active group decides whether the scenarios show (app/services/scenarios.py).
     group = (
         await session.get(Group, user.group_id) if operator and user.group_id is not None else None
@@ -439,11 +515,21 @@ async def dashboard(session, user, *, inspecting=False):
         else {}
     )
     rows = mission_rows(config, facts, awards)
+    # «Как устроен Puls» walks the operator's sections (cabinet, rewards, building): a trainee has
+    # none of them, so the tour is not on their way.
+    if trainee:
+        rows = [row for row in rows if row["key"] != "site_tour"]
     # A staff preview includes the curriculum. An inspected operator keeps their own
     # assignment boundary, so sales and unassigned operators never see a TP scenario.
-    scenarios_visible = not operator or bool(
-        user.is_active and group and group.is_active
-        and user.group_id in await support_group_ids(session, config=department_config)
+    scenarios_visible = (
+        trainee
+        or not operator
+        or bool(
+            user.is_active
+            and group
+            and group.is_active
+            and user.group_id in await support_group_ids(session, config=department_config)
+        )
     )
     if not scenarios_visible:
         rows = [row for row in rows if row["district"] != "scenarios"]
@@ -466,7 +552,9 @@ async def dashboard(session, user, *, inspecting=False):
     prices = values["prices"]
     # Once the team district opens for building, new buildings go there; the old plots keep theirs.
     moved = operator and await construction_open(
-        session, user, districts=district_index(department_config),
+        session,
+        user,
+        districts=district_index(department_config),
     )
     return {
         "revision": config["revision"],
@@ -477,6 +565,8 @@ async def dashboard(session, user, *, inspecting=False):
         "preview": not operator,
         "inspecting": inspecting,
         "can_claim": operator and not inspecting,
+        # Stages already seen grow, on any device: the city celebrates only the rest, once.
+        "levels_seen": user.city_levels_seen if operator and not inspecting else None,
         "districts": [
             {
                 **district,
@@ -484,25 +574,28 @@ async def dashboard(session, user, *, inspecting=False):
                 # stages remain visible. Only persisted awards count, never workspace events.
                 **(
                     {"completed_missions": len(DEFERRED_OKTELL_MISSIONS.intersection(awards))}
-                    if district["id"] == "oktell" else {}
+                    if district["id"] == "oktell"
+                    else {}
                 ),
             }
             for district in DISTRICTS
             if scenarios_visible or district["id"] != "scenarios"
         ],
-        "missions": rows,
+        "missions": [{**m, "coins": 0, "xp": 0} for m in rows] if trainee else rows,
         "xp": xp,
         "level": xp // 300 + 1,
         "level_progress": xp % 300,
         "level_target": 300,
-        "balance": balance,
+        "balance": 0 if trainee else balance,
         # Coins reserved for shop requests cannot pay for a building.
-        "available": account.available if account else 0,
-        "plots": plot_rows(rows, builds),
-        "buildings": [{**item, "price": prices[key]} for key, item in BUILDINGS.items()],
-        "can_build": operator and not inspecting and not moved,
+        "available": account.available if account and not trainee else 0,
+        "plots": [] if trainee else plot_rows(rows, builds),
+        "buildings": []
+        if trainee
+        else [{**item, "price": prices[key]} for key, item in BUILDINGS.items()],
+        "can_build": user.role == Role.OPERATOR and not inspecting and not moved,
         "plots_moved": moved,
-        "quests": await quests(session, user, inspecting=inspecting),
+        "quests": None if trainee else await quests(session, user, inspecting=inspecting),
     }
 
 
@@ -581,8 +674,41 @@ async def build(session, user, plot_key, item_key):
     }
 
 
-async def claim(session, user, key, revision):
+async def see_levels(session, user, levels):
+    """
+    Remembers the district building stages the operator's city showed, so a district that levelled
+    up is celebrated once per account, not once per browser. Stages only go up: an older tab cannot
+    bring back a celebration already seen.
+    """
     if user.role != Role.OPERATOR:
+        raise PermissionDeniedError("В предварительном просмотре город не запоминает увиденное")
+    known = {district["id"] for district in DISTRICTS}
+    seen = dict(user.city_levels_seen or {})
+    for key, level in levels.items():
+        if key in known and level > seen.get(key, 0):
+            seen[key] = level
+    # Even an empty record is kept: a city without learning districts is not asked again.
+    if seen != user.city_levels_seen:
+        user.city_levels_seen = seen
+        await session.commit()
+    return {"levels_seen": seen}
+
+
+async def finish_tour(session, user):
+    """
+    Pulsar's tour of the site reached its end: the Academy's «Как устроен Puls» is ready to claim.
+    The first finish counts; going round again changes nothing.
+    """
+    if user.role != Role.OPERATOR:
+        raise PermissionDeniedError("Экскурсия по сайту засчитывается только операторам")
+    if user.site_tour_at is None:
+        user.site_tour_at = utcnow()
+        await session.commit()
+    return {"site_tour": True}
+
+
+async def claim(session, user, key, revision):
+    if user.role not in LEARNER_ROLES:
         raise PermissionDeniedError("В предварительном просмотре награды не начисляются")
     if key not in TEMPLATES:
         raise NotFoundError("Миссия не найдена")
@@ -618,6 +744,8 @@ async def claim(session, user, key, revision):
     if mission["state"] != "ready":
         raise ConflictError("Сначала выполните условия миссии и предыдущие задания маршрута.")
     definition = deepcopy(config["missions"][key])
+    if user.role == Role.TRAINEE:
+        definition.update(xp=0, coins=0)
     session.add(
         CityAward(
             user_id=user.id,

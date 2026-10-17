@@ -181,7 +181,7 @@ export function ShopPage() {
         </div>
       </div>
 
-      <section className="shop-wallet" aria-label="Мой баланс">
+      <section className="shop-wallet" aria-label="Мой баланс" data-tour="shop-wallet">
         <div className="shop-wallet__balance">
           <span className="shop-wallet__label">Мой баланс</span>
           <strong><span className="shop-coin" aria-hidden="true">◈</span>{coins(data.available)}<small>{plural(data.available, "коин", "коина", "коинов")}</small></strong>
@@ -352,7 +352,7 @@ function ProductCard({ item, available, onBuy }: { item: ShopItemForOperator; av
   const progress = item.price > 0 ? Math.min(1, available / item.price) : 1;
   const status = group === "ready" ? "✓ Можно купить" : group === "saving" ? `Не хватает ${coins(item.missing_coins)} ◈` : "Недоступно";
   return (
-    <article className={`shop-card shop-card--${group}`} style={{ "--prize": color } as CSSProperties}>
+    <article className={`shop-card shop-card--${group}`} style={{ "--prize": color } as CSSProperties} data-tour="shop-item">
       <div className="shop-card__art" aria-hidden="true"><span>{icon}</span></div>
       <span className={`shop-card__status shop-card__status--${group}`}>{status}</span>
       <div className="shop-card__body">

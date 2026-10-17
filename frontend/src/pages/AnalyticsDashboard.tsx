@@ -2,7 +2,7 @@ import { useId } from 'react';
 import type { AnalyticsOut, MetricSummary } from '../api/analytics';
 import { Chart } from '../components/Chart';
 import { ArrowUpRightIcon } from '../components/icons';
-import { Card, EmptyState } from '../components/ui';
+import { Card, EmptyState, Select } from '../components/ui';
 import { assess, description, gapText, metricValue, shortNumber, periodCaption, STATE_LABEL, type OperatorInsight, type OperatorState } from './analyticsInsights';
 
 const STATES: OperatorState[] = ['ontrack', 'attention', 'critical', 'partial', 'missing'];
@@ -123,7 +123,7 @@ export function OperatorDetails({ person, report, metric, onMetric }: { person: 
     <div className={`analytics-person-status analytics-state--${person.state}`}><strong>{STATE_LABEL[person.state]}</strong><span>{row.group_name ?? 'Без группы'} · {periodCaption(report)}</span></div>
     <div className="analytics-person-totals"><div><strong>{person.met}/{report.metrics.length}</strong><span>показателей в норме</span></div><div><strong>{person.improving} ↑ / {person.worsening} ↓</strong><span>стали лучше / хуже</span></div></div>
     <p className="analytics-muted">Есть данные по {person.reported} из {report.metrics.length} показателей. Рост и снижение сравниваются с предыдущим периодом; учитывается направление цели.</p>
-    <label className="field"><span className="field__label">Показатель для графика</span><select className="input" value={metric.code} onChange={e => onMetric(e.target.value)}>{report.metrics.map(m => <option key={m.code} value={m.code}>{m.title}</option>)}</select></label>
+    <label className="field"><span className="field__label">Показатель для графика</span><Select aria-label="Показатель" value={metric.code} onChange={onMetric} options={report.metrics.map(m => ({ value: m.code, label: m.title }))} /></label>
     <Chart title={`${row.full_name} · ${metric.title}`} labels={report.trend.map(t => t.label)} series={[{ id: 'person', name: row.full_name, values: row.trends?.[metric.code] ?? row.trend }]} target={metric.target} unit={metric.unit} compact />
     <div className="analytics-person-comparison"><span>{report.custom_range ? "Период до этого" : "Предыдущий"}: <b>{metricValue(previous, metric)}</b></span><span>{report.custom_range ? "Выбранный период" : "Текущий"}: <b>{metricValue(current, metric)}</b></span></div>
     <div className="analytics-person-metrics">{person.cells.map(c => <article key={c.metric.code} className={`analytics-person-metric analytics-signal--${c.signal}`}><header><strong>{c.metric.title}</strong><b>{metricValue(c.value, c.metric)}</b></header><p>{description(c.metric)}</p><GoalBar value={c.value} metric={c.metric} /><span>{gapText(c.value, c.metric)}</span></article>)}</div>

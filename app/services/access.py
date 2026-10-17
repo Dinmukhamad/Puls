@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.developer import is_developer
 from app.models.access import AccessPolicy, AccessRule
-from app.models.enums import Role
+from app.models.enums import LEARNER_ROLES, Role
 from app.models.user import User
 
 
@@ -36,7 +36,7 @@ SECTIONS = (
         "training",
         "Прохождение обучения",
         "Личные тесты, миссии и симулятор",
-        (Role.OPERATOR, Role.TRAINER),
+        (Role.TRAINEE, Role.OPERATOR, Role.TRAINER),
     ),
     Section(
         "rewards",
@@ -113,6 +113,8 @@ def access_decisions(role, group_id, user_id, rules):
             allowed, source = False, "admin_only"
         if role == Role.TRAINER and section.code not in ("team", "training", "learning_admin"):
             allowed, source = False, "role_limit"
+        if role == Role.TRAINEE and section.code != "training":
+            allowed, source = False, "role_limit"
         decisions[section.code] = {"allowed": allowed, "source": source}
     return decisions
 
@@ -150,13 +152,13 @@ def request_sections(path: str, method: str, role: Role | None = None) -> tuple[
     read = method in ("GET", "HEAD")
     if path == "/telemetry/city":
         # Whoever can open the city can report how smoothly it runs.
-        return ("training",) if role == Role.OPERATOR else ("learning_admin",)
-    if path in ("/learning/city", "/learning/scenarios") or path.startswith(
-        ("/learning/city/", "/learning/scenarios/")
+        return ("training",) if role in LEARNER_ROLES else ("learning_admin",)
+    if path in ("/learning/city", "/learning/scenarios", "/learning/voice") or path.startswith(
+        ("/learning/city/", "/learning/scenarios/", "/learning/voice/")
     ):
-        return ("training",) if role == Role.OPERATOR else ("learning_admin",)
+        return ("training",) if role in LEARNER_ROLES else ("learning_admin",)
     if path in ("/work-sites-access/status", "/work-sites-access/request"):
-        return ("training",) if role == Role.OPERATOR else ()
+        return ("training",) if role in LEARNER_ROLES else ()
     if path.startswith(("/admin/training", "/admin/learning-analytics")):
         return ("learning_admin",)
     if path.startswith(
@@ -213,7 +215,7 @@ def request_sections(path: str, method: str, role: Role | None = None) -> tuple[
         return ("learning_admin",)
     # Work Sites: operators practise, staff look in through learning management.
     if path.startswith(("/learning/crm", "/learning/dispatch", "/learning/oktell")):
-        return ("training",) if role == Role.OPERATOR else ("learning_admin",)
+        return ("training",) if role in LEARNER_ROLES else ("learning_admin",)
     if path.startswith("/learning"):
         return ("training",)
     if path.startswith("/admin/audit"):
@@ -265,3 +267,37 @@ def trainer_path_allowed(path: str, method: str) -> bool:
     if path in ("/admin/learning/driver-parks", "/admin/learning/driver-scenario"):
         return method in ("GET", "HEAD")
     return path.startswith(("/admin/learning", "/admin/training"))
+
+
+def trainee_path_allowed(path: str, method: str) -> bool:
+    """A hard learning-only ceiling, including direct URLs and explicit section grants."""
+    import re
+
+    if path.startswith("/auth/") or path == "/me/access":
+        return True
+    if path.startswith("/me/notifications"):
+        return True
+    if path in ("/work-sites-access/status", "/work-sites-access/request", "/telemetry/city"):
+        return True
+    if path == "/learning/city":
+        return method in ("GET", "HEAD")
+    if path.startswith("/learning/city/"):
+        return (
+            bool(re.fullmatch(r"/learning/city/missions/[a-z0-9_]+/claim", path))
+            and method == "POST"
+        )
+    if path == "/learning" or re.fullmatch(r"/learning/\d+/start", path):
+        return True
+    return any(
+        path == prefix or path.startswith(prefix + "/")
+        for prefix in (
+            "/learning/trainee",
+            "/learning/crm",
+            "/learning/dispatch",
+            "/learning/oktell",
+            "/learning/driver",
+            "/learning/scenarios",
+            "/learning/voice",
+            "/learning/attempts",
+        )
+    )

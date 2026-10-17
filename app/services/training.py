@@ -9,7 +9,7 @@ from sqlalchemy import select
 from app.core.deps import visible_users_filter
 from app.core.errors import DomainError, NotFoundError
 from app.models.driver_shift import DriverShift
-from app.models.enums import Role
+from app.models.enums import LEARNER_ROLES
 from app.models.learning import LearningAssignment, LearningAttempt, LearningContent
 from app.models.user import User
 
@@ -26,7 +26,7 @@ async def assign(session, actor, content_id, payload):
     if not content or content.status != "published":
         raise DomainError("Назначить можно только опубликованный материал")
     conditions = [
-        User.role == Role.OPERATOR,
+        User.role.in_(LEARNER_ROLES),
         User.is_active.is_(True),
         await visible_users_filter(session, actor),
     ]
@@ -69,7 +69,7 @@ async def analytics(
         raise DomainError("Начало периода не может быть позже окончания")
     if date_to and date_to.year == 9999:
         raise DomainError("Выберите более раннюю дату окончания")
-    visibility = [await visible_users_filter(session, actor), User.role == Role.OPERATOR]
+    visibility = [await visible_users_filter(session, actor), User.role.in_(LEARNER_ROLES)]
     if user_id is not None:
         if not await session.scalar(select(User.id).where(*visibility, User.id == user_id)):
             raise NotFoundError("Оператор не найден")

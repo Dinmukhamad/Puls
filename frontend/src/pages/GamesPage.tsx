@@ -14,13 +14,14 @@ import { PrizeArt } from "./PrizeArt";
 import { PrizeStrip } from "./PrizeStrip";
 import { prizeChances, prizeSticker } from "./wheelPrizes";
 import "./games.css";
+import "./motivation.css";
 import "./learning.css";
 
 export function GamesPage({ administrative = false }: { administrative?: boolean }) {
   const [params, setParams] = useSearchParams(); const { atLeast } = useAuth();
   // Raffles stay for the staff who ran them; operators open the chest of the day.
   const tab = administrative && params.get("tab") === "raffles" ? "raffles" : "wheel";
-  return <div className="stack games-page"><div className="page-head"><div><h1 className="page-title">{administrative ? "Управление сундуком дня" : "Сундук дня"}</h1><p className="page-subtitle">{administrative ? "Призы сундука и платные сундуки" : "Ответьте на задания дня — и сундук откроется"}</p></div>{!administrative && atLeast("supervisor") && <Link className="btn btn--secondary" to="/admin/games">Управление</Link>}</div>{administrative && <SegmentedControl label="Раздел" value={tab} options={[{ value:"wheel",label:"Сундук дня" },{ value:"raffles",label:"Розыгрыши (архив)" }]} onChange={(value) => setParams({tab:value})} />}{tab === "wheel" ? administrative ? <WheelSettings /> : <Wheel /> : <Raffles administrative={administrative} />}</div>;
+  return <div className="stack games-page"><div className="page-head"><div><h1 className="page-title">Сундук дня</h1><p className="page-subtitle">{administrative ? "Правила и призы ежедневного сундука сотрудников" : "Ответьте на задания дня — и сундук откроется"}</p></div>{!administrative && atLeast("supervisor") && <Link className="btn btn--secondary" to="/admin/games">Управление</Link>}</div>{administrative && <SegmentedControl label="Раздел сундука" value={tab} options={[{ value:"wheel",label:"Сундук дня" },{ value:"raffles",label:"Розыгрыши (архив)" }]} onChange={(value) => setParams({tab:value})} />}{tab === "wheel" ? administrative ? <WheelSettings /> : <Wheel /> : <Raffles administrative={administrative} />}</div>;
 }
 export function invalidateRewards(client: ReturnType<typeof useQueryClient>) { for (const key of ["wheel","dashboard","wallet","coin-progress", "badges","notifications"]) void client.invalidateQueries({ queryKey:[key] }); }
 const MUTE_KEY = "puls:wheel-muted";
@@ -70,7 +71,7 @@ function Wheel() {
   const cost=`${coins(config.spin_cost)} ${plural(config.spin_cost,"коин","коина","коинов")}`;
   const heading=result?result.reward.title:locked?"Сначала задания. Затем — сюрприз.":opening?"Магия уже внутри…":!config.enabled?"Сундук на перерыве":done?"До встречи завтра!":"Что приготовил ваш сундук?";
   const description=result?result.reward.coins>0?"Награда уже зачислена на ваш счёт. Найдите ей применение в магазине или в своём городе.":paid?"В этот раз без коинов. Можно открыть дополнительный сундук или вернуться завтра.":"Сегодня без коинов. Возвращайтесь за новым сундуком завтра!":locked?"Ответьте на все ситуации дня в «Моём городе», чтобы открыть сундук. Каждый ответ приближает вас к открытию.":opening?"Замок поддаётся. Скоро лента остановится на вашем призе.":!config.enabled?"Открытие временно недоступно. Загляните сюда чуть позже.":done?"Сегодняшние сундуки уже открыты. Новый шанс будет ждать вас на следующий день.":"Один поворот ключа — и сюрприз ваш. Внутри могут оказаться коины для новых покупок и построек.";
-  return <div className="wheel-layout"><Card className="wheel-card chest-card" title="Сундук дня" subtitle="Ваш маленький ежедневный ритуал"
+  return <div className="wheel-layout"><Card className="wheel-card chest-card" tour="chest" title="Сундук дня" subtitle="Ваш маленький ежедневный ритуал"
     action={<><IconButton label={muted?"Включить звук":"Выключить звук"} aria-pressed={muted} onClick={()=>setMuted((on)=>!on)}>{muted?<SoundOffIcon/>:<SoundIcon/>}</IconButton>
       <button type="button" className="wheel-prizes-button" aria-haspopup="dialog" onClick={()=>setPrizesOpen(true)}><span className="wheel-prizes-button__sticker" aria-hidden="true"><PrizeArt kind="gift" /></span><span>Что внутри</span></button></>}>
       <div className="chest-hero" data-state={state} aria-busy={opening}>

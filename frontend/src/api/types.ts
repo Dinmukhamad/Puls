@@ -1,6 +1,6 @@
 /** Типы ответов API. Повторяют схемы Pydantic из бэкенда. */
 
-export type Role = "operator" | "trainer" | "supervisor" | "head" | "admin";
+export type Role = "trainee" | "operator" | "trainer" | "supervisor" | "head" | "admin";
 
 export type WeekStatus = "open" | "calculated" | "closed";
 

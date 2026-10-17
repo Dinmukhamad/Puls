@@ -1,0 +1,73 @@
+/* The call is a desktop with two work applications, matching the operator's reference. */
+.work-sites.work-sites--call[data-site=crm] { padding-right: 0; padding-bottom: 18px; }
+.work-sites--call .crm-layout { display: block; }
+.work-sites--call .crm-layout > .crm-sidebar { display: none; }
+.work-sites--call .crm-main { padding: 14px 18px 0; }
+.work-sites--call > .crm-course-dock { position: static; width: auto; max-width: none; max-height: none; margin: 0 18px 14px; display: grid; grid-template-columns: 200px minmax(0, 1fr); box-shadow: none; border-radius: 10px; }
+.work-sites--call .crm-course-dock > header { align-items: flex-start; border-bottom: 0; border-right: 1px solid #e8edf4; }
+/* Above the windows the step and its instruction come first; the example and the options sit beside each other below. */
+.work-sites--call .crm-course-dock__body { padding: 12px 16px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); align-items: start; gap: 10px 16px; }
+.work-sites--call .crm-course-dock__body > :is(.crm-course-step, .crm-course-passed, [role=status], [role=alert]) { grid-column: 1 / -1; }
+.work-sites--call .crm-course-dock__body > button { justify-self: start; }
+.work-sites--call :is(.crm-course-lesson, .crm-course-more), .work-sites--call .crm-course-dock__body > .pulsar-text-button { display: none; }
+.work-sites--call .crm-course-step { padding: 12px 14px; }
+.work-sites--call .crm-course-step ol { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 6px 28px; }
+.crm-call-brief { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; padding: 16px 20px; border-bottom: 1px solid #dfe5ed; }
+.crm-call-brief span { font-size: 11px; color: #7a8698; }
+.crm-call-brief h2 { margin: 4px 0 7px; font-size: 18px; color: #26364a; }
+.crm-call-brief p { margin: 0; font-size: 13px; line-height: 1.5; color: #526075; }
+.crm-call-brief .crm-call-live { color: #23815a; white-space: nowrap; padding-top: 4px; }
+.crm-call-desktop-viewport { width: 100%; overflow: auto hidden; background: #e8e9eb; }
+/* The frame is the scaled size of the desktop and cannot scroll: a card opening on the right never pushes OKTEL out of view. */
+.crm-call-desktop-frame { overflow: clip; }
+.crm-call-desktop { display: grid; grid-template-columns: 480px 960px; width: 1440px; height: 720px; transform: scale(var(--crm-desktop-scale, 1)); transform-origin: top left; color: #191919; background: #fff; font: 14px/1.4 Arial, sans-serif; }
+.crm-call-oktell { min-width: 0; background: #fff; border-right: 2px solid #a5a7aa; }
+.crm-call-window-bar { display: flex; align-items: center; gap: 15px; height: 48px; padding: 0 18px; border-bottom: 1px solid #ddd; background: #f7f7f7; color: #353535; }
+.crm-call-window-bar > span { font-size: 25px; color: #62676c; }
+.crm-call-window-bar strong { font-size: 15px; font-weight: 400; }
+.crm-call-window-bar small { margin-left: auto; font-size: 11px; color: #777; }
+.crm-oktell-form { margin: 36px 18px 0; padding: 22px 16px; background: #f7f7f7; color: #222; }
+.crm-oktell-park { margin: 0 0 20px; font-size: 13px; }
+.crm-oktell-form label { display: block; margin-bottom: 5px; font-size: 13px; }
+.work-sites .crm-oktell-form input, .work-sites .crm-oktell-form select { display: block; width: 100%; min-width: 0; height: 29px; margin-bottom: 25px; padding: 3px 7px; border: 1px solid #ccc; border-radius: 3px; color: #333; background: #fff; box-shadow: inset 0 1px 2px #0000000a; font: 13px Arial, sans-serif; }
+.work-sites .crm-oktell-form select { margin-bottom: 0; }
+.crm-oktell-identity { display: grid; grid-template-columns: 1fr 1fr; gap: 0 20px; }
+.crm-oktell-request { padding: 22px 34px; font-size: 12px; color: #626971; }
+.crm-oktell-request strong { font-size: 12px; color: #444; }
+.crm-oktell-request b { color: #222; font-weight: 500; }
+.crm-call-dispatch { min-width: 0; background: #f5f4f2; }
+.crm-call-browser-bar { display: flex; align-items: center; gap: 10px; height: 40px; padding: 5px 10px; background: #fff; border-bottom: 1px solid #ddd; font-size: 12px; }
+.crm-call-browser-address { flex: 1; min-width: 0; border-radius: 16px; background: #eff1f4; padding: 6px 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crm-call-browser-bar button { border: 0; color: #555; background: transparent; padding: 4px 6px; min-width: 28px; font-size: 17px; cursor: pointer; }
+.crm-call-desktop .fleet { height: 680px; border-radius: 0; }
+.crm-call-desktop .fleet-page { padding: 14px 18px 40px; }
+.crm-call-desktop .fleet-driver .fleet-head h1 { font-size: 22px; }
+.crm-call-desktop .fleet-driver .fleet-head-right { display: none; }
+.crm-call-desktop .fleet-driver-card { padding: 16px 22px 24px; }
+.crm-call-desktop .fleet-summary-link { display: none; }
+.crm-call-desktop .fleet-summary-cell { padding: 7px 12px; }
+.crm-call-desktop .fleet-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 26px; }
+.crm-call-desktop .fleet-field { grid-template-columns: 138px minmax(0, 1fr); gap: 10px; }
+.crm-call-desktop .fleet-driver .fleet-field:nth-child(4) .fleet-copy input { color: #222; }
+.crm-call-capture-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.crm-call-capture > img { max-width: 100%; }
+.crm-call-small-screen { display: none; margin: 10px 16px; color: #6c7a8d; font-size: 12px; }
+@media (max-width: 800px) {
+  .crm-call-small-screen { display: block; }
+  .crm-call-brief { padding: 14px; }
+  .crm-call-live { display: none; }
+  .work-sites--call .crm-main { padding: 10px 6px 0; }
+  .work-sites--call > .crm-course-dock { margin: 0 6px 10px; grid-template-columns: 1fr; }
+  .work-sites--call .crm-course-dock > header { padding: 10px 12px; border-right: 0; border-bottom: 1px solid #e8edf4; }
+  .crm-call-desktop .fleet { grid-template-columns: 64px minmax(0, 1fr); }
+  .crm-call-desktop .fleet-rail { display: flex; }
+}
+.crm-call-browser-bar .crm-call-copy { flex: none; min-width: 0; padding: 4px 10px; border: 1px solid #c9d3e2; border-radius: 14px; background: #fff; color: #33476a; font-size: 12px; white-space: nowrap; }
+.crm-call-browser-bar .crm-call-copy:disabled { color: #9aa3b1; border-color: #e0e4ea; cursor: default; }
+.crm-call-hint { margin: 0; padding: 9px 12px; border-radius: 8px; background: #f2f6fd; color: #2f3e57; font-size: 13px; line-height: 1.5; }
+.crm-call-capture .crm-call-hint { color: #2f3e57; font-size: 13px; }
+/* The call screen has its own way to the form; the example is for the form itself. */
+.work-sites--call .crm-course-dock__body > :is(.crm-course-go, .crm-course-example) { display: none; }
+.work-sites--call .crm-course-dock__body > .crm-course-checklist { grid-column: 1 / -1; }
+.work-sites--call .crm-course-checklist ol { display: block; columns: 3 260px; column-gap: 28px; }
+.work-sites--call .crm-course-checklist li { break-inside: avoid; margin-bottom: 6px; }

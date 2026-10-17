@@ -224,6 +224,13 @@ export const DisplayIcon = (p: IconProps) => (
   </Icon>
 );
 
+export const PhoneIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <rect x="6.5" y="2.5" width="11" height="19" rx="2.5" />
+    <path d="M11 18.5h2" />
+  </Icon>
+);
+
 export const MenuIcon = (p: IconProps) => (
   <Icon {...p}>
     <path d="M4 7h16M4 12h16M4 17h16" />
@@ -245,6 +252,22 @@ export const PulsMark = ({ size = 22 }: { size?: number }) => (
 
 export const LockIcon = (p: IconProps) => (
   <Icon {...p}><rect x="5" y="10" width="14" height="11" rx="3" /><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3" /></Icon>
+);
+
+export const CameraIcon = (p: IconProps) => (
+  <Icon {...p}><path d="M4 8.5A2.5 2.5 0 0 1 6.5 6h1.3l1.4-2h5.6l1.4 2h1.3A2.5 2.5 0 0 1 20 8.5v8a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 16.5Z" /><circle cx="12" cy="12.5" r="3.5" /></Icon>
+);
+
+export const KeyboardIcon = (p: IconProps) => (
+  <Icon {...p}><rect x="2.5" y="6" width="19" height="12" rx="3" /><path d="M6.5 10h.01M10 10h.01M14 10h.01M17.5 10h.01M8 14h8" /></Icon>
+);
+
+export const ClockIcon = (p: IconProps) => (
+  <Icon {...p}><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5V12l3 2" /></Icon>
+);
+
+export const ShieldIcon = (p: IconProps) => (
+  <Icon {...p}><path d="M12 3 5 6v5.5c0 4.3 3 8 7 9.5 4-1.5 7-5.2 7-9.5V6Z" /><path d="m9 12 2 2 4-4" /></Icon>
 );
 
 export const TelegramIcon = (p: IconProps) => (

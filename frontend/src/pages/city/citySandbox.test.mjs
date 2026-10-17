@@ -33,6 +33,8 @@ test("the test city's tools send what the server's routes take, with no price an
     () => citySandbox.build({ district_id: "support-team-2", family: "house", block: 3, col: 1, row: 0, rotation: 2 }),
     () => citySandbox.lay({ district_id: "support-team-2", family: "road", cells: [[3, 4, 0], [3, 5, 0]] }),
     () => citySandbox.takeAway({ district_id: "support-team-2", cells: [[3, 4, 0]] }),
+    () => citySandbox.moveDecor({ district_id: "support-team-2", moves: [[3, 5, 0, 3, 6, 0]] }),
+    () => citySandbox.turnDecor({ district_id: "support-team-2", cells: [[3, 6, 0, 1]] }),
     () => citySandbox.level(7, 4),
     () => citySandbox.remove(7),
     () => citySandbox.district("support-team-2", { hq_level: 3 }),
@@ -48,6 +50,8 @@ test("the test city's tools send what the server's routes take, with no price an
     { url: `${SANDBOX}/plots`, method: "POST", json: { district_id: "support-team-2", family: "house", block: 3, col: 1, row: 0, rotation: 2 } },
     { url: `${SANDBOX}/decor`, method: "POST", json: { district_id: "support-team-2", family: "road", cells: [[3, 4, 0], [3, 5, 0]] } },
     { url: `${SANDBOX}/decor/remove`, method: "POST", json: { district_id: "support-team-2", cells: [[3, 4, 0]] } },
+    { url: `${SANDBOX}/decor/move`, method: "POST", json: { district_id: "support-team-2", moves: [[3, 5, 0, 3, 6, 0]] } },
+    { url: `${SANDBOX}/decor/turn`, method: "POST", json: { district_id: "support-team-2", cells: [[3, 6, 0, 1]] } },
     { url: `${SANDBOX}/buildings/7/level`, method: "POST", json: { level: 4 } },
     { url: `${SANDBOX}/buildings/7`, method: "DELETE", json: undefined },
     { url: `${SANDBOX}/districts/support-team-2`, method: "PUT", json: { hq_level: 3 } },
@@ -65,7 +69,7 @@ test("the test city's tools send what the server's routes take, with no price an
     assert.match(args, /user: AdminUser/, `${method} ${path} is for administrators only`);
     return { method: method.toUpperCase(), path: new RegExp(`^/api/v1${prefix}${path.replace(/\{[a-z_]+\}/g, "[^/]+")}$`) };
   });
-  assert.equal(routes.length, 11);
+  assert.equal(routes.length, 13);
   for (const r of requests) assert.ok(routes.some(route => route.method === r.method && route.path.test(r.url)), `${r.method} ${r.url}`);
 });
 

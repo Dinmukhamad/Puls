@@ -29,7 +29,7 @@ export function CityBuildEntry({ mine, loading, failed, onRetry, onBuild }: {
         <button type="button" className="city-action city-build-entry__button" disabled>Загружаем стройку…</button>
       </> : canEnter ? <>
         {mine.status === "closed" && <p className="city-build-entry__notice" role="status">{mine.message || "Стройка закрыта руководителем."} Можно посмотреть район.</p>}
-        <button type="button" className="city-action city-build-entry__button" onClick={onBuild}>Строить в районе</button>
+        <button type="button" className="city-action city-build-entry__button" data-tour="build-open" onClick={onBuild}>Строить в районе</button>
       </> : <>
         <p className="city-build-entry__notice" role="status">{reason}</p>
         <button type="button" className="city-secondary city-build-entry__button" onClick={() => setHelp(true)}>Как открыть стройку</button>

@@ -17,7 +17,12 @@ from app.db.session import get_session
 from app.models.enums import ROLE_LEVEL, USER_VISIBILITY, Role
 from app.models.session import LoginSession
 from app.models.user import Group, User
-from app.services.access import effective_access, request_sections, trainer_path_allowed
+from app.services.access import (
+    effective_access,
+    request_sections,
+    trainee_path_allowed,
+    trainer_path_allowed,
+)
 from app.services.sessions import is_valid
 
 oauth2_scheme = OAuth2PasswordBearer(
@@ -63,6 +68,8 @@ async def get_current_user(
     access = await effective_access(session, user)
     request.state.section_access = access
     path = request.url.path.removeprefix(settings.API_V1_PREFIX)
+    if user.role == Role.TRAINEE and not trainee_path_allowed(path, request.method):
+        raise PermissionDeniedError("Стажёру доступно только обучение", code="role_required")
     if user.role == Role.TRAINER and not trainer_path_allowed(path, request.method):
         raise PermissionDeniedError("Роль тренера ограничена обучением", code="role_required")
     sections = request_sections(path, request.method, user.role)
@@ -150,7 +157,7 @@ async def visible_users_filter(session: AsyncSession, actor: User) -> ColumnElem
     Единая матрица видимости ролей. Оператор получает только свои личные данные.
     Группы ограничивают операции управления отдельно от чтения справочника.
     """
-    if actor.role == Role.OPERATOR:
+    if actor.role in (Role.OPERATOR, Role.TRAINEE):
         return User.id == actor.id
     return User.role.in_(USER_VISIBILITY[Role(actor.role)])
 

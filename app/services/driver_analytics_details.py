@@ -8,7 +8,7 @@ from app.core.deps import visible_users_filter
 from app.core.errors import NotFoundError
 from app.models.driver import DriverOrder
 from app.models.driver_shift import DriverShift
-from app.models.enums import Role
+from app.models.enums import LEARNER_ROLES
 from app.models.user import User
 from app.services.driver_shifts import checked_result
 
@@ -158,7 +158,7 @@ async def visible_operator(session, actor, user_id):
     person = await session.scalar(
         select(User).where(
             await visible_users_filter(session, actor),
-            User.role == Role.OPERATOR,
+            User.role.in_(LEARNER_ROLES),
             User.id == user_id,
         )
     )

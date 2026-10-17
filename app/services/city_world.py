@@ -469,7 +469,7 @@ async def save_layout(session, actor, body):
         raise ConflictError("Карту уже изменили. Обновите настройки и повторите.")
     if body.city not in _editable(raw, actor):
         raise PermissionDeniedError("Можно изменять только свой город")
-    groups, supervisors = await _assignment_directory(session)
+    _groups, supervisors = await _assignment_directory(session)
     active = {s["id"] for s in supervisors}
     cities = deepcopy(raw["cities"])
     city = next(c for c in cities if c["id"] == body.city)

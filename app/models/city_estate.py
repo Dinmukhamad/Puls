@@ -111,6 +111,9 @@ class CityCell(Base):
     )
     #: Coins the small thing cost, its land included; taking it away returns them.
     paid: Mapped[int] = mapped_column(default=0, server_default="0")
+    #: Where its owner turned a lamp or a bench (DECOR_TURNS): the side of the cell, a quarter
+    #: turn 0–3 (frontend/src/city3d/world/decor.ts); None — towards the road beside it.
+    turn: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 class CityContribution(Base):

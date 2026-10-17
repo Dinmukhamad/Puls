@@ -136,3 +136,53 @@ export function definitionPresentation(kind: DefinitionKind, row: Definition, me
     ],
   };
 }
+
+export interface DefinitionRow { meta: string; value: string; hint: string; coin: boolean }
+
+/**
+ * One line of a list in «Показатели» and «Мотивация → Достижения» (docs/PERFORMANCE_SECTION.md): what it is under the
+ * title, the number that matters on the right — a metric's target or fine, a nomination's or an achievement's reward.
+ */
+export function definitionRow(kind: DefinitionKind, row: Definition, metrics: readonly Definition[] = []): DefinitionRow {
+  const description = text(row.description);
+  if (kind === "metrics") {
+    if (row.kind === "anti") {
+      const penalty = numeric(row.penalty_per_unit);
+      return {
+        meta: description && description !== "Антипоказатель: снижает итоговый балл до перевода в коины" ? description : defaultPenaltyDescription,
+        // A fine in coins is set in «Правила расчёта»; a zero here is no fine in points, not no fine at all.
+        value: penalty > 0 ? `−${score(penalty)}` : "Без штрафа в баллах",
+        hint: penalty > 0 ? `за каждую ${text(row.unit) ? `1 ${text(row.unit)}` : "единицу"}` : "штраф в коинах — в правилах расчёта",
+        coin: false,
+      };
+    }
+    return {
+      meta: [row.direction === "lower_is_better" ? "Меньше — лучше" : "Больше — лучше", row.allow_overachievement ? "перевыполнение разрешено" : "", description].filter(Boolean).join(" · "),
+      value: `Цель ${measured(numeric(row.target_value), text(row.unit))}`,
+      hint: `${score(numeric(row.max_points))} за цель`,
+      coin: false,
+    };
+  }
+  const facts = definitionPresentation(kind, row, metrics).facts;
+  const reward = numeric(row.coins_reward);
+  if (kind === "nominations") return {
+    meta: `${facts[1].value} · ${facts[2].value}`,
+    value: reward > 0 ? coinsWithUnit(reward) : "Без коинов",
+    hint: "победителю",
+    coin: reward > 0,
+  };
+  return {
+    meta: `${facts[0].value} · ${row.is_repeatable ? "можно получать повторно" : "один раз"}`,
+    value: reward > 0 ? coinsWithUnit(reward) : "Без коинов",
+    hint: reward > 0 ? "при первом получении" : "только достижение",
+    coin: reward > 0,
+  };
+}
+
+/** The seeded achievements name their icon in a word; an emoji written by an admin is shown as it is. */
+const BADGE_ICONS: Record<string, string> = { star: "⭐", medal: "🏅", clock: "⏰", heart: "❤️", crown: "👑", trophy: "🏆", fire: "🔥", target: "🎯", book: "📚", rocket: "🚀", gift: "🎁", spark: "✨" };
+export function badgeIcon(icon: FieldValue | undefined): string {
+  const value = text(icon);
+  if (!value) return "★";
+  return BADGE_ICONS[value.toLowerCase()] ?? (/^[\x20-\x7e]+$/.test(value) ? "★" : value);
+}

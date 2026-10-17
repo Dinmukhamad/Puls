@@ -1,28 +1,59 @@
 /**
  * The small things operators lay on their district's cells (docs/CITY_ESTATES.md, «Мелкие постройки»), one to a
  * cell: roads, footpaths and alleys that join their neighbours into streets, corners and crossings, hedges that close
- * into a fence, and trees, lamps, benches, bushes and flowerbeds. A building turns its front to a road beside it. Pure
+ * into a fence, and trees, lamps, benches, bushes and flowerbeds. A lamp stands by the road beside it and a bench looks
+ * at it, unless their owner turned them to a side of the cell. A building turns its front to a road beside it. Pure
  * data, no three.js: the paving as coloured quads for one mesh, everything else as placements for the instance
  * pools, the same pieces the yards and parks are made of.
  */
 import type { DecorFamily } from "./estateGrid";
-import { WAYS, areaCorners, areaPoint, homeSide, neighbours, sideOf, turnedSide, type BlockSide, type LandBlock, type LandGrid, type Neighbour, type Way } from "./land";
+import { WAYS, areaCorners, areaPoint, homeSide, neighbours, sideOf, turnedSide, wayOf, type BlockSide, type LandBlock, type LandGrid, type Neighbour, type Way } from "./land";
 import type { Placement, PlacementKind, Point } from "./types";
 
-/** What stands on a cell: its kind and whether the viewer may take it away (laid it, or it is their district's). */
-export interface DecorAt { family: DecorFamily; mine: boolean }
+/**
+ * What stands on a cell: its kind, whether the viewer may take it away (laid it, or it is their district's), and for a
+ * lamp or a bench its owner turned, the side of the cell it went to (TURN_SIDES[turn]).
+ */
+export interface DecorAt { family: DecorFamily; mine: boolean; turn?: number }
 /** The small things of a city by cell: `${district}:${block}:${col}:${row}`. */
 export type DecorMap = Map<string, DecorAt>;
 export const decorKey = (district: number, block: number, col: number, row: number) => `${district}:${block}:${col}:${row}`;
 
-/** The cells of every district as the server lists them: [block, column, row, mine] by kind. */
-export function decorMap(districts: readonly { number: number; decor?: Partial<Record<DecorFamily, [number, number, number, number][]>> }[]): DecorMap {
+/** A small thing on a cell as the server lists it: [block, column, row, mine], and its turn if its owner turned it. */
+export type DecorCell = [number, number, number, number] | [number, number, number, number, number];
+/** The cells of every district as the server lists them, by kind. */
+export function decorMap(districts: readonly { number: number; decor?: Partial<Record<DecorFamily, DecorCell[]>> }[]): DecorMap {
   const map: DecorMap = new Map();
-  for (const d of districts) for (const [family, cells] of Object.entries(d.decor ?? {}) as [DecorFamily, [number, number, number, number][]][]) {
-    for (const [block, col, row, mine] of cells) map.set(decorKey(d.number, block, col, row), { family, mine: !!mine });
+  for (const d of districts) for (const [family, cells] of Object.entries(d.decor ?? {}) as [DecorFamily, DecorCell[]][]) {
+    for (const [block, col, row, mine, turn] of cells) {
+      const at: DecorAt = { family, mine: !!mine };
+      if (turn !== undefined && turn !== null) at.turn = turn;
+      map.set(decorKey(d.number, block, col, row), at);
+    }
   }
   return map;
 }
+
+/** The small things their owner turns, as the server's DECOR_TURNS: a lamp to a side of its cell, a bench to look there. */
+export const TURNING: readonly DecorFamily[] = ["lamp", "bench"];
+export const isTurning = (family: DecorFamily | undefined) => !!family && TURNING.includes(family);
+/**
+ * The sides of a cell by turn, a quarter turn apart: seen from above, each next one counterclockwise (the four sides in
+ * the order of world/land.ts turnedSide).
+ */
+export const TURN_SIDES: readonly BlockSide[] = ["z1", "x1", "z0", "x0"];
+/**
+ * The side of its cell a lamp stands at, or a bench looks to: where its owner turned it, else towards the road or the
+ * footpath beside it, else (in the middle of its cell) towards the middle of the city.
+ */
+export function decorSide(grid: LandGrid, map: DecorMap, block: LandBlock, col: number, row: number): BlockSide {
+  const at = map.get(decorKey(block.district, block.block, col, row));
+  if (at?.turn !== undefined) return TURN_SIDES[((at.turn % 4) + 4) % 4];
+  const road = roadside(grid, map, block, col, row, areaPoint(areaCorners(block, col, row), .5, .5));
+  return road ? sideOf(block, road.way) : homeSide(block, col, row);
+}
+/** The turn a quarter turn from `side`: `step` +1 counterclockwise seen from above, -1 clockwise. */
+export const turnFrom = (side: BlockSide, step: number) => (((TURN_SIDES.indexOf(side) + step) % 4) + 4) % 4;
 
 /** Which kinds a kind runs into: a footpath or an alley meets the other and a road, a road only roads, a hedge closes with hedges. */
 const JOINS: Partial<Record<DecorFamily, readonly DecorFamily[]>> = { road: ["road"], path: ["path", "alley", "road"], alley: ["alley", "path", "road"], hedge: ["hedge"] };
@@ -91,8 +122,9 @@ export function decorLayout(grid: LandGrid, map: DecorMap): DecorLayout {
       if (at.family === "alley") alleyTrees(placements, block, col, row, corners, links);
       continue;
     }
-    // Where the nearest road or footpath beside the cell is, for a lamp at its edge and a bench facing it.
-    const toward = roadside(grid, map, block, col, row, centre);
+    // Where its owner turned it, else where the nearest road or footpath beside the cell is: for a lamp at that edge
+    // and a bench facing it.
+    const toward = at.turn !== undefined && isTurning(at.family) ? edgeToward(block, col, row, centre, TURN_SIDES[((at.turn % 4) + 4) % 4]) : roadside(grid, map, block, col, row, centre);
     if (at.family === "hedge") { hedge(placements, col, row, corners, centre, links); continue; }
     const tree = TREES[at.family];
     if (tree) {
@@ -307,23 +339,28 @@ function hedge(placements: Placement[], col: number, row: number, corners: Point
   for (const { to } of links) piece(centre, to.meet);
 }
 
-/** The direction from a cell's middle to the nearest road or footpath beside it, or null. */
-function roadside(grid: LandGrid, map: DecorMap, block: LandBlock, col: number, row: number, centre: Point): Point | null {
+/** The direction from a cell's middle to the nearest road or footpath beside it and the way to it, or null. */
+function roadside(grid: LandGrid, map: DecorMap, block: LandBlock, col: number, row: number, centre: Point): (Point & { way: Way }) | null {
   for (const way of WAYS) for (const to of neighbours(grid, block, col, row, way)) {
     const there = map.get(decorKey(block.district, to.block.block, to.col, to.row));
     if (!there || !ROADLIKE.includes(there.family)) continue;
     const dx = to.meet.x - centre.x, dz = to.meet.z - centre.z, l = Math.hypot(dx, dz) || 1;
-    return { x: dx / l, z: dz / l };
+    return { x: dx / l, z: dz / l, way };
   }
   return null;
 }
 
-/** The way a cell looks with nothing beside it: towards the middle of the city. */
-function facing(block: LandBlock, col: number, row: number, centre: Point): Point {
-  const corners = areaCorners(block, col, row), side = homeSide(block, col, row);
-  const edge = side === "z0" ? areaPoint(corners, .5, 0) : side === "z1" ? areaPoint(corners, .5, 1) : side === "x0" ? areaPoint(corners, 0, .5) : areaPoint(corners, 1, .5);
+/** The direction from a cell's middle to the middle of its edge on `side`. */
+export function edgeToward(block: LandBlock, col: number, row: number, centre: Point, side: BlockSide): Point {
+  const corners = areaCorners(block, col, row), way = wayOf(side);
+  const edge = way === "row-" ? areaPoint(corners, .5, 0) : way === "row+" ? areaPoint(corners, .5, 1) : way === "col-" ? areaPoint(corners, 0, .5) : areaPoint(corners, 1, .5);
   const dx = edge.x - centre.x, dz = edge.z - centre.z, l = Math.hypot(dx, dz) || 1;
   return { x: dx / l, z: dz / l };
+}
+
+/** The way a cell looks with nothing beside it: towards the middle of the city. */
+function facing(block: LandBlock, col: number, row: number, centre: Point): Point {
+  return edgeToward(block, col, row, centre, homeSide(block, col, row));
 }
 
 /**

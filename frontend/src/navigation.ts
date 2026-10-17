@@ -24,9 +24,10 @@ export const ACCOUNT_SECTION = section("profile", "Профиль", UserIcon, [
 ]);
 const QR_ACCESS_SECTION = section("qr_access", "QR-доступ", QrIcon, [tab("/qr-access", "Сканер QR")]);
 const personal = [tab("/cabinet", "Мой кабинет"), tab("/progress", "Мой прогресс")];
-const learningTabs = [tab("/training/city", "Мой город · миссии")];
+const learningTabs = [tab("/training/city", "Мой город · миссии"), tab("/training/voice", "Голосовой тренажёр")];
 const staffLearning = section("training", "Обучение", SparkIcon, [
   tab("/admin/learning/city", "Миссии города"), tab("/training/city", "Город оператора"),
+  tab("/training/voice", "Голосовой тренажёр"),
   tab("/admin/learning-analytics", "Аналитика симулятора"),
 ]);
 const team = (admin = false, supervisor = false) => section("team", "Команда", UsersIcon, [
@@ -57,10 +58,15 @@ const staffHome = section("home", "Главная", HomeIcon, [tab("/admin/summa
 /** Only major destinations enter the sidebar. Future modules extend tabs inside these sections.
  * Section names are one or two short words and are the same on desktop and in the phone tab bar, so they must fit a tab. */
 export const ROLE_NAVIGATION: Record<Role, readonly NavItem[]> = {
+  trainee: [
+    section("home", "Главная", HomeIcon, [tab("/trainee", "Подготовка к работе")]),
+    section("training", "Обучение", SparkIcon, [tab("/training/city", "Учебный город"), tab("/training/voice", "Голосовой тренажёр")]),
+    ACCOUNT_SECTION,
+  ],
   trainer: [
     section("home", "Главная", HomeIcon, [tab("/trainer", "Учебная сводка")]),
     section("team", "Команда", UsersIcon, [tab("/admin/users", "Операторы")]),
-    section("training", "Обучение", SparkIcon, [tab("/admin/learning/city", "Миссии города"), tab("/training/city", "Город оператора")]),
+    section("training", "Обучение", SparkIcon, [tab("/admin/learning/city", "Миссии города"), tab("/training/city", "Город оператора"), tab("/training/voice", "Голосовой тренажёр")]),
     section("driver", "Симулятор", SparkIcon, [tab("/admin/learning?kind=simulator", "Сценарии"), tab("/training/city?district=driver", "Тестовый запуск в городе")]),
     section("learning_analytics", "Аналитика", TrophyIcon, [tab("/admin/learning-analytics", "Аналитика симулятора")]),
     QR_ACCESS_SECTION,
@@ -85,14 +91,16 @@ export const ROLE_NAVIGATION: Record<Role, readonly NavItem[]> = {
 };
 
 export function defaultAccess(role: Role): AccessMap {
+  if (role === "trainee") return { training: true };
   if (role === "trainer") return { team: true, training: true, learning_admin: true };
   const staff = role !== "operator";
   return { personal: !staff, results: true, training: !staff, rewards: !staff, overview: staff, team: staff, analytics: staff, performance: staff, learning_admin: staff, motivation: staff, reports: role === "head" || role === "admin", system: role === "admin" };
 }
 
 export function routeSection(pathname: string, search = "", role: Role = "operator"): SectionCode | "account" | "access" | "developer" | "qr_access" | undefined {
+  if (pathname === "/trainee") return "training";
   if (pathname === "/qr-access") return "qr_access";
-  if (pathname === "/training/work-sites" || pathname === "/training/city" || pathname.startsWith("/training/scenarios/")) return role === "operator" ? "training" : "learning_admin";
+  if (pathname === "/training/work-sites" || pathname === "/training/city" || pathname === "/training/voice" || pathname.startsWith("/training/voice/") || pathname.startsWith("/training/scenarios/")) return role === "operator" || role === "trainee" ? "training" : "learning_admin";
   const matches = (path: string) => pathname === path || pathname.startsWith(`${path}/`);
   if (pathname === "/trainer" || pathname === "/admin/learning-analytics") return "learning_admin";
   if (matches("/progress")) return role === "operator" ? "results" : "personal";
@@ -114,6 +122,8 @@ export function routeSection(pathname: string, search = "", role: Role = "operat
 export function canVisit(role: Role, to: string, allowed: AccessMap, isDeveloper = false): boolean {
   if (to === "/") return true;
   const [path, search = ""] = to.split("#")[0].split("?");
+  if (path === "/trainee" && role !== "trainee") return false;
+  if (role === "trainee" && !["/trainee", "/profile", "/notifications", "/training", "/simulator"].some(p => path === p || path.startsWith(p + "/"))) return false;
   if (role === "trainer" && !["/qr-access", "/profile", "/notifications", "/trainer", "/admin/learning-analytics", "/admin/learning", "/training", "/simulator", "/admin/users"].some(p => path === p || path.startsWith(p + "/"))) return false;
   if (role === "operator" && path.startsWith("/admin/users")) return false;
   // Сценарии Driver Simulator ведёт только тренер, у остальных студии нет.
@@ -128,6 +138,10 @@ export function canVisit(role: Role, to: string, allowed: AccessMap, isDeveloper
 }
 
 export function visibleNavigation(role: Role, allowed: AccessMap = defaultAccess(role), isDeveloper = false): readonly NavItem[] {
+  if (role === "trainee") return ROLE_NAVIGATION.trainee.flatMap(item => {
+    const tabs = item.tabs.filter(link => canVisit(role, link.to, allowed));
+    return tabs.length ? [{ ...item, tabs, to: tabs[0].to }] : [];
+  });
   if (role === "trainer") return ROLE_NAVIGATION.trainer.flatMap(item => {
     const tabs = item.tabs.filter(link => canVisit(role, link.to, allowed));
     return tabs.length ? [{ ...item, tabs, to: tabs[0].to }] : [];
@@ -176,6 +190,7 @@ export function currentSection(role: Role, pathname: string, search = "", allowe
   // Bookmarked personal history stays under the cabinet without another tab.
   if (pathname === "/wallet") return sections.find(item => item.tabs.some(link => link.to === "/cabinet"));
   if (pathname === "/training/work-sites" || pathname.startsWith("/training/scenarios/")) return sections.find(item => item.tabs.some(tab => tab.to === "/training/city"));
+  if (pathname === "/training/voice" || pathname.startsWith("/training/voice/")) return sections.find(item => item.tabs.some(tab => tab.to === "/training/voice"));
   if (role === "trainer" && ["/admin/learning", "/training", "/simulator"].some(p => pathname === p || pathname.startsWith(p + "/"))) {
     const driver = pathname === "/admin/learning" || pathname.startsWith("/simulator") || (pathname === "/training/city" && new URLSearchParams(search).get("district") === "driver");
     return sections.find(item => item.id === (driver ? "driver" : "training"));
@@ -220,6 +235,7 @@ export function mobileNavigation(items: readonly NavItem[]) {
 
 /** Migrate old app launch URLs after authentication and access have finished loading. */
 export function appEntryRedirect(pathname: string, home: string, canPath: (path: string) => boolean): string | null {
+  if (pathname === "/trainee" && !canPath("/trainee")) return home;
   if (pathname === "/cabinet" && !canPath("/cabinet")) return home;
   // Учебных материалов больше нет: их страницы ведут в город, а студия у сотрудников — в аналитику симулятора.
   if (pathname === "/training" || pathname.startsWith("/training/attempts/")) return canPath("/training/city") ? "/training/city" : home;

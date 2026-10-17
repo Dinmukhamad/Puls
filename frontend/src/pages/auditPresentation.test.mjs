@@ -13,7 +13,7 @@ const { AuditChanges } = module.exports;
 const helper = await build({ entryPoints: [fileURLToPath(new URL("./auditPresentation.ts", import.meta.url))], bundle: true, platform: "node", format: "cjs", write: false });
 const helpers = { exports: {} };
 new Function("require", "module", "exports", helper.outputFiles[0].text)(createRequire(import.meta.url), helpers, helpers.exports);
-const { auditActionLabel, auditBusinessChanges, auditEntityLabel } = helpers.exports;
+const { AUDIT_ACTIONS, AUDIT_GROUPS, auditActionLabel, auditActionsOf, auditBusinessChanges, auditDay, auditEntityLabel, auditSummary } = helpers.exports;
 
 const entry = {
   id: 9481, action: "user.update", entity_type: "user", entity_id: "5741", actor_name: "Администратор",
@@ -55,6 +55,17 @@ test("audit maps known actions and entities, and never exposes unknown action or
   assert.equal(auditActionLabel("constructor"), "Действие зарегистрировано");
 });
 
+test("bulk session audit shows scope, role and actual counts without session identifiers", () => {
+  assert.equal(auditActionLabel("session.revoke_bulk"), "Массовое завершение сеансов");
+  assert.deepEqual(auditBusinessChanges({ scope: "role", role: "operator", revoked_count: 4, user_count: 2, keep_current: true, session_ids: ["private-session"], user_ids: [112, 113] }), [
+    { label: "Область действия", value: "Роль" },
+    { label: "Роль", value: "Оператор" },
+    { label: "Завершено сеансов", value: "4" },
+    { label: "Затронуто сотрудников", value: "2" },
+    { label: "Сохранить текущий сеанс", value: "Да" },
+  ]);
+});
+
 test("unrecognized enum values and unsafe value shapes are suppressed without hiding valid amounts", () => {
   assert.deepEqual(auditBusinessChanges({ role: "internal_role", tx_type: "internal_transaction", status: "internal_status", title: { id: 7891 }, amount: 250, balance: 540, is_active: true }), [
     { label: "Количество", value: "250" }, { label: "Баланс", value: "540" }, { label: "Активен", value: "Да" },
@@ -81,3 +92,25 @@ test("audit filters use the site's list and period calendar instead of system co
   assert.match(source, /<Select aria-label="Действие"/);
   assert.match(source, /<DateRangePicker ariaLabel="Период событий"/);
 });
+
+test("every known action belongs to exactly one section of the journal", () => {
+  for (const action of Object.keys(AUDIT_ACTIONS)) {
+    const sections = AUDIT_GROUPS.filter(group => group.prefixes.some(prefix => action.startsWith(prefix)));
+    assert.equal(sections.length, 1, `${action}: ${sections.map(group => group.label).join(", ") || "нет раздела"}`);
+  }
+  assert.deepEqual(auditActionsOf("auth").map(([key]) => key).sort(), ["auth.login", "auth.logout", "session.revoke", "session.revoke_bulk", "session.revoke_others"]);
+  assert.equal(auditActionsOf("").length, Object.keys(AUDIT_ACTIONS).length);
+  assert.equal(auditActionsOf("unknown").length, Object.keys(AUDIT_ACTIONS).length);
+});
+
+test("a row shows its first understood changes and the day it falls under", () => {
+  assert.equal(auditSummary({ login: "oper5", role: "operator", hidden_code: "x" }), "Логин: oper5 · Роль: Оператор");
+  assert.equal(auditSummary({ supervisor_id: 4 }), "");
+  const now = new Date(2026, 9, 17, 12, 0);
+  const at = (date) => new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().replace("Z", "");
+  assert.equal(auditDay(at(new Date(2026, 9, 17, 0, 5)), now), "Сегодня");
+  assert.equal(auditDay(at(new Date(2026, 9, 16, 23, 55)), now), "Вчера");
+  assert.match(auditDay(at(new Date(2026, 9, 3, 9, 0)), now), /^3 октября$/);
+  assert.match(auditDay(at(new Date(2025, 11, 31, 9, 0)), now), /^31 декабря 2025/);
+});
+

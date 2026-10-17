@@ -2,8 +2,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import type { Dispatch, ReactNode, SetStateAction } from "react";
 import { createPortal } from "react-dom";
 
-export type CityToolbarSlot = "level" | "cities" | "build" | "missions" | "quests" | "skills" | "tools" | "history";
-const slots: readonly CityToolbarSlot[] = ["level", "cities", "build", "missions", "quests", "skills", "tools", "history"];
+export type CityToolbarSlot = "level" | "cities" | "build" | "quests" | "skills" | "tools" | "history";
+const slots: readonly CityToolbarSlot[] = ["level", "cities", "build", "quests", "skills", "tools", "history"];
 
 /** The toolbar's one open popup, named by its slot; null when every popup is closed. */
 export type CityToolbarState = { active: CityToolbarSlot | null; setActive: Dispatch<SetStateAction<CityToolbarSlot | null>> };

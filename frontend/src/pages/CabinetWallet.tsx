@@ -11,7 +11,7 @@ export function WalletCard({ balance }: { balance: BalanceBlock }) {
   useEffect(() => {
     if (window.location.hash === "#wallet") document.getElementById("wallet")?.scrollIntoView({ block: "start" });
   }, []);
-  return <Card id="wallet" title={<span className="cabinet-wallet__title"><CoinIcon size={20} />Кошелёк</span>} className="cabinet-wallet">
+  return <Card id="wallet" title={<span className="cabinet-wallet__title"><CoinIcon size={20} />Кошелёк</span>} className="cabinet-wallet" tour="cabinet-wallet">
     <div className="cabinet-wallet__content">
       <div><p className="cabinet-wallet__amount">{coins(balance.available)}</p><p className="small secondary">{plural(balance.available, "коин доступен", "коина доступны", "коинов доступно")}</p></div>
       {balance.reserved > 0 && <p className="cabinet-wallet__reserve">В резерве на покупки: <strong>{coins(balance.reserved)}</strong> коинов. Общий баланс: {coins(balance.balance)}.</p>}

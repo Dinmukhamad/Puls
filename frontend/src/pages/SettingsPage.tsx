@@ -5,17 +5,18 @@ import { configuration, configurationError, type Definition, type DefinitionInpu
 import { useAccess } from "../auth/AccessContext";
 import { useAuth } from "../auth/AuthContext";
 import { GlassSurface } from "../components/GlassSurface";
+import { ChevronRightIcon } from "../components/icons";
 import { Sheet } from "../components/Sheet";
 import { useToast } from "../components/Toast";
 import { Badge, Button, Card, EmptyState, ErrorState, RowsSkeleton, Select } from "../components/ui";
 import { visibleNavigation } from "../navigation";
 import { coins, plural } from "../utils/format";
 import { createInternalCode } from "../utils/internalCode";
-import { definitionPresentation } from "./definitionPresentation";
+import { badgeIcon, definitionPresentation, definitionRow } from "./definitionPresentation";
 import "./configuration.css";
 
 type Option = { value: string; label: string };
-type FieldSpec = { key: string; label: string; type?: "number" | "textarea" | "boolean" | "select"; hint?: string; required?: boolean; min?: number; step?: number | "any"; maxLength?: number; options?: Option[] };
+type FieldSpec = { key: string; label: string; type?: "number" | "textarea" | "boolean" | "select"; hint?: string; required?: boolean; min?: number; step?: number | "any"; maxLength?: number; options?: Option[]; unit?: string };
 const directions: Option[] = [{ value: "higher_is_better", label: "Больше — лучше" }, { value: "lower_is_better", label: "Меньше — лучше" }];
 const badgeRules: Option[] = [
   { value: "learning_count", label: "Пройти разные учебные задания" },
@@ -53,7 +54,7 @@ export function SettingsPage() {
   const hasOuterNavigation = views.every(([key]) => destinations.includes(`/admin/settings?tab=${key}`));
   const navigation = !hasOuterNavigation && <nav className="configuration-nav" aria-label="Разделы показателей и наград">{views.map(([key, label]) => <Button key={key} variant={tab === key ? "primary" : "secondary"} aria-current={tab === key ? "page" : undefined} onClick={() => setParams({ tab: key })}>{label}</Button>)}</nav>;
   return <div className={`stack configuration-page${tab !== "rules" ? " configuration-definitions-page" : ""}`}>
-    {tab === "rules" ? <><div className="page-head"><div><h1 className="page-title">Правила расчёта</h1><p className="page-subtitle">Перевод баллов в коины, бонусы и ограничения начислений</p></div></div>{navigation}<RulesSection /></> : <DefinitionSection key={tab} kind={tab} navigation={navigation} />}
+    {tab === "rules" ? <><div className="page-head"><div><h1 className="page-title">Правила расчёта</h1><p className="page-subtitle">Перевод баллов в коины, штрафы, бонусы и ограничения начислений</p></div></div>{navigation}<RulesSection /></> : <DefinitionSection key={tab} kind={tab} navigation={navigation} />}
   </div>;
 }
 
@@ -66,36 +67,45 @@ function RulesSection() {
   return <RulesEditor initial={rules.data} metrics={metrics.data} key={JSON.stringify(rules.data)} />;
 }
 
+const C = "коинов";
 const ruleGroups: { title: string; subtitle: string; fields: FieldSpec[] }[] = [
   { title: "Баллы и коины", subtitle: "Баллы конкурса переводятся в коины после закрытия периода", fields: [
-    { key: "points_per_coin", label: "Баллов за 1 коин", type: "number", required: true, min: .000001, step: "any" },
-    { key: "rank1_bonus", label: "Бонус за 1 место конкурса", type: "number", required: true, min: 0 },
-    { key: "rank2_bonus", label: "Бонус за 2 место конкурса", type: "number", required: true, min: 0 },
-    { key: "rank3_bonus", label: "Бонус за 3 место конкурса", type: "number", required: true, min: 0 },
+    { key: "points_per_coin", label: "Баллов за 1 коин", type: "number", required: true, min: .000001, step: "any", unit: "баллов" },
+    { key: "rank1_bonus", label: "Бонус за 1 место конкурса", type: "number", required: true, min: 0, unit: C },
+    { key: "rank2_bonus", label: "Бонус за 2 место конкурса", type: "number", required: true, min: 0, unit: C },
+    { key: "rank3_bonus", label: "Бонус за 3 место конкурса", type: "number", required: true, min: 0, unit: C },
   ] },
   { title: "Штрафы", subtitle: "Списываются при закрытии недели, после её начислений. Если коинов не хватает, остаток спишется при следующем закрытии", fields: [
-    { key: "lateness_fine", label: "За каждое опоздание", type: "number", required: true, min: 0 },
-    { key: "forbidden_site_fine", label: "За каждый посторонний сайт", type: "number", required: true, min: 0 },
+    { key: "lateness_fine", label: "За каждое опоздание", type: "number", required: true, min: 0, unit: C },
+    { key: "forbidden_site_fine", label: "За каждый посторонний сайт", type: "number", required: true, min: 0, unit: C },
   ] },
   { title: "Бонусы", subtitle: "Дополнительные начисления в коинах", fields: [
-    { key: "no_lateness_bonus", label: "Неделя без опозданий", type: "number", required: true, min: 0 },
-    { key: "no_forbidden_sites_bonus", label: "Без посторонних сайтов", type: "number", required: true, min: 0 },
-    { key: "nomination_bonus_default", label: "Бонус номинации по умолчанию", type: "number", required: true, min: 0 },
-    { key: "driver_gratitude_bonus", label: "Благодарность водителя", type: "number", required: true, min: 0 },
-    { key: "gratitude_monthly_limit", label: "Благодарностей в месяц на оператора", type: "number", required: true, min: 0, hint: "0 — без ограничения" },
-    { key: "nomination_min_participants", label: "Минимум участников для номинаций", type: "number", required: true, min: 0 },
+    { key: "no_lateness_bonus", label: "Неделя без опозданий", type: "number", required: true, min: 0, unit: C },
+    { key: "no_forbidden_sites_bonus", label: "Без посторонних сайтов", type: "number", required: true, min: 0, unit: C },
+    { key: "nomination_bonus_default", label: "Бонус номинации по умолчанию", type: "number", required: true, min: 0, unit: C },
+    { key: "driver_gratitude_bonus", label: "Благодарность водителя", type: "number", required: true, min: 0, unit: C },
+    { key: "gratitude_monthly_limit", label: "Благодарностей в месяц на оператора", type: "number", required: true, min: 0, hint: "0 — без ограничения", unit: "шт" },
+    { key: "nomination_min_participants", label: "Минимум участников для номинаций", type: "number", required: true, min: 0, unit: "чел." },
   ] },
   { title: "Ручные операции", subtitle: "Ограничения для начислений и списаний сотрудниками", fields: [
-    { key: "manual_max_abs_amount", label: "Максимум коинов за одну операцию", type: "number", required: true, min: 1 },
-    { key: "manual_reason_min_length", label: "Минимальная длина комментария", type: "number", required: true, min: 0, hint: "Число символов. Причина операции остаётся обязательной." },
-    { key: "manual_monthly_limit", label: "Начислений супервайзера в месяц", type: "number", required: true, min: 0, hint: "Сумма ручных начислений всем операторам. 0 — без ограничения. Руководитель не ограничен." },
+    { key: "manual_max_abs_amount", label: "Максимум за одну операцию", type: "number", required: true, min: 1, unit: C },
+    { key: "manual_reason_min_length", label: "Минимальная длина комментария", type: "number", required: true, min: 0, hint: "Причина операции остаётся обязательной.", unit: "симв." },
+    { key: "manual_monthly_limit", label: "Начислений супервайзера в месяц", type: "number", required: true, min: 0, hint: "Сумма ручных начислений всем операторам. 0 — без ограничения. Руководитель не ограничен.", unit: C },
   ] },
   { title: "Магазин", subtitle: "Бонусы с денежной стоимостью продаются, пока не исчерпан бюджет месяца", fields: [
-    { key: "coin_rate_tenge", label: "Тенге за 1 коин", type: "number", required: true, min: .01, step: "any", hint: "Для пересчёта цен и отчёта «Экономика месяца»" },
-    { key: "shop_monthly_budget_tenge", label: "Бюджет магазина на месяц, ₸", type: "number", required: true, min: 0, hint: "0 — без бюджета" },
+    { key: "coin_rate_tenge", label: "Стоимость 1 коина", type: "number", required: true, min: .01, step: "any", hint: "Для пересчёта цен и отчёта «Экономика месяца»", unit: "₸" },
+    { key: "shop_monthly_budget_tenge", label: "Бюджет магазина на месяц", type: "number", required: true, min: 0, hint: "0 — без бюджета", unit: "₸" },
   ] },
 ];
+const ruleNumbers = ruleGroups.flatMap((group) => group.fields).map((field) => field.key);
+/** The rules as they would be saved: numbers as numbers, so a retyped «50» is not a change. */
+const normalizedRules = (values: DefinitionInput) => JSON.stringify(Object.fromEntries(Object.entries(values).map(([key, value]) => [key, ruleNumbers.includes(key) ? Number(value) : value]).sort()));
 
+/**
+ * «Правила расчёта» (docs/PERFORMANCE_SECTION.md): the groups side by side, every number with its unit, the course
+ * checked right under the rate. The save panel appears with the first change and stays at the bottom of the screen
+ * until the rules are saved or the changes are dropped.
+ */
 function RulesEditor({ initial, metrics }: { initial: Rules; metrics: Definition[] }) {
   const { atLeast } = useAuth(); const editable = atLeast("head");
   const [values, setValues] = useState<DefinitionInput>({ ...initial });
@@ -103,30 +113,37 @@ function RulesEditor({ initial, metrics }: { initial: Rules; metrics: Definition
   const toast = useToast(); const client = useQueryClient();
   const save = useMutation({ mutationFn: () => {
     const data = { ...values };
-    ruleGroups.flatMap((g) => g.fields).forEach((f) => { data[f.key] = Number(data[f.key]); });
+    ruleNumbers.forEach((key) => { data[key] = Number(data[key]); });
     return configuration.updateRules(data as unknown as Rules);
   }, onSuccess: (data) => { client.setQueryData(["configuration-rules"], data); void client.invalidateQueries({ queryKey: ["dashboard"] }); toast.success("Правила сохранены"); } });
+  const dirty = normalizedRules(values) !== normalizedRules({ ...initial });
   const field = (spec: FieldSpec) => <ConfigurationField key={spec.key} spec={spec} value={values[spec.key]} disabled={!editable || save.isPending} onChange={(value) => setValues((current) => ({ ...current, [spec.key]: value }))} />;
   const metricOptions = metrics.map((m) => ({ value: m.code, label: `${m.title}${m.is_active ? "" : " · неактивен"}` }));
   const rate = Number(values.points_per_coin);
-  function submit(event: FormEvent) { event.preventDefault(); if (!save.isPending) save.mutate(); }
-  return <form className="stack" onSubmit={submit}>
-    <p className="configuration-note">Изменения применяются к следующим расчётам. Опубликованные итоги и начисленные коины сохраняются.</p>
+  function submit(event: FormEvent) { event.preventDefault(); if (!save.isPending && dirty) save.mutate(); }
+  return <form className="stack rules-form" onSubmit={submit}>
     {!editable && <p className="configuration-note">Просмотр настроек. Изменять правила могут руководитель и администратор.</p>}
-    {ruleGroups.map((group) => <Card key={group.title} title={group.title} subtitle={group.subtitle}><div className="configuration-form-grid">{group.fields.map(field)}</div></Card>)}
-    <Card title="Конкурс" subtitle="Баллы, дисциплина и штрафы начисляются каждую неделю"><div className="configuration-form-grid">
-      {field({ key: "contest_period", label: "Места и номинации", type: "select", required: true, options: [{ value: "month", label: "Раз в месяц, среди всех операторов" }, { value: "week", label: "Каждую неделю" }], hint: "Неделя относится к месяцу своего четверга. Месяц закрывается вместе с его последней неделей." })}
-    </div></Card>
-    <Card title="Дисциплина и видимость"><div className="configuration-form-grid">
-      {field({ key: "lateness_metric_code", label: "Показатель опозданий", type: "select", options: metricOptions, required: true })}
-      {field({ key: "forbidden_sites_metric_code", label: "Показатель посторонних сайтов", type: "select", options: metricOptions, required: true })}
-    </div><div className="configuration-toggles">
-      {field({ key: "discipline_requires_reported", label: "Бонус за дисциплину только при загруженных данных", type: "boolean", hint: "Если выключить, отсутствие отчёта о нарушениях разрешает бонус." })}
-      {field({ key: "rating_show_balance_to_operators", label: "Показывать операторам баланс коллег в рейтинге", type: "boolean", hint: "Индивидуальная история операций остаётся доступна по правам." })}
-    </div></Card>
-    <Card title="Проверка курса" subtitle="Предварительный пример без дополнительных бонусов"><div className="configuration-example"><label className="field"><span className="field__label">Баллы конкурса</span><input className="input" type="number" min={0} step="any" value={sample} onChange={(e) => setSample(e.target.value)} /></label><span className="configuration-example__equals" aria-hidden="true">=</span><output className="configuration-example__result" aria-live="polite"><strong>{Number.isFinite(rate) && rate > 0 && Number.isFinite(Number(sample)) ? coins(Math.floor(Math.max(0, Number(sample)) / rate)) : "—"}</strong> коинов</output>{Number.isFinite(rate) && rate > 0 && <span className="configuration-example__rate">Курс: {coins(rate)} {plural(rate, "балл", "балла", "баллов")} = 1 коин, дробная часть отбрасывается</span>}</div></Card>
+    <div className="rules-grid">
+      {ruleGroups.map((group, index) => <Card key={group.title} title={group.title} subtitle={group.subtitle}><div className="configuration-form-grid">{group.fields.map(field)}</div>
+        {index === 0 && <div className="configuration-example" aria-label="Проверка курса"><label className="field"><span className="field__label">Пример: баллы конкурса</span><input className="input" type="number" min={0} step="any" value={sample} onChange={(e) => setSample(e.target.value)} /></label><span className="configuration-example__equals" aria-hidden="true">=</span><output className="configuration-example__result" aria-live="polite"><strong>{Number.isFinite(rate) && rate > 0 && Number.isFinite(Number(sample)) ? coins(Math.floor(Math.max(0, Number(sample)) / rate)) : "—"}</strong> коинов</output>{Number.isFinite(rate) && rate > 0 && <span className="configuration-example__rate">Курс: {coins(rate)} {plural(rate, "балл", "балла", "баллов")} = 1 коин, дробная часть отбрасывается. Без бонусов за места и дисциплину.</span>}</div>}
+      </Card>)}
+      <Card title="Конкурс" subtitle="Баллы, дисциплина и штрафы начисляются каждую неделю"><div className="configuration-form-grid configuration-form-grid--single">
+        {field({ key: "contest_period", label: "Места и номинации", type: "select", required: true, options: [{ value: "month", label: "Раз в месяц, среди всех операторов" }, { value: "week", label: "Каждую неделю" }], hint: "Неделя относится к месяцу своего четверга. Месяц закрывается вместе с его последней неделей." })}
+      </div></Card>
+      <Card title="Дисциплина и видимость"><div className="configuration-form-grid">
+        {field({ key: "lateness_metric_code", label: "Показатель опозданий", type: "select", options: metricOptions, required: true })}
+        {field({ key: "forbidden_sites_metric_code", label: "Показатель посторонних сайтов", type: "select", options: metricOptions, required: true })}
+      </div><div className="configuration-toggles">
+        {field({ key: "discipline_requires_reported", label: "Бонус за дисциплину только при загруженных данных", type: "boolean", hint: "Если выключить, отсутствие отчёта о нарушениях разрешает бонус." })}
+        {field({ key: "rating_show_balance_to_operators", label: "Показывать операторам баланс коллег в рейтинге", type: "boolean", hint: "Индивидуальная история операций остаётся доступна по правам." })}
+      </div></Card>
+    </div>
     {save.isError && <p role="alert" className="configuration-error">{configurationError(save.error)}</p>}
-    {editable && <div className="configuration-save"><p className="muted small">Изменения сохраняются в журнале аудита.</p><Button type="submit" variant="primary" disabled={save.isPending}>{save.isPending ? "Сохраняем…" : "Сохранить правила"}</Button></div>}
+    {editable && <div className={`configuration-save rules-save${dirty ? " is-dirty" : ""}`} role={dirty ? "region" : undefined} aria-label={dirty ? "Несохранённые изменения" : undefined}>
+      <span>{dirty ? "Есть несохранённые изменения. Они применятся к следующим расчётам." : "Изменения применяются к следующим расчётам; опубликованные итоги не меняются. Каждое сохранение попадает в журнал аудита."}</span>
+      {dirty && <Button disabled={save.isPending} onClick={() => { setValues({ ...initial }); save.reset(); }}>Отменить</Button>}
+      {dirty && <Button type="submit" variant="primary" disabled={save.isPending}>{save.isPending ? "Сохраняем…" : "Сохранить правила"}</Button>}
+    </div>}
   </form>;
 }
 
@@ -148,18 +165,34 @@ function DefinitionSection({ kind, navigation }: { kind: DefinitionKind; navigat
     <GlassSurface variant="regular" className="configuration-filters"><label className="field configuration-search"><span className="field__label">Поиск</span><input className="input" type="search" value={search} placeholder="Название или описание" onChange={(e) => setParams({ tab: kind, search: e.target.value, status }, { replace: true })} /></label><label className="field"><span className="field__label">Статус</span><Select aria-label="Статус записей" value={status} options={[{ value: "all", label: "Все" }, { value: "active", label: "Активные" }, { value: "archived", label: "Неактивные" }]} onChange={(value) => setParams({ tab: kind, search, status: value })} /></label></GlassSurface>
     {query.isLoading && <RowsSkeleton />}{query.isError && <ErrorState error={new Error(configurationError(query.error))} onRetry={() => query.refetch()} />}
     {items?.length === 0 && <EmptyState title="Записи не найдены" hint="Измените фильтры или добавьте новую запись." />}
-    <div className="configuration-cards definition-cards">{items?.map((row) => {
-      const presentation = definitionPresentation(kind, row, metrics);
-      return <article key={row.id} className="card card--standard definition-card">
-        <header className="definition-card__head"><h2 className="definition-card__title">{row.title}</h2><div className="definition-card__status"><Badge tone={row.is_active ? "success" : "neutral"}>{row.is_active ? "Активно" : "Неактивно"}</Badge></div></header>
-        <p className="definition-card__description">{presentation.description}</p>
-        <dl className="definition-card__facts">{presentation.facts.map((fact) => <div key={fact.label} className="definition-card__fact"><dt>{fact.label}</dt><dd>{fact.value}</dd></div>)}</dl>
-        <footer className="definition-card__footer">{atLeast("head") && <Button onClick={() => setEditor(row)}>Изменить</Button>}<Button variant="plain" onClick={() => setDetails(row)} aria-label={`Подробнее: ${row.title}`}>Подробнее</Button></footer>
-      </article>;
-    })}</div>
+    {items && items.length > 0 && groups(kind, items).map(group => <Card key={group.title} title={group.title} subtitle={group.subtitle} padded={false} className="definition-list">
+      <ul className="definition-rows">{group.items.map((row) => {
+        const line = definitionRow(kind, row, metrics);
+        return <li key={row.id}><button type="button" className={`definition-row${row.is_active ? "" : " is-inactive"}`} onClick={() => atLeast("head") ? setEditor(row) : setDetails(row)}
+          aria-label={`${atLeast("head") ? "Изменить" : "Подробнее"}: ${row.title}`}>
+          {kind === "badges" && <span className="definition-row__icon" aria-hidden="true">{badgeIcon(row.icon)}</span>}
+          <span className="definition-row__main"><span className="definition-row__title"><strong>{row.title}</strong>{!row.is_active && <Badge tone="neutral">Неактивно</Badge>}</span><span className="definition-row__meta">{line.meta}</span></span>
+          <span className="definition-row__value"><strong className={line.coin ? "is-coin" : undefined}>{line.value}</strong><small>{line.hint}</small></span>
+          <ChevronRightIcon size={16} />
+        </button></li>;
+      })}</ul>
+    </Card>)}
     {editor && <DefinitionEditor kind={kind} target={editor === "new" ? undefined : editor} onClose={() => setEditor(null)} />}
     {details && <DefinitionDetails kind={kind} row={details} metrics={metrics} onClose={() => setDetails(null)} onEdit={atLeast("head") ? () => { setDetails(null); setEditor(details); } : undefined} />}
   </div>;
+}
+
+/** Metrics fall in two lists — results that earn points and penalties that take them — the rest is one list. */
+function groups(kind: DefinitionKind, items: Definition[]): { title: string; subtitle: string; items: Definition[] }[] {
+  const count = (list: Definition[], one: string, few: string, many: string) => `${list.length} ${plural(list.length, one, few, many)}`;
+  if (kind === "metrics") {
+    const results = items.filter(row => row.kind !== "anti"), penalties = items.filter(row => row.kind === "anti");
+    return [
+      { title: "Рабочие результаты", subtitle: `${count(results, "показатель", "показателя", "показателей")} · баллы начисляются по степени выполнения цели`, items: results },
+      { title: "Штрафные показатели", subtitle: `${count(penalties, "показатель", "показателя", "показателей")} · снижают итоговый балл до перевода в коины`, items: penalties },
+    ].filter(group => group.items.length);
+  }
+  return [{ title: kind === "nominations" ? "Номинации" : "Достижения", subtitle: kind === "nominations" ? `${count(items, "номинация", "номинации", "номинаций")} · победитель получает награду, когда закрываются итоги конкурса` : `${count(items, "достижение", "достижения", "достижений")} · открываются сами по подтверждённым результатам`, items }];
 }
 
 function DefinitionDetails({ kind, row, metrics, onClose, onEdit }: { kind: DefinitionKind; row: Definition; metrics: Definition[]; onClose: () => void; onEdit?: () => void }) {
@@ -267,6 +300,7 @@ function ConfigurationField({ spec, value, disabled, onChange }: { spec: FieldSp
   return <label className="field"><span className="field__label">{spec.label}</span>
     {spec.type === "select" ? <Select aria-label={spec.label} value={String(value ?? "")} disabled={disabled} required={spec.required} options={spec.options ?? []} onChange={onChange} />
       : spec.type === "textarea" ? <textarea className="input" rows={3} value={String(value ?? "")} disabled={disabled} maxLength={spec.maxLength} onChange={(e) => onChange(e.target.value)} />
+      : spec.unit ? <span className="input-unit"><input className="input" type="number" inputMode="decimal" value={String(value ?? "")} disabled={disabled} min={spec.min} step={spec.step ?? 1} required={spec.required} onChange={(e) => onChange(e.target.value)} /><span aria-hidden="true">{spec.unit}</span></span>
       : <input className="input" type={spec.type === "number" ? "number" : "text"} value={String(value ?? "")} disabled={disabled} min={spec.min} step={spec.step ?? 1} required={spec.required} maxLength={spec.maxLength} onChange={(e) => onChange(e.target.value)} />}
     {spec.hint && <span className="muted micro">{spec.hint}</span>}
   </label>;

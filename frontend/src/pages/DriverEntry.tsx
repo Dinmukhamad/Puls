@@ -21,7 +21,7 @@ export function DriverEntry() {
   const last = data?.shift_history?.[0];
   return <Card title="Driver Simulator" subtitle="Учебное приложение водителя · Алматы"><div className="stack dx-entry">
     <TaxiScene />
-    {user?.role !== "operator" && <p>Тестовая проверка: прохождение не входит в статистику операторов и не выдаёт награды Puls.</p>}
+    {user?.role !== "operator" && user?.role !== "trainee" && <p>Тестовая проверка: прохождение не входит в статистику операторов и не выдаёт награды Puls.</p>}
     <p>Заказы, межгород, деньги, чаты и профиль связаны одной сменой. Пройдите заказ полностью, разберите обращение и проверьте результат.</p>
     {query.isLoading ? <RowsSkeleton rows={2} /> : query.isError ? <ErrorState error={query.error} onRetry={() => query.refetch()} /> : <>
       <div className="row"><Badge tone={unfinished ? "accent" : last ? "success" : "neutral"}>{unfinished ? "Есть незавершённая смена" : last ? "Готово к новой смене" : "Ещё не запускали"}</Badge>{data?.shift_best != null && <Badge tone="success">Лучший результат: {data.shift_best}/100</Badge>}</div>

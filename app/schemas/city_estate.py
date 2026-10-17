@@ -25,12 +25,35 @@ DISTRICT = r"^(support|sales)(-team-[1-3]|-2-team-[1-2]|-4-team-[1-4]|-5-team-[1
 Cell = tuple[int, int, int]
 
 
+#: A small thing moving: [block, column, row] it stands on, then [block, column, row] it goes to.
+Move = tuple[int, int, int, int, int, int]
+#: A small thing turned: [block, column, row, turn], the turn a quarter turn 0–3.
+Turned = tuple[int, int, int, int]
+
+
 def check_cells(cells, limit):
     if not 1 <= len(cells) <= limit:
         raise ValueError(f"За раз можно выбрать от 1 до {limit} клеток")
     for block, col, row in cells:
         if not (1 <= block <= 99 and 0 <= col <= 999 and 0 <= row <= 999):
             raise ValueError("Таких клеток нет на земле района")
+    return cells
+
+
+def check_moves(moves, limit):
+    """Each small thing from its cell to another, none of them twice, nor two onto one cell."""
+    sources, targets = [m[:3] for m in moves], [m[3:] for m in moves]
+    check_cells(sources, limit)
+    check_cells(targets, limit)
+    if len(set(sources)) != len(sources) or len(set(targets)) != len(targets):
+        raise ValueError("Клетки повторяются")
+    return moves
+
+
+def check_turns(cells, limit):
+    check_cells([c[:3] for c in cells], limit)
+    if any(not 0 <= turn <= 3 for *_cell, turn in cells):
+        raise ValueError("Поворот — от 0 до 3 четвертей")
     return cells
 
 
@@ -79,6 +102,34 @@ class UndecorInput(Keyed):
         from app.services.city_estate import DECOR_BATCH
 
         check_cells(self.cells, DECOR_BATCH)
+        return self
+
+
+class DecorMoveInput(Keyed):
+    """One's own small things (and the district's) onto other free cells of the district, free."""
+
+    district_id: str | None = Field(default=None, pattern=DISTRICT, max_length=32)
+    moves: list[Move]
+
+    @model_validator(mode="after")
+    def moves_in_range(self):
+        from app.services.city_estate import DECOR_BATCH
+
+        check_moves(self.moves, DECOR_BATCH)
+        return self
+
+
+class DecorTurnInput(Keyed):
+    """One's own lamps and benches (and the district's) turned to a side of their cells, free."""
+
+    district_id: str | None = Field(default=None, pattern=DISTRICT, max_length=32)
+    cells: list[Turned]
+
+    @model_validator(mode="after")
+    def turns_in_range(self):
+        from app.services.city_estate import DECOR_BATCH
+
+        check_turns(self.cells, DECOR_BATCH)
         return self
 
 
@@ -169,6 +220,36 @@ class SandboxUndecorInput(BaseModel):
         from app.services.city_estate import DECOR_BATCH
 
         check_cells(self.cells, DECOR_BATCH)
+        return self
+
+
+class SandboxDecorMoveInput(BaseModel):
+    """Small things of a test district onto other free cells, whoever laid them."""
+
+    model_config = ConfigDict(extra="forbid")
+    district_id: str = Field(pattern=SANDBOX_DISTRICT, max_length=32)
+    moves: list[Move]
+
+    @model_validator(mode="after")
+    def moves_in_range(self):
+        from app.services.city_estate import DECOR_BATCH
+
+        check_moves(self.moves, DECOR_BATCH)
+        return self
+
+
+class SandboxDecorTurnInput(BaseModel):
+    """Lamps and benches of a test district turned, whoever laid them."""
+
+    model_config = ConfigDict(extra="forbid")
+    district_id: str = Field(pattern=SANDBOX_DISTRICT, max_length=32)
+    cells: list[Turned]
+
+    @model_validator(mode="after")
+    def turns_in_range(self):
+        from app.services.city_estate import DECOR_BATCH
+
+        check_turns(self.cells, DECOR_BATCH)
         return self
 
 

@@ -1,10 +1,11 @@
-import { REQUEST_STATUS_LABELS, ROLE_LABELS, TX_LABELS, WEEK_STATUS_LABELS } from "../utils/format";
+import { parseTimestamp, REQUEST_STATUS_LABELS, ROLE_LABELS, TX_LABELS, WEEK_STATUS_LABELS } from "../utils/format";
 
 export const AUDIT_ACTIONS: Record<string, string> = {
   "auth.login": "Вход в систему", "auth.logout": "Выход из системы",
   "user.create": "Создан сотрудник", "user.update": "Изменён сотрудник",
   "user.login_reset": "Изменён логин сотрудника", "user.login_change": "Изменён логин",
   "user.password_reset": "Сброшен пароль", "user.password_change": "Изменён пароль",
+  "user.avatar_upload": "Обновлено фото сотрудника", "user.avatar_delete": "Удалено фото сотрудника",
   "group.create": "Создана команда", "group.update": "Изменена команда",
   "supervisor_team.assign": "Операторы назначены супервайзеру",
   "supervisor_team.remove": "Операторы сняты из команды",
@@ -13,6 +14,7 @@ export const AUDIT_ACTIONS: Record<string, string> = {
   "week.recalculate": "Подготовлен расчёт", "week.close": "Опубликованы итоги",
   "week.close_previous": "Закрыта прошлая неделя", "session.revoke": "Завершён сеанс",
   "session.revoke_others": "Завершены остальные сеансы",
+  "session.revoke_bulk": "Массовое завершение сеансов",
   "day.metrics_upload": "Загружены показатели по дням", "day.reports_upload": "Загружены месячные отчёты",
   "access.update": "Изменён доступ к разделам", "work_sites.approve": "Открыт доступ к рабочим сайтам",
   "rules.update": "Изменены правила начисления", "coins.manual": "Выполнена операция с коинами",
@@ -64,6 +66,7 @@ const numberFields: Record<string, string> = {
   xp: "Опыт", rank: "Место", target: "Цель", max_points: "Максимум баллов", weight: "Вес", min_coins: "Порог коинов",
   level: "Уровень", hq_level: "Уровень главного здания", cost: "Стоимость", refunded: "Возвращено коинов",
   changed_count: "Операторов переведено", updated_groups: "Команд обновлено", reconciled_operators: "Операторов проверено",
+  revoked_count: "Завершено сеансов", user_count: "Затронуто сотрудников",
   operators: "Операторов", days: "Дней", minutes: "Продолжительность в минутах", pass_percent: "Порог прохождения, %",
   daily_spins: "Попыток в день", count: "Количество", points_per_coin: "Баллов за один коин",
   rank1_bonus: "Бонус за первое место", rank2_bonus: "Бонус за второе место", rank3_bonus: "Бонус за третье место",
@@ -79,9 +82,11 @@ const booleanFields: Record<string, string> = {
   is_active: "Активен", enabled: "Доступно", replace: "Замена показателей", correct: "Ответ верный",
   requires_approval: "Требуется одобрение", discipline_requires_reported: "Бонусы только по загруженным показателям",
   rating_show_balance_to_operators: "Показывать баланс коллег в рейтинге",
+  keep_current: "Сохранить текущий сеанс",
 };
 const enumFields: Record<string, { label: string; values: Record<string, string> }> = {
   role: { label: "Роль", values: ROLE_LABELS },
+  scope: { label: "Область действия", values: { selected: "Выбранные сеансы", user: "Сотрудник", role: "Роль", all: "Все сотрудники" } },
   gender: { label: "Пол", values: { male: "Мужской", female: "Женский" } },
   status: { label: "Статус", values: { ...REQUEST_STATUS_LABELS, ...WEEK_STATUS_LABELS, draft: "Черновик", published: "Опубликован" } },
   tx_type: { label: "Операция", values: TX_LABELS },
@@ -111,3 +116,36 @@ export function auditBusinessChanges(changes: unknown): AuditChange[] {
     return mapped ? [{ label, value: mapped }] : [];
   });
 }
+
+/** Sections of the journal: a section is the set of action prefixes the server narrows by. */
+export const AUDIT_GROUPS: { key: string; label: string; prefixes: string[] }[] = [
+  { key: "auth", label: "Вход и сеансы", prefixes: ["auth.", "session."] },
+  { key: "people", label: "Сотрудники и команды", prefixes: ["user.", "group.", "supervisor_team.", "telegram."] },
+  { key: "access", label: "Доступ", prefixes: ["access.", "work_sites."] },
+  { key: "results", label: "Показатели и итоги", prefixes: ["week.", "day.", "metric.", "nomination."] },
+  { key: "rewards", label: "Коины и награды", prefixes: ["coins.", "rules.", "badge.", "progress.", "shop_item.", "wheel.", "raffle.", "scenario."] },
+  { key: "learning", label: "Обучение", prefixes: ["learning.", "driver."] },
+  { key: "city", label: "Город", prefixes: ["city."] },
+];
+
+/** The actions a section holds, for the «Действие» list once a section is chosen. */
+export function auditActionsOf(group?: string): [string, string][] {
+  const prefixes = AUDIT_GROUPS.find(item => item.key === group)?.prefixes;
+  return Object.entries(AUDIT_ACTIONS).filter(([key]) => !prefixes || prefixes.some(prefix => key.startsWith(prefix)));
+}
+
+/** One line under the event: its first understood changes, so most rows need no opening. */
+export function auditSummary(changes: unknown, limit = 2): string {
+  return auditBusinessChanges(changes).slice(0, limit).map(item => `${item.label}: ${item.value}`).join(" · ");
+}
+
+/** The day heading an event falls under: «Сегодня», «Вчера» or the date itself. */
+export function auditDay(iso: string, now = new Date()): string {
+  const day = parseTimestamp(iso);
+  const start = (value: Date) => new Date(value.getFullYear(), value.getMonth(), value.getDate()).getTime();
+  const days = Math.round((start(now) - start(day)) / 86_400_000);
+  if (days === 0) return "Сегодня";
+  if (days === 1) return "Вчера";
+  return day.toLocaleDateString("ru-RU", { day: "numeric", month: "long", ...(day.getFullYear() === now.getFullYear() ? {} : { year: "numeric" }) });
+}
+

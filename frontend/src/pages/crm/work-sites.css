@@ -98,7 +98,8 @@
 .crm-fields { padding:25px 40px 20px; border:0; margin:0; min-width:0; }
 .crm-field { display:grid; grid-template-columns:140px minmax(0,1fr); align-items:start; gap:22px; margin-bottom:13px; font-size:12px; }
 .crm-field>span { text-align:right; color:#8198c0; padding-top:8px; font-size:11px; }
-.crm-field input[type=file] { font-size:11px; padding:5px!important; }
+/* The drop zone below is the control: it opens the same file choice, so the browser's own button stays hidden. */
+.crm-field input[type=file] { position:absolute; width:1px; height:1px; padding:0!important; margin:-1px; overflow:hidden; clip:rect(0 0 0 0); border:0; opacity:0; }
 .crm-form-footer { padding:18px 20px; display:flex; align-items:center; gap:16px; flex-wrap:wrap; border-top:1px solid #eef2f8; }
 .crm-form-footer>span { color:#96a3b8; font-size:11px; }
 .crm-form-footer label { display:flex; align-items:center; gap:10px; }

@@ -3,7 +3,8 @@
  * hold the phone, ВУ, ID and link of its account. Without a call the appeal has two accounts:
  * Pulsar's test driver and the account open in the Диспетчерская.
  */
-export interface AccountData { id: string; phone: string; license: string }
+/** `park`: the park_id of the account's park, which a link to the account carries. */
+export interface AccountData { id: string; phone: string; license: string; park?: string }
 export type CopyKind = "phone" | "license" | "id" | "link";
 
 /** Copy buttons announce what they put on the clipboard: they raise no «copy» event of their own. */
@@ -52,10 +53,22 @@ export function fieldMatch(field: "phone" | "license_number" | "driver_id", valu
   return found.includes("true") ? "true" : found.includes("link") ? "link" : "false";
 }
 
-/** A request's comment names an account by its link: "ok", "missing", or "" while it is empty. */
+/**
+ * A request's comment links an account in its park: "ok", "missing", or "" while it is empty. The same rule as
+ * the server's check of the CRM tasks (app/services/crm_training.py _account_link): a link to
+ * fleet.yandex.kz/contractors/<ID> with the park's park_id, with or without https:// and «/details»; the ID alone
+ * is no link.
+ */
 export function linkMatch(comment: string, accounts: AccountData[] = []) {
   if (!comment.trim() || !accounts.length) return "";
-  return accounts.some(account => comment.toLowerCase().includes(account.id.toLowerCase())) ? "ok" : "missing";
+  const links = comment.toLowerCase().match(/(?:https?:\/\/)?fleet\.yandex\.kz\/contractors\/[^\s<>]+/g) ?? [];
+  const linked = (account: AccountData) => links.some(link => {
+    const [path, query = ""] = link.split("?"), id = account.id.toLowerCase();
+    const to = path.replace(/^(?:https?:\/\/)?fleet\.yandex\.kz/, "").replace(/\/+$/, "");
+    return (to === `/contractors/${id}` || to === `/contractors/${id}/details`)
+      && (!account.park || new URLSearchParams(query.replace(/[.,;!)\]}]+$/, "")).get("park_id") === account.park.toLowerCase());
+  });
+  return accounts.some(linked) ? "ok" : "missing";
 }
 
 /** Copies the way the operator would and tells the work sites what was copied. */

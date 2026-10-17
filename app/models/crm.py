@@ -14,7 +14,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.db.base import Base, TimestampMixin
+from app.db.base import Base, TimestampMixin, utcnow
 
 
 class CrmCategory(Base):
@@ -56,12 +56,60 @@ class CrmAppeal(Base, TimestampMixin):
     comment: Mapped[str] = mapped_column(Text, default="")
     is_ticket: Mapped[bool] = mapped_column(Boolean, default=False)
     status: Mapped[str] = mapped_column(String(20), default="recorded", index=True)
+    revision: Mapped[int] = mapped_column(default=1)
+    # A saved training record keeps its task binding; business status remains independent.
+    training_task: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    last_edit_request_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
 
 
 class CrmAttachment(Base):
     __tablename__ = "crm_attachments"
     id: Mapped[int] = mapped_column(primary_key=True)
     appeal_id: Mapped[int] = mapped_column(ForeignKey("crm_appeals.id"), index=True)
+    name: Mapped[str] = mapped_column(String(200))
+    mime: Mapped[str] = mapped_column(String(80))
+    size: Mapped[int]
+    data: Mapped[bytes] = mapped_column(LargeBinary, deferred=True)
+
+
+class CrmTicket(Base):
+    __tablename__ = "crm_tickets"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    appeal_id: Mapped[int] = mapped_column(ForeignKey("crm_appeals.id"), unique=True)
+    status: Mapped[str] = mapped_column(String(30), default="new")
+    revision: Mapped[int] = mapped_column(default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class CrmTicketEvent(Base):
+    __tablename__ = "crm_ticket_events"
+    __table_args__ = (UniqueConstraint("ticket_id", "request_id"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ticket_id: Mapped[int] = mapped_column(ForeignKey("crm_tickets.id"), index=True)
+    request_id: Mapped[str] = mapped_column(String(36))
+    action: Mapped[str] = mapped_column(String(30))
+    author_name: Mapped[str] = mapped_column(String(255))
+    comment: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class CrmCourseCapture(Base):
+    __tablename__ = "crm_course_captures"
+    __table_args__ = (UniqueConstraint("user_id", "task_key"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    task_key: Mapped[str] = mapped_column(String(40))
+    driver_id: Mapped[str] = mapped_column(String(80))
+    incoming_phone: Mapped[str] = mapped_column(String(40))
+    digest: Mapped[str] = mapped_column(String(64))
+    data: Mapped[bytes] = mapped_column(LargeBinary, deferred=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class CrmTicketAttachment(Base):
+    __tablename__ = "crm_ticket_attachments"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("crm_ticket_events.id"), index=True)
     name: Mapped[str] = mapped_column(String(200))
     mime: Mapped[str] = mapped_column(String(80))
     size: Mapped[int]

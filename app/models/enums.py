@@ -8,6 +8,7 @@ from enum import StrEnum
 class Role(StrEnum):
     """Роли системы (п. 2 ТЗ)."""
 
+    TRAINEE = "trainee"  # Стажёр: только собственное обучение до выхода на работу
     OPERATOR = "operator"  # Оператор
     TRAINER = "trainer"  # Обучение, без административной иерархии
     SUPERVISOR = "supervisor"  # Супервайзер
@@ -17,6 +18,7 @@ class Role(StrEnum):
 
 #: Иерархия прав: чем больше число, тем шире доступ.
 ROLE_LEVEL: dict[Role, int] = {
+    Role.TRAINEE: -1,
     Role.OPERATOR: 0,
     Role.TRAINER: 0,
     Role.SUPERVISOR: 1,
@@ -25,12 +27,16 @@ ROLE_LEVEL: dict[Role, int] = {
 }
 
 USER_VISIBILITY: dict[Role, tuple[Role, ...]] = {
+    Role.TRAINEE: (),
     Role.OPERATOR: (),
-    Role.TRAINER: (Role.OPERATOR,),
-    Role.SUPERVISOR: (Role.OPERATOR, Role.SUPERVISOR),
-    Role.HEAD: (Role.OPERATOR, Role.TRAINER, Role.SUPERVISOR),
+    Role.TRAINER: (Role.TRAINEE, Role.OPERATOR),
+    Role.SUPERVISOR: (Role.TRAINEE, Role.OPERATOR, Role.SUPERVISOR),
+    Role.HEAD: (Role.TRAINEE, Role.OPERATOR, Role.TRAINER, Role.SUPERVISOR),
     Role.ADMIN: tuple(Role),
 }
+
+# Learners keep real attempts; staff use previews. Rewards remain operator-only.
+LEARNER_ROLES = (Role.TRAINEE, Role.OPERATOR)
 
 
 class TxType(StrEnum):
@@ -73,7 +79,10 @@ TX_GROUPS: dict[str, tuple[TxType, ...]] = {
     ),
     "writeoff": (TxType.MANUAL_DEBIT, TxType.CORRECTION, TxType.FINE),
     "purchase": (
-        TxType.PURCHASE, TxType.CITY_BUILD, TxType.CITY_CONTRIBUTION, TxType.GAME_STAKE,
+        TxType.PURCHASE,
+        TxType.CITY_BUILD,
+        TxType.CITY_CONTRIBUTION,
+        TxType.GAME_STAKE,
     ),
 }
 

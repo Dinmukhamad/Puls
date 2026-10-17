@@ -8,12 +8,11 @@ export type MissionState = "available" | "in_progress" | "ready" | "locked" | "c
 export interface MissionDefinition { title: string; description: string; pulsar: string; target: number; xp: number; coins: number; enabled: boolean; prerequisite: string | null }
 export interface CityMission extends MissionDefinition { key: string; district: DistrictId; objective: string; path: string; current: number; state: MissionState; claimed_at: string | null }
 export interface CityDistrict { id: DistrictId; name: string; subtitle: string; soon: boolean; readonly completed_missions?: number }
-export interface CityData { revision: number; user_id: number; full_name: string; gender?: "male" | "female" | null; guide_name?: string | null; preview: boolean; inspecting: boolean; can_claim: boolean; districts: CityDistrict[]; missions: CityMission[]; xp: number; level: number; level_progress: number; level_target: number; balance: number; available: number; plots: CityPlot[]; buildings: CityBuilding[]; can_build: boolean; plots_moved?: boolean; quests: CityQuests | null }
+export interface CityData { revision: number; user_id: number; full_name: string; gender?: "male" | "female" | null; guide_name?: string | null; preview: boolean; inspecting: boolean; can_claim: boolean; /** District stages the account has already seen grow, on any device (null: not yet recorded). */ levels_seen?: Record<string, number> | null; districts: CityDistrict[]; missions: CityMission[]; xp: number; level: number; level_progress: number; level_target: number; balance: number; available: number; plots: CityPlot[]; buildings: CityBuilding[]; can_build: boolean; plots_moved?: boolean; quests: CityQuests | null }
 export type BuildingKey = "garden" | "gazebo" | "playground" | "sports" | "fountain" | "cottage" | "house" | "tower";
 /** A plot of the operator's own district; `item` is what stands on it. */
 export interface CityPlot { key: string; district: DistrictId; unlocked: boolean; item: BuildingKey | null }
 export interface CityBuilding { key: BuildingKey; name: string; description: string; icon: string; price: number }
-export interface CityBuilt { plot: string; item: BuildingKey; name: string; price: number; balance: number }
 /** A daily situation: `right` and `explanation` come only once it is answered. */
 export interface CityQuest { slot: number; giver: "driver" | "client" | "guide"; title: string; speaker: string; text: string; options: string[]; answered: boolean; answer: number | null; correct: boolean | null; right: number | null; explanation: string | null; coins: number }
 export interface CityQuests { day: string; coins: number; items: CityQuest[] }
@@ -32,7 +31,9 @@ export const city = {
   own: (signal?: AbortSignal) => request<CityData>("/api/v1/learning/city", { signal, timeoutMs: CITY_READ_TIMEOUT_MS }),
   operator: (id: number, signal?: AbortSignal) => request<CityData>(`/api/v1/admin/learning/city/operators/${id}`, { signal, timeoutMs: CITY_READ_TIMEOUT_MS }),
   claim: (key: string, revision: number) => request<CityReward>(`/api/v1/learning/city/missions/${key}/claim`, { method: "POST", json: { revision } }),
-  build: (plot: string, item: BuildingKey) => request<CityBuilt>(`/api/v1/learning/city/plots/${plot}/build`, { method: "POST", json: { item } }),
+  levelsSeen: (levels: Record<string, number>) => request<{ levels_seen: Record<string, number> }>("/api/v1/learning/city/levels/seen", { method: "POST", json: { levels } }),
+  /** Pulsar's tour of the site reached its end: the Academy's «Как устроен Puls» can be claimed. */
+  finishTour: () => request<{ site_tour: boolean }>("/api/v1/learning/city/tour/finish", { method: "POST" }),
   answer: (slot: number, answer: number) => request<CityQuest>(`/api/v1/learning/city/quests/${slot}/answer`, { method: "POST", json: { answer } }),
   economy: () => request<CityEconomy>("/api/v1/admin/learning/city/economy"),
   saveEconomy: ({ catalogue: _catalogue, can_edit: _canEdit, ...json }: CityEconomy) => request<CityEconomy>("/api/v1/admin/learning/city/economy", { method: "PUT", json }),

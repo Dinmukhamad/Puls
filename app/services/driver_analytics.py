@@ -9,7 +9,7 @@ from app.core.deps import visible_users_filter
 from app.core.errors import NotFoundError
 from app.models.driver import DriverOrder
 from app.models.driver_shift import DriverShift
-from app.models.enums import Role
+from app.models.enums import LEARNER_ROLES
 from app.models.user import User
 from app.services.driver_analytics_details import ERRORS, order_activity, session_summary, timestamp
 from app.services.driver_shifts import CHECKS
@@ -32,7 +32,7 @@ async def report(
             select(User)
             .where(
                 await visible_users_filter(session, actor),
-                User.role == Role.OPERATOR,
+                User.role.in_(LEARNER_ROLES),
             )
             .order_by(User.full_name, User.id)
         )

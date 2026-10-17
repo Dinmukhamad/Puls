@@ -28,7 +28,7 @@ async def test_only_developer_can_inspect_or_revoke_sessions(client, session, de
         result = await client.request(method, f"/api/v1{path}", headers=headers)
         assert result.status_code == 403, (path, result.text)
         assert result.json()["code"] == (
-            "role_required" if role == Role.TRAINER else "developer_required"
+            "role_required" if role in (Role.TRAINER, Role.TRAINEE) else "developer_required"
         )
     assert (await session.get(LoginSession, sid)).revoked_at is None
     assert (await client.get("/api/v1/auth/me", headers=headers)).status_code == 200

@@ -8,7 +8,8 @@ stage by stage from one storey, a ready building is bought as it is, at the pric
 squares of one operator filling a square become a park (4 × 4 cells), six filling a rectangle a big
 park (6 × 4), at once and for free. The small things, roads, footpaths, trees, lamps, benches,
 bushes, flowerbeds and hedges, take a cell each (DECOR_FAMILIES): they are laid many at once, at a
-small price with the land, and whoever laid one may take it away for its coins back. All land is
+small price with the land, and whoever laid one may take it away for its coins back, move it onto
+other free cells or, a lamp or a bench, turn it to a side of its cell, both for free. All land is
 available from the start; its geographic bands determine only the price of land. In the centre of
 every district is its growing main building.
 
@@ -22,7 +23,8 @@ history entry.
 
 Buildings keep their place as (module, u, v): on the land module is the block, u the column and v
 the row of their first cell; module 0 is the old public square of 12 × 12 cells (the client draws
-both, frontend/src/city3d). A small thing is only a cell taken (city_cells.decor).
+both, frontend/src/city3d). A small thing is only a cell taken (city_cells.decor), and for a lamp or
+a bench the side its owner turned it to (city_cells.turn).
 """
 
 import hashlib
@@ -286,6 +288,8 @@ DECOR_PRICES = {
 }
 #: At most this many cells in one laying or taking away.
 DECOR_BATCH = 400
+#: The small things whose owner turns them: a lamp to a side of its cell, a bench to look there.
+DECOR_TURNS = ("lamp", "bench")
 
 #: What a district builds together on its public square. Size is in cells of the square.
 PROJECT_FAMILIES = {
@@ -680,7 +684,8 @@ def decor_catalogue(decor_prices):
 
 
 def decor_view(cells, user, *, home=False):
-    """A district's small things by kind: [block, column, row, 1 if the viewer may take it away].
+    """A district's small things by kind: [block, column, row, 1 if the viewer may take it away],
+    and where it was turned (DECOR_TURNS) after that, if it was.
 
     That is what the viewer laid, and in their own district (`home`) what has become the
     district's, left by operators who moved on.
@@ -688,7 +693,8 @@ def decor_view(cells, user, *, home=False):
     out = {}
     for cell in cells:
         mine = int(cell.owner_id == user.id if cell.owner_id is not None else home)
-        out.setdefault(cell.decor, []).append([cell.module, cell.u, cell.v, mine])
+        turned = [] if cell.turn is None else [cell.turn]
+        out.setdefault(cell.decor, []).append([cell.module, cell.u, cell.v, mine, *turned])
     return out
 
 
@@ -1214,6 +1220,68 @@ async def decor_cells(session, district_id, cells):
             code="decor_missing",
         )
     return found
+
+
+async def shift_decor(session, district_id, moves, *, may):
+    """Moves the small things on cells of the district onto others, each with what it is, who laid
+    it, what it cost and where it was turned; `may(cell)` says whether the actor may move it.
+
+    Where they go must be the district's land, free or left by another of the things moving, so a
+    line moves along itself. All of them move, or none.
+    """
+    found = await decor_cells(session, district_id, [tuple(m[:3]) for m in moves])
+    if not all(may(cell) for cell in found):
+        raise PermissionDeniedError("Подвинуть можно только своё и общее района")
+    by_place = {(cell.module, cell.u, cell.v): cell for cell in found}
+    by_block = {}
+    for block, col, row in (tuple(m[3:]) for m in moves):
+        if city_land.area(district_id, block, col, row) is None:
+            raise ConflictError(
+                "Туда не подвинуть: там нет земли твоего района.", code="wrong_plot"
+            )
+        by_block.setdefault(block, []).append((col, row))
+    for block, wanted in by_block.items():
+        taken = await occupied(session, district_id, block, wanted)
+        if any((cell.module, cell.u, cell.v) not in by_place for cell in taken):
+            raise ConflictError(
+                "Туда не подвинуть: часть клеток уже занята. Обновите город и попробуйте ещё раз.",
+                code="plot_taken",
+            )
+    things = [(by_place[tuple(m[:3])], tuple(m[3:])) for m in moves]
+    kept = [(cell.decor, cell.owner_id, cell.paid, cell.turn) for cell, _to in things]
+    for cell, _to in things:
+        await session.delete(cell)
+    # The cells left go first: some of them take a thing moving along the line.
+    await session.flush()
+    for (decor, owner_id, paid, turn), (_cell, (block, col, row)) in zip(kept, things, strict=True):
+        session.add(
+            CityCell(
+                district_id=district_id,
+                module=block,
+                u=col,
+                v=row,
+                decor=decor,
+                owner_id=owner_id,
+                paid=paid,
+                turn=turn,
+            )
+        )
+    return len(things)
+
+
+async def turn_decor(session, district_id, cells, *, may):
+    """Turns lamps and benches on cells of the district to the sides named (DECOR_TURNS);
+    `may(cell)` says whether the actor may turn it. All of them turn, or none."""
+    found = await decor_cells(session, district_id, [tuple(c[:3]) for c in cells])
+    if not all(may(cell) for cell in found):
+        raise PermissionDeniedError("Повернуть можно только своё и общее района")
+    by_place = {(cell.module, cell.u, cell.v): cell for cell in found}
+    for block, col, row, turn in cells:
+        cell = by_place[(block, col, row)]
+        if cell.decor not in DECOR_TURNS:
+            raise ConflictError("Поворачиваются только фонари и скамейки", code="no_turn")
+        cell.turn = turn
+    return len(cells)
 
 
 async def widen(session, district_id, actor):
@@ -1756,6 +1824,46 @@ async def take_away(session, user, body):
 
     return await operation(
         session, user, body.key, "undecor", body.model_dump(exclude={"key"}), perform
+    )
+
+
+async def move_decor(session, user, body):
+    """One's own small things and the district's onto other free cells of the district, free.
+
+    A small thing's price is the same on any cell, its land included: moving it costs nothing and
+    taking it away later still returns what it cost.
+    """
+
+    async def perform():
+        home = await builder(session, user)
+        require_selected_district(home, body.district_id)
+        moved = await shift_decor(
+            session, home["id"], body.moves, may=lambda cell: cell.owner_id in (user.id, None)
+        )
+        event(session, home["id"], "decor", actor=user, payload={"do": "move", "cells": moved})
+        await session.flush()
+        return {"moved": moved, **await balance(session, user.id)}
+
+    return await operation(
+        session, user, body.key, "decormove", body.model_dump(exclude={"key"}), perform
+    )
+
+
+async def turn_decor_cells(session, user, body):
+    """One's own lamps and benches and the district's turned to a side of their cells, free."""
+
+    async def perform():
+        home = await builder(session, user)
+        require_selected_district(home, body.district_id)
+        turned = await turn_decor(
+            session, home["id"], body.cells, may=lambda cell: cell.owner_id in (user.id, None)
+        )
+        event(session, home["id"], "decor", actor=user, payload={"do": "turn", "cells": turned})
+        await session.flush()
+        return {"turned": turned, **await balance(session, user.id)}
+
+    return await operation(
+        session, user, body.key, "decorturn", body.model_dump(exclude={"key"}), perform
     )
 
 

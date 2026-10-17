@@ -37,13 +37,10 @@
   position: absolute; top: calc(100% + 6px); left: 0; right: auto; bottom: auto;
   z-index: 2; width: var(--city-popup-width); transform: none;
 }
-.city-toolbar .city-hud-peek > .city-peek__content,
-.city-toolbar .city-skills-peek > .city-peek__content { width: min(1040px, calc(100vw - var(--city-left) - var(--city-right))); }
+.city-toolbar .city-hud-peek > .city-peek__content { width: min(1040px, calc(100vw - var(--city-left) - var(--city-right))); }
 
 .city-immersive .city-toolbar .city-hud,
-.city-immersive .city-toolbar .city-mission,
 .city-immersive .city-toolbar .city-tasks,
-.city-immersive .city-toolbar .city-skills,
 .city-immersive .city-toolbar .city-map-tools {
   position: static; inset: auto; transform: none; max-width: none; width: 100%;
 }
@@ -59,11 +56,11 @@
 .city-immersive .city-toolbar .city-tasks {
   max-height: calc(100dvh - var(--city-popup-top) - var(--city-peek-bottom) - 12px); overflow-y: auto;
 }
-.city-immersive .city-toolbar .city-mission {
-  height: min(720px, calc(100dvh - var(--city-popup-top) - var(--city-peek-bottom) - 12px));
-  max-height: none; border-radius: 24px;
+/* «Навыки»: every district and a district's missions in one popup (citySkills.css). */
+.city-toolbar .city-skills-peek > .city-peek__content {
+  display: flex; flex-direction: column;
+  height: min(760px, calc(100dvh - var(--city-popup-top) - var(--city-peek-bottom) - 12px));
 }
-.city-immersive .city-toolbar .city-skills { height: var(--city-skills); }
 .city-immersive .city-toolbar .city-map-tools {
   display: grid; grid-template-columns: repeat(4, minmax(44px, 1fr)); gap: 4px; padding: 8px;
 }
@@ -87,16 +84,10 @@
   .city-immersive .city-toolbar .city-hud__label { display: inline; }
   .city-hud-peek .city-hud__stat, .city-hud-peek .city-hud__coins { margin-left: auto; }
   .city-hud-peek .city-hud__coins .city-hud__label { display: none; }
-  .city-immersive .city-toolbar .city-skills { height: 66px; padding: 0 8px; }
-  .city-immersive .city-toolbar .city-building-level, .city-immersive .city-toolbar .city-mission__footer .city-fine { display: grid; }
   .city-immersive .city-toolbar .city-map-tools [data-extra] { display: block; }
   .city-immersive[data-building][data-department] {
     --city-free-bottom: min(calc(var(--city-dock) + min(44dvh, 400px) + 10px), calc(100dvh - var(--city-free-top) - 80px));
   }
-}
-@media (max-height: 560px) {
-  .city-immersive .city-toolbar .city-mission { overflow-y: auto; overscroll-behavior: contain; }
-  .city-immersive .city-toolbar .city-mission__body { flex: none; overflow: visible; mask-image: none; -webkit-mask-image: none; }
 }
 
 /* «Задания»: the day's situations and the trainer's scenarios, with a count of what is left on the button. */

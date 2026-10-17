@@ -79,18 +79,19 @@ async def test_staff_promotion_during_attempt_cannot_issue_operator_rewards(
 @pytest.mark.parametrize(
     "role,visible",
     [
+        (Role.TRAINEE, set()),
         (Role.OPERATOR, set()),
-        (Role.TRAINER, {"operator"}),
-        (Role.SUPERVISOR, {"operator", "supervisor"}),
-        (Role.HEAD, {"operator", "trainer", "supervisor"}),
-        (Role.ADMIN, {"operator", "trainer", "supervisor", "head", "admin"}),
+        (Role.TRAINER, {"trainee", "operator"}),
+        (Role.SUPERVISOR, {"trainee", "operator", "supervisor"}),
+        (Role.HEAD, {"trainee", "operator", "trainer", "supervisor"}),
+        (Role.ADMIN, {"trainee", "operator", "trainer", "supervisor", "head", "admin"}),
     ],
 )
 async def test_visibility_matrix_in_lists_search_and_direct_urls(client, session, role, visible):
     accounts = {r: await make_user(session, login=f"matrix-{r}", role=r) for r in Role}
     headers = auth(await login(client, accounts[role].login))
     response = await client.get("/api/v1/admin/users", headers=headers)
-    if role == Role.OPERATOR:
+    if role in (Role.TRAINEE, Role.OPERATOR):
         assert response.status_code == 403
         assert (await client.get("/api/v1/lookups/users", headers=headers)).status_code == 403
         return

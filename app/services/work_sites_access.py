@@ -9,7 +9,7 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 
 from app.core.errors import PermissionDeniedError
-from app.models.enums import Role
+from app.models.enums import LEARNER_ROLES
 from app.models.session import LoginSession
 from app.models.user import User
 from app.models.work_sites_access import WorkSitesAccess
@@ -35,7 +35,7 @@ async def has_grant(session, session_id):
 
 
 async def status(session, user, session_id):
-    required = user.role == Role.OPERATOR
+    required = user.role in LEARNER_ROLES
     row = await session.get(WorkSitesAccess, session_id) if required else None
     return {
         "required": required,
@@ -47,7 +47,7 @@ async def status(session, user, session_id):
 
 
 async def issue(session, user, session_id):
-    if user.role != Role.OPERATOR:
+    if user.role not in LEARNER_ROLES:
         raise PermissionDeniedError("Для вашей роли QR-подтверждение не требуется")
     # Serialize regeneration with approval on the same browser session.
     await session.scalar(
@@ -102,7 +102,7 @@ async def resolve(session, payload, *, lock=False):
     if (
         not user
         or not user.is_active
-        or user.role != Role.OPERATOR
+        or user.role not in LEARNER_ROLES
         or not is_valid(login_session, user.id)
     ):
         raise invalid

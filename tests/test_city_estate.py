@@ -1369,6 +1369,112 @@ async def test_taking_small_things_away_returns_what_they_cost_and_only_ones_own
     assert [e["do"] for e in events] == ["lay", "lay", "lay", "remove", "lay"]
 
 
+async def move(client, h, moves, *, op=None, **extra):
+    """Moves small things: [block, column, row] they stand on, then the cell they go to."""
+    return await client.post(
+        CITY + "/decor/move",
+        headers=h,
+        json={"key": op or key(), "moves": [[*a, *b] for a, b in moves], **extra},
+    )
+
+
+async def turn(client, h, cells, *, op=None, **extra):
+    """Turns lamps and benches: [block, column, row, turn]."""
+    return await client.post(
+        CITY + "/decor/turn",
+        headers=h,
+        json={"key": op or key(), "cells": [list(c) for c in cells], **extra},
+    )
+
+
+async def test_small_things_move_onto_free_cells_for_free_with_what_they_cost(
+    client, session, team
+):
+    me = auth(await login(client, team.login))
+    assert (await lay(client, me, "lamp", [(FIRST, 0, 0), (FIRST, 1, 0)])).status_code == 200
+    assert (await lay(client, me, "bench", [(FIRST, 2, 0)])).status_code == 200
+    neighbour = await make_user(session, login="neighbour-move", group_id=team.group_id)
+    await fund(session, neighbour.id, 300)
+    n = auth(await login(client, neighbour.login))
+    assert (await lay(client, n, "road", [(FIRST, 5, 0)])).status_code == 200
+    # A line moves along itself: each cell it leaves may take the next thing of it.
+    op = key()
+    line = [((FIRST, c, 0), (FIRST, c + 1, 0)) for c in range(3)]
+    r = await move(client, me, line, op=op, district_id="support-team-1")
+    assert r.status_code == 200, r.text
+    assert (r.json()["moved"], r.json()["balance"]) == (3, 2000 - 15 * 2 - 8)
+    again = await move(client, me, line, op=op, district_id="support-team-1")
+    assert again.json()["replayed"] and again.json()["moved"] == 3
+    reused = await move(client, me, line[:1], op=op, district_id="support-team-1")
+    assert reused.json()["code"] == "operation_key_reused"
+    rows = await session.scalars(
+        select(CityCell).where(CityCell.decor.is_not(None)).order_by(CityCell.u)
+    )
+    assert [(c.u, c.v, c.decor, c.owner_id, c.paid) for c in rows] == [
+        (1, 0, "lamp", team.id, 15),
+        (2, 0, "lamp", team.id, 15),
+        (3, 0, "bench", team.id, 8),
+        (5, 0, "road", neighbour.id, 5),
+    ]
+    # Onto a taken cell, past the district's land, off an empty cell, a neighbour's: never.
+    for moves, code in (
+        ([((FIRST, 3, 0), (FIRST, 5, 0))], "plot_taken"),  # the neighbour's road
+        ([((FIRST, 2, 0), (FIRST, 3, 0))], "plot_taken"),  # the bench, which stays
+        ([((FIRST, 3, 0), (5, 48, 3))], "wrong_plot"),  # the railway
+        ([((FIRST, 0, 0), (FIRST, 0, 1))], "decor_missing"),  # nothing there now
+    ):
+        refused = await move(client, me, moves)
+        assert refused.status_code == 409 and refused.json()["code"] == code, (moves, refused.text)
+    assert (await move(client, me, [((FIRST, 5, 0), (FIRST, 6, 0))])).status_code == 403
+    for moves in (
+        [((FIRST, 1, 0), (FIRST, 1, 1)), ((FIRST, 1, 0), (FIRST, 1, 2))],  # one thing twice
+        [((FIRST, 1, 0), (FIRST, 1, 1)), ((FIRST, 2, 0), (FIRST, 1, 1))],  # two onto one cell
+        [],
+    ):
+        assert (await move(client, me, moves)).status_code == 422
+    one = [((FIRST, 1, 0), (FIRST, 1, 1))]
+    elsewhere = await move(client, me, one, district_id="support-team-2")
+    assert elsewhere.json()["code"] == "district_changed"
+    # Moving is free and taking away still returns what it cost.
+    assert sorted(await spent(session)) == sorted([-30, -8, -5])
+    gone = await take_away(client, me, [(FIRST, 1, 0), (FIRST, 3, 0)])
+    assert (gone.status_code, gone.json()["refunded"]) == (200, 15 + 8)
+    events = await session.scalars(select(CityEvent.payload).where(CityEvent.kind == "decor"))
+    assert [e["do"] for e in events] == ["lay", "lay", "lay", "move", "remove"]
+
+
+async def test_lamps_and_benches_turn_to_a_side_of_their_cells_and_keep_it_when_moved(
+    client, session, team
+):
+    me = auth(await login(client, team.login))
+    assert (await lay(client, me, "lamp", [(FIRST, 0, 0), (FIRST, 1, 0)])).status_code == 200
+    assert (await lay(client, me, "bench", [(FIRST, 2, 0)])).status_code == 200
+    assert (await lay(client, me, "road", [(FIRST, 3, 0)])).status_code == 200
+    # By the road beside them until turned; then where their owner turned them, the view says.
+    r = await turn(client, me, [(FIRST, 1, 0, 2), (FIRST, 2, 0, 3)], district_id="support-team-1")
+    assert r.status_code == 200, r.text
+    assert r.json()["turned"] == 2
+    view = (await district_view(client, me))["decor"]
+    assert view["lamp"] == [[FIRST, 0, 0, 1], [FIRST, 1, 0, 1, 2]]
+    assert view["bench"] == [[FIRST, 2, 0, 1, 3]]
+    # Only lamps and benches turn, a quarter turn 0–3, one's own and the district's.
+    assert (await turn(client, me, [(FIRST, 3, 0, 1)])).json()["code"] == "no_turn"
+    assert (await turn(client, me, [(FIRST, 0, 0, 4)])).status_code == 422
+    assert (await turn(client, me, [(FIRST, 9, 0, 1)])).json()["code"] == "decor_missing"
+    neighbour = await make_user(session, login="neighbour-turn-lamp", group_id=team.group_id)
+    n = auth(await login(client, neighbour.login))
+    assert (await turn(client, n, [(FIRST, 0, 0, 1)])).status_code == 403
+    # A turned lamp moved keeps its turn; turning is free.
+    assert (await move(client, me, [((FIRST, 1, 0), (FIRST, 1, 2))])).status_code == 200
+    assert (await district_view(client, me))["decor"]["lamp"] == [
+        [FIRST, 0, 0, 1],
+        [FIRST, 1, 2, 1, 2],
+    ]
+    assert sorted(await spent(session)) == sorted([-30, -8, -5])
+    events = await session.scalars(select(CityEvent.payload).where(CityEvent.kind == "decor"))
+    assert [e["do"] for e in events][-2:] == ["turn", "move"]
+
+
 async def test_an_owner_turns_a_buildings_front_where_no_road_decides_it(client, session, team):
     me = auth(await login(client, team.login))
     house = (await buy(client, me, "house", FIRST, 0, 0, rotation=3)).json()["object"]

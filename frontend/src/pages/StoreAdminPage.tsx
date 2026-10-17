@@ -1,16 +1,27 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { configuration, configurationError, type StoreItemInput } from "../api/configuration";
 import type { ShopItemOut } from "../api/types";
 import { useAuth } from "../auth/AuthContext";
 import { GlassSurface } from "../components/GlassSurface";
 import { Sheet } from "../components/Sheet";
 import { useToast } from "../components/Toast";
-import { Badge, Button, Card, EmptyState, ErrorState, KPI, Pagination, RowsSkeleton } from "../components/ui";
+import { Badge, Button, EmptyState, ErrorState, KPI, Pagination, RowsSkeleton, Select } from "../components/ui";
 import { coins } from "../utils/format";
 import { createInternalCode } from "../utils/internalCode";
 import "./configuration.css";
+import "./motivation.css";
+
+/** The item's limits in one line: only those that are set, «без лимитов» when none is. */
+export function storeLimits(item: Pick<ShopItemOut, "stock_limit" | "per_user_monthly_limit" | "monthly_stock">) {
+  const parts = [
+    item.per_user_monthly_limit != null ? `${item.per_user_monthly_limit} в месяц на сотрудника` : "",
+    item.monthly_stock != null ? `${item.monthly_stock} в месяц на всех` : "",
+    item.stock_limit != null ? `${item.stock_limit} всего` : "",
+  ].filter(Boolean);
+  return parts.length ? parts.join(" · ") : "Без лимитов";
+}
 
 export function StoreAdminPage() {
   const { atLeast } = useAuth();
@@ -33,17 +44,18 @@ export function StoreAdminPage() {
     }, { replace: key === "search" });
   }
   return <div className="stack configuration-page">
-    <div className="page-head"><div><h1 className="page-title">Каталог магазина</h1><p className="page-subtitle">Бонусы, стоимость и правила выдачи</p></div><div className="page-head__actions"><Link className="btn btn--secondary btn--m" to="/admin/requests">Заявки на выдачу</Link>{atLeast("head") && <Button variant="primary" onClick={() => setEditor("new")}>Добавить бонус</Button>}</div></div>
-    {query.data && <div className="kpi-grid"><KPI label="Активных бонусов" value={query.data.filter((x) => x.is_active).length} /><KPI label="В архиве" value={query.data.filter((x) => !x.is_active).length} /><KPI label="С одобрением" value={query.data.filter((x) => x.is_active && x.requires_approval).length} /><KPI label="Без лимита выдач" value={query.data.filter((x) => x.is_active && x.stock_limit === null).length} /></div>}
-    <GlassSurface variant="regular" className="configuration-filters"><label className="field configuration-search"><span className="field__label">Поиск по каталогу</span><input type="search" className="input" placeholder="Название или описание" value={search} onChange={(e) => filter("search", e.target.value)} /></label><label className="field"><span className="field__label">Статус</span><select className="input" value={status} onChange={(e) => filter("status", e.target.value)}><option value="active">Активные</option><option value="archived">Архив</option><option value="all">Все бонусы</option></select></label></GlassSurface>
+    <div className="page-head"><div><h1 className="page-title">Товары магазина</h1><p className="page-subtitle">Бонусы, которые сотрудники покупают за коины: цена, лимиты и выдача</p></div>{atLeast("head") && <div className="page-head__actions"><Button variant="primary" onClick={() => setEditor("new")}>Добавить бонус</Button></div>}</div>
+    {query.data && <div className="kpi-grid"><KPI label="В каталоге" value={query.data.filter((x) => x.is_active).length} hint="Видны сотрудникам в магазине" /><KPI label="С одобрением" value={query.data.filter((x) => x.is_active && x.requires_approval).length} hint="Заявку проверяет руководитель" /><KPI label="Стоят компании денег" value={query.data.filter((x) => x.is_active && x.cost_tenge).length} hint="Идут в бюджет магазина" /><KPI label="В архиве" value={query.data.filter((x) => !x.is_active).length} /></div>}
+    <GlassSurface variant="regular" className="configuration-filters"><label className="field configuration-search"><span className="field__label">Поиск по каталогу</span><input type="search" className="input" placeholder="Название или описание" value={search} onChange={(e) => filter("search", e.target.value)} /></label><label className="field"><span className="field__label">Статус</span><Select aria-label="Статус бонусов" value={status} options={[{ value: "active", label: "В каталоге" }, { value: "archived", label: "В архиве" }, { value: "all", label: "Все бонусы" }]} onChange={(value) => filter("status", value)} /></label></GlassSurface>
     {query.isLoading && <RowsSkeleton />}{query.isError && <ErrorState error={new Error(configurationError(query.error))} onRetry={() => query.refetch()} />}
     {query.isSuccess && visible.length === 0 && <EmptyState title="Бонусы не найдены" hint="Измените фильтры или добавьте новый бонус." />}
-    <div className="configuration-cards">{visible.map((item) => <Card key={item.id} title={item.title} action={<Badge tone={item.is_active ? "success" : "neutral"}>{item.is_active ? "В каталоге" : "В архиве"}</Badge>} className="configuration-item">
-      <div className="configuration-price">{coins(item.price)} <span>коинов</span></div>
-      {item.description && <p className="configuration-description">{item.description}</p>}
-      <dl className="configuration-properties"><dt>Всего выдач</dt><dd>{item.stock_limit ?? "Без лимита"}</dd><dt>На сотрудника в месяц</dt><dd>{item.per_user_monthly_limit ?? "Без лимита"}</dd><dt>Всем за месяц</dt><dd>{item.monthly_stock ?? "Без лимита"}</dd><dt>Стоит компании</dt><dd>{item.cost_tenge ? `${coins(item.cost_tenge)} ₸` : "Ничего"}</dd><dt>Одобрение</dt><dd>{item.requires_approval ? "Руководителем" : "Автоматически"}</dd></dl>
-      {atLeast("head") && <div className="configuration-actions"><Button onClick={() => setEditor(item)}>Изменить</Button><Button variant="plain" onClick={() => setArchive(item)}>{item.is_active ? "В архив" : "Восстановить"}</Button></div>}
-    </Card>)}</div>
+    <div className="store-items">{visible.map((item) => <article key={item.id} className={`card card--standard store-item${item.is_active ? "" : " is-archived"}`}>
+      <header className="store-item__head"><h2 className="store-item__title">{item.title}</h2>{!item.is_active && <Badge tone="neutral">В архиве</Badge>}</header>
+      <p className="store-item__price">{coins(item.price)} <span>коинов</span></p>
+      {item.description && <p className="store-item__description">{item.description}</p>}
+      <dl className="store-item__facts"><div><dt>Лимиты</dt><dd>{storeLimits(item)}</dd></div><div><dt>Выдача</dt><dd>{item.requires_approval ? "Одобряет руководитель" : "Сразу, без одобрения"}</dd></div>{item.cost_tenge ? <div><dt>Стоит компании</dt><dd>{coins(item.cost_tenge)} ₸</dd></div> : null}</dl>
+      {atLeast("head") && <footer className="store-item__actions"><Button size="s" onClick={() => setEditor(item)}>Изменить</Button><Button size="s" variant="plain" onClick={() => setArchive(item)}>{item.is_active ? "В архив" : "Вернуть в каталог"}</Button></footer>}
+    </article>)}</div>
     {query.isSuccess && <Pagination page={currentPage} size={size} total={items.length} onChange={(p) => filter("page", String(p))} />}
     {editor && <StoreItemEditor item={editor === "new" ? undefined : editor} onClose={() => setEditor(null)} />}
     {archive && <StoreArchive item={archive} onClose={() => setArchive(null)} />}

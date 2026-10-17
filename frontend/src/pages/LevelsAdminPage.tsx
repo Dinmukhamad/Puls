@@ -4,20 +4,34 @@ import { progressApi, type ProgressLevel } from "../api/progress";
 import { useAuth } from "../auth/AuthContext";
 import { Sheet } from "../components/Sheet";
 import { Badge, Button, Card, ErrorState, Skeleton } from "../components/ui";
-import { coins } from "../utils/format";
+import { coins, plural } from "../utils/format";
 import "./workflow.css";
+import "./motivation.css";
 
 export function LevelsAdminPage() {
   const { atLeast } = useAuth();
   const [editor, setEditor] = useState<ProgressLevel | "new" | null>(null);
   const [saved, setSaved] = useState(false);
   const levels = useQuery({ queryKey: ["coin-levels"], queryFn: progressApi.levels });
-  return <div className="stack">
-    <header className="page-head"><div><h1 className="page-title">Уровни и прогресс</h1><p className="page-subtitle">Уровень определяется заработанными коинами за всё время.</p></div>{atLeast("admin") && <Button variant="primary" onClick={() => { setSaved(false); setEditor("new"); }}>Добавить уровень</Button>}</header>
-    <Card title="Как работают уровни"><p>Покупки и возвраты не меняют прогресс. При достижении каждого порога выше нуля автоматически открывается одноимённое достижение. Дополнительные коины за уровень не начисляются.</p><p className="workflow-note">Изменение порогов пересчитывает уровни и достижения всех сотрудников по их заработку. Баланс кошельков сохраняется.</p></Card>
-    {saved && <p role="status">Уровень сохранён. Прогресс сотрудников пересчитан по новым порогам.</p>}
-    <Card title="Шкала уровней">{levels.isPending && <Skeleton height={240} />}{levels.isError && <ErrorState error={levels.error} onRetry={() => levels.refetch()} />}
-      <div className="workflow-results">{levels.data?.map(level => <article className="workflow-result" key={level.id}><div><strong>{level.title}</strong><p>От {coins(level.min_coins)} заработанных коинов</p>{level.min_coins > 0 && <p className="small secondary">Достижение: «{coins(level.min_coins)} коинов заработано»</p>}{level.description && <p>{level.description}</p>}</div><div className="workflow-actions"><Badge tone={level.is_active ? "success" : "neutral"}>{level.is_active ? "Активен" : "Скрыт"}</Badge>{atLeast("admin") && <Button onClick={() => { setSaved(false); setEditor(level); }}>Изменить</Button>}</div></article>)}</div>
+  const rows = [...(levels.data ?? [])].sort((a, b) => a.min_coins - b.min_coins);
+  const top = Math.max(1, ...rows.map(level => level.min_coins));
+  const admin = atLeast("admin");
+  return <div className="stack levels-page">
+    <header className="page-head"><div><h1 className="page-title">Уровни</h1><p className="page-subtitle">{levels.data ? `${rows.filter(level => level.is_active).length} ${plural(rows.filter(level => level.is_active).length, "активный уровень", "активных уровня", "активных уровней")} · ` : ""}уровень растёт с коинами, заработанными за всё время</p></div>{admin && <div className="page-head__actions"><Button variant="primary" onClick={() => { setSaved(false); setEditor("new"); }}>Добавить уровень</Button></div>}</header>
+    {saved && <p className="levels-saved" role="status">Уровень сохранён. Прогресс сотрудников пересчитан по новым порогам.</p>}
+    <Card className="levels-scale" padded={false} title="Шкала уровней" subtitle="Покупки и возвраты прогресс не уменьшают. На каждом пороге выше нуля сотрудник получает одноимённое достижение; отдельных коинов за уровень нет.">
+      {levels.isPending && <div className="card__body"><Skeleton height={240} /></div>}
+      {levels.isError && <ErrorState error={levels.error} onRetry={() => levels.refetch()} />}
+      {rows.length > 0 && <ol className="levels-list">{rows.map((level, index) => <li key={level.id} className={`levels-row${level.is_active ? "" : " is-hidden"}`}>
+        <span className="levels-row__number" aria-hidden="true">{index + 1}</span>
+        <div className="levels-row__main">
+          <p className="levels-row__title"><strong>{level.title}</strong>{!level.is_active && <Badge tone="neutral">Скрыт</Badge>}</p>
+          <p className="levels-row__meta">{level.min_coins > 0 ? `Достижение «${coins(level.min_coins)} коинов заработано»` : "Стартовый уровень у всех сотрудников"}{level.description ? ` · ${level.description}` : ""}</p>
+        </div>
+        <div className="levels-row__threshold"><span className="levels-row__coins">{level.min_coins > 0 ? `от ${coins(level.min_coins)}` : "0"}</span><span className="levels-row__bar" aria-hidden="true"><span style={{ width: `${Math.max(2, level.min_coins / top * 100)}%` }} /></span></div>
+        {admin && <Button size="s" variant="plain" className="levels-row__edit" aria-label={`Изменить уровень «${level.title}»`} onClick={() => { setSaved(false); setEditor(level); }}>Изменить</Button>}
+      </li>)}</ol>}
+      <p className="levels-note">Изменение порогов пересчитывает уровни и достижения всех сотрудников по их заработку. Баланс кошельков не меняется.</p>
     </Card>
     {editor && <LevelEditor level={editor === "new" ? undefined : editor} onClose={() => setEditor(null)} onSaved={() => { setEditor(null); setSaved(true); }} />}
   </div>;

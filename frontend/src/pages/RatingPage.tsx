@@ -36,7 +36,7 @@ export function RatingPage() {
   if (params.get("tab") === "progress") return <Navigate to="/progress" replace />;
   // The contest is monthly (docs/COIN_ECONOMY.md); the weeks stay one tap away.
   const view = params.get("view") === "weeks" || params.has("week") ? "weeks" : "month";
-  const toggle = <SegmentedControl label="Период рейтинга" value={view} options={[{ value: "month", label: "Конкурс месяца" }, { value: "weeks", label: "Недели" }]} onChange={(value) => { const next = new URLSearchParams(params); next.delete("week"); next.delete("page"); if (value === "weeks") next.set("view", "weeks"); else next.delete("view"); setParams(next); }} />;
+  const toggle = <div data-tour="rating-views"><SegmentedControl label="Период рейтинга" value={view} options={[{ value: "month", label: "Конкурс месяца" }, { value: "weeks", label: "Недели" }]} onChange={(value) => { const next = new URLSearchParams(params); next.delete("week"); next.delete("page"); if (value === "weeks") next.set("view", "weeks"); else next.delete("view"); setParams(next); }} /></div>;
   return view === "month"
     ? <div className="stack"><RatingHeading month />{toggle}<MonthContest /></div>
     : <Leaderboard toggle={toggle} />;
@@ -148,7 +148,7 @@ function Leaderboard({ toggle }: { toggle?: ReactNode }) {
                   <tr>
                     <th className="num">Место</th>
                     <th>Оператор</th>
-                    <th>Группа</th>
+                    <th>Команда</th>
                     <th className="num">Баллы</th>
                     <th className="num">Коины за неделю</th>
                     {showBalances && <th className="num">Баланс</th>}
@@ -183,7 +183,7 @@ function Leaderboard({ toggle }: { toggle?: ReactNode }) {
                             {row.full_name}
                             {row.is_me && <span className="tag-me">это вы</span>}
                           </span>
-                          <span className="cell-person__meta">{row.group_name ?? "—"}</span>
+                          <span className="cell-person__meta">{row.group_name ?? "Без команды"}</span>
                         </span>
                       </span>
                       <CoinAmount value={row.coins_week} size="s" />
@@ -259,7 +259,7 @@ function RatingRow({ row, showBalance }: { row: RatingRowOut; showBalance: boole
           </span>
         </span>
       </td>
-      <td className="muted">{row.group_name ?? "—"}</td>
+      <td className="muted">{row.group_name ?? "Без команды"}</td>
       <td className="num">{points(row.points)}</td>
       <td className="num">{coins(row.coins_week)}</td>
       {showBalance && (

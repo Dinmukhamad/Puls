@@ -19,6 +19,9 @@ from app.api.v1 import (
     city_sandbox,
     city_seasons,
     crm,
+    crm_course,
+    crm_draft,
+    crm_training,
     dispatch,
     driver,
     economy,
@@ -33,17 +36,23 @@ from app.api.v1 import (
     system,
     telegram,
     telemetry,
+    trainee,
+    voice_training,
     wallet,
     work_sites_access,
 )
 
 api_router = APIRouter()
+api_router.include_router(trainee.router)
 api_router.include_router(city.router)
 api_router.include_router(city_estate.router)
 api_router.include_router(city_sandbox.router)
 api_router.include_router(city_seasons.router)
 api_router.include_router(work_sites_access.router)
 api_router.include_router(crm.router)
+api_router.include_router(crm_course.router)
+api_router.include_router(crm_draft.router)
+api_router.include_router(crm_training.router)
 api_router.include_router(dispatch.router)
 api_router.include_router(oktell.router)
 api_router.include_router(access.router)
@@ -63,6 +72,7 @@ api_router.include_router(system.router)
 api_router.include_router(progress.router)
 api_router.include_router(analytics.router)
 api_router.include_router(driver.router)
+api_router.include_router(voice_training.router)
 api_router.include_router(learning.router)
 api_router.include_router(scenarios.router)
 api_router.include_router(games.router)

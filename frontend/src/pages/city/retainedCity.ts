@@ -46,7 +46,6 @@ export function createCityRetention() {
           onArrival: id => next.callbacks?.onArrival?.(id),
           onJourney: phase => next.callbacks?.onJourney?.(phase),
           onEstate: pick => next.callbacks?.onEstate?.(pick),
-          onPlot: options.onPlot ? key => next.callbacks?.onPlot?.(key) : undefined,
           onQuest: options.onQuest ? slot => next.callbacks?.onQuest?.(slot) : undefined,
           onReady: () => status("ready"), onLost: () => status("failed"),
           onRestored: () => { status("ready"); next.callbacks?.onRestored?.(); },

@@ -1,5 +1,5 @@
 import { ApiError, buildQuery, request } from "./client";
-import type { Gender, DashboardOut, Page, Role, ShopRequestOut, TransactionOut, UserBrief, UserOut } from "./types";
+import type { Gender, DashboardOut, Page, Role, ShopRequestOut, UserBrief, UserOut } from "./types";
 import type { TelegramInvitation, TelegramStatus } from "./telegram";
 
 export interface TeamGroup {
@@ -66,8 +66,6 @@ export const team = {
     request<UserOut>(`/api/v1/admin/users/${id}/login`, { method: "POST", json: { login } }),
   dashboard: (id: number, weekId?: number) =>
     request<DashboardOut>(`/api/v1/admin/users/${id}/dashboard${buildQuery({ week_id: weekId })}`),
-  transactions: (id: number, page: number) =>
-    request<Page<TransactionOut>>(`/api/v1/admin/users/${id}/transactions${buildQuery({ page, size: 20 })}`),
   purchases: (id: number, page: number) =>
     request<Page<ShopRequestOut>>(`/api/v1/admin/users/${id}/purchases${buildQuery({ page, size: 20 })}`),
   groups: () => request<TeamGroup[]>("/api/v1/admin/groups"),

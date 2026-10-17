@@ -1,0 +1,210 @@
+.crm-training-tasks { display: grid; gap: 7px; list-style: none; padding: 0; margin: 0 0 18px; }
+.work-sites .crm-training-task { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; border: 1px solid #e3e5e8; border-radius: 11px; background: #fff; padding: 10px; color: #2f3553; }
+.crm-training-task > span:first-child { display: grid; place-items: center; flex: none; width: 28px; height: 28px; border-radius: 50%; background: #f0f1f3; font-size: 13px; font-weight: 700; }
+.crm-training-task > span:last-child { display: grid; gap: 3px; min-width: 0; }
+.crm-training-task strong { font-size: 13px; line-height: 1.3; }
+.crm-training-task small { color: #777d88; font-size: 11px; }
+.work-sites .crm-training-task[aria-current=step] { border-color: #858b98; box-shadow: 0 0 0 1px #858b98; background: #f7f8fa; }
+.work-sites .crm-training-task:disabled { cursor: default; opacity: .55; }
+.work-sites .crm-training-task.is-passed > span:first-child { background: #e0f5eb; color: #19734d; }
+.crm-training-detail blockquote { margin: 0 0 12px; padding: 13px; border: 1px solid #dce1e9; border-radius: 12px; background: #f6f8fc; color: #2f3553; }
+.crm-training-detail blockquote small { color: #737e91; font-size: 12px; }
+.crm-training-detail blockquote p { font-size: 14px; line-height: 1.55; margin: 7px 0 0; }
+.crm-training-source { margin-bottom: 12px; padding: 10px 12px; border: 1px solid #e5e7eb; border-radius: 10px; color: #40475a; font-size: 12px; line-height: 1.5; }
+.crm-training-source summary { cursor: pointer; font-weight: 650; }
+.crm-training-source dl { margin: 10px 0 0; display: grid; gap: 7px; }
+.crm-training-source dl > div { display: grid; grid-template-columns: 80px minmax(0, 1fr); gap: 8px; }
+.crm-training-source dt { color: #777d88; }
+.crm-training-source dd { margin: 0; overflow-wrap: anywhere; user-select: text; }
+.crm-training-source code { font-size: 11px; white-space: normal; }
+.crm-training-steps { margin: 16px 0; }
+.crm-training-steps ol { list-style: none; padding: 0; margin: 0; display: grid; gap: 7px; }
+.crm-training-steps li { display: flex; gap: 9px; padding: 9px; border: 1px solid #e8eaee; border-radius: 10px; color: #596174; align-items: flex-start; }
+.crm-training-steps li > span { display: grid; place-items: center; width: 23px; height: 23px; flex: none; border-radius: 50%; background: #f0f1f4; font-size: 12px; font-weight: 700; }
+.crm-training-steps p { margin: 2px 0 0; font-size: 12px; line-height: 1.45; }
+.crm-training-steps .is-passed { color: #19734d; background: #f0faf5; border-color: #c8e6d7; }
+.crm-training-steps .is-failed { color: #a13d35; background: #fff7f5; border-color: #f0d3cd; }
+.crm-training-steps > small { display: block; color: #767d89; font-size: 11px; line-height: 1.5; margin: 9px 0; }
+.crm-training-verdict { color: #303b50; font-size: 13px; }
+.crm-training-verdict > ul { list-style: none; padding: 0; display: grid; gap: 8px; }
+.crm-training-verdict li { display: flex; gap: 9px; padding: 10px; border-radius: 9px; background: #f2faf6; color: #19734d; }
+.crm-training-verdict li.is-bad { background: #fff3f1; color: #9b382e; }
+.crm-training-verdict strong { font-size: 12px; }
+.crm-training-verdict p { margin: 5px 0 0; font-size: 12px; line-height: 1.5; }
+.crm-training-error { color: #a1342c; font-size: 13px; line-height: 1.5; }
+.work-sites .crm-training-main-action { width: 100%; margin: 8px 0; }
+/* The task's next step is the dock's one call to action: the CRM's blue, not Pulsar's grey that reads as disabled. */
+.work-sites .pulsar-dock .crm-primary.crm-training-main-action { background: var(--crm-blue); border-color: var(--crm-blue); color: #fff; font-weight: 600; }
+.work-sites .pulsar-dock .crm-primary.crm-training-main-action:hover:not(:disabled) { background: #3659ec; }
+.work-sites .pulsar-dock .crm-primary.crm-training-main-action:disabled { opacity: .6; cursor: default; }
+.crm-training-complete { display: grid; gap: 10px; color: #19734d; background: #edf9f2; padding: 12px; border-radius: 10px; font-size: 13px; line-height: 1.6; }
+.crm-training-complete p { margin: 0; }
+.crm-training-source > small { display: block; margin-top: 8px; color: #767d89; font-size: 11px; }
+.crm-training-dock .crm-training-verdict { margin-bottom: 4px; }
+.crm-training-mode { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 0 0 14px; padding: 10px 14px; border: 1px solid #dfe5ef; border-radius: 10px; background: #f6f8fc; color: #4a5568; font-size: 12px; line-height: 1.5; }
+.crm-training-mode button { border: 0; background: none; padding: 0; color: #3e63dd; font: inherit; font-weight: 600; cursor: pointer; text-decoration: underline; }
+.crm-training-dock .pulsar-dock-footer { justify-content: center; }
+.crm-training-start { max-width: 720px; padding: 28px; color: #303b50; }
+.crm-training-start h2 { font-size: 22px; line-height: 1.35; margin: 0 0 14px; }
+.crm-training-start p { font-size: 14px; line-height: 1.7; margin: 0 0 20px; }
+.crm-training-start-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.crm-training-all-checks { margin: 10px 0; color: #667084; font-size: 12px; }
+.crm-training-all-checks summary { cursor: pointer; padding: 5px 0; }
+.crm-training-all-checks ul { list-style: none; padding: 0; display: grid; gap: 6px; }
+.crm-training-list { margin-bottom: 14px; color: #596579; font-size: 12px; }
+.crm-training-list > summary { cursor: pointer; padding: 3px 0 10px; font-weight: 600; }
+.crm-training-list .crm-training-tasks { margin-bottom: 0; }
+
+.crm-course-dock { position: fixed; top: 18px; right: 18px; z-index: 42; width: 340px; max-height: calc(100dvh - 36px); overflow: auto; color: #273449; background: #fff; border: 1px solid #dce3ee; border-radius: 16px; box-shadow: 0 12px 36px #162d4b1a; }
+.crm-course-dock > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; border-bottom: 1px solid #e8edf4; }
+.crm-course-dock > header div { display: grid; gap: 4px; flex: 1; }
+.crm-course-dock small { color: #6a778b; font-size: 12px; }
+.crm-course-dock > header button { border: 0; border-radius: 8px; min-width: 36px; height: 36px; background: #eff3f9; color: #34465e; font-size: 20px; cursor: pointer; }
+.crm-course-progress { display: block; height: 5px; border-radius: 3px; background: #e9eef6; overflow: hidden; }
+.crm-course-progress > span { display: block; height: 100%; background: #2f9e6a; border-radius: inherit; }
+.crm-course-dock__body { padding: 16px; display: grid; gap: 14px; font-size: 13px; line-height: 1.55; }
+.crm-course-dock h2 { margin: 2px 0 6px; font-size: 18px; line-height: 1.35; }
+.crm-course-dock p { margin: 0; }
+.crm-course-lesson { display: grid; gap: 2px; }
+.crm-course-lesson > p { color: #45536a; }
+.crm-course-terms, .crm-course-memo { display: grid; gap: 8px; margin: 10px 0 0; }
+.crm-course-terms > div, .crm-course-memo > div { padding: 8px 10px; border-radius: 9px; background: #f5f7fb; }
+.crm-course-terms dt, .crm-course-memo dt { font-weight: 700; color: #2b3a52; }
+.crm-course-terms dd, .crm-course-memo dd { margin: 2px 0 0; color: #4d5b71; }
+.crm-course-step { display: grid; gap: 8px; padding: 14px; border-radius: 12px; background: #f0f5ff; border: 1px solid #d5e2ff; }
+.crm-course-step > strong { font-size: 15px; line-height: 1.45; color: #1f3462; }
+.crm-course-step ol { margin: 0; padding-left: 20px; display: grid; gap: 6px; color: #2f3e57; }
+.crm-course-note { padding: 8px 10px; border-left: 3px solid #e3a008; border-radius: 0 8px 8px 0; background: #fff8e6; color: #6b4e09; font-size: 12px; }
+.crm-course-here { color: #3654c9; font-size: 12px; font-weight: 600; }
+.crm-course-failures { display: grid; gap: 8px; padding: 12px 14px; border-radius: 10px; color: #8f2f22; background: #fff2ee; border: 1px solid #f5d2c9; }
+.crm-course-failures ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
+.crm-course-failures small { color: #8f2f22; }
+.crm-course-example { padding: 10px 12px; border: 1px dashed #b9c8e6; border-radius: 10px; background: #fbfcff; }
+.crm-course-example p { margin-top: 4px; white-space: pre-line; overflow-wrap: anywhere; color: #2b3a52; }
+.crm-course-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.crm-course-table caption { text-align: left; font-weight: 700; padding-bottom: 6px; color: #2b3a52; }
+.crm-course-table th, .crm-course-table td { padding: 6px 8px; border: 1px solid #e1e7f0; text-align: left; vertical-align: top; }
+.crm-course-table th { width: 26px; color: #6a778b; }
+.crm-course-passed { display: grid; gap: 8px; padding: 14px; border-radius: 12px; background: #edf9f2; border: 1px solid #c8e9d6; color: #1d5c3f; }
+.crm-course-passed > small { color: #19734d; font-weight: 700; font-size: 13px; }
+.crm-course-passed ul, .crm-course-done ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
+.crm-course-done ul { margin-bottom: 18px; font-size: 14px; line-height: 1.6; }
+.crm-course-done .crm-course-example { margin-bottom: 20px; }
+.crm-course-more { display: grid; gap: 10px; padding-top: 4px; border-top: 1px solid #edf1f6; }
+.crm-course-dock details > summary { cursor: pointer; font-size: 12px; color: #53677f; }
+.crm-course-dock details > p, .crm-course-dock details > dl, .crm-course-dock details > ul, .crm-course-dock details > ol { margin-top: 8px; }
+.crm-course-rules, .crm-course-checklist ol { padding-left: 18px; display: grid; gap: 6px; }
+.crm-course-checklist { padding: 10px 12px; border: 1px solid #e3e9f2; border-radius: 10px; }
+.crm-course-program { padding: 0; list-style: none; display: grid; gap: 7px; }
+.crm-course-program li { display: flex; align-items: baseline; gap: 9px; font-size: 12px; }
+.crm-course-program [data-state=locked] { color: #8a94a2; }
+.crm-course-program [data-state=passed] { color: #18794e; }
+.crm-course-step-list { padding-left: 20px; display: grid; gap: 6px; }
+.crm-course-step-list [data-done=true] { color: #18794e; }
+/* The element the current step waits for: the operator sees where to click. Practice lights nothing. */
+@keyframes crm-course-glow { 0%, 100% { box-shadow: 0 0 0 3px #496bff40; } 50% { box-shadow: 0 0 0 8px #496bff14; } }
+.work-sites[data-course-target=appeal-row] [data-course=appeal-row],
+.work-sites[data-course-target=ticket-link] [data-course=ticket-link],
+.work-sites[data-course-target=capture] [data-course=capture],
+.work-sites[data-course-target=advice] [data-course=advice],
+.work-sites[data-course-target=attach-capture] [data-course=attach-capture],
+.work-sites[data-course-target=moderate] [data-course=moderate],
+.work-sites[data-course-target=rework] [data-course=rework],
+.work-sites[data-course-target=comment] [data-course=comment],
+.work-sites [data-course=copy-link].is-due { outline: 2px solid #496bff; outline-offset: 3px; animation: crm-course-glow 1.6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .work-sites [data-course] { animation: none !important; } }
+/* A snapshot shows the work windows as they are, without the course's frames. */
+.crm-call-desktop[data-capturing] [data-course] { outline: none !important; animation: none !important; box-shadow: none !important; }
+.crm-course-feedback { margin: 12px 0; padding: 12px 14px; border-radius: 10px; color: #9d382a; background: #fff2ee; font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+.crm-call-windows { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 20px; }
+.crm-call-window { min-width: 0; border: 1px solid #dfe6ef; border-radius: 12px; overflow: hidden; background: #fff; }
+.crm-call-window > header { background: #293d58; color: #fff; padding: 14px 16px; font-size: 14px; font-weight: 600; }
+.crm-call-window > label { display: grid; gap: 8px; margin: 16px; font-size: 12px; }
+.work-sites .crm-call-window input { width: 100%; padding: 10px; border: 1px solid #cad5e3; border-radius: 7px; color: #24344d; background: #fff; }
+.crm-call-window > p, .crm-call-window > dl { margin: 16px; font-size: 13px; line-height: 1.6; }
+.crm-call-account { padding: 0 16px 16px; }
+.crm-call-account h3 { font-size: 17px; }
+.crm-call-window dl { display: grid; gap: 12px; }
+.crm-call-window dt { color: #738197; font-size: 12px; }
+.crm-call-window dd { margin: 4px 0 0; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.crm-call-link { font-size: 11px; word-break: break-all; color: #4166c4; line-height: 1.6; }
+.crm-call-incoming { display: grid; gap: 12px; padding: 24px 16px; background: #f1f8f4; }
+.crm-call-incoming strong { font-size: 23px; overflow-wrap: anywhere; }
+.crm-call-incoming small { color: #718497; }
+.crm-call-incoming span { color: #18794e; font-size: 12px; }
+.crm-call-search { display: grid; margin: 0 16px 16px; gap: 7px; }
+.crm-call-search button { display: grid; gap: 6px; padding: 12px; border: 1px solid #dae3ef; background: #f6f8fc; text-align: left; border-radius: 8px; color: #283b56; cursor: pointer; }
+.crm-call-search span { font-size: 12px; }
+.crm-call-capture, .crm-course-advice { display: grid; gap: 14px; padding: 20px; border-top: 1px solid #e5ebf2; }
+.crm-call-capture img, .crm-course-attach img { display: block; width: 100%; border: 1px solid #d9e2ee; border-radius: 8px; }
+.crm-call-capture > button { justify-self: start; }
+.crm-call-capture p { font-size: 12px; color: #718197; }
+.crm-course-advice h3 { margin: 0; }
+.crm-course-advice label { display: flex; gap: 10px; align-items: baseline; font-size: 13px; }
+.crm-course-attach { margin: 0 0 20px 190px; display: grid; gap: 12px; font-size: 13px; }
+.crm-course-attach img { max-width: 600px; }
+.crm-course-attach button { justify-self: start; }
+.crm-ticket-columns { display: grid; grid-template-columns: 2fr 1fr; gap: 24px; }
+.crm-ticket-columns .crm-detail-grid { grid-template-columns: 1fr; }
+.crm-ticket-history { list-style: none; padding: 0; font-size: 12px; display: grid; gap: 12px; }
+.crm-ticket-history small { display: block; color: #738197; margin-top: 4px; }
+.crm-ticket-actions, .crm-ticket-comments-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.crm-ticket-comments-heading { margin-top: 24px; border-bottom: 1px solid #dce4ee; padding-bottom: 12px; }
+.crm-ticket-comment { display: grid; grid-template-columns: 150px 1fr auto; gap: 16px; padding: 20px 0; border-bottom: 1px solid #e7edf4; font-size: 12px; }
+.crm-ticket-comment p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.crm-ticket-comment small { color: #738197; }
+.crm-ticket-overlay { position: fixed; inset: 0; z-index: 150; background: #0006; display: grid; place-items: center; padding: 20px; }
+.crm-ticket-dialog { width: min(740px, 100%); max-height: calc(100dvh - 40px); overflow: auto; background: #fff; padding: 24px; box-shadow: 0 15px 60px #0003; border-radius: 9px; }
+.crm-ticket-dialog h2 { margin: 0 0 22px; text-align: center; font-size: 18px; color: #273449; }
+.crm-ticket-dialog form { display: grid; gap: 16px; }
+.crm-ticket-dialog label { display: grid; gap: 10px; color: #64748b; font-size: 13px; }
+.crm-ticket-dialog textarea { width: 100%; min-height: 110px; resize: vertical; padding: 12px; border: 1px solid #b8c9eb; border-radius: 5px; font: inherit; color: #26364d; background: #fff; }
+.crm-ticket-dialog .crm-paste-zone { margin: 0; }
+.crm-ticket-dialog footer { display: flex; justify-content: flex-end; gap: 12px; }
+@media (max-width: 1099px) {
+  .crm-course-dock { top: auto; bottom: 12px; right: 12px; max-height: min(45dvh, 420px); width: 360px; max-width: calc(100vw - 24px); }
+  .crm-course-dock > header { padding: 10px 14px; }
+  .work-sites:has(.crm-course-dock.is-open) { padding-bottom: calc(min(45dvh, 420px) + 30px); }
+}
+@media (max-width: 700px) {
+  .crm-call-windows, .crm-ticket-columns { grid-template-columns: 1fr; }
+  .crm-course-attach { margin-left: 0; }
+  .crm-call-windows { padding: 14px; gap: 12px; }
+  .crm-ticket-comment { grid-template-columns: 1fr; gap: 8px; }
+}
+.crm-ticket-dialog-hint { margin-top: -8px; color: #64748b; font-size: 12px; line-height: 1.5; }
+.crm-course-form-hint { display: grid; gap: 10px; margin: 16px 24px 0; padding: 14px 16px; border: 1px solid #d5e2ff; border-radius: 10px; background: #f6f9ff; color: #2f3e57; font-size: 13px; line-height: 1.5; }
+.crm-course-form-hint > strong { font-size: 14px; color: #1f3462; }
+.crm-course-form-hint .crm-course-table th { width: 150px; color: #34465e; font-weight: 600; }
+.crm-course-form-hint .crm-course-table td, .crm-course-form-hint .crm-course-table th { background: #fff; }
+.crm-course-form-hint p { margin: 0; }
+.crm-course-attach small { color: #8a5a00; font-size: 12px; }
+@media (max-width: 700px) { .crm-course-form-hint { margin: 12px 12px 0; } .crm-course-form-hint .crm-course-table th { width: 96px; } }
+.crm-course-dock .crm-course-step ol, .crm-course-dock .crm-course-step-list, .crm-course-dock .crm-course-checklist ol { list-style: decimal; }
+.crm-course-dock .crm-course-rules, .crm-course-dock .crm-course-failures ul, .crm-course-dock .crm-course-passed ul, .crm-course-done ul { list-style: disc; }
+.crm-course-dock li::marker { color: #6a7d9c; font-weight: 600; }
+.work-sites .crm-course-dock__body .crm-primary { height: auto; min-height: 38px; white-space: normal; line-height: 1.4; }
+.work-sites .crm-course-passed .crm-primary { width: 100%; }
+/* The practice's screenshot: what is still missing, then the picture itself, right above saving. */
+.crm-practice-snapshot { display: grid; gap: 10px; margin: 0 0 20px 190px; padding: 14px 16px; border: 1px dashed #b9c8e6; border-radius: 10px; background: #fbfcff; color: #2f3e57; font-size: 13px; line-height: 1.5; }
+.crm-practice-snapshot[data-state=attached] { border-style: solid; border-color: #c8e6d7; background: #f3fbf6; }
+.crm-practice-snapshot > strong { font-size: 14px; color: #1f3462; }
+.crm-practice-snapshot p { margin: 0; }
+.crm-practice-snapshot ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.crm-practice-snapshot li { display: flex; gap: 8px; color: #6a778b; }
+.crm-practice-snapshot li[data-ok=true] { color: #19734d; }
+.crm-practice-snapshot li > span { width: 14px; flex: none; text-align: center; }
+.crm-practice-snapshot img { display: block; width: 100%; max-width: 600px; border: 1px solid #d9e2ee; border-radius: 8px; }
+.crm-practice-snapshot > button { justify-self: start; }
+.crm-practice-snapshot .crm-help-link { display: inline; margin: 0; font-size: 13px !important; }
+/* Drawn off screen for the screenshot only; nobody sees or reaches it. */
+.crm-practice-stage { position: fixed; left: -20000px; top: 0; width: 1440px; height: 720px; overflow: hidden; pointer-events: none; }
+@media (max-width: 700px) { .crm-practice-snapshot { margin-left: 0; } }
+.crm-course-practice { display: grid; gap: 8px; padding: 12px 14px; border: 1px solid #d5e2ff; border-radius: 12px; background: #f6f9ff; color: #2f3e57; font-size: 13px; line-height: 1.5; }
+.crm-course-practice > strong { color: #1f3462; }
+.crm-course-practice dl { display: grid; gap: 4px; margin: 0; }
+.crm-course-practice dl > div { display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: 8px; }
+.crm-course-practice dt { color: #6a778b; }
+.crm-course-practice dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; user-select: text; }
+.crm-course-practice p { margin: 0; color: #45536a; }
+.crm-course-dock .crm-course-practice dl > div { grid-template-columns: 1fr; gap: 0; }

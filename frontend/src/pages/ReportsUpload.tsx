@@ -1,9 +1,11 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
+import { FileDrop } from "../components/FileDrop";
+import { monthOptions } from "../components/dateRange";
 import { reports, type ReportsResult } from "../api/periods";
 import { useAuth } from "../auth/AuthContext";
 import { useToast } from "../components/Toast";
-import { Badge, Button, Card, ErrorState, KPI } from "../components/ui";
+import { Badge, Button, Card, ErrorState, KPI, Select } from "../components/ui";
 import { coins, periodLabel, WEEK_STATUS_LABELS } from "../utils/format";
 
 const KIND_LABELS = { team: "Отчёт команды", quality: "Оценки проверяющих", unknown: "Не распознан" } as const;
@@ -18,8 +20,6 @@ export function ReportsUpload({ onSaved }: { onSaved?: () => void }) {
   const [month, setMonth] = useState("");
   const [result, setResult] = useState<ReportsResult | null>(null);
   const [saved, setSaved] = useState(false);
-  const [dragging, setDragging] = useState(false);
-  const input = useRef<HTMLInputElement>(null);
   const generation = useRef(0);
 
   const inspect = useMutation({
@@ -47,18 +47,17 @@ export function ReportsUpload({ onSaved }: { onSaved?: () => void }) {
     else inspect.reset();
   };
   const changeMonth = (value: string) => { setMonth(value); if (files.length) choose(files, value); };
-  const clear = () => { choose([]); if (input.current) input.current.value = ""; };
+  const clear = () => choose([]);
 
   return <Card title="Месячные отчёты СЗоВ"
     subtitle="Загрузите отчёты команд (report_…) и оценки проверяющих (monthly_report_dates_…) — всё остальное сайт посчитает сам">
-    <div className={`upload-zone${dragging ? " is-dragging" : ""}`}
-      onDragOver={(e) => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)}
-      onDrop={(e) => { e.preventDefault(); setDragging(false); if (!busy) choose(Array.from(e.dataTransfer.files)); }}>
-      <strong>{inspect.isPending ? "Читаем отчёты…" : files.length ? `Выбрано файлов: ${files.length}` : "Перетащите сюда все файлы за месяц"}</strong>
-      <label className="field"><span className="field__label">или выберите на устройстве (можно несколько)</span>
-        <input ref={input} type="file" multiple accept=".xlsx" disabled={busy} onChange={(e) => choose(Array.from(e.target.files ?? []))} /></label>
-      <label className="field"><span className="field__label">Месяц — если не указан в названии файлов</span>
-        <input type="month" className="input" value={month} disabled={busy} onChange={(e) => changeMonth(e.target.value)} /></label>
+    <div className="reports-upload">
+      <FileDrop accept=".xlsx" multiple disabled={busy} files={files} onFiles={list => choose(list)}
+        title={files.length ? `Выбрано файлов: ${files.length}` : "Перетащите сюда все файлы за месяц"} busy={inspect.isPending && "Читаем отчёты…"}
+        hint="Файлы XLSX из СЗоВ, можно сразу несколько." />
+      <label className="field reports-upload__month"><span className="field__label">Месяц</span>
+        <Select aria-label="Месяц отчётов" value={month} disabled={busy} onChange={changeMonth} options={[{ value: "", label: "Из названий файлов" }, ...monthOptions()]} />
+        <span className="field__note">Укажите, если месяца нет в названии файлов.</span></label>
     </div>
     {inspect.isError && <ErrorState error={inspect.error} />}
     {result && <div className="stack" style={{ marginTop: "var(--sp-5)" }}>

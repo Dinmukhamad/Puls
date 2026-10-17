@@ -47,15 +47,14 @@ const phrases: Record<string, string> = {
   save: "Последний шаг — проверяем и сохраняем!",
 };
 
-export function PulsarGuide({ catalog, screen, categoryIds, step, editor, openRequest, onStart, onNext, onPrevious, onClose }: {
+export function PulsarGuide({ catalog, screen, categoryIds, step, editor, openRequest, onStart, onNext, onPrevious, onClose, onTraining }: {
   catalog?: CrmCatalog; screen?: string; categoryIds: string[]; step: number | null; editor: boolean; openRequest: number;
-  onStart: () => void; onNext: () => void; onPrevious: () => void; onClose: () => void;
+  onStart: () => void; onNext: () => void; onPrevious: () => void; onClose: () => void; onTraining?: () => void;
 }) {
   const guide = useGuide();
   const [compact, setCompact] = useState(false), [mobileOpen, setMobileOpen] = useState(false);
   const [manualKey, setManualKey] = useState("");
   const [editing, setEditing] = useState<CrmInstruction | null>(null);
-  const [checked, setChecked] = useState<number[]>([]);
   const [attention, setAttention] = useState(false), [unread, setUnread] = useState(false);
   const [narrow, setNarrow] = useState(() => window.matchMedia("(max-width:1099px)").matches);
   useEffect(() => { const query = window.matchMedia("(max-width:1099px)"), sync = () => setNarrow(query.matches); query.addEventListener("change", sync); return () => query.removeEventListener("change", sync); }, []);
@@ -68,7 +67,6 @@ export function PulsarGuide({ catalog, screen, categoryIds, step, editor, openRe
   const key = manualKey || (step !== null ? `guide:${GUIDE_STEPS[step].target}` : screen ?? (categoryIds.length ? `category:${categoryIds.at(-1)}` : "guide:welcome"));
   const current = catalog?.instructions?.[key];
   const context = selectedCategories(catalog?.categories ?? [], categoryIds);
-  useEffect(() => { setChecked([]); }, [key, current?.revision]);
   // A new tip makes Pulsar jump and, when he is folded away, leaves a badge until he is opened.
   const shownKey = useRef(key);
   useEffect(() => {
@@ -77,9 +75,9 @@ export function PulsarGuide({ catalog, screen, categoryIds, step, editor, openRe
     const timer = window.setTimeout(() => setAttention(false), 1800);
     return () => window.clearTimeout(timer);
   }, [key]);
-  const total = current?.steps.length ?? 0, percent = total ? Math.round(checked.length / total * 100) : 0, finished = total > 0 && checked.length === total;
-  const mood: PulsarMood = finished || (tourStep === GUIDE_STEPS.length - 1) ? "cheer" : tourStep === 0 ? "wave" : attention || tour ? "point" : "idle";
-  const speech = finished ? "Отлично! Все шаги выполнены — можно сохранять." : tour ? phrases[GUIDE_STEPS[tourStep].target] : manualKey ? "Вы смотрите другую инструкцию." : screen ? "Подсказка для этого экрана:" : categoryIds.length ? "Для этой категории у меня есть инструкция:" : "Выберите категорию в форме — я подскажу, что делать.";
+  const total = current?.steps.length ?? 0;
+  const mood: PulsarMood = (tourStep === GUIDE_STEPS.length - 1) ? "cheer" : tourStep === 0 ? "wave" : attention || tour ? "point" : "idle";
+  const speech = tour ? phrases[GUIDE_STEPS[tourStep].target] : manualKey ? "Вы смотрите другую инструкцию." : screen ? "Подсказка для этого экрана:" : categoryIds.length ? "Для этой категории у меня есть инструкция:" : "Выберите категорию в форме — я подскажу, что делать.";
   const open = () => { setCompact(false); setMobileOpen(true); setUnread(false); };
   const categoryPath = (id: string) => { const labels: string[] = []; let node = catalog?.categories.find(n => n.id === id); while (node) { labels.unshift(node.label); const parent = node.parent_id; node = catalog?.categories.find(n => n.id === parent); } return labels.join(" › "); };
   return <aside className={`pulsar-dock${compact ? " is-compact" : ""}${mobileOpen ? " is-open" : ""}${attention ? " is-attention" : ""}`} aria-label={guide.text("Пульсар — инструкции")} data-instruction={key}>
@@ -97,11 +95,11 @@ export function PulsarGuide({ catalog, screen, categoryIds, step, editor, openRe
       {editing ? <CrmInstructionEditor key={`${editing.key}:${editing.revision}`} instruction={editing} onClose={() => setEditing(null)} /> : <>
         <div className="pulsar-modes" role="tablist"><button role="tab" aria-selected={!tour && !manualKey} className={!tour && !manualKey ? "is-active" : ""} onClick={() => { setManualKey(""); onClose(); }}>📋 По обращению</button><button role="tab" aria-selected={tour} className={tour ? "is-active" : ""} onClick={() => { setManualKey(""); onStart(); }}>🚀 Первые шаги</button></div>
         {current ? <><div className="pulsar-instruction">{!tour && !manualKey && context.length > 0 && <p className="pulsar-context">{context.map(n => n.label).join(" › ")}</p>}<p className="pulsar-body">{guide.text(current.body)}</p></div>
-          {total > 0 && <div className={`pulsar-checklist${finished ? " is-finished" : ""}`}><div className="pulsar-checklist-heading"><strong>Что сделать</strong><span>{checked.length} из {total}</span></div><div className="pulsar-progress" role="progressbar" aria-label="Отмеченные шаги памятки" aria-valuenow={checked.length} aria-valuemin={0} aria-valuemax={total}><span style={{ width: `${percent}%` }}/></div>{current.steps.map((text, index) => <label key={index} className={checked.includes(index) ? "is-done" : ""}><input type="checkbox" checked={checked.includes(index)} onChange={() => setChecked(previous => previous.includes(index) ? previous.filter(n => n !== index) : [...previous, index])}/><span>{checked.includes(index) ? "✓" : index + 1}</span><p>{guide.text(text)}</p></label>)}<small>Нажимайте на шаг, когда выполните его</small></div>}
+          {total > 0 && <div className="crm-reference"><strong>Порядок действий</strong><ol className="crm-reference-steps">{current.steps.map((text, index) => <li key={index}>{guide.text(text)}</li>)}</ol><small>Это инструкция. Результат задания проверяется после сохранения обращения.</small></div>}
           {editor && <div className="pulsar-edit-tools"><button className="pulsar-edit-button" onClick={() => { setEditing(current); open(); }}>✎ Изменить текст этой подсказки</button><label>Открыть другую инструкцию<select value={key} onChange={e => setManualKey(e.target.value)}><optgroup label="Знакомство с CRM">{GUIDE_STEPS.map(s => { const item = catalog?.instructions?.[`guide:${s.target}`]; return item && <option key={item.key} value={item.key}>{item.title}</option>; })}</optgroup><optgroup label="Учётные записи водителей">{Object.values(catalog?.instructions ?? {}).filter(item => item.key.startsWith("drivers:")).map(item => <option key={item.key} value={item.key}>{item.title}</option>)}</optgroup>{([["Акции", "promo:"], ["Регистрация водителей", "registration:"], ["ЭДО", "edo:"]] as const).map(([label, prefix]) => <optgroup key={prefix} label={label}>{Object.values(catalog?.instructions ?? {}).filter(item => item.key.startsWith(prefix)).map(item => <option key={item.key} value={item.key}>{item.title}</option>)}</optgroup>)}<optgroup label="Категории обращений">{catalog?.categories.filter(n => !n.disabled).map(n => <option key={n.id} value={`category:${n.id}`}>{categoryPath(n.id)}</option>)}</optgroup></select></label></div>}
         </> : <p className="pulsar-muted">Загружаем инструкции. При ошибке используйте обновление данных CRM.</p>}
       </>}
     </div>
-    {!editing && <footer className="pulsar-dock-footer">{step !== null ? <><button className="pulsar-text-button" disabled={step === 0} onClick={onPrevious}>← Назад</button><button className="pulsar-next" onClick={onNext}>{step === GUIDE_STEPS.length - 1 ? "Готово ✓" : step === 0 ? "Начать знакомство →" : "Дальше →"}</button></> : <button className="pulsar-text-button pulsar-restart" onClick={onStart}>🚀 Пройти знакомство с CRM заново</button>}</footer>}
+    {!editing && <footer className="pulsar-dock-footer">{onTraining && <button className="pulsar-text-button" onClick={onTraining}>← К заданиям</button>}{step !== null ? <><button className="pulsar-text-button" disabled={step === 0} onClick={onPrevious}>← Назад</button><button className="pulsar-next" onClick={onNext}>{step === GUIDE_STEPS.length - 1 ? "Готово ✓" : step === 0 ? "Начать знакомство →" : "Дальше →"}</button></> : <button className="pulsar-text-button pulsar-restart" onClick={onStart}>🚀 Пройти знакомство с CRM заново</button>}</footer>}
   </aside>;
 }

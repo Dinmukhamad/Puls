@@ -16,7 +16,7 @@ async function load(path) {
 }
 const { DistrictLandmarkCard } = await load("./DistrictLandmarkCard.tsx");
 const { CityDistrictSheet } = await load("./CityDistrictSheet.tsx");
-const { CityEstateDock } = await load("./CityEstateDock.tsx");
+const { CityEstateDock, DistrictTab } = await load("./CityEstateDock.tsx");
 const { CitySandboxDock } = await load("./CitySandboxDock.tsx");
 
 const landmark = { status: "active", level: 2, name: "Дом команды", module: 0, u: 0, v: 0, w: 12, h: 12, rotation: 0, taken: 24, plots: 200, peak: 24,
@@ -92,7 +92,8 @@ test("legacy squares retain paid project controls beside the same growing main b
 });
 
 test("all land opens at once with one main-building progress and active public mode never opens projects", () => {
-  const overview = render(CityEstateDock, dockProps);
+  assert.doesNotMatch(render(CityEstateDock, dockProps), /role="progressbar"/, "the land waits in the district tab");
+  const overview = render(DistrictTab, { land: district, onShow: noop });
   assert.match(overview, /aria-label="Земля района"/);
   assert.match(overview, /Весь район открыт/);
   assert.match(overview, /Свободно 176 клеток/);

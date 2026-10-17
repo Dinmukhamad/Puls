@@ -421,12 +421,12 @@ const cellPoint = (col, row, block = home) => { const p = city.cellCentre(block,
 const chosen = picks => picks.filter(p => p.kind === 'cells').at(-1)?.cells.map(c => [c.block, c.col, c.row]);
 const states = picks => picks.filter(p => p.kind === 'cells').at(-1)?.cells.map(c => c.state);
 
-test('the left button chooses a line of cells, whatever stands on them; a tap chooses one, lines go on from the last cell', () => {
+test('in the line mode the left button chooses a line of cells, whatever stands on them; a tap chooses one, lines go on from the last cell', () => {
   const s = setup(), b = home.block;
   // The house on the test plot and a lamp of one's own beside it take cells; a tree of a neighbour's too.
   s.state([object('house')], false, { decor: { lamp: [[b, frame.col + 4, frame.row, 1]], tree: [[b, frame.col + 6, frame.row, 0]] } });
   s.aim(cellPoint(frame.col + 4, frame.row + 1), frame.rotation + .55);
-  s.build(null);
+  choosing(s, { shape: 'line' });
   // A drag from the house's own cell through the lamp's and the tree's along a row and down a column: all of them,
   // each with what is on it.
   s.drag(cellPoint(frame.col + 2, frame.row), cellPoint(frame.col + 8, frame.row + 2));
@@ -437,10 +437,10 @@ test('the left button chooses a line of cells, whatever stands on them; a tap ch
   assert.deepEqual(s.picks.at(-1).cells.map(c => c.band), path.map(c => c.block.band));
   // The page keeps them. A new drag chooses its own line instead; with Shift, after them.
   const kept = s.picks.at(-1).cells;
-  choosing(s, { cells: kept });
+  choosing(s, { shape: 'line', cells: kept });
   s.picks.length = 0; s.drag(cellPoint(frame.col + 4, frame.row + 5), cellPoint(frame.col + 4, frame.row + 7));
   assert.deepEqual(chosen(s.picks), [5, 6, 7].map(r => [b, frame.col + 4, frame.row + r]));
-  choosing(s, { cells: kept });
+  choosing(s, { shape: 'line', cells: kept });
   s.picks.length = 0; s.drag(cellPoint(frame.col + 4, frame.row + 5), cellPoint(frame.col + 4, frame.row + 7), { shiftKey: true });
   assert.deepEqual(chosen(s.picks), [...kept.map(c => [c.block, c.col, c.row]), ...[5, 6, 7].map(r => [b, frame.col + 4, frame.row + r])]);
   // A tap chooses the one cell instead.
@@ -463,10 +463,10 @@ test('the left button chooses a line of cells, whatever stands on them; a tap ch
   s.estates.dispose();
 });
 
-test('the mouse\'s other buttons and fingers keep moving the camera: only the left button draws', () => {
+test('the mouse\'s other buttons and fingers keep moving the camera: only the left button draws, and only lines or areas', () => {
   const s = setup(), canvas = s.ctx.renderer.domElement, seen = [];
   s.state([]); s.aim(cellPoint(frame.col + 4, frame.row + 1), frame.rotation + .55);
-  choosing(s, { family: 'tree' });
+  choosing(s, { family: 'tree', shape: 'line' });
   // A listener of the camera's: it hears the presses the choosing does not take.
   canvas.addEventListener('pointerdown', event => seen.push([event.pointerType, event.button]));
   const at = point => { const p = point.clone().project(s.camera); return { clientX: (p.x + 1) * 400, clientY: (1 - p.y) * 400 }; };
@@ -481,10 +481,20 @@ test('the mouse\'s other buttons and fingers keep moving the camera: only the le
   s.drag(cellPoint(frame.col + 4, frame.row), cellPoint(frame.col + 6, frame.row));
   assert.equal(seen.length, 3);
   assert.equal(chosen(s.picks).length, 3);
-  // A finger's tap still chooses a cell.
-  s.picks.length = 0;
+  // A finger's tap still chooses a cell (one at a time here; in the line mode it would go on from the last one).
+  choosing(s, { family: 'tree' }); s.picks.length = 0;
   for (const type of ['pointerdown', 'pointerup']) canvas.dispatchEvent(Object.assign(new Event(type), { isPrimary: true, pointerId: 4, pointerType: 'touch', button: 0 }, at(cellPoint(frame.col + 9, frame.row))));
   assert.deepEqual(chosen(s.picks), [[home.block, frame.col + 9, frame.row]]);
+  // A building (or one cell at a time, or nothing chosen yet): nothing to draw, so a left drag turns or moves the camera
+  // as everywhere in the city and chooses nothing; a click still chooses its cell.
+  for (const choice of [{ family: 'house' }, { family: 'tree' }, {}]) {
+    choosing(s, choice); s.picks.length = 0; seen.length = 0;
+    s.drag(cellPoint(frame.col + 4, frame.row), cellPoint(frame.col + 8, frame.row));
+    assert.deepEqual(seen, [['mouse', 0]], 'the camera hears the left drag');
+    assert.equal(chosen(s.picks), undefined, 'and nothing is chosen');
+    s.tap(cellPoint(frame.col + 5, frame.row + 2));
+    assert.deepEqual(chosen(s.picks), [[home.block, frame.col + 5, frame.row + 2]]);
+  }
   s.estates.dispose();
 });
 
@@ -519,7 +529,7 @@ test('with Ctrl (or Cmd) either button adds an area: every cell of the rectangle
   s.estates.dispose();
 });
 
-test('a click with Ctrl, Cmd or Shift takes a cell in or out; a plain drag chooses a line instead, a plain tap one cell', () => {
+test('a click with Ctrl, Cmd or Shift takes a cell in or out; a plain drag draws a line only in the line mode, a plain tap one cell', () => {
   const s = setup(), b = home.block, canvas = s.ctx.renderer.domElement, seen = [];
   s.state([], false, { decor: { tree: [[b, frame.col + 5, frame.row + 4, 0]] } });
   s.aim(cellPoint(frame.col + 6, frame.row + 4), frame.rotation + .55);
@@ -544,11 +554,17 @@ test('a click with Ctrl, Cmd or Shift takes a cell in or out; a plain drag choos
   keep(); s.picks.length = 0;
   click(cellPoint(frame.col + 9, frame.row + 1), { shiftKey: true });
   assert.equal(chosen(s.picks).length, area.length + 1);
-  // Without a key a drag chooses its line instead, the camera never hearing of it; a tap chooses one cell.
+  // Without a key a drag is the camera's, choosing nothing; in the line mode it chooses its line instead, the camera
+  // never hearing of it. A tap chooses one cell.
   keep(); s.picks.length = 0;
   s.drag(cellPoint(frame.col + 3, frame.row + 6), cellPoint(frame.col + 6, frame.row + 6));
-  assert.deepEqual(seen, []);
+  assert.deepEqual(seen, [0]);
+  assert.equal(chosen(s.picks), undefined);
+  choosing(s, { family: 'road', shape: 'line' }); s.picks.length = 0;
+  s.drag(cellPoint(frame.col + 3, frame.row + 6), cellPoint(frame.col + 6, frame.row + 6));
+  assert.deepEqual(seen, [0]);
   assert.deepEqual(chosen(s.picks), [3, 4, 5, 6].map(c => [b, frame.col + c, frame.row + 6]));
+  choosing(s);
   s.tap(cellPoint(frame.col + 9, frame.row + 1));
   assert.deepEqual(chosen(s.picks), [[b, frame.col + 9, frame.row + 1]]);
   // Placing a building from the inventory, nothing chooses cells.
@@ -592,7 +608,7 @@ test('the cells chosen say what is on them: one\'s own small things, in the test
   const s = setup(), b = home.block, decor = { road: [[b, frame.col + 5, frame.row, 1], [b, frame.col + 6, frame.row, 0]], lamp: [[b, frame.col + 7, frame.row, 1]] };
   s.state([object('house')], false, { decor });
   s.aim(cellPoint(frame.col + 6, frame.row + 1), frame.rotation + .55);
-  choosing(s);
+  choosing(s, { shape: 'line' });
   s.drag(cellPoint(frame.col + 2, frame.row), cellPoint(frame.col + 8, frame.row));
   assert.deepEqual(states(s.picks), ['taken', 'free', 'free', 'own', 'taken', 'own', 'free'], 'the house, free cells, one\'s road, a neighbour\'s, one\'s lamp');
   // The land changes under the cells chosen: the map tells the page what is on them now.

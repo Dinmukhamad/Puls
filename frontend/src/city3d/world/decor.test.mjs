@@ -231,6 +231,34 @@ test('trees, bushes and flowerbeds stand in their own cells; a lamp by its road 
   }
 });
 
+test('a lamp or a bench its owner turned stands at that side of its cell, whatever road is beside it', () => {
+  const map = D.decorMap([{ number: 1, decor: { lamp: [[3, 1, 2, 1, 2], [3, 4, 2, 1]], tree: [[3, 5, 2, 1, 1]] } }]);
+  assert.deepEqual(map.get('1:3:1:2'), { family: 'lamp', mine: true, turn: 2 });
+  assert.deepEqual(map.get('1:3:4:2'), { family: 'lamp', mine: true });
+  assert.deepEqual(D.TURN_SIDES, ['z1', 'x1', 'z0', 'x0']);
+  assert.deepEqual(['z1', 'x1', 'z0', 'x0'].map(side => [D.turnFrom(side, 1), D.turnFrom(side, -1)]), [[1, 3], [2, 0], [3, 1], [0, 2]]);
+  for (const grid of Object.values(GRIDS)) {
+    const { block, b, C, R } = windowOf(grid), at = p => D.cellAt(grid, p);
+    for (const turn of [0, 1, 2, 3]) {
+      // A road above them; the lamp and the bench turned anyway go to the side turned to.
+      const side = D.TURN_SIDES[turn], cells = { road: [[b, C(10), R(8), 1], [b, C(11), R(8), 1]], lamp: [[b, C(10), R(9), 1, turn]], bench: [[b, C(11), R(9), 1, turn]] };
+      const map = D.decorMap([{ number: 1, decor: cells }]), layout = D.decorLayout(grid, map);
+      const lamp = layout.lamps[0], bench = layout.placements.find(p => p.kind === 'bench');
+      assert.deepEqual([at(lamp).col, at(lamp).row, at(bench).col, at(bench).row], [C(10), R(9), C(11), R(9)], `turn ${turn}: in their cells`);
+      for (const [thing, col, by] of [[lamp, C(10), .95], [bench, C(11), .75]]) {
+        const centre = D.cellCentre(block, col, R(9)), dir = D.edgeToward(block, col, R(9), centre, side);
+        assert.ok(near(thing, { x: centre.x + dir.x * by, z: centre.z + dir.z * by }, 1e-9), `turn ${turn}: at the ${side} side`);
+        assert.equal(D.decorSide(grid, map, block, col, R(9)), side);
+      }
+      assert.ok(Math.hypot(Math.sin(bench.rotation) - D.edgeToward(block, C(11), R(9), D.cellCentre(block, C(11), R(9)), side).x, Math.cos(bench.rotation) - D.edgeToward(block, C(11), R(9), D.cellCentre(block, C(11), R(9)), side).z) < 1e-9, `turn ${turn}: the bench looks to its side`);
+    }
+    // Not turned: by the road beside it, else (in the middle) towards the middle of the city.
+    const plain = D.decorMap([{ number: 1, decor: { road: [[b, C(10), R(8), 1]], lamp: [[b, C(10), R(9), 1], [b, C(20), R(9), 1]] } }]);
+    assert.equal(D.decorSide(grid, plain, block, C(10), R(9)), D.sideOf(block, 'row-'));
+    assert.equal(D.decorSide(grid, plain, block, C(20), R(9)), D.homeSide(block, C(20), R(9)));
+  }
+});
+
 test('a building turns its front to the road beside it, to the most of it, else where its owner turned it', () => {
   for (const [city, grid] of Object.entries(GRIDS)) {
     const { block, b, C, R } = windowOf(grid), col = C(10), row = R(5);

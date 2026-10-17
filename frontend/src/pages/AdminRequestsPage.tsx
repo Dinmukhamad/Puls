@@ -84,9 +84,10 @@ export function AdminRequestsPage() {
     <div className="stack">
       <div className="page-head">
         <div>
-          <h1 className="page-title">Заявки из магазина</h1>
+          <h1 className="page-title">Заказы и выдача</h1>
           <p className="page-subtitle">
-            Одобрение списывает зарезервированные коины, отказ возвращает их оператору
+            Заявки сотрудников из магазина: одобрение списывает зарезервированные коины, отказ
+            возвращает их
           </p>
         </div>
       </div>

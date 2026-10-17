@@ -11,7 +11,7 @@ from app.core.errors import ConflictError, DomainError, NotFoundError
 from app.db.base import utcnow
 from app.models.driver import DriverOrder, DriverProfile, DriverSettings
 from app.models.driver_shift import DriverShift, DriverSupportCase
-from app.models.enums import Role
+from app.models.enums import LEARNER_ROLES
 from app.models.learning import LearningContent
 from app.models.user import User
 from app.schemas.driver_shift import DriverScenario
@@ -294,7 +294,7 @@ async def start(session, user_id, payload):
         raise ConflictError("Сначала завершите ранее начатый заказ")
     config = await configuration(session)
     user = await session.get(User, user_id)
-    is_preview = user.role != Role.OPERATOR
+    is_preview = user.role not in LEARNER_ROLES
     if payload.content_id:
         content = await session.get(LearningContent, payload.content_id)
         if (

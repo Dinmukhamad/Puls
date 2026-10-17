@@ -2,6 +2,7 @@
 
 from app.db.base import Base
 from app.models.access import AccessPolicy, AccessRule
+from app.models.avatar import UserAvatar
 from app.models.badge import BadgeDefinition, UserBadge
 from app.models.city import (
     CityAward,
@@ -36,6 +37,8 @@ from app.models.contest import (
     OperatorWeekResult,
 )
 from app.models.crm import CrmAppeal, CrmAttachment, CrmCategory, CrmInstruction
+from app.models.crm_draft import CrmDraft, CrmDraftAttachment
+from app.models.crm_training import CrmTrainingAttempt, CrmTrainingCheck
 from app.models.dispatch import DispatchEvent
 from app.models.driver import DriverOrder, DriverProfile, DriverSettings
 from app.models.driver_auth import DriverDevice, TelegramLink
@@ -60,6 +63,7 @@ from app.models.settings import AuditLog, GamificationSettings
 from app.models.shop import ShopItem, ShopRequest
 from app.models.telemetry import CityPerfReport
 from app.models.user import CoinAccount, Group, User
+from app.models.voice_training import VoiceTrainingAttempt
 from app.models.work_sites_access import WorkSitesAccess
 
 __all__ = [
@@ -92,7 +96,11 @@ __all__ = [
     "CrmAppeal",
     "CrmAttachment",
     "CrmCategory",
+    "CrmDraft",
+    "CrmDraftAttachment",
     "CrmInstruction",
+    "CrmTrainingAttempt",
+    "CrmTrainingCheck",
     "DispatchEvent",
     "DriverDevice",
     "DriverMapRate",
@@ -132,7 +140,9 @@ __all__ = [
     "TelegramLink",
     "TxType",
     "User",
+    "UserAvatar",
     "UserBadge",
+    "VoiceTrainingAttempt",
     "WeekStatus",
     "WheelConfig",
     "WheelSpin",

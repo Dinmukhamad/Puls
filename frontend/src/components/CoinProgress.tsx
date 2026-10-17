@@ -18,7 +18,7 @@ export function ProgressOverview({ data, showDetails, own = false }: { data: Coi
   const work = data.achievements.filter(item => item.category === "work");
   const nearest = work.filter(item => !item.unlocked).sort((a, b) => b.progress_percent - a.progress_percent)[0];
   return <div className="stack coin-progress">
-    <Card className="coin-progress-hero" variant="highlight">
+    <Card className="coin-progress-hero" variant="highlight" tour="progress-level">
       <div className="coin-progress-heading"><span>Уровень {data.level_number}</span><Badge tone="coin">{earned} {plural(earned, "достижение", "достижения", "достижений")}</Badge></div>
       <h2>{data.current?.title ?? "Начало пути"}</h2>
       <p className="coin-progress-total"><strong>{coins(data.total)}</strong> коинов заработано за всё время</p>
@@ -29,7 +29,7 @@ export function ProgressOverview({ data, showDetails, own = false }: { data: Coi
     </Card>
     {showDetails && <>
       {nearest && <Card title="Ближайшее достижение"><Achievement item={nearest} own={own} /></Card>}
-      <Card title="Как заработать коины"><div className="coin-earning-options">
+      <Card title="Как заработать коины" tour="progress-earn"><div className="coin-earning-options">
         <div><h3>Работа</h3><p>Выполняйте показатели недели. После закрытия недели результат и бонусы переводятся в коины.</p>{own && <Link hideWhenDenied to="/cabinet">Посмотреть показатели →</Link>}</div>
         <div><h3>Обучение</h3><p>Пройдите задание успешно. Размер награды указан в его карточке; за одно задание коины выдаются один раз.</p>{own && <Link hideWhenDenied to="/training/city">Перейти к обучению →</Link>}</div>
         <div><h3>Достижения</h3><p>Выполняйте условия ниже. Бонус за первое получение приближает следующий уровень.</p><a href="#work-achievements">Посмотреть условия ↓</a></div>

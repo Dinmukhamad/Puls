@@ -40,6 +40,8 @@
 .city-world--fallback{background:radial-gradient(ellipse 60% 55% at 45% 50%,#cfe8b8 0,#b5dca0 45%,#9fd0e6 46%,#c8e6f3 100%)}
 .city-fallback{display:grid;place-content:center;justify-items:center;gap:8px;padding:24px;text-align:center;color:#1f3445}.city-fallback span{font-size:56px}.city-fallback strong{font-size:17px}.city-fallback small{max-width:320px;font-size:13px;line-height:1.5;color:#3d5566}
 .city-map-hint{position:fixed;left:var(--city-left);right:var(--city-free-right);bottom:calc(var(--city-free-bottom) + 4px);width:max-content;max-width:calc(100vw - var(--city-left) - var(--city-free-right) - 24px);margin-inline:auto;z-index:2;padding:7px 14px;border-radius:999px;background:#ffffffd1;color:#2b4a5e;font-size:12px;line-height:1.4;text-align:center;pointer-events:none;box-shadow:0 6px 20px rgba(16,40,58,.12);animation:city-hint 8s ease 1.2s both}
+.city-turn{position:fixed;left:var(--city-free-left,var(--city-left));right:var(--city-free-right);bottom:calc(var(--city-free-bottom) + 12px);width:max-content;margin-inline:auto;z-index:20;display:flex;gap:2px;padding:4px;border-radius:999px}
+.city-turn button{width:44px;height:44px;border:0;border-radius:50%;background:transparent;color:var(--text-primary);font:inherit;font-size:21px;font-weight:700;line-height:1;cursor:pointer}.city-turn button:hover{background:var(--surface-hover)}.city-turn button:active{background:var(--surface-pressed)}.city-turn button:focus-visible{outline:2px solid var(--accent-primary);outline-offset:-2px}
 .city-map-tools{position:fixed;right:var(--city-free-right);top:50%;transform:translateY(-50%);z-index:20;display:flex;flex-direction:column;gap:2px;padding:4px;border-radius:16px}
 .city-map-tools button{width:38px;height:38px;border:0;border-radius:11px;background:transparent;color:var(--text-primary);font:inherit;font-size:17px;font-weight:700;line-height:1;cursor:pointer}.city-map-tools button:hover{background:var(--surface-hover)}.city-map-tools button:active{background:var(--surface-pressed)}.city-map-tools button:focus-visible{outline:2px solid var(--accent-primary);outline-offset:-2px}
 
@@ -142,21 +144,6 @@
 }
 @media(max-width:380px){.city-hud__xp>span{font-size:11px}.city-hud{gap:8px}.city-guide-setup__figures{grid-template-columns:1fr}}
 @media(prefers-reduced-motion:reduce){.city-meter>span{transition:none}.city-immersive .pulsar-floating,.city-immersive .pulsar-stars,.city-immersive .pulsar-shadow{animation:none!important}.city-guide-setup,.city-loading span{animation:none}.city-map-hint{animation:none;display:none}.city-skill{transition:none}}
-/* Plots of the district (mission panel) and the building catalogue (sheet). */
-.city-plots{display:grid;gap:8px;padding:10px 12px;border-radius:14px;background:var(--city-glass-soft);border:1px solid var(--separator)}
-.city-plots__head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:12px}.city-plots__head span{color:var(--text-secondary);font-size:11px}
-.city-plots__list{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
-.city-plots__list button{display:grid;place-items:center;height:40px;border-radius:10px;border:1px solid var(--separator);background:var(--surface-primary);font-size:19px;cursor:pointer;color:var(--text-secondary)}
-.city-plots__list button[data-state=open]{border:2px dashed #2f9e5b;color:#2f9e5b;font-weight:700}
-.city-plots__list button[data-state=locked]{opacity:.55;font-size:15px}
-.city-plots small{font-size:10.5px;line-height:1.4;color:var(--text-secondary)}
-.city-catalogue{display:grid;gap:12px}
-.city-catalogue__balance{margin:0;font-size:13px;color:var(--text-secondary);line-height:1.5}.city-catalogue__balance strong{color:var(--text-primary)}
-.city-catalogue ul{list-style:none;margin:0;padding:0;display:grid;gap:8px}
-.city-catalogue li{display:grid;grid-template-columns:44px minmax(0,1fr) auto;align-items:center;gap:12px;padding:10px 12px;border-radius:14px;border:1px solid var(--separator);background:var(--city-soft)}
-.city-catalogue__icon{display:grid;place-items:center;width:44px;height:44px;border-radius:12px;background:var(--surface-primary);font-size:24px}
-.city-catalogue__text{display:grid;gap:3px;min-width:0}.city-catalogue__text strong{font-size:14px}.city-catalogue__text small{font-size:12px;color:var(--text-secondary);line-height:1.4}
-.city-catalogue .city-action{min-height:40px;width:auto;padding:0 14px;font-size:13px;white-space:nowrap}
 /* A HUD button: the test city, building, the open situations. */
 .city-group-button{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 12px;border:1px solid var(--separator);border-radius:12px;background:var(--city-glass-soft);color:var(--text-primary);font:inherit;font-size:13px;font-weight:650;cursor:pointer}
 /* A daily situation (sheet) and the HUD button with open ones. */

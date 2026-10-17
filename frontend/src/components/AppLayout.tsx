@@ -10,6 +10,7 @@ import { GlassSurface } from "./GlassSurface";
 import { ChevronLeftIcon, LogoutIcon, MenuIcon, PulsMark } from "./icons";
 import { Sheet } from "./Sheet";
 import { Avatar, Button, IconButton } from "./ui";
+import { SiteTourProvider } from "../tour/SiteTour";
 import "./section-navigation.css";
 
 const COLLAPSE_KEY = "puls.sidebar.collapsed";
@@ -35,7 +36,7 @@ export function AppLayout() {
   const activeTab = active ? currentTab(active, location.pathname, location.search) : undefined;
   const { primary, overflow } = mobileNavigation(items);
   const separateProfile = !items.some((item) => item.id === "profile");
-  // «Мой город» занимает весь экран: меню сжимается до плавающих карточек поверх карты.
+  // «Мой город» занимает весь экран: меню сжимается до плавающих карточек поверх карты. У стажёра это его учебный город.
   const immersive = location.pathname === "/training/city";
   const overflowActive = overflow.some((item) => item.id === active?.id) || (separateProfile && active?.id === "profile");
 
@@ -53,11 +54,12 @@ export function AppLayout() {
 
   const userLink = user && <AccountMenu />;
 
-  return <div className={`shell${collapsed ? " shell--collapsed" : ""}${peek.open ? " shell--peek" : ""}${immersive ? " shell--immersive" : ""}`}>
+  // Pulsar's tour of the site (tour/siteTour.ts) finds the menu by its `data-tour` markers.
+  return <SiteTourProvider><div className={`shell${collapsed ? " shell--collapsed" : ""}${peek.open ? " shell--peek" : ""}${immersive ? " shell--immersive" : ""}`} data-sections={items.map((item) => item.id).join(" ")}>
     <GlassSurface as="aside" variant="regular" className="sidebar" {...peek.handlers}>
       <div className="sidebar__brand"><span className="sidebar__mark"><PulsMark /></span><span className="sidebar__name">Puls</span><IconButton label={!collapsed ? "Свернуть меню" : peek.open ? "Закрепить меню" : "Развернуть меню"} className="sidebar__toggle" aria-expanded={!collapsed} onClick={() => { setCollapsed((value) => !value); peek.settle(); }}><ChevronLeftIcon size={18} /></IconButton></div>
-      <nav className="sidebar__nav" aria-label="Основные разделы">
-        {items.map((item) => <Link key={item.id} to={item.to} className={active?.id === item.id ? "nav-item is-active" : "nav-item"} aria-current={active?.id === item.id ? "page" : undefined} aria-label={collapsed ? item.label : undefined}><span className="nav-item__icon"><item.icon size={20} /></span><span className="nav-item__label">{item.label}</span></Link>)}
+      <nav className="sidebar__nav" aria-label="Основные разделы" data-tour="nav">
+        {items.map((item) => <Link key={item.id} to={item.to} data-tour={`nav-${item.id}`} className={active?.id === item.id ? "nav-item is-active" : "nav-item"} aria-current={active?.id === item.id ? "page" : undefined} aria-label={collapsed ? item.label : undefined}><span className="nav-item__icon"><item.icon size={20} /></span><span className="nav-item__label">{item.label}</span></Link>)}
       </nav>
       {!immersive && userLink}
     </GlassSurface>
@@ -65,15 +67,15 @@ export function AppLayout() {
 
     <main className="main"><div className={`main__inner${location.pathname === "/profile" ? " main__inner--profile" : ""}`}>
       {/* A section label alone above the page title only repeats it, so it comes with the tabs. */}
-      {active && !immersive && active.tabs.length > 1 && <div className="section-navigation"><p className="section-navigation__title">{active.label}</p><nav className="section-navigation__tabs" aria-label={`Подразделы: ${active.label}`}>{active.tabs.map((item) => <Link key={item.to} to={subsectionDestination(item, location.pathname, location.search)} className={activeTab?.to === item.to ? "section-navigation__tab is-active" : "section-navigation__tab"} aria-current={activeTab?.to === item.to ? "page" : undefined}>{item.label}</Link>)}</nav></div>}
+      {active && !immersive && active.tabs.length > 1 && <div className="section-navigation"><p className="section-navigation__title">{active.label}</p><nav className="section-navigation__tabs" aria-label={`Подразделы: ${active.label}`}>{active.tabs.map((item) => <Link key={item.to} to={subsectionDestination(item, location.pathname, location.search)} data-tour={`tab-${item.to.split(/[?#]/)[0].slice(1)}`} className={activeTab?.to === item.to ? "section-navigation__tab is-active" : "section-navigation__tab"} aria-current={activeTab?.to === item.to ? "page" : undefined}>{item.label}</Link>)}</nav></div>}
       <SectionGuard><Outlet /></SectionGuard>
     </div></main>
 
-    <GlassSurface as="nav" variant="prominent" className={compactTabBar ? "tabbar tabbar--compact" : "tabbar"} aria-label="Основные разделы, мобильное меню">
-      {primary.map((item) => <Link key={item.id} to={item.to} aria-label={item.label} aria-current={active?.id === item.id ? "page" : undefined} className={active?.id === item.id ? "tab is-active" : "tab"}><span className="tab__icon"><item.icon size={22} /></span><span className="tab__label">{item.label}</span></Link>)}
-      {overflow.length > 0 && <button type="button" className={menuOpen || overflowActive ? "tab is-active" : "tab"} aria-label="Ещё разделы" aria-haspopup="dialog" aria-expanded={menuOpen} aria-controls={menuOpen ? menuId : undefined} onClick={() => setMenuOpen(true)}><span className="tab__icon"><MenuIcon size={22} /></span><span className="tab__label">Ещё</span></button>}
+    <GlassSurface as="nav" variant="prominent" className={compactTabBar ? "tabbar tabbar--compact" : "tabbar"} aria-label="Основные разделы, мобильное меню" data-tour="nav">
+      {primary.map((item) => <Link key={item.id} to={item.to} data-tour={`nav-${item.id}`} aria-label={item.label} aria-current={active?.id === item.id ? "page" : undefined} className={active?.id === item.id ? "tab is-active" : "tab"}><span className="tab__icon"><item.icon size={22} /></span><span className="tab__label">{item.label}</span></Link>)}
+      {overflow.length > 0 && <button type="button" data-tour="nav-more" data-sections={[...overflow.map(item => item.id), "profile"].join(" ")} className={menuOpen || overflowActive ? "tab is-active" : "tab"} aria-label="Ещё разделы" aria-haspopup="dialog" aria-expanded={menuOpen} aria-controls={menuOpen ? menuId : undefined} onClick={() => setMenuOpen(true)}><span className="tab__icon"><MenuIcon size={22} /></span><span className="tab__label">Ещё</span></button>}
     </GlassSurface>
-    {menuOpen && <Sheet id={menuId} title="Разделы Puls" onClose={closeMenu} size="s"><nav className="mobile-menu" aria-label="Все основные разделы">{items.filter(item => item.id !== "profile").map((item) => <Link key={item.id} to={item.to} className={active?.id === item.id ? "nav-item is-active" : "nav-item"} aria-current={active?.id === item.id ? "page" : undefined} onClick={closeMenu}><span className="nav-item__icon"><item.icon size={20} /></span><span>{item.label}</span></Link>)}</nav><div className="mobile-account"><Link to={ACCOUNT_SECTION.to} className="mobile-account__profile" aria-current={location.pathname === "/profile" ? "page" : undefined} onClick={closeMenu}>{user && <Avatar name={user.full_name} id={user.id} size={36} />}<span><strong>{user?.full_name}</strong><small>Профиль и настройки</small></span></Link><Button block size="s" variant="destructive" icon={<LogoutIcon size={16} />} disabled={leaving} onClick={() => { setLeaving(true); void logout(); }}>{leaving ? "Выходим…" : "Выйти из аккаунта"}</Button></div></Sheet>}
+    {menuOpen && <Sheet id={menuId} title="Разделы Puls" onClose={closeMenu} size="s"><nav className="mobile-menu" aria-label="Все основные разделы">{items.filter(item => item.id !== "profile").map((item) => <Link key={item.id} to={item.to} data-tour={`nav-${item.id}`} className={active?.id === item.id ? "nav-item is-active" : "nav-item"} aria-current={active?.id === item.id ? "page" : undefined} onClick={closeMenu}><span className="nav-item__icon"><item.icon size={20} /></span><span>{item.label}</span></Link>)}</nav><div className="mobile-account"><Link to={ACCOUNT_SECTION.to} data-tour="nav-profile" className="mobile-account__profile" aria-current={location.pathname === "/profile" ? "page" : undefined} onClick={closeMenu}>{user && <Avatar name={user.full_name} id={user.id} size={36} />}<span><strong>{user?.full_name}</strong><small>Профиль и настройки</small></span></Link><Button block size="s" variant="destructive" icon={<LogoutIcon size={16} />} disabled={leaving} onClick={() => { setLeaving(true); void logout(); }}>{leaving ? "Выходим…" : "Выйти из аккаунта"}</Button></div></Sheet>}
 
-  </div>;
+  </div></SiteTourProvider>;
 }

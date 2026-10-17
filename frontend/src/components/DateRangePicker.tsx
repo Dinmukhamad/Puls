@@ -2,6 +2,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties
 import { createPortal } from "react-dom";
 import { ChevronLeftIcon, ChevronRightIcon } from "./icons";
 import { Button } from "./ui";
+import { Select } from "./Select";
 import { calendarDate, dateKey, monthCaption, shiftDays, shiftMonth } from "./weekCalendar";
 import { formatDateRange, inclusiveRangeDays, moveCalendarMonth, rangeCalendarDays, todayDateKey, validDateRange, type DateRange } from "./dateRange";
 import "./DateRangePicker.css";
@@ -16,6 +17,12 @@ export interface DateRangePickerProps {
   loading?: boolean;
   className?: string;
   ariaLabel?: string;
+  /** One date instead of a period: a tap picks it and closes the calendar (see DatePicker). */
+  single?: boolean;
+  /** What the closed field says while nothing is chosen. */
+  placeholder?: string;
+  /** Offers «Очистить» for an optional date. */
+  onClear?: () => void;
 }
 
 const usePopoverLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
@@ -26,7 +33,7 @@ const days = (n: number) => `${n} ${n % 10 === 1 && n % 100 !== 11 ? "день" 
  * One calendar and nothing else: the first tap is the period's start, the second its end (or Apply right
  * away for one day). Dates are a draft until Apply: selecting a day never starts a data request.
  */
-export function DateRangePicker({ value, defaultRange, onChange, disabled = false, loading = false, className = "", ariaLabel = "Период" }: DateRangePickerProps) {
+export function DateRangePicker({ value, defaultRange, onChange, disabled = false, loading = false, className = "", ariaLabel = "Период", single = false, placeholder, onClear }: DateRangePickerProps) {
   const id = useId();
   const root = useRef<HTMLDivElement>(null), trigger = useRef<HTMLButtonElement>(null), panel = useRef<HTMLDivElement>(null);
   const effective = value ?? defaultRange;
@@ -42,7 +49,7 @@ export function DateRangePicker({ value, defaultRange, onChange, disabled = fals
   const valid = validDateRange(draft);
   const grid = rangeCalendarDays(month);
   const count = inclusiveRangeDays(draft);
-  const caption = !effective && loading ? "Загрузка периода…" : formatDateRange(effective);
+  const caption = !effective && loading ? "Загрузка периода…" : !validDateRange(effective) && placeholder ? placeholder : formatDateRange(effective);
   const preview = anchor && hovered ? { date_from: anchor < hovered ? anchor : hovered, date_to: anchor < hovered ? hovered : anchor } : draft;
   const activeDay = grid.some((day) => day.key === focusedDate) ? focusedDate : grid.find((day) => day.inMonth)?.key;
 
@@ -62,6 +69,7 @@ export function DateRangePicker({ value, defaultRange, onChange, disabled = fals
   }
 
   function pickDate(key: string) {
+    if (single) { onChange({ date_from: key, date_to: key }); close(true); return; }
     if (!anchor) { setDraft({ date_from: key, date_to: key }); setAnchor(key); }
     else { setDraft({ date_from: key < anchor ? key : anchor, date_to: key < anchor ? anchor : key }); setAnchor(null); }
     setHovered(null); setFocusedDate(key);
@@ -138,7 +146,7 @@ export function DateRangePicker({ value, defaultRange, onChange, disabled = fals
       <svg className={open ? "date-range-picker__chevron is-open" : "date-range-picker__chevron"} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
     </button>
     {open && host && createPortal(<div ref={panel} id={`${id}-calendar`} className="date-range-picker__popup" role="dialog" aria-modal="false" aria-labelledby={`${id}-title`} style={position} {...{ popover: "manual" }} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(true); } }}>
-      <h2 className="sr-only" id={`${id}-title`}>Выберите период</h2>
+      <h2 className="sr-only" id={`${id}-title`}>{single ? "Выберите дату" : "Выберите период"}</h2>
       <div className="date-range-picker__month"><button type="button" className="date-range-picker__arrow" aria-label="Предыдущий месяц" disabled={month <= "0001-01"} onClick={() => setMonth(shiftMonth(month, -1))}><ChevronLeftIcon size={18} /></button><strong aria-live="polite">{capitalized(monthCaption(month))}</strong><button type="button" className="date-range-picker__arrow" aria-label="Следующий месяц" disabled={month >= "9999-12"} onClick={() => setMonth(shiftMonth(month, 1))}><ChevronRightIcon size={18} /></button></div>
       <div className="date-range-picker__weekdays" aria-hidden="true">{["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"].map((day) => <span key={day}>{day}</span>)}</div>
       <div className="date-range-picker__days" role="group" aria-label={`Даты: ${monthCaption(month)}`} onPointerLeave={() => setHovered(null)}>{grid.map((day, index) => {
@@ -149,10 +157,55 @@ export function DateRangePicker({ value, defaultRange, onChange, disabled = fals
         const rowStart = index % 7 === 0, rowEnd = index % 7 === 6;
         const label = calendarDate(day.key)?.toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }) ?? "Дата вне допустимого диапазона";
         const cls = ["date-range-picker__cell", inPreview && "is-in-range", from && "is-from", to && "is-to", inPreview && rowStart && "is-row-start", inPreview && rowEnd && "is-row-end"].filter(Boolean).join(" ");
-        return <span key={day.key} className={cls}><button type="button" data-date={day.key} className={`date-range-picker__day${!day.inMonth ? " is-outside" : ""}${from || to ? " is-endpoint" : ""}`} disabled={!day.selectable} tabIndex={day.key === activeDay ? 0 : -1} aria-label={`${label}${from && to ? ", начало и конец периода" : from ? ", начало периода" : to ? ", конец периода" : ""}`} aria-pressed={selected} aria-current={day.key === today ? "date" : undefined} onFocus={() => setFocusedDate(day.key)} onPointerEnter={() => anchor && setHovered(day.key)} onKeyDown={(event) => onDayKey(event, day.key)} onClick={() => pickDate(day.key)}>{day.day}</button></span>;
+        return <span key={day.key} className={cls}><button type="button" data-date={day.key} className={`date-range-picker__day${!day.inMonth ? " is-outside" : ""}${from || to ? " is-endpoint" : ""}`} disabled={!day.selectable} tabIndex={day.key === activeDay ? 0 : -1} aria-label={`${label}${single ? from ? ", выбрана" : "" : from && to ? ", начало и конец периода" : from ? ", начало периода" : to ? ", конец периода" : ""}`} aria-pressed={selected} aria-current={day.key === today ? "date" : undefined} onFocus={() => setFocusedDate(day.key)} onPointerEnter={() => anchor && setHovered(day.key)} onKeyDown={(event) => onDayKey(event, day.key)} onClick={() => pickDate(day.key)}>{day.day}</button></span>;
       })}</div>
-      <p className="date-range-picker__hint" aria-live="polite">{anchor ? "Выберите дату окончания — или примените один день" : valid ? <><strong>{formatDateRange(draft)}</strong> · {days(count)}</> : "Нажмите дату начала, затем дату окончания"}</p>
-      <footer className="date-range-picker__footer"><Button onClick={() => close(true)}>Отмена</Button><Button variant="primary" disabled={!valid} onClick={() => { if (valid) { onChange({ ...draft }); close(true); } }}>Применить</Button></footer>
+      {single ? <footer className="date-range-picker__footer">
+        <Button onClick={() => close(true)}>Отмена</Button>
+        {onClear && validDateRange(effective) ? <Button onClick={() => { onClear(); close(true); }}>Очистить</Button> : <Button onClick={() => pickDate(today)}>Сегодня</Button>}
+      </footer> : <><p className="date-range-picker__hint" aria-live="polite">{anchor ? "Выберите дату окончания — или примените один день" : valid ? <><strong>{formatDateRange(draft)}</strong> · {days(count)}</> : "Нажмите дату начала, затем дату окончания"}</p>
+      <footer className="date-range-picker__footer"><Button onClick={() => close(true)}>Отмена</Button><Button variant="primary" disabled={!valid} onClick={() => { if (valid) { onChange({ ...draft }); close(true); } }}>Применить</Button></footer></>}
     </div>, host)}
+  </div>;
+}
+
+/**
+ * One date in the site's calendar instead of the browser's field: the closed field shows «17.10.2026», a tap on a day
+ * picks it. `value` and `onChange` speak «YYYY-MM-DD»; an empty string is no date.
+ */
+export function DatePicker({ value, onChange, placeholder = "Выбрать дату", clearable = false, disabled, className = "", ariaLabel = "Дата" }: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  clearable?: boolean;
+  disabled?: boolean;
+  className?: string;
+  ariaLabel?: string;
+}) {
+  return <DateRangePicker single className={`date-picker ${className}`.trim()} value={value ? { date_from: value, date_to: value } : undefined}
+    onChange={range => onChange(range.date_from)} onClear={clearable ? () => onChange("") : undefined}
+    placeholder={placeholder} disabled={disabled} ariaLabel={ariaLabel} />;
+}
+
+/** Times of day for a deadline, every half hour. */
+export const HALF_HOURS = Array.from({ length: 48 }, (_, index) => `${String(Math.floor(index / 2)).padStart(2, "0")}:${index % 2 ? "30" : "00"}`);
+
+/**
+ * A date and a time («YYYY-MM-DDTHH:MM», local, as the browser's datetime field gave it): the site's calendar and a list
+ * of half hours. A time that is not on the half hour stays in the list as it is.
+ */
+export function DateTimePicker({ value, onChange, clearable = false, disabled, ariaLabel = "Дата и время", defaultTime = "23:30" }: {
+  value: string;
+  onChange: (value: string) => void;
+  clearable?: boolean;
+  disabled?: boolean;
+  ariaLabel?: string;
+  defaultTime?: string;
+}) {
+  const [date, time] = value ? [value.slice(0, 10), value.slice(11, 16)] : ["", ""];
+  const times = time && !HALF_HOURS.includes(time) ? [...HALF_HOURS, time].sort() : HALF_HOURS;
+  return <div className="date-time-picker">
+    <DatePicker ariaLabel={ariaLabel} value={date} clearable={clearable} disabled={disabled} onChange={next => onChange(next ? `${next}T${time || defaultTime}` : "")} />
+    <Select aria-label={`${ariaLabel}: время`} value={time} disabled={disabled || !date} onChange={next => onChange(`${date}T${next}`)}
+      options={[...(time ? [] : [{ value: "", label: "Время" }]), ...times.map(item => ({ value: item, label: item }))]} />
   </div>;
 }

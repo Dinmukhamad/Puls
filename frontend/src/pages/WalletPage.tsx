@@ -31,7 +31,7 @@ function WalletLedger({ items }: { items: WalletTransaction[] }) {
         <thead><tr><th>Дата</th><th>Оператор</th><th>Операция</th><th>Провёл</th><th className="num">Сумма</th><th className="num">Баланс после</th></tr></thead>
         <tbody>{items.map((tx) => <tr key={tx.id}>
             <td className="nowrap secondary">{dateTime(tx.created_at)}</td>
-            <td className="wallet-ledger__person"><Link to={`/admin/users/${tx.user_id}?tab=coins`}>{tx.full_name}</Link></td>
+            <td className="wallet-ledger__person"><Link to={`/admin/wallet?user=${tx.user_id}`}>{tx.full_name}</Link></td>
             <td className="wallet-ledger__operation">
               <span className="wallet-ledger__reason">{tx.reason}</span>
               <span className="wallet-ledger__meta"><span className="wallet-ledger__type">{TX_LABELS[tx.tx_type] ?? "Операция с коинами"}</span>Операция №{tx.id}{tx.shop_request_id && <Link to="/admin/requests">Покупка №{tx.shop_request_id}</Link>}</span>
@@ -43,7 +43,7 @@ function WalletLedger({ items }: { items: WalletTransaction[] }) {
       </table>
     </div>
     <ul className="card-list wallet-ledger-cards">{items.map((tx) => <li className="list-card" key={tx.id}>
-        <div className="list-card__head"><Link to={`/admin/users/${tx.user_id}?tab=coins`}>{tx.full_name}</Link><Amount tx={tx} /></div>
+        <div className="list-card__head"><Link to={`/admin/wallet?user=${tx.user_id}`}>{tx.full_name}</Link><Amount tx={tx} /></div>
         <p className="wallet-ledger__reason">{tx.reason}</p>
         <div className="wallet-ledger__meta"><span className="wallet-ledger__type">{TX_LABELS[tx.tx_type] ?? "Операция с коинами"}</span></div>
         <dl className="list-card__metrics">

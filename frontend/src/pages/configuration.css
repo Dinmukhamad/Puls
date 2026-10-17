@@ -5,20 +5,7 @@
 .configuration-nav > .btn { flex-shrink: 0; }
 .configuration-section-head { display: flex; justify-content: space-between; gap: 16px; align-items: center; flex-wrap: wrap; }
 .configuration-section-head h2 { font-size: 20px; font-weight: 650; letter-spacing: -.025em; }
-.configuration-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 310px), 1fr)); gap: 20px; }
-.configuration-item { display: flex; flex-direction: column; min-width: 0; }
-.configuration-item .card__head { align-items: flex-start; flex-wrap: nowrap; }
-.configuration-item .card__titles { flex: 1; }
-.configuration-item .card__action { flex-shrink: 0; }
-.configuration-item .card__title { overflow-wrap: anywhere; }
-.configuration-item .card__body { display: flex; flex-direction: column; gap: 18px; flex: 1; }
-.configuration-price { font-size: 30px; font-weight: 700; letter-spacing: -.035em; color: var(--gold-text); }
-.configuration-price > span { font-size: 14px; font-weight: 500; letter-spacing: 0; margin-left: 4px; }
 .configuration-description { font-size: 14px; line-height: 1.6; color: var(--text-secondary); white-space: pre-wrap; overflow-wrap: anywhere; }
-.configuration-properties { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 13px; }
-.configuration-properties dt { color: var(--text-secondary); }
-.configuration-properties dd { margin: 0; text-align: right; }
-.configuration-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto; }
 .configuration-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
 .configuration-toggle { display: flex; gap: 12px; align-items: flex-start; cursor: pointer; }
 .configuration-toggle > input { width: 20px; height: 20px; flex-shrink: 0; margin-top: 2px; accent-color: var(--accent-primary); }
@@ -40,7 +27,6 @@
 .configuration-condition { min-width: 0; padding: 20px; border: 1px solid var(--border-subtle); border-radius: var(--radius-m); }
 .configuration-condition legend { padding: 0 8px; font-weight: 600; font-size: 14px; }
 
-/* Definition cards share the same content rows; store cards keep their layout. */
 .configuration-page .page-head { align-items: center; }
 .configuration-definitions-page .configuration-filters {
   display: grid;
@@ -57,68 +43,6 @@
   height: 44px;
   min-height: 44px;
 }
-.configuration-definitions-page .definition-cards { grid-auto-rows: 1fr; }
-.definition-card {
-  display: grid;
-  grid-template-rows: 44px 66px 144px auto;
-  gap: 16px;
-  padding: 20px;
-  min-width: 0;
-}
-/* Title and status share one line: the badge is centred on the title's first line. */
-.definition-card__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; min-width: 0; }
-.definition-card__status { flex: none; display: flex; align-items: center; height: 22px; }
-.definition-card__title {
-  flex: 1 1 auto;
-  min-width: 0;
-  margin: 0;
-  font-size: 16px;
-  font-weight: 650;
-  line-height: 22px;
-  letter-spacing: -.02em;
-  overflow-wrap: anywhere;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  overflow: hidden;
-}
-.definition-card__description {
-  margin: 0;
-  font-size: 14px;
-  line-height: 22px;
-  color: var(--text-secondary);
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  overflow: hidden;
-}
-.definition-card__facts { display: grid; grid-template-rows: repeat(3, 48px); margin: 0; min-width: 0; }
-.definition-card__fact {
-  display: grid;
-  grid-template-columns: minmax(80px, .8fr) minmax(0, 1.2fr);
-  gap: 12px;
-  align-items: center;
-  padding-block: 4px;
-  border-bottom: 1px solid var(--border-subtle);
-}
-.definition-card__fact dt { font-size: 12px; line-height: 18px; color: var(--text-secondary); overflow-wrap: anywhere; }
-.definition-card__fact dd {
-  margin: 0;
-  font-size: 13px;
-  line-height: 20px;
-  font-weight: 600;
-  text-align: right;
-  overflow-wrap: anywhere;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  overflow: hidden;
-}
-.definition-card__footer { display: flex; align-items: end; justify-content: space-between; gap: 8px; min-width: 0; }
-.definition-card__footer > .btn { min-height: 40px; }
-.definition-card__footer > .btn:only-child { margin-left: auto; }
 .definition-details > .badge { justify-self: start; }
 .definition-details__facts { display: grid; gap: 16px; margin: 0; }
 .definition-details__facts > div { display: grid; grid-template-columns: minmax(90px, .65fr) minmax(0, 1.35fr); gap: 16px; padding-bottom: 16px; border-bottom: 1px solid var(--border-subtle); }
@@ -130,12 +54,7 @@
   .configuration-search { min-width: min(100%, 200px); }
   .configuration-filters > .field:not(.configuration-search) { min-width: 120px; }
   .configuration-save { align-items: stretch; flex-direction: column; }
-  .configuration-actions .btn { min-height: 44px; }
   .configuration-definitions-page .configuration-filters { grid-template-columns: minmax(0, 1fr); padding: 12px; gap: 12px; }
-  .configuration-definitions-page .definition-cards { grid-auto-rows: auto; }
-  .definition-card { grid-template-rows: auto auto auto auto; gap: 14px; padding: 18px; }
-  .definition-card__facts { grid-template-rows: repeat(3, minmax(44px, auto)); }
-  .definition-card__footer > .btn { min-height: 44px; }
   .definition-details__facts > div { grid-template-columns: minmax(80px, .6fr) minmax(0, 1.4fr); gap: 12px; }
 }
 
@@ -143,3 +62,54 @@
 .economy-split { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: var(--sp-4); }
 .month-contest__head { display: flex; flex-wrap: wrap; align-items: end; gap: var(--sp-3) var(--sp-5); }
 .month-contest__head p { margin: 0; }
+
+/*
+ * Metrics, nominations and achievements as rows (docs/PERFORMANCE_SECTION.md): the title and what it is on the left, the
+ * number that matters on the right. The whole row opens the editor, or the details for those who only read.
+ */
+.definition-list .card__head { flex-wrap: wrap; gap: var(--sp-3); }
+.definition-rows { list-style: none; margin: 0; padding: 0; }
+.definition-rows > li + li { border-top: 1px solid var(--separator); }
+.definition-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(150px, auto) 16px; align-items: center; gap: var(--sp-2) var(--sp-5); width: 100%; padding: var(--sp-3) var(--sp-5); border: 0; background: none; color: var(--text-primary); font: inherit; text-align: left; cursor: pointer; }
+.definition-row:has(.definition-row__icon) { grid-template-columns: 36px minmax(0, 1fr) minmax(150px, auto) 16px; }
+.definition-row:hover { background: var(--surface-hover); }
+.definition-row:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: -2px; border-radius: var(--radius-m); }
+.definition-row > svg { color: var(--text-tertiary); }
+.definition-row:hover > svg { color: var(--text-primary); }
+.definition-row.is-inactive .definition-row__main, .definition-row.is-inactive .definition-row__value { opacity: .6; }
+.definition-row__icon { display: grid; place-items: center; width: 36px; height: 36px; border-radius: var(--radius-m); background: var(--surface-secondary); font-size: 18px; }
+.definition-row__main { display: grid; gap: 2px; min-width: 0; }
+.definition-row__title { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); }
+.definition-row__title strong { font-weight: 600; overflow-wrap: anywhere; }
+.definition-row__meta { color: var(--text-secondary); font-size: var(--text-caption); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.definition-row__value { display: grid; justify-items: end; gap: 2px; text-align: right; }
+.definition-row__value strong { font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.definition-row__value strong.is-coin { color: var(--gold-text); }
+.definition-row__value small { color: var(--text-tertiary); font-size: var(--text-caption); white-space: nowrap; }
+@media (max-width: 600px) {
+  .definition-row { padding: var(--sp-3) var(--sp-4); }
+  .definition-row__icon { display: none; }
+  .definition-row > svg { display: none; }
+  .definition-row, .definition-row:has(.definition-row__icon) { grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); }
+  .definition-row__meta { white-space: normal; }
+  /* On a phone the number goes under the title, on one line with its note: the title keeps the whole width. */
+  .definition-row__value { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: flex-start; gap: 0 var(--sp-2); text-align: left; }
+  .definition-row__value small { white-space: normal; }
+}
+
+/* «Правила расчёта»: the groups in two columns on a wide screen, filling each from the top; one column on a phone. */
+.rules-grid { column-count: 2; column-gap: var(--sp-5); }
+.rules-grid > .card { break-inside: avoid; margin-bottom: var(--sp-5); }
+.rules-grid .configuration-example { margin-top: var(--sp-5); padding-top: var(--sp-4); border-top: 1px solid var(--separator); }
+.configuration-form-grid--single { grid-template-columns: minmax(0, 1fr); }
+/* A number and its unit in one field. */
+.input-unit { position: relative; display: block; }
+.input-unit > .input { width: 100%; padding-right: 64px; }
+.input-unit > span { position: absolute; top: 50%; right: 14px; transform: translateY(-50%); color: var(--text-tertiary); font-size: var(--text-caption); pointer-events: none; }
+/* The save panel: a quiet line while nothing changed, a bar at the bottom of the screen once something did. */
+.rules-save { display: flex; align-items: center; justify-content: flex-end; gap: var(--sp-3); flex-wrap: wrap; padding: var(--sp-3) var(--sp-4); border-radius: var(--radius-l); }
+.rules-save > span { margin-right: auto; color: var(--text-secondary); font-size: var(--text-caption); }
+.rules-save.is-dirty { position: sticky; bottom: var(--sp-4); z-index: 20; background: var(--surface-opaque); border: 1px solid var(--border-strong); box-shadow: 0 8px 30px #0001; }
+.rules-save.is-dirty > span { color: var(--text-primary); font-size: var(--text-secondary-size); }
+@media (max-width: 1100px) { .rules-grid { column-count: 1; } }
+@media (max-width: 767px) { .rules-save.is-dirty { bottom: calc(var(--tabbar-height) + 10px + var(--safe-bottom) + var(--sp-3)); } .rules-save.is-dirty > .btn { flex: 1; } }

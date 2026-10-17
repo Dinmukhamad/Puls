@@ -39,7 +39,7 @@ function fixture(t) {
     const raw = Object.fromEntries([
       'setDepartment', 'setDepartmentWorld', 'setEstates', 'setBuild', 'focusEstate', 'focusWorld', 'travelTo', 'skipTravel', 'dispose', 'setActive', 'setLevels', 'setLabels', 'setMascot', 'setPlots',
       'setQuests', 'setTimeOfDay', 'setControls', 'select', 'setTraffic',
-      'focusMascot', 'focusPlot', 'focusQuest', 'zoom', 'rotate', 'tilt', 'reset',
+      'focusMascot', 'focusQuest', 'zoom', 'rotate', 'tilt', 'reset',
     ].map(name => [name, (...args) => calls.push([name, ...args])]));
     const engine = { host, canvas, options, raw, calls, called: name => calls.filter(call => call[0] === name) };
     engines.push(engine);
@@ -53,7 +53,7 @@ function fixture(t) {
 
 function page(overrides = {}) {
   const events = [];
-  const callbacks = Object.fromEntries(['onWorldPick', 'onArrival', 'onJourney', 'onEstate', 'onSelect', 'onView', 'onPlot', 'onQuest', 'onReady', 'onLost', 'onRestored', 'onProgress']
+  const callbacks = Object.fromEntries(['onWorldPick', 'onArrival', 'onJourney', 'onEstate', 'onSelect', 'onView', 'onQuest', 'onReady', 'onLost', 'onRestored', 'onProgress']
     .map(name => [name, (...args) => events.push([name, ...args])]));
   return {
     events,
@@ -65,7 +65,7 @@ function emitAll(options) {
   options.onWorldPick?.('station'); options.onArrival?.('sales'); options.onJourney?.('departing'); options.onEstate?.({ kind: 'object', district: 'support-team-1', object: 1 });
   options.onSelect('driver');
   options.onView({ azimuth: 2, polar: 1, distance: 40, target: [1, 2, 3] });
-  options.onPlot?.('plot-1'); options.onQuest?.(1);
+  options.onQuest?.(1);
   options.onProgress?.(.7); options.onLost(); options.onRestored?.(); options.onReady();
 }
 
@@ -180,7 +180,7 @@ test('reattachment refreshes progress and callbacks but keeps traffic and an unc
   assert.deepEqual(engine.called('setLevels'), [['setLevels', newPage.options.levels, ['crm']]]);
   emitAll(engine.options);
   assert.deepEqual(oldPage.events, []);
-  assert.deepEqual(newPage.events.map(event => event[0]), ['onWorldPick', 'onArrival', 'onJourney', 'onEstate', 'onSelect', 'onView', 'onPlot', 'onQuest', 'onProgress', 'onLost', 'onReady', 'onRestored', 'onReady']);
+  assert.deepEqual(newPage.events.map(event => event[0]), ['onWorldPick', 'onArrival', 'onJourney', 'onEstate', 'onSelect', 'onView', 'onQuest', 'onProgress', 'onLost', 'onReady', 'onRestored', 'onReady']);
 });
 
 test('selection changes from both the page and the canvas are remembered across visits', t => {
@@ -225,17 +225,16 @@ test('changing owner, city key or logging out disposes the previous scene and ne
 
 test('a capability change rebuilds with the new permitted actions instead of retaining the old permissions', t => {
   const { acquire, engines } = fixture(t);
-  // CityMap includes canBuild/canQuest in the key: callback presence controls
-  // whether the renderer creates interactive plot/quest controls at all.
-  const first = acquire({ key: 'x4-build0-quest0', options: page({ onPlot: undefined, onQuest: undefined }).options });
-  assert.equal(engines[0].options.onPlot, undefined);
+  // CityMap includes canQuest in the key: callback presence controls
+  // whether the renderer creates interactive quest controls at all.
+  const first = acquire({ key: 'x4-quest0', options: page({ onQuest: undefined }).options });
   assert.equal(engines[0].options.onQuest, undefined);
   first.release();
-  const newPage = page(), second = acquire({ key: 'x4-build1-quest1', options: newPage.options });
+  const newPage = page(), second = acquire({ key: 'x4-quest1', options: newPage.options });
   assert.equal(second.reused, false);
   assert.equal(engines[0].called('dispose').length, 1);
-  engines[1].options.onPlot('plot-1'); engines[1].options.onQuest(2);
-  assert.deepEqual(newPage.events, [['onPlot', 'plot-1'], ['onQuest', 2]]);
+  engines[1].options.onQuest(2);
+  assert.deepEqual(newPage.events, [['onQuest', 2]]);
 });
 
 test('a failed retained engine is recreated, while an engine that finishes loading off-page is reused', t => {
@@ -341,7 +340,7 @@ class RuntimeElement extends EventTarget {
   contains(node) { return node === this || this.children.some(child => child.contains?.(node)); }
   getBoundingClientRect() { return { left: 0, top: 0, right: this.clientWidth, bottom: this.clientHeight, width: this.clientWidth, height: this.clientHeight }; }
 }
-function startupFixture(t) {
+function startupFixture(t, overrides = {}) {
   const names = ['document', 'window', 'ResizeObserver', 'HTMLElement', 'Node', '__pulsCityStartup', 'setTimeout'];
   const originals = new Map(names.map(name => [name, Object.getOwnPropertyDescriptor(globalThis, name)])), timers = [];
   const rendererReady = deferred(), modelsReady = deferred(), modelsRequested = deferred(), compiled = deferred(), calls = [];
@@ -371,7 +370,7 @@ function startupFixture(t) {
     if (name === 'createLoop') { state.render = args[0].render; return piece(); }
     if (name === 'createQuality') return piece({ settings: { fps: 60, resolution: 1 }, onChange: () => noop });
     if (name === 'createSky') return piece({ sun: null });
-    if (name === 'createDistricts') { const hit = new startupCity.THREE.Object3D(); hit.userData.district = 'crm'; state.pickables = [hit]; return piece({ anchors: new Map(), pickables: state.pickables, startGrowth() { calls.push(['growth']); return 'crm'; } }); }
+    if (name === 'createDistricts') { calls.push(['districts', args[1].grown]); const hit = new startupCity.THREE.Object3D(); hit.userData.district = 'crm'; state.pickables = [hit]; return piece({ anchors: new Map(), pickables: state.pickables, startGrowth() { calls.push(['growth']); return 'crm'; } }); }
     if (name === 'createPicker') { state.learningPickables = args[2]; state.learningPickerHandlers = args[3]; return piece(); }
     if (name === 'createMascot') return piece({ nameAnchor: new startupCity.THREE.Vector3(), focusPoint: new startupCity.THREE.Vector3() });
     if (name === 'createDepartmentWorld') return piece({
@@ -383,7 +382,7 @@ function startupFixture(t) {
     return piece();
   };
   const host = new RuntimeElement(), options = page({ world: 'x4', onReady: () => calls.push(['ready']), onLost: () => calls.push(['lost']),
-    onRestored: () => { calls.push(['restored']); state.restoration?.resolve(); },
+    onRestored: () => { calls.push(['restored']); state.restoration?.resolve(); }, ...overrides,
   }).options;
   const control = startupCity.createCity(host, options);
   t.after(() => {
@@ -495,6 +494,21 @@ test('context restoration rebuilds the real runtime and returns to the last esta
   assert.ok(restoredCalls.findIndex(call => call[0] === 'ready') > focusIndex);
   s.frame();
   assert.equal(s.calls.slice(beforeRestore).filter(call => call[0] === 'estate-focus').length, 1, 'the restored destination is consumed once');
+  assert.equal(s.calls.some(call => call[0] === 'lost'), false);
+});
+
+test('a district grows once: a scene rebuilt after a restored context stands it already grown', async t => {
+  const s = startupFixture(t, { grown: ['crm'] }), built = () => s.calls.filter(call => call[0] === 'districts').map(call => call[1]);
+  s.rendererReady.resolve(); await s.modelsRequested.promise;
+  await s.finishModels(); s.frame();
+  assert.deepEqual(built(), [['crm']], 'the first scene waits to grow it');
+  assert.equal(s.calls.filter(call => call[0] === 'growth').length, 1);
+  await s.restore(); s.frame();
+  assert.deepEqual(built().at(-1), [], 'the restored scene does not celebrate it again');
+  // A level-up during the visit grows live, and is not replayed by a later restoration either.
+  s.control.setLevels({ crm: 2 }, ['crm']);
+  await s.restore(); s.frame();
+  assert.deepEqual(built().at(-1), []);
   assert.equal(s.calls.some(call => call[0] === 'lost'), false);
 });
 

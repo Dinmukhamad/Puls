@@ -1,8 +1,9 @@
 /**
- * The plots of the operator's own district (docs/CITY_BUILDS.md): squares on the green belt between the
+ * The plots behind the learning districts (docs/CITY_BUILDS.md): squares on the green belt between the
  * inner ring road and the promenade, either side of every open district, facing the lagoon. The server
- * says which are open and what stands on them; this file only knows where they are and how every
- * building is laid out on one, from the same pieces as the courtyards of the complexes.
+ * says what the operator built on them; this file knows where they are, what stands on the others
+ * (plotBuilding) and how every building is laid out on one, from the same pieces as the courtyards of
+ * the complexes.
  */
 import type { Placement, Point, Surface, SurfaceKind, PlacementKind } from "./types";
 
@@ -27,6 +28,26 @@ export function plotSpots(spec: PlotSpec, angles: Map<string, number>, inner: nu
       return { key: `${district}-${i}`, district, x, z, rotation: Math.atan2(-x, -z), size };
     });
   });
+}
+
+/**
+ * Plots are no longer sold (docs/CITY_BUILDS.md, «Участки застроены»): what the operator built there stays, every other
+ * plot has a building of its own, the same for everyone — two houses and two parks or yards behind each district.
+ */
+const BUILT_UP: Record<string, BuildingKey> = {
+  "academy-0": "house", "academy-1": "garden", "academy-2": "playground", "academy-3": "cottage",
+  "driver-0": "cottage", "driver-1": "sports", "driver-2": "fountain", "driver-3": "house",
+  "crm-0": "tower", "crm-1": "gazebo", "crm-2": "garden", "crm-3": "house",
+  "dispatch-0": "house", "dispatch-1": "playground", "dispatch-2": "sports", "dispatch-3": "tower",
+};
+/** What stands on a plot: the operator's building, else the plot's own. */
+export function plotBuilding(plot: Plot, item: BuildingKey | null): BuildingKey {
+  if (item) return item;
+  const own = BUILT_UP[plot.key];
+  if (own) return own;
+  let hash = 0;
+  for (const ch of plot.key) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
+  return BUILDING_KEYS[hash % BUILDING_KEYS.length];
 }
 
 /** Is `p` within `pad` of the plot's square? */

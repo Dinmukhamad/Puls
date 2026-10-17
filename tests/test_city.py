@@ -12,7 +12,7 @@ from app.models.crm import CrmAppeal
 from app.models.driver import DriverOrder, DriverProfile
 from app.models.driver_shift import DriverShift
 from app.models.enums import Role
-from app.models.user import CoinAccount
+from app.models.user import CoinAccount, User
 from app.services.city import default_missions
 from app.services.crm_catalog import default_categories
 from tests.conftest import auth, login, make_group, make_user
@@ -105,6 +105,47 @@ async def test_city_reads_never_award_and_server_rejects_forged_progress(client,
     assert await session.scalar(select(func.count()).select_from(CityAward)) == 0
     assert (await client.get(BASE)).status_code == 401
     assert (await client.get(ADMIN + "/participants", headers=headers)).status_code == 403
+
+
+async def test_seen_district_stages_belong_to_the_account_and_only_go_up(
+    client, session, operator, head
+):
+    # Another browser of the same operator reads what the first one already celebrated.
+    first = auth(await login(client, operator.login))
+    second = auth(await login(client, operator.login))
+    assert (await client.get(BASE, headers=first)).json()["levels_seen"] is None
+    # A record without learning districts is still a record: the city does not ask again.
+    empty = await client.post(BASE + "/levels/seen", headers=first, json={"levels": {}})
+    assert empty.json() == {"levels_seen": {}}
+    assert (await client.get(BASE, headers=first)).json()["levels_seen"] == {}
+    seen = await client.post(
+        BASE + "/levels/seen", headers=first, json={"levels": {"dispatch": 3, "crm": 1}}
+    )
+    assert seen.json() == {"levels_seen": {"dispatch": 3, "crm": 1}}
+    assert (await client.get(BASE, headers=second)).json()["levels_seen"] == {
+        "dispatch": 3,
+        "crm": 1,
+    }
+    # An older tab cannot bring a celebration back; unknown districts are not kept.
+    older = await client.post(
+        BASE + "/levels/seen", headers=second, json={"levels": {"dispatch": 2, "nowhere": 4}}
+    )
+    assert older.json() == {"levels_seen": {"dispatch": 3, "crm": 1}}
+    grown = await client.post(BASE + "/levels/seen", headers=second, json={"levels": {"crm": 2}})
+    assert grown.json()["levels_seen"] == {"dispatch": 3, "crm": 2}
+    for wrong in ({"dispatch": 6}, {"dispatch": 0}, {"x" * 41: 2}):
+        bad = await client.post(BASE + "/levels/seen", headers=first, json={"levels": wrong})
+        assert bad.status_code == 422
+    # Staff previews and an inspected operator's city neither read nor write it.
+    staff = auth(await login(client, head.login))
+    assert (await client.get(BASE, headers=staff)).json()["levels_seen"] is None
+    assert (await client.get(f"{ADMIN}/operators/{operator.id}", headers=staff)).json()[
+        "levels_seen"
+    ] is None
+    denied = await client.post(BASE + "/levels/seen", headers=staff, json={"levels": {"crm": 5}})
+    assert denied.status_code == 403
+    await session.refresh(operator)
+    assert operator.city_levels_seen == {"dispatch": 3, "crm": 2}
 
 
 @pytest.mark.parametrize("home_city", [None, "sales", "support"])
@@ -259,18 +300,20 @@ async def test_real_driver_chain_ignores_foreign_cancelled_and_preview_orders(
     assert await session.scalar(select(func.count()).select_from(CoinTransaction)) == 3
 
 
-async def test_crm_chain_requires_own_category_and_staff_closed_ticket(client, operator, session):
-    headers = auth(await login(client, operator.login))
+async def test_crm_chain_requires_verified_training_not_raw_or_staff_closed_tickets(
+    client, operator, session
+):
+    from tests.conftest import login_with_work_sites
+    from tests.test_crm_training import IMAGE, appeal_payload, save, start
+
+    headers = auth(await login_with_work_sites(client, operator.login))
     other = await make_user(session, login="other")
     await appeal(session, other.id, phone=True, ticket=True, status="closed")
     await claim(client, headers, "welcome")
     assert (await claim(client, headers, "crm_first")).status_code == 409
     await appeal(session, operator.id)
-    assert (await claim(client, headers, "crm_first")).status_code == 200
-    assert (await claim(client, headers, "crm_phone")).status_code == 409
+    assert (await claim(client, headers, "crm_first")).status_code == 409
     ticket = await appeal(session, operator.id, phone=True, ticket=True, status="new")
-    assert (await claim(client, headers, "crm_phone")).status_code == 200
-    assert (await claim(client, headers, "crm_closed")).status_code == 409
     staff = await make_user(session, login="trainer", role=Role.TRAINER)
     staff_headers = auth(await login(client, staff.login))
     response = await client.patch(
@@ -279,7 +322,16 @@ async def test_crm_chain_requires_own_category_and_staff_closed_ticket(client, o
         json={"status": "closed"},
     )
     assert response.status_code == 200, response.text
-    assert (await claim(client, headers, "crm_closed")).status_code == 200
+    # Business processing of an arbitrary ticket is separate from task proof.
+    assert (await claim(client, headers, "crm_first")).status_code == 409
+    for key in ("crm_first", "crm_phone", "crm_closed"):
+        item = await start(client, headers, key)
+        saved = await save(
+            client, headers, appeal_payload(item), files=IMAGE if key == "crm_phone" else None
+        )
+        assert saved.status_code == 201, saved.text
+        assert saved.json()["status"] == ("recorded" if key == "crm_first" else "new")
+        assert (await claim(client, headers, key)).status_code == 200
     result = (await client.get(BASE, headers=headers)).json()
     assert result["xp"] == 505 and result["balance"] == 210
 
@@ -792,3 +844,48 @@ async def test_trainers_edit_the_situations_and_new_days_use_them(client, sessio
     # Today's deal (the first read) uses the enabled situations only.
     rows = (await client.get(BASE, headers=me)).json()["quests"]["items"]
     assert sorted(q["text"] for q in rows) == [f"Своя ситуация номер {i}" for i in range(3)]
+
+
+async def test_site_tour_is_ready_once_the_tour_is_finished_and_pays_once(
+    client, session, operator, supervisor
+):
+    headers = auth(await login(client, operator.login))
+    finish = lambda h: client.post(f"{BASE}/tour/finish", headers=h)  # noqa: E731
+
+    async def tour():
+        data = (await client.get(BASE, headers=headers)).json()
+        return next(m for m in data["missions"] if m["key"] == "site_tour"), data
+
+    row, data = await tour()
+    # The Academy's second mission, right after the welcome, and started from the city itself.
+    assert [m["key"] for m in data["missions"]][:2] == ["welcome", "site_tour"]
+    assert row["district"] == "academy" and row["state"] == "locked"
+    assert row["path"] == "/training/city?district=academy&mission=site_tour"
+    assert (row["title"], row["target"], row["xp"], row["coins"]) == (
+        "Как устроен Puls",
+        1,
+        40,
+        50,
+    )
+    assert (await claim(client, headers, "welcome")).status_code == 200
+    row, _ = await tour()
+    assert row["state"] == "available" and row["current"] == 0
+    assert (await claim(client, headers, "site_tour")).status_code == 409
+    # The first finish counts; going round again keeps it.
+    assert (await finish(headers)).json() == {"site_tour": True}
+    first = (await session.get(User, operator.id, populate_existing=True)).site_tour_at
+    assert first is not None
+    assert (await finish(headers)).status_code == 200
+    assert (await session.get(User, operator.id, populate_existing=True)).site_tour_at == first
+    row, _ = await tour()
+    assert row["state"] == "ready" and row["current"] == 1
+    claimed = await claim(client, headers, "site_tour")
+    assert claimed.status_code == 200 and claimed.json()["coins"] == 50
+    assert (await claim(client, headers, "site_tour")).json()["already_claimed"] is True
+    account = await session.get(CoinAccount, operator.id, populate_existing=True)
+    assert account.balance == 50
+    row, _ = await tour()
+    assert row["state"] == "completed"
+    # Staff look round the site without the operator's mission.
+    staff = auth(await login(client, supervisor.login))
+    assert (await finish(staff)).status_code == 403

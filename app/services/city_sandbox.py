@@ -9,10 +9,10 @@ reaches operators, the staff report, the coin journal or the real districts' his
 city's views ask only for configured districts, and the operators' own views skip the prefix.
 
 There administrators build and lay small things for free, set any building's stage up or down, take
-buildings and small things away, set the headquarters' stage, open shared projects and build or
-cancel them at once, and clear a city's test land to start again. The rules of the land stay the
-real ones (all land available, free cells, parks gathering from one owner's squares), so what
-works here works in the city.
+buildings and small things away, move small things and turn lamps and benches, set the
+headquarters' stage, open shared projects and build or cancel them at once, and clear a city's
+test land to start again. The rules of the land stay the real ones (all land available, free
+cells, parks gathering from one owner's squares), so what works here works in the city.
 """
 
 from sqlalchemy import delete, select
@@ -46,7 +46,9 @@ from app.services.city_estate import (
     public_object,
     release_cells,
     require_public_square,
+    shift_decor,
     take_cells,
+    turn_decor,
     widen,
     world_districts,
 )
@@ -221,6 +223,26 @@ async def take_away(session, user, body):
     )
     await commit(session)
     return {"removed": len(found)}
+
+
+async def move_decor(session, user, body):
+    """Small things of a test district onto other free cells, whoever laid them."""
+    district_id = test_id(body.district_id)
+    await lock_user(session, user.id)
+    moved = await shift_decor(session, district_id, body.moves, may=lambda cell: True)
+    event(session, district_id, "sandbox", actor=user, payload={"do": "move", "cells": moved})
+    await commit(session)
+    return {"moved": moved}
+
+
+async def turn_decor_cells(session, user, body):
+    """Lamps and benches of a test district turned to a side of their cells, whoever laid them."""
+    district_id = test_id(body.district_id)
+    await lock_user(session, user.id)
+    turned = await turn_decor(session, district_id, body.cells, may=lambda cell: True)
+    event(session, district_id, "sandbox", actor=user, payload={"do": "turn", "cells": turned})
+    await commit(session)
+    return {"turned": turned}
 
 
 async def set_level(session, user, object_id, body):
