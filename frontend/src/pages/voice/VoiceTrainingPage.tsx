@@ -59,7 +59,7 @@ export function VoiceTrainingPage() {
     if (draftKey) try { sessionStorage.setItem(draftKey, JSON.stringify({ text, request: requestRef.current })); } catch { /* The conversation still works with browser storage disabled. */ }
   }, [draftKey]);
   const onTranscript = useCallback((text: string) => { if (inputKeyRef.current === draftKey) saveDraft(text); }, [draftKey, saveDraft]);
-  const speech = useVoiceSpeech({ onTranscript });
+  const speech = useVoiceSpeech({ onTranscript, voicePreferenceKey: `puls:voice-output:${user?.id ?? "account"}` });
   const { speak, stopSpeaking, stopRecording, cancel } = speech;
   useEffect(() => {
     let text = "";
@@ -100,9 +100,9 @@ export function VoiceTrainingPage() {
   useEffect(() => {
     if (!current || current.state !== "in_progress" || !lastDriver || !speech.support.synthesis || spokenRef.current === spokenKey) return;
     spokenRef.current = spokenKey;
-    void speak(lastDriver.text);
+    void speak(lastDriver.text, current.persona);
     return () => { spokenRef.current = ""; stopSpeaking(); };
-  }, [spokenKey, current?.state, speech.support.synthesis, speak, stopSpeaking]); // Saved inspections do not replay the same driver line.
+  }, [spokenKey, current?.state, current?.persona, speech.support.synthesis, speak, stopSpeaking]); // Saved inspections and voice selection do not replay the same driver line.
 
   const beginRecording = async () => {
     if (pending || current?.can_finish || speech.speaking || speech.recording || speech.muted) return;
@@ -145,7 +145,8 @@ export function VoiceTrainingPage() {
         <button className={`voice-button voice-mic-check ${speech.micChecked ? "is-checked" : ""}`} disabled={speech.checkingMic || !speech.support.microphone} onClick={() => void speech.checkMicrophone()}><VoiceIcon name={speech.micChecked ? "check" : "mic"} />{speech.checkingMic ? "Проверяем микрофон…" : speech.micChecked ? "Микрофон доступен" : "Проверить микрофон"}</button>
         {speech.micChecked && <p className="voice-caption" role="status">{speech.micSignal === "quiet" ? "Сигнал тихий. Проверь громкость или попробуй говорить ближе к микрофону." : speech.micSignal === "detected" ? "Слышим тебя. Можно начинать." : "Доступ получен. Если распознавание не сработает, введи ответ текстом."}</p>}
         {!speech.support.recognition && <p className="voice-caption">В этом браузере нет распознавания речи. Тренировку можно пройти с текстовыми ответами.</p>}
-        <button className="voice-button voice-button--primary voice-start" disabled={pending || !selectedScenario} onClick={() => { if (!actionLock.current) { actionLock.current = true; start.mutate(); } }}><VoiceIcon name="play" />{start.isPending ? "Начинаем…" : "Начать разговор"}<VoiceIcon name="arrow" size={18} /></button>
+        {speech.support.synthesis && <VoiceSettings speech={speech} disabled={pending || speech.checkingMic} onPreview={() => void speak("Здравствуйте. Мне нужно поменять номер телефона. Подскажите, как это сделать?", persona)} />}
+        <button className="voice-button voice-button--primary voice-start" disabled={pending || !selectedScenario} onClick={() => { if (!actionLock.current) { actionLock.current = true; cancel(); start.mutate(); } }}><VoiceIcon name="play" />{start.isPending ? "Начинаем…" : "Начать разговор"}<VoiceIcon name="arrow" size={18} /></button>
         <p className="voice-privacy">Распознавание выполняет браузер и его голосовой сервис. На сервер тренажёра отправляется проверенный текст ответа.</p>
       </aside></div>
       <VoiceHistory attempts={catalog.data.attempts} />
@@ -156,12 +157,13 @@ export function VoiceTrainingPage() {
       <div className="voice-attempt-heading"><div><span className="voice-eyebrow">УЧЕБНЫЙ ЗВОНОК</span><h1>{current.title}</h1></div><span className="voice-tag">{personaLabel(current.persona)} водитель</span></div>
       {current.state === "in_progress" ? <div className="voice-call-grid"><section className="voice-panel voice-conversation" aria-label="Разговор с водителем"><div className="voice-conversation-top"><span className="voice-live-dot" /> Учебная линия <span>Реплика {current.turn + 1}</span></div><div className="voice-speaker"><VoiceOrb active={speech.speaking || speech.recording} recording={speech.recording} /><span className="voice-eyebrow">{speech.recording ? "ОПЕРАТОР" : "ВОДИТЕЛЬ"}</span><h2>{speech.recording ? "Слушаем тебя" : current.driver.name.split(" ").slice(0, 2).join(" ")}</h2><p className={`voice-status ${speech.recording ? "is-recording" : ""}`} role="status" aria-live="polite">{status}</p></div>
         {current.can_finish && <div className="voice-resolved" role="status"><VoiceIcon name="check" /><p>Водителю понятен следующий шаг.<br /><small>Заверши тренировку, чтобы посмотреть разбор.</small></p></div>}
-        <div className="voice-call-controls"><button className={`voice-button voice-answer ${speech.recording ? "is-recording" : "voice-button--primary"}`} disabled={pending || speech.speaking || (!speech.recording && (current.can_finish || speech.muted || !speech.support.recognition))} onClick={() => speech.recording ? endRecording() : void beginRecording()}><VoiceIcon name={speech.recording ? "stop" : "mic"} />{speech.recording ? "Завершить запись" : draft ? "Перезаписать ответ" : "Ответить"}</button><div className="voice-secondary-controls"><button className="voice-icon-button" title={speech.speaking ? "Остановить озвучку" : "Повторить реплику"} aria-label={speech.speaking ? "Остановить озвучку" : "Повторить реплику"} disabled={pending || speech.recording || !lastDriver || !speech.support.synthesis} onClick={() => speech.speaking ? stopSpeaking() : lastDriver && void speak(lastDriver.text)}><VoiceIcon name={speech.speaking ? "stop" : "repeat"} /></button><button className={`voice-icon-button ${speech.muted ? "is-muted" : ""}`} title={speech.muted ? "Включить микрофон" : "Выключить микрофон"} aria-label={speech.muted ? "Включить микрофон" : "Выключить микрофон"} aria-pressed={speech.muted} disabled={pending || !speech.support.recognition} onClick={() => { speech.setMuted(!speech.muted); if (speech.recording) setReviewing(true); }}><VoiceIcon name={speech.muted ? "muted" : "mic"} /></button></div></div>
+        <div className="voice-call-controls"><button className={`voice-button voice-answer ${speech.recording ? "is-recording" : "voice-button--primary"}`} disabled={pending || speech.speaking || (!speech.recording && (current.can_finish || speech.muted || !speech.support.recognition))} onClick={() => speech.recording ? endRecording() : void beginRecording()}><VoiceIcon name={speech.recording ? "stop" : "mic"} />{speech.recording ? "Завершить запись" : draft ? "Перезаписать ответ" : "Ответить"}</button><div className="voice-secondary-controls"><button className="voice-icon-button" title={speech.speaking ? "Остановить озвучку" : "Повторить реплику"} aria-label={speech.speaking ? "Остановить озвучку" : "Повторить реплику"} disabled={pending || speech.recording || !lastDriver || !speech.support.synthesis} onClick={() => speech.speaking ? stopSpeaking() : lastDriver && void speak(lastDriver.text, current.persona)}><VoiceIcon name={speech.speaking ? "stop" : "repeat"} /></button><button className={`voice-icon-button ${speech.muted ? "is-muted" : ""}`} title={speech.muted ? "Включить микрофон" : "Выключить микрофон"} aria-label={speech.muted ? "Включить микрофон" : "Выключить микрофон"} aria-pressed={speech.muted} disabled={pending || !speech.support.recognition} onClick={() => { speech.setMuted(!speech.muted); if (speech.recording) setReviewing(true); }}><VoiceIcon name={speech.muted ? "muted" : "mic"} /></button></div></div>
         {speech.recording && <p className="voice-record-hint" role="status">{speech.interimTranscript || "Говори, затем нажми «Завершить запись»."}</p>}
         {speech.muted && <p className="voice-caption voice-center">Микрофон выключен. Включи его или введи ответ текстом.</p>}
         {!speech.support.synthesis && <p className="voice-caption voice-center">Озвучка недоступна. Реплика водителя есть в расшифровке ниже.</p>}
         {!current.can_finish && (draft || reviewing || textMode || !speech.support.recognition) && <form className="voice-answer-review" onSubmit={event => { event.preventDefault(); submitAnswer(); }}><div className="voice-review-heading"><label htmlFor="voice-answer-text">{speech.recording ? "Распознаём ответ" : "Проверь ответ перед отправкой"}</label><span>Водитель ещё не слышит этот текст</span></div><textarea id="voice-answer-text" value={draft} maxLength={4000} rows={4} disabled={pending || speech.recording} onChange={event => saveDraft(event.target.value)} placeholder="Напиши, что ты скажешь водителю…" /><div className="voice-review-actions"><span>{draft.length}/4000</span><button className="voice-button voice-button--primary" type="submit" disabled={pending || speech.recording || speech.speaking || !draft.trim()}>{answer.isPending ? "Обрабатываем…" : "Отправить ответ"}<VoiceIcon name="arrow" size={17} /></button></div></form>}
         {!current.can_finish && !speech.recording && !textMode && speech.support.recognition && !draft && <button className="voice-text-toggle" onClick={() => { setTextMode(true); setReviewing(true); }}>Ввести ответ текстом</button>}
+        {speech.support.synthesis && <details className="voice-call-settings"><summary>Настройка голоса</summary><VoiceSettings speech={speech} disabled={pending || speech.recording} previewLabel="Повторить реплику" onPreview={() => { if (lastDriver) void speak(lastDriver.text, current.persona); }} /></details>}
         <VoiceTranscriptView attempt={current} forceOpen={!speech.support.synthesis} />
         <div className="voice-finish-row"><p>Прогресс и отправленные ответы сохраняются в аккаунте.{draft && <small>Неотправленный черновик не попадёт в разбор.</small>}</p><button className="voice-finish" disabled={pending || speech.recording} onClick={finishAttempt}>{finish.isPending ? "Сохраняем…" : "Завершить тренировку"}</button></div>
       </section><VoiceSituation attempt={current} /></div> : <VoiceResults attempt={current} pending={pending} onRetry={retryTurn} reviewOpen={reviewOpen} onReviewOpen={() => setReviewOpen(true)} reviewComment={reviewComment} onReviewComment={setReviewComment} reviewing={review.isPending} onReview={() => review.mutate()} onReviewCancel={() => setReviewOpen(false)} />}
@@ -170,6 +172,21 @@ export function VoiceTrainingPage() {
     {speech.error && <section className="voice-panel voice-speech-error" role="alert"><strong>Не удалось использовать голос</strong><p>{speech.error}</p><div className="voice-inline-actions"><button className="voice-button" disabled={pending || speech.recording || speech.checkingMic || !speech.support.microphone} onClick={() => void speech.checkMicrophone()}>Проверить микрофон снова</button>{attemptId && current?.state === "in_progress" && <button className="voice-button" onClick={() => { setTextMode(true); setReviewing(true); speech.clearError(); }}>Продолжить текстом</button>}<button className="voice-text-toggle" onClick={speech.clearError}>Закрыть</button></div><small>Текущий этап разговора сохранён.</small></section>}
     {mutationError && <section className="voice-panel voice-error" role="alert"><strong>Действие не подтверждено</strong><p>{errorText(mutationError)}</p><p>Отправленный ответ мог сохраниться. Проверь прогресс перед повторной отправкой; черновик останется доступен.</p>{attemptId && <button className="voice-button" disabled={attempt.isFetching} onClick={() => void attempt.refetch()}>Проверить сохранённый прогресс</button>}</section>}
   </main>;
+}
+
+function VoiceSettings({ speech, disabled, onPreview, previewLabel = "Прослушать голос" }: {
+  speech: ReturnType<typeof useVoiceSpeech>; disabled: boolean; onPreview: () => void; previewLabel?: string;
+}) {
+  const savedVoiceMissing = speech.selectedVoiceURI && !speech.russianVoices.some(voice => voice.voiceURI === speech.selectedVoiceURI);
+  return <div className="voice-output-settings">
+    <label>Голос водителя<select value={speech.selectedVoiceURI} disabled={disabled || speech.speaking} onChange={event => speech.selectVoice(event.target.value)}>
+      <option value="">Автоматически · рекомендуемый</option>
+      {savedVoiceMissing && <option value={speech.selectedVoiceURI}>Сохранённый голос недоступен</option>}
+      {speech.russianVoices.map(voice => <option key={voice.voiceURI} value={voice.voiceURI}>{voice.name}</option>)}
+    </select></label>
+    <button className="voice-button" disabled={disabled} onClick={() => speech.speaking ? speech.stopSpeaking() : onPreview()}><VoiceIcon name={speech.speaking ? "stop" : "play"} size={17} />{speech.speaking ? "Остановить озвучку" : previewLabel}</button>
+    <p className="voice-caption">Темп и паузы зависят от характера водителя. Доступные голоса определяет браузер.</p>
+  </div>;
 }
 
 export function VoiceHistory({ attempts }: { attempts: VoiceAttemptSummary[] }) {

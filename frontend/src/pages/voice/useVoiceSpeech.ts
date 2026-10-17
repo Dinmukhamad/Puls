@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createVoicePlaybackPlan, rankRussianVoices, type VoicePlaybackPersona } from "./voicePlayback";
 
 // Web Speech recognition is still vendor-prefixed in some browsers and is not
 // included in TypeScript's DOM declarations. Keep its small interface local.
@@ -46,19 +47,42 @@ interface RecordingSession {
   stopTimer: number | null;
 }
 interface SpeakingSession {
-  utterance: SpeechSynthesisUtterance;
+  utterance: SpeechSynthesisUtterance | null;
   resolve: (completed: boolean) => void;
   timer: number | null;
+  removeVoiceListener: (() => void) | null;
 }
 
 export type MicSignal = "unknown" | "detected" | "quiet";
 export interface VoiceSpeechOptions {
   /** Current full draft, including interim recognition. Review it before sending. */
   onTranscript?: (text: string) => void;
+  voicePreferenceKey?: string;
 }
 
 function browser(): SpeechWindow | null {
   return typeof window === "undefined" ? null : window as SpeechWindow;
+}
+
+function availableRussianVoices(): SpeechSynthesisVoice[] {
+  try { return rankRussianVoices(browser()?.speechSynthesis?.getVoices() ?? []); } catch { return []; }
+}
+
+function storedVoice(key: string): string {
+  try { return browser()?.localStorage.getItem(key) ?? ""; } catch { return ""; }
+}
+
+function clearPlayback(session: SpeakingSession) {
+  if (session.timer !== null) window.clearTimeout(session.timer);
+  session.timer = null;
+  session.removeVoiceListener?.();
+  session.removeVoiceListener = null;
+  if (session.utterance) {
+    session.utterance.onstart = null;
+    session.utterance.onend = null;
+    session.utterance.onerror = null;
+    session.utterance = null;
+  }
 }
 
 function microphoneError(error: unknown): string {
@@ -110,7 +134,7 @@ function releaseMic(check: MicCheck) {
  * `speak` settles on completion/cancellation, including unsupported TTS; callers
  * must keep the driver's text available as an accessible fallback.
  */
-export function useVoiceSpeech({ onTranscript }: VoiceSpeechOptions = {}) {
+export function useVoiceSpeech({ onTranscript, voicePreferenceKey = "puls:voice-output" }: VoiceSpeechOptions = {}) {
   const [recording, setRecording] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const [checkingMic, setCheckingMic] = useState(false);
@@ -120,6 +144,9 @@ export function useVoiceSpeech({ onTranscript }: VoiceSpeechOptions = {}) {
   const [transcript, setTranscript] = useState("");
   const [interimTranscript, setInterimTranscript] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [russianVoices, setRussianVoices] = useState(availableRussianVoices);
+  const [selectedVoiceURI, setSelectedVoiceURI] = useState(() => storedVoice(voicePreferenceKey));
+  const selectedVoiceRef = useRef(selectedVoiceURI);
   const mounted = useRef(true);
   const onTranscriptRef = useRef(onTranscript);
   onTranscriptRef.current = onTranscript;
@@ -172,10 +199,7 @@ export function useVoiceSpeech({ onTranscript }: VoiceSpeechOptions = {}) {
     const session = speakingRef.current;
     speakingRef.current = null;
     if (session) {
-      if (session.timer !== null) window.clearTimeout(session.timer);
-      session.utterance.onend = null;
-      session.utterance.onerror = null;
-      session.utterance.onstart = null;
+      clearPlayback(session);
       session.resolve(false);
       browser()?.speechSynthesis?.cancel();
     }
@@ -348,7 +372,7 @@ export function useVoiceSpeech({ onTranscript }: VoiceSpeechOptions = {}) {
     try { session.recognition.stop(); } catch { endRecording(session, true); }
   }, [endRecording]);
 
-  const speak = useCallback((text: string): Promise<boolean> => {
+  const speak = useCallback((text: string, persona: VoicePlaybackPersona = "calm"): Promise<boolean> => {
     stopSpeaking();
     inputGeneration.current += 1;
     startingRef.current = false;
@@ -362,24 +386,15 @@ export function useVoiceSpeech({ onTranscript }: VoiceSpeechOptions = {}) {
       return Promise.resolve(false);
     }
     return new Promise<boolean>((resolve) => {
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = "ru-RU";
-      const voices = currentWindow.speechSynthesis.getVoices();
-      const russianVoices = voices.filter((voice) => /^ru(?:-|_|$)/i.test(voice.lang));
-      const voice = russianVoices.find((candidate) => candidate.localService) || russianVoices[0];
-      if (voice) utterance.voice = voice;
-      // Empty voice lists are common before voiceschanged; the browser can
-      // still resolve the requested language when speak() is called.
-      const output: SpeakingSession = { utterance, resolve, timer: null };
+      const synthesis = currentWindow.speechSynthesis;
+      const plan = createVoicePlaybackPlan(text, persona);
+      const output: SpeakingSession = { utterance: null, resolve, timer: null, removeVoiceListener: null };
       speakingRef.current = output;
       const finish = (completed: boolean, message?: string) => {
         if (speakingRef.current !== output) return;
         speakingRef.current = null;
-        if (output.timer !== null) window.clearTimeout(output.timer);
-        utterance.onstart = null;
-        utterance.onend = null;
-        utterance.onerror = null;
-        if (!completed) currentWindow.speechSynthesis.cancel();
+        clearPlayback(output);
+        if (!completed) synthesis.cancel();
         if (mounted.current) {
           setSpeaking(false);
           if (message) setError(message);
@@ -387,16 +402,51 @@ export function useVoiceSpeech({ onTranscript }: VoiceSpeechOptions = {}) {
         resolve(completed);
       };
       const failureMessage = "Не удалось озвучить реплику. Прочитай её в расшифровке или нажми «Повторить реплику».";
-      utterance.onend = () => finish(true);
-      utterance.onerror = () => finish(false, failureMessage);
-      utterance.onstart = () => {
+      const begin = () => {
         if (speakingRef.current !== output) return;
-        if (output.timer !== null) window.clearTimeout(output.timer);
-        output.timer = window.setTimeout(() => finish(false, failureMessage), Math.min(120000, Math.max(20000, text.length * 160)));
+        clearPlayback(output);
+        const voices = availableRussianVoices();
+        const voice = voices.find(candidate => candidate.voiceURI === selectedVoiceRef.current) ?? voices[0];
+        const play = (index: number) => {
+          if (speakingRef.current !== output) return;
+          clearPlayback(output);
+          const segment = plan[index];
+          if (!segment) { finish(true); return; }
+          const utterance = new SpeechSynthesisUtterance(segment.text);
+          utterance.lang = "ru-RU";
+          if (voice) utterance.voice = voice;
+          utterance.rate = segment.rate;
+          utterance.pitch = segment.pitch;
+          output.utterance = utterance;
+          const isCurrent = () => speakingRef.current === output && output.utterance === utterance;
+          utterance.onend = () => {
+            if (!isCurrent()) return;
+            clearPlayback(output);
+            if (index + 1 === plan.length) finish(true);
+            else output.timer = window.setTimeout(() => play(index + 1), segment.pauseAfterMs);
+          };
+          utterance.onerror = () => { if (isCurrent()) finish(false, failureMessage); };
+          utterance.onstart = () => {
+            if (!isCurrent()) return;
+            if (output.timer !== null) window.clearTimeout(output.timer);
+            output.timer = window.setTimeout(() => finish(false, failureMessage), Math.min(120000, Math.max(20000, segment.text.length * 180)));
+          };
+          output.timer = window.setTimeout(() => finish(false, failureMessage), 10000);
+          try { synthesis.speak(utterance); } catch { finish(false, failureMessage); }
+        };
+        play(0);
       };
-      output.timer = window.setTimeout(() => finish(false, failureMessage), 10000);
       setSpeaking(true);
-      try { currentWindow.speechSynthesis.speak(utterance); } catch { finish(false, failureMessage); }
+      setError(null);
+      if (availableRussianVoices().length) begin();
+      else {
+        // Browser voices often arrive asynchronously. Keep the whole wait and
+        // phrase sequence cancellable, then fall back to the requested locale.
+        const onVoicesChanged = () => { if (availableRussianVoices().length) begin(); };
+        synthesis.addEventListener?.("voiceschanged", onVoicesChanged);
+        output.removeVoiceListener = () => synthesis.removeEventListener?.("voiceschanged", onVoicesChanged);
+        output.timer = window.setTimeout(begin, 700);
+      }
     });
   }, [cancelMicCheck, endRecording, stopSpeaking]);
 
@@ -433,6 +483,27 @@ export function useVoiceSpeech({ onTranscript }: VoiceSpeechOptions = {}) {
 
   const clearError = useCallback(() => { if (mounted.current) setError(null); }, []);
 
+  const selectVoice = useCallback((uri: string) => {
+    selectedVoiceRef.current = uri;
+    setSelectedVoiceURI(uri);
+    try { browser()?.localStorage.setItem(voicePreferenceKey, uri); } catch { /* Device preference is optional. */ }
+  }, [voicePreferenceKey]);
+
+  useEffect(() => {
+    const uri = storedVoice(voicePreferenceKey);
+    selectedVoiceRef.current = uri;
+    setSelectedVoiceURI(uri);
+  }, [voicePreferenceKey]);
+
+  useEffect(() => {
+    const synthesis = browser()?.speechSynthesis;
+    if (!synthesis) return;
+    const update = () => { if (mounted.current) setRussianVoices(availableRussianVoices()); };
+    update();
+    synthesis.addEventListener?.("voiceschanged", update);
+    return () => synthesis.removeEventListener?.("voiceschanged", update);
+  }, []);
+
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -443,7 +514,7 @@ export function useVoiceSpeech({ onTranscript }: VoiceSpeechOptions = {}) {
 
   return {
     support, recording, speaking, checkingMic, micChecked, micSignal, muted,
-    transcript, interimTranscript, error,
+    transcript, interimTranscript, error, russianVoices, selectedVoiceURI, selectVoice,
     checkMicrophone, startRecording, stopRecording, speak, stopSpeaking,
     setMuted, clearError, resetTranscript, cancel,
   };

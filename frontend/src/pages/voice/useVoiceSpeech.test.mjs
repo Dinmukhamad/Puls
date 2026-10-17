@@ -16,9 +16,13 @@ function deferred() {
   return { promise, resolve };
 }
 
+const russianVoice = { voiceURI: "ru-test", name: "Pavel", lang: "ru-RU", localService: true, default: false };
+const naturalRussianVoice = { voiceURI: "ru-natural", name: "Dmitry Natural", lang: "ru-RU", localService: false, default: false };
+const flushEvents = async () => { await Promise.resolve(); await Promise.resolve(); };
+
 /** Persistent hook state, browser event dispatch and an explicit unmount. */
-function fixture(t, { recognition = true, synthesis = true, server = false } = {}) {
-  const original = new Map(["window", "navigator", "SpeechSynthesisUtterance"].map((name) => [name, Object.getOwnPropertyDescriptor(globalThis, name)]));
+function fixture(t, { recognition = true, synthesis = true, server = false, voices = [russianVoice] } = {}) {
+  const original = new Map(["window", "navigator", "SpeechSynthesisUtterance", "localStorage"].map((name) => [name, Object.getOwnPropertyDescriptor(globalThis, name)]));
   const calls = { streamsStopped: 0, micRequests: 0, synthesisCancelled: 0, afterUnmountUpdates: 0, transcripts: [] };
   let mounted = true;
   const recognizers = [];
@@ -36,13 +40,27 @@ function fixture(t, { recognition = true, synthesis = true, server = false } = {
   const mediaDevices = {
     async getUserMedia() { calls.micRequests++; return stream; },
   };
+  let availableVoices = voices;
+  const speechListeners = new Map();
   const speechSynthesis = {
-    getVoices: () => [],
+    getVoices: () => availableVoices,
     speak: (utterance) => { utterances.push(utterance); },
     cancel: () => { calls.synthesisCancelled++; },
+    addEventListener(type, listener) {
+      if (!speechListeners.has(type)) speechListeners.set(type, new Set());
+      speechListeners.get(type).add(listener);
+    },
+    removeEventListener(type, listener) { speechListeners.get(type)?.delete(listener); },
+  };
+  const stored = new Map();
+  const localStorage = {
+    getItem: (key) => stored.get(key) ?? null,
+    setItem: (key, value) => stored.set(key, String(value)),
+    removeItem: (key) => stored.delete(key),
   };
   const testWindow = {
     isSecureContext: true,
+    localStorage,
     setTimeout: (...args) => setTimeout(...args), clearTimeout: (...args) => clearTimeout(...args),
     setInterval: (...args) => setInterval(...args), clearInterval: (...args) => clearInterval(...args),
     ...(recognition ? { SpeechRecognition: FakeRecognition } : {}),
@@ -52,9 +70,11 @@ function fixture(t, { recognition = true, synthesis = true, server = false } = {
     delete globalThis.window;
     delete globalThis.navigator;
     delete globalThis.SpeechSynthesisUtterance;
+    delete globalThis.localStorage;
   } else {
     Object.defineProperty(globalThis, "window", { configurable: true, writable: true, value: testWindow });
     Object.defineProperty(globalThis, "navigator", { configurable: true, writable: true, value: { mediaDevices } });
+    Object.defineProperty(globalThis, "localStorage", { configurable: true, writable: true, value: localStorage });
     Object.defineProperty(globalThis, "SpeechSynthesisUtterance", {
       configurable: true, writable: true,
       value: synthesis ? class { constructor(text) { this.text = text; } } : undefined,
@@ -92,10 +112,20 @@ function fixture(t, { recognition = true, synthesis = true, server = false } = {
   new Function("require", "module", "exports", compiled.outputFiles[0].text)((name) => name === "react" ? react : require(name), module, module.exports);
   let disposed = false;
   const hook = {
-    calls, recognizers, utterances, mediaDevices, stream, testWindow,
+    calls, recognizers, utterances, mediaDevices, stream, testWindow, localStorage,
+    voiceListeners() { return speechListeners.get("voiceschanged")?.size ?? 0; },
+    setVoices(next, emit = true) {
+      availableVoices = next;
+      if (emit) this.emitVoicesChanged();
+    },
+    emitVoicesChanged() {
+      const event = { type: "voiceschanged" };
+      [...(speechListeners.get("voiceschanged") ?? [])].forEach((listener) => listener(event));
+      speechSynthesis.onvoiceschanged?.(event);
+    },
     render() {
       cursor = 0;
-      const result = module.exports.useVoiceSpeech({ onTranscript: (text) => calls.transcripts.push(text) });
+      const result = module.exports.useVoiceSpeech({ onTranscript: (text) => calls.transcripts.push(text), voicePreferenceKey: "test-voice" });
       effects.splice(0).forEach((effect) => effect());
       return result;
     },
@@ -217,7 +247,7 @@ test("a stuck recognition stop times out into review without losing the draft", 
   assert.equal(hook.recognizers[0].aborted, true);
 });
 
-test("TTS requests Russian even before voices load and settles on end or cancellation", async (t) => {
+test("TTS requests Russian and settles on end or cancellation", async (t) => {
   const hook = fixture(t);
   const completed = hook.render().speak("Здравствуйте!");
   assert.equal(hook.utterances[0].lang, "ru-RU");
@@ -261,4 +291,153 @@ test("driver playback cancels a pending input request so it cannot record its ow
   hook.dispose();
   assert.equal(await playback, false);
   assert.equal(hook.calls.synthesisCancelled, 1);
+});
+
+test("late Russian voices are used once without replaying the current driver line", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const hook = fixture(t, { voices: [] });
+  const speak = hook.render().speak;
+  const playback = speak("Здравствуйте!", "calm");
+  assert.equal(hook.render().speaking, true);
+  assert.equal(hook.utterances.length, 0, "wait briefly instead of selecting a browser fallback too soon");
+  t.mock.timers.tick(200);
+  hook.setVoices([russianVoice, naturalRussianVoice]);
+  await flushEvents();
+  assert.equal(hook.utterances.length, 1);
+  assert.equal(hook.utterances[0].voice.voiceURI, naturalRussianVoice.voiceURI);
+  assert.equal(hook.utterances[0].lang, "ru-RU");
+  assert.equal(hook.render().russianVoices.length, 2);
+  assert.equal(hook.render().speak, speak, "voice availability must not restart the page playback effect");
+  hook.emitVoicesChanged();
+  t.mock.timers.tick(700);
+  await flushEvents();
+  assert.equal(hook.utterances.length, 1);
+  hook.utterances[0].onend();
+  assert.equal(await playback, true);
+  assert.equal(hook.render().speaking, false);
+});
+
+test("missing Russian voices have a bounded wait and keep the Russian language fallback", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const english = { ...russianVoice, voiceURI: "en-test", name: "English", lang: "en-US", default: true };
+  const hook = fixture(t, { voices: [english] });
+  const playback = hook.render().speak("Алло!", "calm");
+  t.mock.timers.tick(699);
+  await flushEvents();
+  assert.equal(hook.utterances.length, 0);
+  assert.equal(hook.render().speaking, true);
+  t.mock.timers.tick(1);
+  await flushEvents();
+  assert.equal(hook.utterances.length, 1);
+  assert.equal(hook.utterances[0].lang, "ru-RU");
+  assert.equal(hook.utterances[0].voice == null, true, "never explicitly select a foreign default");
+  hook.utterances[0].onend();
+  assert.equal(await playback, true);
+});
+
+test("cancelling delayed voice loading settles immediately and prevents late playback", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const hook = fixture(t, { voices: [] });
+  const baselineListeners = hook.voiceListeners();
+  const playback = hook.render().speak("Здравствуйте!", "calm");
+  hook.render().stopSpeaking();
+  assert.equal(await playback, false);
+  assert.equal(hook.render().speaking, false);
+  assert.equal(hook.voiceListeners(), baselineListeners, "release session listeners while retaining the catalog listener");
+  hook.setVoices([russianVoice]);
+  t.mock.timers.tick(1000);
+  await flushEvents();
+  assert.equal(hook.utterances.length, 0);
+});
+
+test("unmount during delayed voice loading releases listeners without late state updates", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const hook = fixture(t, { voices: [] });
+  const playback = hook.render().speak("Здравствуйте!", "calm");
+  hook.dispose();
+  assert.equal(await playback, false);
+  assert.equal(hook.voiceListeners(), 0);
+  hook.setVoices([russianVoice]);
+  t.mock.timers.tick(1000);
+  await flushEvents();
+  assert.equal(hook.utterances.length, 0);
+  assert.equal(hook.calls.afterUnmountUpdates, 0);
+});
+
+test("sentence pauses retain speaking state and complete only after the last sentence", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const hook = fixture(t);
+  let settled = false;
+  const playback = hook.render().speak("Здравствуйте! Я потерял SIM-карту.", "calm").then((completed) => { settled = true; return completed; });
+  assert.equal(hook.utterances.length, 1, "enqueue one sentence at a time");
+  hook.utterances[0].onend();
+  await flushEvents();
+  assert.equal(settled, false);
+  assert.equal(hook.render().speaking, true, "the microphone must stay blocked during a speech pause");
+  assert.equal(hook.utterances.length, 1);
+  t.mock.timers.tick(1000);
+  await flushEvents();
+  assert.equal(hook.utterances.length, 2);
+  assert.match(hook.utterances[1].text, /Я потерял сим-карту/);
+  assert.equal(hook.render().speaking, true);
+  hook.utterances[1].onend();
+  assert.equal(await playback, true);
+  assert.equal(hook.render().speaking, false);
+});
+
+test("starting microphone input during a speech pause cancels remaining sentences", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const hook = fixture(t);
+  const playback = hook.render().speak("Здравствуйте! Скажите, что делать дальше.", "confused");
+  hook.utterances[0].onend();
+  assert.equal(hook.render().speaking, true);
+  assert.equal(await hook.render().startRecording(), true);
+  assert.equal(await playback, false);
+  t.mock.timers.tick(1000);
+  await flushEvents();
+  assert.equal(hook.utterances.length, 1, "a cancelled intersentence timer cannot speak into the microphone");
+  assert.equal(hook.render().speaking, false);
+  assert.equal(hook.render().recording, true);
+  hook.recognizers[0].result([["Откройте приложение", true]]);
+  hook.recognizers[0].onend();
+  assert.equal(hook.render().transcript, "Откройте приложение");
+});
+
+test("late events from replaced utterances cannot finish the current playback", async (t) => {
+  const hook = fixture(t);
+  const first = hook.render().speak("Первая реплика.", "calm");
+  const staleEnd = hook.utterances[0].onend;
+  const staleError = hook.utterances[0].onerror;
+  const second = hook.render().speak("Вторая реплика.", "calm");
+  assert.equal(await first, false);
+  const cancelledBeforeLateEvents = hook.calls.synthesisCancelled;
+  staleEnd();
+  staleError({ error: "interrupted" });
+  assert.equal(hook.render().speaking, true);
+  assert.equal(hook.calls.synthesisCancelled, cancelledBeforeLateEvents);
+  assert.equal(hook.render().error, null);
+  hook.utterances[1].onend();
+  assert.equal(await second, true);
+});
+
+test("changing the selected Russian voice keeps speak stable and takes effect on the next playback", async (t) => {
+  const hook = fixture(t, { voices: [russianVoice, naturalRussianVoice] });
+  const speak = hook.render().speak;
+  const first = speak("Здравствуйте!", "calm");
+  const currentVoice = hook.utterances[0].voice;
+  hook.render().selectVoice(russianVoice.voiceURI);
+  assert.equal(hook.render().selectedVoiceURI, russianVoice.voiceURI);
+  assert.equal(hook.localStorage.getItem("test-voice"), russianVoice.voiceURI);
+  assert.equal(hook.render().speak, speak);
+  assert.equal(hook.utterances.length, 1, "selection alone must not replay the driver line");
+  assert.equal(hook.utterances[0].voice, currentVoice, "do not change an utterance already playing");
+  hook.utterances[0].onend();
+  assert.equal(await first, true);
+  const second = speak("Что мне делать?", "calm");
+  assert.equal(hook.utterances[1].voice.voiceURI, russianVoice.voiceURI);
+  hook.utterances[1].onend();
+  assert.equal(await second, true);
+  hook.localStorage.setItem = () => { throw new Error("Storage blocked"); };
+  assert.doesNotThrow(() => hook.render().selectVoice(naturalRussianVoice.voiceURI));
+  assert.equal(hook.render().selectedVoiceURI, naturalRussianVoice.voiceURI, "blocked device storage must not prevent selecting a voice");
 });
