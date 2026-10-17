@@ -44,7 +44,7 @@ test("the toolbar's open popup and a held one show their children and an expande
     assert.equal((html.match(/<button/g) ?? []).length, 2);
   }
   const other = renderToStaticMarkup(React.createElement(CityToolbarContext.Provider, { value: toolbar },
-    React.createElement(CityPeekPanel, { label: "Миссии", icon: "📋", toolbarSlot: "missions" }, "Миссии")));
+    React.createElement(CityPeekPanel, { label: "Миссии", icon: "📋", toolbarSlot: "skills" }, "Миссии")));
   assert.match(other, /data-open="false"/, "only the toolbar's active slot is open");
 });
 
@@ -144,7 +144,7 @@ test("hovering opens nothing: a click opens the popup and a second click closes 
 test("in the toolbar one popup is open at a time: another button switches to its own", (t) => {
   page(t);
   const toolbar = sharedToolbar();
-  const missions = fixture(t, { toolbar, toolbarSlot: "missions" }), quests = fixture(t, { toolbar, toolbarSlot: "quests" });
+  const missions = fixture(t, { toolbar, toolbarSlot: "skills" }), quests = fixture(t, { toolbar, toolbarSlot: "quests" });
   const both = () => { missions.render(); quests.render(); return [missions.expanded(), quests.expanded()]; };
   missions.click();
   assert.deepEqual(both(), [true, false]);
@@ -158,7 +158,7 @@ test("in the toolbar one popup is open at a time: another button switches to its
   assert.equal(toolbar.active, null);
   assert.deepEqual(both(), [false, false]);
   // The page opens a slot itself, e.g. the missions of a district chosen on the map.
-  toolbar.setActive("missions");
+  toolbar.setActive("skills");
   assert.deepEqual(both(), [true, false]);
 });
 
@@ -181,7 +181,7 @@ test("a shared toolbar receives each whole panel in its slot and keeps it there 
 test("panels use stable logical slots so DOM keyboard order matches visual toolbar order", () => {
   const html = renderToStaticMarkup(React.createElement(CityToolbar));
   assert.match(html, /role="toolbar" aria-label="Панели города"/);
-  assert.deepEqual([...html.matchAll(/data-city-panel="([^"]+)"/g)].map(match => match[1]), ["level", "cities", "build", "missions", "quests", "skills", "tools", "history"]);
+  assert.deepEqual([...html.matchAll(/data-city-panel="([^"]+)"/g)].map(match => match[1]), ["level", "cities", "build", "quests", "skills", "tools", "history"]);
 });
 
 test("Escape closes the popup and gives focus back to its button", (t) => {

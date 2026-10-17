@@ -37,8 +37,7 @@
   position: absolute; top: calc(100% + 6px); left: 0; right: auto; bottom: auto;
   z-index: 2; width: var(--city-popup-width); transform: none;
 }
-.city-toolbar .city-hud-peek > .city-peek__content,
-.city-toolbar .city-skills-peek > .city-peek__content { width: min(1040px, calc(100vw - var(--city-left) - var(--city-right))); }
+.city-toolbar .city-hud-peek > .city-peek__content { width: min(1040px, calc(100vw - var(--city-left) - var(--city-right))); }
 
 .city-immersive .city-toolbar .city-hud,
 .city-immersive .city-toolbar .city-mission,
@@ -64,6 +63,15 @@
   max-height: none; border-radius: 24px;
 }
 .city-immersive .city-toolbar .city-skills { height: var(--city-skills); }
+/* Skills and the selected district's missions share one popup and one toolbar entry. */
+.city-toolbar .city-skills-peek > .city-peek__content {
+  display: flex; flex-direction: column; gap: 8px;
+  height: min(802px, calc(100dvh - var(--city-popup-top) - var(--city-peek-bottom) - 12px));
+}
+.city-immersive .city-toolbar .city-skills-peek .city-skills { flex: 0 0 auto; }
+.city-skills-peek .city-skills__title { display: none; }
+.city-skills-peek .city-skills__list { flex: 1; }
+.city-immersive .city-toolbar .city-skills-peek .city-mission { flex: 1; height: auto; min-height: 0; }
 .city-immersive .city-toolbar .city-map-tools {
   display: grid; grid-template-columns: repeat(4, minmax(44px, 1fr)); gap: 4px; padding: 8px;
 }
@@ -97,6 +105,7 @@
 @media (max-height: 560px) {
   .city-immersive .city-toolbar .city-mission { overflow-y: auto; overscroll-behavior: contain; }
   .city-immersive .city-toolbar .city-mission__body { flex: none; overflow: visible; mask-image: none; -webkit-mask-image: none; }
+  .city-immersive .city-toolbar .city-skills-peek .city-mission__body { flex: 1; overflow-y: auto; }
 }
 
 /* «Задания»: the day's situations and the trainer's scenarios, with a count of what is left on the button. */
