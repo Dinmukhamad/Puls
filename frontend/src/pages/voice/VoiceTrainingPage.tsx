@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { voiceKeys, voiceTraining, voiceWorkSite, type VoiceAttempt, type VoiceAttemptSummary, type VoicePersona } from "../../api/voiceTraining";
 import { useAuth } from "../../auth/AuthContext";
+import { Select } from "../../components/Select";
 import { useVoiceSpeech } from "./useVoiceSpeech";
 import { VoiceMentorReviews } from "./VoiceMentorReviews";
 import "./voice.css";
@@ -179,11 +180,10 @@ function VoiceSettings({ speech, disabled, onPreview, previewLabel = "Просл
 }) {
   const savedVoiceMissing = speech.selectedVoiceURI && !speech.russianVoices.some(voice => voice.voiceURI === speech.selectedVoiceURI);
   return <div className="voice-output-settings">
-    <label>Голос водителя<select value={speech.selectedVoiceURI} disabled={disabled || speech.speaking} onChange={event => speech.selectVoice(event.target.value)}>
-      <option value="">Автоматически · рекомендуемый</option>
-      {savedVoiceMissing && <option value={speech.selectedVoiceURI}>Сохранённый голос недоступен</option>}
-      {speech.russianVoices.map(voice => <option key={voice.voiceURI} value={voice.voiceURI}>{voice.name}</option>)}
-    </select></label>
+    <label>Голос водителя<Select className="voice-select" aria-label="Голос водителя" value={speech.selectedVoiceURI} disabled={disabled || speech.speaking} onChange={value => speech.selectVoice(value)}
+      options={[{ value: "", label: "Автоматически · рекомендуемый" },
+        ...(savedVoiceMissing ? [{ value: speech.selectedVoiceURI, label: "Сохранённый голос недоступен" }] : []),
+        ...speech.russianVoices.map(voice => ({ value: voice.voiceURI, label: voice.name }))]} /></label>
     <button className="voice-button" disabled={disabled} onClick={() => speech.speaking ? speech.stopSpeaking() : onPreview()}><VoiceIcon name={speech.speaking ? "stop" : "play"} size={17} />{speech.speaking ? "Остановить озвучку" : previewLabel}</button>
     <p className="voice-caption">Темп и паузы зависят от характера водителя. Доступные голоса определяет браузер.</p>
   </div>;
