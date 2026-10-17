@@ -5,7 +5,7 @@ import { useAuth } from "../auth/AuthContext";
 import { MedalIcon, SparkIcon } from "../components/icons";
 import { Sheet } from "../components/Sheet";
 import { useToast } from "../components/Toast";
-import { Badge, Button, Card, EmptyState, ErrorState, RowsSkeleton } from "../components/ui";
+import { Badge, Button, Card, EmptyState, ErrorState, RowsSkeleton, Select } from "../components/ui";
 import { coins, points } from "../utils/format";
 
 const MEDALS = ["gold", "silver", "bronze"] as const;
@@ -44,9 +44,8 @@ export function MonthContest() {
       action={<Badge tone={data.status === "closed" ? "success" : "warning"}>{data.status === "closed" ? "Итоги опубликованы" : "Месяц идёт"}</Badge>}>
       <div className="month-contest__head">
         <label className="field"><span className="field__label">Месяц</span>
-          <select className="input" value={`${data.year}-${data.month}`} onChange={(e) => { const [y, m] = e.target.value.split("-").map(Number); setPicked({ year: y, month: m }); }}>
-            {choices.map((m) => <option key={m.label} value={`${m.year}-${m.month}`}>{m.name}{m.status === "closed" ? " · итоги" : ""}</option>)}
-          </select></label>
+          <Select aria-label="Месяц конкурса" value={`${data.year}-${data.month}`} onChange={(value) => { const [y, m] = value.split("-").map(Number); setPicked({ year: y, month: m }); }}
+            options={choices.map((m) => ({ value: `${m.year}-${m.month}`, label: `${m.name.charAt(0).toLocaleUpperCase()}${m.name.slice(1)}${m.status === "closed" ? " · итоги" : ""}` }))} /></label>
         <p className="secondary small">Закрыто недель: {closedWeeks} из {data.weeks_planned}. Неделя относится к месяцу своего четверга.</p>
         {atLeast("supervisor") && data.status !== "closed" && <div className="row">
           <Button size="s" disabled={calculate.isPending} onClick={() => calculate.mutate()}>{calculate.isPending ? "Считаем…" : "Пересчитать"}</Button>
