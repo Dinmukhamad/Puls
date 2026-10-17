@@ -9,10 +9,10 @@ import { CitySandboxDock } from "./CitySandboxDock";
 import { DEFAULT_SCREEN, type ScreenWays } from "./decorArrange";
 import type { CityEstateView, EstatePick, JourneyPhase, PlotAddress } from "../../city3d/types";
 import { NO_CHOICE, spacing } from "./cellChoice";
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { city, MISSION_STATES, nextMission, type BuildingKey, type CityBuilt, type CityData, type CityQuest, type CityReward, type DistrictId } from "../../api/city";
+import { city, nextMission, type BuildingKey, type CityBuilt, type CityData, type CityDistrict, type CityMission, type CityQuest, type CityReward, type DistrictId } from "../../api/city";
 import { attemptPath, learning, type LearningContent } from "../../api/learning";
 import { CityTasks, speakerIcon } from "./CityTasks";
 import { driverShift } from "../../api/driverShift";
@@ -21,9 +21,7 @@ import { ErrorState } from "../../components/ui";
 import { Sheet } from "../../components/Sheet";
 import { PulsarFace } from "../crm/PulsarGuide";
 import { CityMap } from "./CityMap";
-import { DISTRICT_LEVEL_NAMES, MAX_DISTRICT_LEVEL, completedDistrictMissions, districtLevel } from "./cityLevels";
-import { DISTRICT_COLORS, districtLabels } from "./cityDistricts";
-import type { CityLabelInfo } from "../../city3d/types";
+import { districtLabels } from "./cityDistricts";
 import { districtLayout, isDistrictOf } from "../../city3d/world/estateGrid";
 import "../crm/pulsar.css";
 import "./city.css";
@@ -32,6 +30,7 @@ import { CityGuideSetup, GUIDE_AVATAR } from "./CityGuideSetup";
 import { CityControlsSetup } from "./CityControlsSetup";
 import { CityBuildEntry } from "./CityBuildEntry";
 import { CityPeekPanel } from "./CityPeekPanel";
+import { CitySkillsPanel } from "./CitySkillsPanel";
 import { CityToolbar, CityToolbarButton, CityToolbarProvider, useCityToolbarState } from "./CityToolbar";
 import "./cityPanelLayout.css";
 import { districtPlotGrid, freeDistrictPlot } from "./freeDistrictPlot";
@@ -254,14 +253,13 @@ export function CityPage() {
   </div>;
   const data = query.data;
   const selected = data.districts.find(d => d.id === params.get("district")) ?? data.districts.find(d => d.id === nextMission(data.missions)?.district) ?? data.districts[0];
-  const missions = data.missions.filter(m => m.district === selected.id);
-  const mission = missions.find(m => m.key === params.get("mission")) ?? nextMission(missions);
   const completed = data.missions.filter(m => m.state === "completed").length;
   const total = data.missions.filter(m => m.enabled || m.state === "completed").length;
-  function selectDistrict(id: DistrictId) { const p = new URLSearchParams(params); p.set("district", id); p.delete("mission"); setParams(p, {replace:true}); requestFocus(value => value + 1); claim.reset(); toolbar.setActive("skills"); }
+  // «Навыки» shows a district once one is chosen (on the map, in the list or by a link); without one, all of them.
+  const chosen = data.districts.find(d => d.id === params.get("district")) ?? null;
+  function selectDistrict(id: DistrictId, key?: string) { const p = new URLSearchParams(params); p.set("district", id); if (key) p.set("mission", key); else p.delete("mission"); setParams(p, {replace:true}); requestFocus(value => value + 1); claim.reset(); toolbar.setActive("skills"); }
+  function allDistricts() { const p = new URLSearchParams(params); p.delete("district"); p.delete("mission"); setParams(p, {replace:true}); claim.reset(); }
   function selectMission(key: string) { const p = new URLSearchParams(params); p.set("mission", key); setParams(p, {replace:true}); claim.reset(); }
-  const parent = data.missions.find(m => m.key === mission?.prerequisite);
-  const actionable = mission && !["locked", "unavailable"].includes(mission.state);
   // В чужом городе — фигура и помощник того оператора, в своём — свои.
   const mascot = data.inspecting ? { gender: data.gender ?? null, name: data.guide_name || DEFAULT_GUIDE } : { gender: user?.gender ?? null, name: guideName(user) };
   const labels = districtLabels(data.districts, data.missions);
@@ -285,11 +283,38 @@ export function CityPage() {
     }, 0);
   }
   const rank = data.level < 2 ? "Новый житель" : data.level < 4 ? "Исследователь" : "Мастер города";
-  const level = districtLevel(completedDistrictMissions(selected, missions), selected.soon);
-  const oktellDeferred = selected.id === "oktell" && missions.length === 0;
-  const districtDone = missions.length > 0 && missions.every(m => m.state === "completed" || !m.enabled);
+  const actionable = (m: CityMission) => !["locked", "unavailable"].includes(m.state);
+  /** The mission's main button: take the reward, go to the task, practise again, or say why it cannot. */
+  function missionAction(m: CityMission, d: CityDistrict) {
+    if (d.id === "scenarios") return actionable(m) && !data.inspecting ? <Link className="city-action" to={m.path}>{m.state === "completed" ? "Повторить для практики →" : "Пройти сценарий →"}</Link> : <button className="city-action" disabled>{m.state === "unavailable" ? "Сценарий на паузе" : "Просмотр прогресса"}</button>;
+    if (m.state === "ready" && data.can_claim) return <button className="city-action" disabled={claim.isPending} onClick={() => claim.mutate(m.key)}>{claim.isPending ? "Проверяем результат…" : m.key === "welcome" ? "Начать свой путь →" : "Завершить и получить награду →"}</button>;
+    if (actionable(m) && m.key !== "welcome" && !data.inspecting) {
+      const text = m.state === "completed" ? "Вернуться к практике →" : "Перейти к заданию →";
+      return d.id === "driver" ? <button className="city-action" onClick={() => setDriverLaunch(true)}>{text}</button> : <Link className="city-action" to={m.path}>{text}</Link>;
+    }
+    return <button className="city-action" disabled>{m.state === "unavailable" ? "Миссия на паузе" : data.inspecting ? "Просмотр прогресса" : data.preview ? "Предпросмотр без наград" : m.state === "completed" ? "Миссия пройдена" : "Завершите предыдущую миссию"}</button>;
+  }
   // The mission's main button already leads to the district's tool: the second link to it is left out.
-  const opensTool = !!mission && !selected.soon && selected.id !== "scenarios" && !!actionable && mission.key !== "welcome" && !data.inspecting && !(mission.state === "ready" && data.can_claim);
+  const opensTool = (m: CityMission, d: CityDistrict) => !d.soon && d.id !== "scenarios" && actionable(m) && m.key !== "welcome" && !data.inspecting && !(m.state === "ready" && data.can_claim);
+  function districtTool(d: CityDistrict, primary: boolean) {
+    if (data.inspecting) return null;
+    const look = primary ? "city-action" : "city-secondary";
+    if (d.id === "driver") return <button type="button" className={look} onClick={() => setDriverLaunch(true)}>Открыть автопарк →</button>;
+    const site = d.id === "crm" ? ["/training/work-sites", "Открыть CRM · рабочие сайты →"] : d.id === "dispatch" ? ["/training/work-sites?site=dispatch", "Открыть Диспетчерскую →"] : d.id === "oktell" ? ["/training/work-sites?site=oktell", "Открыть Oktell →"] : null;
+    return site && <Link className={look} to={site[0]}>{site[1]}</Link>;
+  }
+  const guideFor = (m: CityMission) => <div className="city-guide">
+    {mascot.gender ? <span className="city-guide-avatar" aria-hidden="true">{GUIDE_AVATAR[mascot.gender]}</span> : <PulsarFace />}
+    <p><b>{mascot.name}:</b> {guideText(m.pulsar, mascot.name)}</p>
+    {!data.inspecting && !askGuide && !guideEditing && !showControls && <button type="button" className="city-guide-edit" onClick={() => setGuideEditing(true)} aria-label="Изменить фигуру и имя помощника" title="Изменить помощника">✎</button>}
+  </div>;
+  const fineFor = (d: CityDistrict) => d.id === "scenarios" ? "Коины начисляются автоматически после первого успешного прохождения. Повторная тренировка — без повторной награды." : ["crm", "dispatch", "oktell"].includes(d.id) ? "Рабочие сайты открываются оператору через QR." : "Завершённые ранее действия тоже учитываются.";
+  /** Old plots stay listed where something was built on them, or while building still happens there. */
+  function plotsFor(d: CityDistrict) {
+    const plots = data.plots.filter(p => p.district === d.id), free = plots.find(p => p.unlocked && !p.item);
+    if (!plots.length || (data.plots_moved && !plots.some(p => p.item))) return null;
+    return <CityPlotsSummary plots={plots} buildings={data.buildings} canBuild={data.can_build} moved={data.plots_moved} onShow={key => setPlotFocus({ key, at: Date.now() })} onBuild={free && data.can_build ? () => { setPlotFocus({ key: free.key, at: Date.now() }); openPlot(free.key); } : undefined} />;
+  }
   // Today's situations and the trainer's scenarios: the toolbar counts what is still to do.
   const quests = data.quests?.items ?? [];
   const assigned = data.inspecting ? [] : (assignments.data ?? []).filter(item => item.assigned);
@@ -300,8 +325,6 @@ export function CityPage() {
   // A new operator meets the first mission as soon as the first visit's cards are answered or put off.
   const welcomeAhead = department === "support" && !data.inspecting && !data.preview && !building && mapStatus !== "loading" && !askGuide && !showControls
     && data.missions.some(m => m.key === "welcome" && m.state !== "completed" && m.state !== "unavailable");
-  const districtPlots = data.plots.filter(p => p.district === selected.id);
-  const freePlot = districtPlots.find(p => p.unlocked && !p.item);
   function openPlot(key: string) { build.reset(); setPlotKey(key); }
   const mineEstate = estateQuery.data, canOpenBuild = !!mineEstate?.district && (mineEstate.status === "ready" || mineEstate.status === "closed");
   const buildingLandQuery = building?.district.startsWith("sales-") ? salesLand : supportLand;
@@ -363,46 +386,12 @@ export function CityPage() {
     </div>
     <OpenOnce when={welcomeAhead} onOpen={() => toolbar.setActive("skills")} />
 
-    {department === "support" && !building && <CityPeekPanel className="city-skills-peek" toolbarSlot="skills" label="Твои навыки · учебные центры и миссии" compactLabel="Навыки" icon="🎓" holdOpen={claim.isPending}>
-    <CitySkills labels={labels} selected={selected.id} onSelect={selectDistrict} open={toolbar.active === "skills" || claim.isPending} />
-    <aside className="city-mission glass glass--regular" data-expanded="true" aria-label={`Район «${selected.name}»`}>
-      <div className="city-mission__body" id="city-mission-body" aria-live="polite">
-        <div className="city-mission-top"><span className="city-eyebrow">{selected.name}</span><span className="city-state" data-state={mission?.state}>{selected.soon ? "СКОРО" : mission ? MISSION_STATES[mission.state] : "Нет заданий"}</span></div>
-        <div className="city-building-level city-extra" aria-label={`Уровень здания ${level} из ${MAX_DISTRICT_LEVEL}`}><span>{"★".repeat(level)}<em>{"★".repeat(MAX_DISTRICT_LEVEL - level)}</em></span><strong>Здание: {DISTRICT_LEVEL_NAMES[level - 1]}</strong><small>{oktellDeferred ? "При первом входе в Oktell обучение проведёт по разделам, статусам и перезвону водителю." : selected.soon ? "Район строится и откроется позже" : level === MAX_DISTRICT_LEVEL ? "Максимальный уровень — район стал легендой" : districtDone ? "Все миссии района пройдены — здание достроено" : "Каждая пройденная миссия района улучшает здание"}</small></div>
-        {districtPlots.length > 0 && <CityPlotsSummary plots={districtPlots} buildings={data.buildings} canBuild={data.can_build} moved={data.plots_moved} onShow={key => setPlotFocus({ key, at: Date.now() })} onBuild={freePlot && data.can_build ? () => { setPlotFocus({ key: freePlot.key, at: Date.now() }); openPlot(freePlot.key); } : undefined} />}
-        {!data.inspecting && !opensTool && selected.id === "driver" && <button className="city-secondary city-extra" onClick={() => setDriverLaunch(true)}>Открыть автопарк →</button>}
-        {!data.inspecting && !opensTool && selected.id === "crm" && <Link className="city-secondary city-extra" to="/training/work-sites">Открыть CRM · рабочие сайты →</Link>}
-        {!data.inspecting && !opensTool && selected.id === "dispatch" && <Link className="city-secondary city-extra" to="/training/work-sites?site=dispatch">Открыть Диспетчерскую · рабочие сайты →</Link>}
-        {!data.inspecting && !opensTool && selected.id === "oktell" && <Link className="city-secondary city-extra" to="/training/work-sites?site=oktell">Открыть Oktell · рабочие сайты →</Link>}
-
-        {selected.id === "scenarios" && <p className="city-copy city-extra">Учебные разговоры с водителем и практика в CRM и Диспетчерской. Все действия выполняются в тренажёре. Коины — за первое успешное прохождение.</p>}
-        {selected.soon ? <>
-          <h2>Новый район. Новые возможности.</h2>
-          <p className="city-copy city-extra">Здесь появятся новые учебные инструменты и миссии.</p>
-          <div className="city-guide city-extra"><PulsarFace /><p>А пока продолжим развивать автопарк, CRM-центр и Диспетчерскую. Твой прогресс сохранится.</p></div>
-        </> : mission && <>
-          <nav className="city-mission-path city-extra" aria-label={`Миссии: ${selected.name}`}>{missions.map((m,i) => <button key={m.key} type="button" onClick={() => selectMission(m.key)} aria-label={`${i+1}. ${m.title}. ${MISSION_STATES[m.state]}`} aria-pressed={mission.key===m.key} data-state={m.state}>{m.state === "completed" ? "✓" : i+1}</button>)}</nav>
-          <h2>{mission.title}</h2>
-          <p className="city-copy city-extra">{mission.description}</p>
-          <div className="city-objective city-extra"><span>{mission.objective}</span><strong>{mission.current} / {mission.target}</strong><div className="city-meter"><span style={{width:`${mission.current/mission.target*100}%`}} /></div></div>
-          {mission.state === "locked" && <p className="city-prerequisite city-extra">Сначала завершите «{parent?.title}» и получите награду.</p>}
-          <div className="city-rewards city-extra">{mission.xp > 0 && <span>✦ {mission.xp} XP</span>}{mission.coins > 0 && <span>◈ {mission.coins} коинов</span>}<span>{mission.state === "completed" ? "Получено" : "За прохождение"}</span></div>
-          <div className="city-guide city-extra">
-            {mascot.gender ? <span className="city-guide-avatar" aria-hidden="true">{GUIDE_AVATAR[mascot.gender]}</span> : <PulsarFace />}
-            <p><b>{mascot.name}:</b> {guideText(mission.pulsar, mascot.name)}</p>
-            {!data.inspecting && !askGuide && !guideEditing && !showControls && <button type="button" className="city-guide-edit" onClick={() => setGuideEditing(true)} aria-label="Изменить фигуру и имя помощника" title="Изменить помощника">✎</button>}
-          </div>
-        </>}
-      </div>
-      {/* Кнопка действия всегда на виду, описание над ней прокручивается. */}
-      <div className="city-mission__footer">
-        {selected.soon ? <button className="city-action" disabled>Район строится</button> : mission && <>
-          {claim.isError && <p className="city-error" role="alert">{claim.error.message}</p>}
-          {selected.id === "scenarios" ? actionable && !data.inspecting ? <Link className="city-action" to={mission.path}>{mission.state === "completed" ? "Повторить для практики →" : "Пройти сценарий →"}</Link> : <button className="city-action" disabled>{mission.state === "unavailable" ? "Сценарий на паузе" : "Просмотр прогресса"}</button> : mission.state === "ready" && data.can_claim ? <button className="city-action" disabled={claim.isPending} onClick={() => claim.mutate(mission.key)}>{claim.isPending ? "Проверяем результат…" : mission.key === "welcome" ? "Начать свой путь →" : "Завершить и получить награду →"}</button> : actionable && mission.key !== "welcome" && !data.inspecting ? selected.id === "driver" ? <button className="city-action" onClick={() => setDriverLaunch(true)}>{mission.state === "completed" ? "Вернуться к практике →" : "Перейти к заданию →"}</button> : <Link className="city-action" to={mission.path}>{mission.state === "completed" ? "Вернуться к практике →" : "Перейти к заданию →"}</Link> : <button className="city-action" disabled>{mission.state === "unavailable" ? "Миссия на паузе" : data.inspecting ? "Просмотр прогресса" : data.preview ? "Предпросмотр без наград" : mission.state === "completed" ? "Миссия пройдена" : "Завершите предыдущую миссию"}</button>}
-          <p className="city-fine city-extra">{selected.id === "scenarios" ? "Коины начисляются автоматически после первого успешного прохождения. Повторная тренировка — без повторной награды." : ["crm", "dispatch", "oktell"].includes(selected.id) ? "Рабочие сайты открываются оператору через QR." : "Завершённые ранее действия тоже учитываются."}</p>
-        </>}
-      </div>
-    </aside></CityPeekPanel>}
+    {department === "support" && !building && <CityPeekPanel className="city-skills-peek" toolbarSlot="skills" label="Навыки: районы, миссии и награды" compactLabel="Навыки" icon="🎓" holdOpen={claim.isPending}>
+      <CitySkillsPanel data={data} labels={labels} district={chosen} missionKey={params.get("mission")} completed={completed} total={total}
+        onDistrict={(id, key) => id ? selectDistrict(id, key) : allDistricts()} onMission={selectMission}
+        error={claim.isError ? <p className="city-error" role="alert">{claim.error.message}</p> : null}
+        action={missionAction} opensTool={opensTool} tool={districtTool} guide={guideFor} fine={fineFor} plots={plotsFor} />
+    </CityPeekPanel>}
     {!building && (quests.length > 0 || allPassed || assigned.length > 0) && <CityPeekPanel className="city-tasks-peek" toolbarSlot="quests" label={todo ? `Задания: осталось ${todo}` : "Задания: всё выполнено"} compactLabel="Задания" icon={<>❗{todo > 0 && <b className="city-count">{todo}</b>}</>} holdOpen={startAssignment.isPending}>
       <CityTasks quests={quests} coins={data.quests?.coins ?? 0} allPassed={allPassed} assigned={assigned} onQuest={openQuest} onStart={item => startAssignment.mutate(item)} starting={startAssignment.isPending ? startAssignment.variables?.id ?? null : null} error={startAssignment.isError ? startAssignment.error.message : null} />
     </CityPeekPanel>}
@@ -420,22 +409,6 @@ export function CityPage() {
     {driverLaunch && <Sheet title="Автопарк · Driver Simulator" onClose={() => setDriverLaunch(false)}><DriverEntry /></Sheet>}
   </div></CityToolbarProvider>;
 }
-
-/** Skills stay mounted and scroll to the current district when the panel opens. */
-function CitySkills({ labels, selected, onSelect, open }: { labels: CityLabelInfo[]; selected: DistrictId; onSelect: (id: DistrictId) => void; open: boolean }) {
-  const list = useRef<HTMLDivElement>(null);
-  useEffect(() => { if (open) list.current?.querySelector("[aria-pressed=true]")?.scrollIntoView({ inline: "center", block: "nearest" }); }, [selected, open]);
-  return <nav className="city-skills glass glass--regular" aria-label="Районы города">
-    <div className="city-skills__title"><h2>Твои навыки</h2><p>Опыт города показывает путь обучения. Коины попадают в общий кошелёк Puls.</p></div>
-    <div className="city-skills__list" ref={list}>
-      {labels.map(l => <button type="button" key={l.id} className="city-skill" style={{ "--district": DISTRICT_COLORS[l.id] } as CSSProperties} aria-pressed={selected === l.id} data-soon={l.soon || undefined} data-reward={l.reward || undefined} onClick={() => onSelect(l.id)}>
-        <span className="city-skill__icon" aria-hidden="true">{l.icon}</span>
-        <span className="city-skill__text"><strong>{l.name}</strong><small>{l.status}</small></span>
-      </button>)}
-    </div>
-  </nav>;
-}
-
 
 /** The district's plots in the mission panel: how many are built, and the way to the next free one. */
 function CityPlotsSummary({ plots, buildings, canBuild, moved, onShow, onBuild }: { plots: CityData["plots"]; buildings: CityData["buildings"]; canBuild: boolean; moved?: boolean; onShow: (key: string) => void; onBuild?: () => void }) {

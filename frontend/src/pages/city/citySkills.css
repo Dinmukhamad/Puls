@@ -1,0 +1,102 @@
+/*
+ * «Навыки» (CitySkillsPanel, docs/CITY_MISSIONS.md): the overview of every district and a district's missions by name.
+ * One popup under the toolbar: a header, a list that scrolls, and the mission's button always in view below it.
+ * Each district keeps its colour (--district) for its icon, progress and the open mission.
+ */
+.city-immersive .city-toolbar .skills { flex: 1; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; border-radius: 24px; overflow: hidden; }
+.skills-head { display: grid; gap: 10px; padding: 18px 18px 14px; border-bottom: 1px solid var(--separator); }
+.skills-head__title { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.skills-head h2 { margin: 0; font-size: 21px; line-height: 1.2; letter-spacing: -.5px; }
+.skills-head p { margin: 0; font-size: 12.5px; line-height: 1.55; color: var(--text-secondary); }
+.skills-count { font-size: 12px; font-weight: 700; color: var(--text-secondary); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.skills-meter { display: block; height: 6px; border-radius: 99px; background: var(--progress-tint); overflow: hidden; }
+.skills-meter > span { display: block; height: 100%; border-radius: inherit; background: var(--district, var(--text-primary)); transition: width .4s var(--ease-standard); }
+.skills-scroll { min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; display: grid; align-content: start; gap: 12px; padding: 14px 14px 18px; }
+.skills-foot { display: grid; gap: 8px; padding: 12px 16px 14px; border-top: 1px solid var(--separator); }
+.skills-foot .city-secondary { min-height: 40px; font-size: 13px; }
+.skills-chevron { grid-column: -2; color: var(--text-quaternary); font-size: 20px; line-height: 1; }
+
+/* Overview: the next mission with its button, then every district. */
+.skills-next { --district: #888; display: grid; gap: 6px; padding: 14px 14px 12px; border-radius: 18px; border: 1px solid color-mix(in srgb, var(--district) 35%, var(--separator)); background: color-mix(in srgb, var(--district) 9%, var(--surface-primary)); }
+.skills-next--done { --district: #48b68d; }
+.skills-next__eyebrow { font-size: 11px; font-weight: 750; letter-spacing: .4px; text-transform: uppercase; color: var(--text-secondary); }
+.skills-next[data-reward] .skills-next__eyebrow { color: var(--gold-text); }
+.skills-next__where { justify-self: start; display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 2px 10px 2px 7px; border: 0; border-radius: 99px; background: color-mix(in srgb, var(--district) 16%, transparent); color: var(--text-primary); font: inherit; font-size: 12px; font-weight: 650; cursor: pointer; }
+.skills-next__where:hover { background: color-mix(in srgb, var(--district) 26%, transparent); }
+.skills-next h3 { margin: 2px 0 0; font-size: 17px; line-height: 1.3; letter-spacing: -.2px; }
+.skills-next p { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); }
+.skills-next__action { display: grid; margin-top: 6px; }
+.skills-section { margin: 6px 2px 0; font-size: 11px; font-weight: 750; letter-spacing: .5px; text-transform: uppercase; color: var(--text-tertiary); }
+.skills-districts { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.skills-district { --district: #888; width: 100%; display: grid; grid-template-columns: 40px minmax(0, 1fr) 56px 12px; align-items: center; gap: 12px; min-height: 58px; padding: 8px 12px 8px 8px; border: 1px solid var(--separator); border-radius: 16px; background: color-mix(in srgb, var(--surface-primary) 80%, transparent); color: var(--text-primary); font: inherit; text-align: left; cursor: pointer; transition: background var(--motion-fast) var(--ease-standard), transform var(--motion-fast) var(--ease-standard); }
+.skills-district:hover { background: var(--surface-hover); }
+.skills-district:active { transform: scale(.99); }
+.skills-district:focus-visible { outline: 3px solid var(--district); outline-offset: 2px; }
+.skills-district__icon { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; background: color-mix(in srgb, var(--district) 18%, var(--surface-primary)); font-size: 19px; }
+.skills-district__text { display: grid; gap: 2px; min-width: 0; line-height: 1.3; }
+.skills-district__text strong { font-size: 14px; font-weight: 720; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.skills-district__text small { font-size: 12px; color: var(--text-secondary); }
+.skills small[data-tone=done] { color: var(--status-success-text); font-weight: 650; }
+.skills small[data-tone=reward] { color: var(--gold-text); font-weight: 700; }
+.skills-district .skills-meter { height: 5px; }
+.skills-district[data-soon] { opacity: .72; }
+.skills-district[data-soon] .skills-district__icon { filter: saturate(.35); }
+
+/* A district: back to all, its name, how far it is and its building, then its missions. */
+.skills-head--district { gap: 12px; padding-top: 10px; background: linear-gradient(180deg, color-mix(in srgb, var(--district) 13%, transparent), transparent); }
+.skills-back { justify-self: start; display: inline-flex; align-items: center; gap: 4px; min-height: 32px; margin-left: -6px; padding: 0 10px 0 6px; border: 0; border-radius: 10px; background: transparent; color: var(--text-secondary); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.skills-back span { font-size: 20px; line-height: 1; }
+.skills-back:hover { background: var(--surface-hover); color: var(--text-primary); }
+.skills-district-title { display: flex; align-items: center; gap: 12px; }
+.skills-district-title .skills-district__icon { flex: none; width: 48px; height: 48px; border-radius: 15px; font-size: 24px; }
+.skills-district-title p { margin-top: 2px; }
+.skills-district-facts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.skills-district-facts > span { display: grid; gap: 2px; padding: 8px 10px; border-radius: 12px; background: var(--city-glass-soft); border: 1px solid var(--separator); }
+.skills-district-facts strong { font-size: 15px; font-variant-numeric: tabular-nums; }
+.skills-district-facts small { font-size: 11.5px; color: var(--text-secondary); }
+.skills-district-facts .skills-stars { font-size: 14px; letter-spacing: 1px; color: #f2b400; }
+.skills-stars em { font-style: normal; color: color-mix(in srgb, var(--text-primary) 16%, transparent); }
+.skills-note { margin: 0; padding: 10px 12px; border-radius: 12px; background: var(--city-glass-soft); border: 1px solid var(--separator); font-size: 12.5px; line-height: 1.55; color: var(--text-secondary); }
+.skills-mastered { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 16px; background: var(--status-success-tint); }
+.skills-mastered > span { font-size: 26px; }
+.skills-mastered strong { display: block; font-size: 15px; }
+.skills-mastered small { display: block; margin-top: 2px; font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); }
+
+/* Missions by name; the open one shows what to do. */
+.skills-missions { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.skills-mission { border: 1px solid var(--separator); border-radius: 16px; background: color-mix(in srgb, var(--surface-primary) 80%, transparent); overflow: hidden; }
+.skills-mission[data-open] { border-color: color-mix(in srgb, var(--district) 45%, var(--separator)); box-shadow: 0 6px 18px rgba(16, 24, 40, .08); }
+.skills-mission__row { width: 100%; display: grid; grid-template-columns: 30px minmax(0, 1fr) 12px; align-items: center; gap: 10px; min-height: 54px; padding: 8px 12px 8px 10px; border: 0; background: transparent; color: var(--text-primary); font: inherit; text-align: left; cursor: pointer; }
+.skills-mission__row:hover { background: var(--surface-hover); }
+.skills-mission__row:focus-visible { outline: 3px solid var(--district); outline-offset: -3px; border-radius: 16px; }
+.skills-mission__mark { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--surface-secondary); border: 1px solid var(--separator); font-size: 12px; font-weight: 750; color: var(--text-secondary); }
+.skills-mission[data-state=completed] .skills-mission__mark { background: var(--status-success-tint); color: var(--status-success-text); border-color: transparent; }
+.skills-mission[data-state=ready] .skills-mission__mark { background: var(--coin-tint); color: var(--gold-text); border-color: transparent; }
+.skills-mission[data-open]:not([data-state=completed]):not([data-state=ready]):not([data-state=locked]) .skills-mission__mark { background: var(--district); color: #fff; border-color: transparent; }
+.skills-mission__text { display: grid; gap: 2px; min-width: 0; line-height: 1.3; }
+.skills-mission__text strong { font-size: 13.5px; font-weight: 700; }
+.skills-mission__text small { font-size: 12px; color: var(--text-secondary); }
+.skills-mission:is([data-state=locked], [data-state=unavailable]) .skills-mission__text strong { color: var(--text-secondary); }
+.skills-mission[data-state=ready] .skills-mission__text small { color: var(--gold-text); font-weight: 650; }
+.skills-mission[data-state=completed] .skills-mission__text small { color: var(--status-success-text); }
+.skills-mission .skills-chevron { transition: transform var(--motion-fast) var(--ease-standard); }
+.skills-mission[data-open] .skills-chevron { transform: rotate(90deg); }
+.skills-mission__detail { display: grid; gap: 12px; padding: 0 14px 14px 52px; }
+.skills-mission__detail > p { margin: 0; font-size: 13px; line-height: 1.6; color: var(--text-secondary); }
+.skills-objective { display: grid; grid-template-columns: 1fr auto; gap: 6px 8px; font-size: 12px; color: var(--text-secondary); }
+.skills-objective strong { color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.skills-objective .skills-meter { grid-column: 1 / -1; }
+.skills-locked { margin: 0; padding: 9px 11px; border: 1px dashed var(--border-strong); border-radius: 10px; font-size: 12px; line-height: 1.5; color: var(--text-secondary); }
+.skills-rewards { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.skills-rewards span { padding: 4px 9px; border-radius: 99px; background: var(--city-glass-soft); border: 1px solid var(--separator); font-size: 12px; font-weight: 700; }
+.skills-rewards small { font-size: 12px; color: var(--text-secondary); }
+.skills-mission__detail .city-guide { margin-top: 0; }
+
+@media (max-width: 767px) {
+  .skills-head { padding: 14px 14px 12px; }
+  .skills-scroll { padding: 12px 10px 16px; }
+  .skills-mission__detail { padding-left: 14px; }
+  .skills-foot { padding: 10px 12px 12px; }
+}
+@media (max-height: 640px) { .skills-head > p { display: none; } }
+@media (prefers-reduced-motion: reduce) { .skills-meter > span, .skills-mission .skills-chevron { transition: none; } }
