@@ -36,8 +36,8 @@ export function AppLayout() {
   const activeTab = active ? currentTab(active, location.pathname, location.search) : undefined;
   const { primary, overflow } = mobileNavigation(items);
   const separateProfile = !items.some((item) => item.id === "profile");
-  // «Мой город» занимает весь экран: меню сжимается до плавающих карточек поверх карты.
-  const immersive = location.pathname === "/training/city" && user?.role !== "trainee";
+  // «Мой город» занимает весь экран: меню сжимается до плавающих карточек поверх карты. У стажёра это его учебный город.
+  const immersive = location.pathname === "/training/city";
   const overflowActive = overflow.some((item) => item.id === active?.id) || (separateProfile && active?.id === "profile");
 
   useEffect(() => { try { localStorage.setItem(COLLAPSE_KEY, collapsed ? "1" : "0"); } catch { /* Optional preference. */ } }, [collapsed]);

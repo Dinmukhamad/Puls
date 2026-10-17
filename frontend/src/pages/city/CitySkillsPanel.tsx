@@ -3,7 +3,7 @@ import type { CityData, CityDistrict, CityMission, DistrictId } from "../../api/
 import type { CityLabelInfo } from "../../city3d/types";
 import { DISTRICT_COLORS } from "./cityDistricts";
 import { DISTRICT_LEVEL_NAMES, MAX_DISTRICT_LEVEL, districtLevel } from "./cityLevels";
-import { continueMission, districtProgress, missionNote, openMission, type DistrictProgress } from "./citySkills";
+import { continueMission, districtProgress, missionNote, ofMissions, openMission, type DistrictProgress } from "./citySkills";
 import "./citySkills.css";
 
 export interface SkillsActions {
@@ -24,14 +24,16 @@ export interface SkillsActions {
  * every district with how far it is; with one, the district — its missions by name, the chosen one open with what to
  * do, and the button for it always in view at the bottom.
  */
-export function CitySkillsPanel({ data, labels, district, missionKey, completed, total, onDistrict, onMission, error, ...actions }: {
+export function CitySkillsPanel({ data, labels, district, missionKey, completed, total, onDistrict, onMission, error, rewards = true, ...actions }: {
   data: CityData; labels: CityLabelInfo[]; district: CityDistrict | null; missionKey: string | null; completed: number; total: number;
   /** Opens a district, with one of its missions open, or (null) all of them. */
   onDistrict: (id: DistrictId | null, mission?: string) => void; onMission: (key: string) => void; error: ReactNode;
+  /** Missions pay XP and coins (operators); a trainee's teach only, so nothing speaks of rewards. */
+  rewards?: boolean;
 } & SkillsActions) {
   return <section className="skills glass glass--prominent" style={district ? tint(district.id) : undefined} aria-label={district ? `Навыки · ${district.name}` : "Навыки"}>
-    {district ? <DistrictView data={data} label={labels.find(l => l.id === district.id)} district={district} missionKey={missionKey} onBack={() => onDistrict(null)} onMission={onMission} error={error} {...actions} />
-      : <Overview data={data} labels={labels} completed={completed} total={total} onDistrict={onDistrict} error={error} action={actions.action} />}
+    {district ? <DistrictView data={data} label={labels.find(l => l.id === district.id)} district={district} missionKey={missionKey} onBack={() => onDistrict(null)} onMission={onMission} error={error} rewards={rewards} {...actions} />
+      : <Overview data={data} labels={labels} completed={completed} total={total} onDistrict={onDistrict} error={error} rewards={rewards} action={actions.action} />}
   </section>;
 }
 
@@ -39,16 +41,17 @@ const tint = (id: DistrictId) => ({ "--district": DISTRICT_COLORS[id] }) as CSSP
 const Meter = ({ done, total, label }: { done: number; total: number; label: string }) =>
   <span className="skills-meter" role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={total} aria-valuenow={done}><span style={{ width: `${total ? done / total * 100 : 0}%` }} /></span>;
 
-function Overview({ data, labels, completed, total, onDistrict, error, action }: {
+function Overview({ data, labels, completed, total, onDistrict, error, rewards, action }: {
   data: CityData; labels: CityLabelInfo[]; completed: number; total: number; onDistrict: (id: DistrictId, mission?: string) => void; error: ReactNode;
-  action: SkillsActions["action"];
+  rewards: boolean; action: SkillsActions["action"];
 }) {
   const next = continueMission(data.districts, data.missions), home = next && data.districts.find(d => d.id === next.district);
   const label = home && labels.find(l => l.id === home.id);
   return <>
     <header className="skills-head">
-      <div className="skills-head__title"><h2>Навыки</h2><span className="skills-count">{completed} из {total} миссий</span></div>
-      <p>Каждый район учит своему рабочему инструменту. Пройденные миссии дают опыт и коины и улучшают здание района.</p>
+      <div className="skills-head__title"><h2>Навыки</h2><span className="skills-count">{ofMissions(completed, total)}</span></div>
+      <p>{rewards ? "Каждый район учит своему рабочему инструменту. Пройденные миссии дают опыт и коины и улучшают здание района."
+        : "Каждый район учит своему рабочему инструменту. Пройденные миссии растят здание района, а твой прогресс видит наставник."}</p>
       <Meter done={completed} total={total} label="Пройдено миссий во всех районах" />
     </header>
     <div className="skills-scroll">
@@ -79,11 +82,12 @@ function DistrictStatus({ district, progress }: { district: CityDistrict; progre
   if (!progress.total) return <small>Рабочий кабинет</small>;
   if (progress.reward) return <small data-tone="reward">✦ Забери награду</small>;
   if (progress.mastered) return <small data-tone="done">✓ Район освоен</small>;
-  return <small>{progress.done} из {progress.total} миссий</small>;
+  return <small>{ofMissions(progress.done, progress.total)}</small>;
 }
 
-function DistrictView({ data, label, district, missionKey, onBack, onMission, error, action, opensTool, tool, guide, fine }: {
+function DistrictView({ data, label, district, missionKey, onBack, onMission, error, rewards, action, opensTool, tool, guide, fine }: {
   data: CityData; label?: CityLabelInfo; district: CityDistrict; missionKey: string | null; onBack: () => void; onMission: (key: string) => void; error: ReactNode;
+  rewards: boolean;
 } & SkillsActions) {
   // Every mission of the district is listed, a paused one too; the progress counts the curriculum's.
   const missions = data.missions.filter(m => m.district === district.id);
@@ -111,7 +115,7 @@ function DistrictView({ data, label, district, missionKey, onBack, onMission, er
     <div className="skills-scroll">
       {district.soon && <p className="skills-note">Район строится: здесь появятся новые учебные инструменты и миссии. Твой прогресс в других районах сохранится.</p>}
       {deferred && <p className="skills-note">При первом входе в Oktell обучение само проведёт по разделам, статусам и перезвону водителю. Достигнутый уровень здания сохраняется.</p>}
-      {district.id === "scenarios" && <p className="skills-note">Учебные разговоры с водителем и практика в CRM и Диспетчерской. Коины — за первое успешное прохождение.</p>}
+      {district.id === "scenarios" && <p className="skills-note">Учебные разговоры с водителем и практика в CRM и Диспетчерской.{rewards && " Коины — за первое успешное прохождение."}</p>}
       {progress.mastered && <div className="skills-mastered" role="status"><span aria-hidden="true">🏆</span><div><strong>Район освоен</strong><small>Все миссии пройдены{level === MAX_DISTRICT_LEVEL ? " — здание стало легендой" : ""}. Практиковаться можно сколько угодно.</small></div></div>}
       {missions.length > 0 && <ol className="skills-missions" aria-label={`Миссии района «${district.name}»`}>{missions.map((m, i) => {
         const isOpen = open?.key === m.key, parent = data.missions.find(item => item.key === m.prerequisite);
@@ -125,7 +129,7 @@ function DistrictView({ data, label, district, missionKey, onBack, onMission, er
             <p>{m.description}</p>
             {m.state !== "completed" && <div className="skills-objective"><span>{m.objective}</span><strong>{m.current} / {m.target}</strong><Meter done={m.current} total={m.target} label={`${m.objective}: ${m.current} из ${m.target}`} /></div>}
             {m.state === "locked" && parent && <p className="skills-locked">Откроется, когда будет пройдена миссия «{parent.title}» и получена награда.</p>}
-            <div className="skills-rewards">{m.xp > 0 && <span>✦ {m.xp} XP</span>}{m.coins > 0 && <span>◈ {m.coins} коинов</span>}<small>{m.state === "completed" ? "получено" : "за прохождение"}</small></div>
+            {rewards && (m.xp > 0 || m.coins > 0) && <div className="skills-rewards">{m.xp > 0 && <span>✦ {m.xp} XP</span>}{m.coins > 0 && <span>◈ {m.coins} коинов</span>}<small>{m.state === "completed" ? "получено" : "за прохождение"}</small></div>}
             {guide(m)}
           </div>}
         </li>;

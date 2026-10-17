@@ -19,7 +19,7 @@ test("trainee progress preserves completed historical stages and excludes paused
   assert.equal(summary.percent, 67);
   const html = renderToStaticMarkup(React.createElement(TraineeProgress, { data }));
   assert.match(html, /67%/);
-  assert.match(html, /Пройдено 2 из 3 этапов/);
+  assert.match(html, /Пройдено 2 из 3 миссий/);
   assert.doesNotMatch(html, /койн|коин|XP|баланс|уровень/i);
 });
 

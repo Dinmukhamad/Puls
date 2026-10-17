@@ -67,7 +67,7 @@ test('the scenarios district is available immediately and follows server complet
   const mission = {key:'scenario_business_park',district:'scenarios',enabled:true,state:'available'};
   const first = districtLabels(districts,[mission])[0];
   assert.equal(first.soon,false); assert.equal(first.reward,false); assert.equal(first.level,1);
-  assert.equal(first.icon,DISTRICT_ICONS.scenarios); assert.equal(first.status,'0 из 1 миссий');
+  assert.equal(first.icon,DISTRICT_ICONS.scenarios); assert.equal(first.status,'0 из 1 миссии');
   assert.match(DISTRICT_COLORS.scenarios,/^#[0-9a-f]{6}$/i);
   assert.equal(districtLabels(districts,[{...mission,state:'ready'}])[0].reward,true);
   const completed = districtLabels(districts,[{...mission,state:'completed'}])[0];

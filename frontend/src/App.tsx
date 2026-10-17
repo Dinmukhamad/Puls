@@ -3,6 +3,7 @@ import { lazy, Suspense, useLayoutEffect } from "react";
 import { retainedCity } from "./pages/city/retainedCity";
 import { CityRoute } from "./pages/city/CityRoute";
 const TraineePage = lazy(() => import("./pages/TraineePage").then(module => ({ default: module.TraineePage })));
+const TraineeCity = lazy(() => import("./pages/city/TraineeCity").then(module => ({ default: module.TraineeCity })));
 
 import { useAuth } from "./auth/AuthContext";
 import { useAccess } from "./auth/AccessContext";
@@ -85,7 +86,7 @@ export function App() {
       <Route path="/simulator/attempts/:attemptId" element={<SectionGuard><Suspense fallback={<Skeleton height={300} />}><SimulatorPage /></Suspense></SectionGuard>} />
       <Route element={<AppLayout />}>
         <Route path="/trainee" element={<Suspense fallback={<Skeleton height={400} />}><TraineePage /></Suspense>} />
-        <Route path="/training/city" element={user.role === "trainee" ? <Suspense fallback={<Skeleton height={400} />}><TraineePage learning /></Suspense> : <CityRoute />} />
+        <Route path="/training/city" element={user.role === "trainee" ? <Suspense fallback={<div className="city-immersive city-immersive--empty" />}><TraineeCity /></Suspense> : <CityRoute />} />
         <Route path="/training/scenarios/:key" element={<Suspense fallback={<Skeleton height={400} />}><ScenarioPage /></Suspense>} />
         <Route path="/training/scenarios/attempts/:attemptId" element={<Suspense fallback={<Skeleton height={400} />}><ScenarioPage /></Suspense>} />
         <Route path="/admin/learning/city" element={<Suspense fallback={<Skeleton height={400} />}><CityAdminPage /></Suspense>} />

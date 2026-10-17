@@ -59,7 +59,7 @@ const staffHome = section("home", "Главная", HomeIcon, [tab("/admin/summa
 export const ROLE_NAVIGATION: Record<Role, readonly NavItem[]> = {
   trainee: [
     section("home", "Главная", HomeIcon, [tab("/trainee", "Подготовка к работе")]),
-    section("training", "Обучение", SparkIcon, [tab("/training/city", "Учебная карта")]),
+    section("training", "Обучение", SparkIcon, [tab("/training/city", "Учебный город")]),
     ACCOUNT_SECTION,
   ],
   trainer: [

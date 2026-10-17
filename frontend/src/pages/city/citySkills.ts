@@ -3,7 +3,11 @@
  * mission, and a district's missions by name. Pure helpers of CitySkillsPanel.
  */
 import type { CityDistrict, CityMission } from "../../api/city";
+import { plural } from "../../utils/format";
 import { completedDistrictMissions } from "./cityLevels";
+
+/** «3 из 5 миссий», «0 из 1 миссии»: how many of a district's (or all) missions are passed. */
+export const ofMissions = (done: number, total: number) => `${done} из ${total} ${plural(total, "миссии", "миссий", "миссий")}`;
 
 /** The missions a district counts: the curriculum's enabled ones and those already passed. */
 export const countedMissions = (district: CityDistrict, missions: CityMission[]) =>

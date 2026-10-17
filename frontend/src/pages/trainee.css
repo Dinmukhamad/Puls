@@ -11,12 +11,6 @@
 .trainee-progress__value strong { font-size: var(--text-kpi); line-height: 1.15; letter-spacing: -.025em; font-variant-numeric: tabular-nums; }
 .trainee-progress__value span { color: var(--text-secondary); font-size: var(--text-secondary-size); }
 .trainee-progress p { margin: 0; }
-.trainee-learning-progress { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-3); }
-.trainee-learning-progress .progress { flex: 1; min-width: 80px; }
-.trainee-learning-progress strong { font-size: var(--text-secondary-size); font-variant-numeric: tabular-nums; }
-.trainee-learning-layout { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(0, 1.8fr); gap: var(--sp-5); align-items: start; }
-.trainee-learning-layout > .card { min-width: 0; }
-.trainee-program-mobile { display: none; padding: 0 var(--sp-4) var(--sp-4); }
 .trainee-program { list-style: none; padding: 0; margin: 0; }
 .trainee-program > li + li { border-top: 1px solid var(--separator); }
 .trainee-program :is(a, button) { display: flex; align-items: center; gap: var(--sp-3); width: 100%; min-height: 84px; padding: var(--sp-4) var(--sp-6); border: 0; background: transparent; color: var(--text-primary); text-align: left; font: inherit; text-decoration: none; cursor: pointer; transition: background var(--motion-fast) var(--ease-standard); }
@@ -24,7 +18,8 @@
 .trainee-program [aria-current=step] { background: var(--surface-pressed); box-shadow: inset 3px 0 0 var(--accent-primary); }
 .trainee-program :is(a, button):focus-visible { position: relative; outline: 2px solid var(--accent-primary); outline-offset: -3px; }
 .trainee-program li:last-child :is(a, button) { border-radius: 0 0 var(--radius-xl) var(--radius-xl); }
-.trainee-program__icon { display: grid; place-items: center; flex: none; width: 38px; height: 38px; border-radius: var(--radius-s); background: var(--surface-secondary); color: var(--text-secondary); }
+/* Each district as in the city: its sign's icon on its colour. */
+.trainee-program__icon { display: grid; place-items: center; flex: none; width: 40px; height: 40px; border-radius: 12px; background: color-mix(in srgb, var(--district, var(--text-tertiary)) 16%, var(--surface-primary)); border: 1px solid color-mix(in srgb, var(--district, var(--separator)) 35%, transparent); color: var(--text-primary); font-size: 20px; }
 .trainee-program__icon.is-complete { color: var(--status-success-text); background: var(--status-success-tint); }
 .trainee-program__text { display: grid; gap: var(--sp-1); flex: 1; min-width: 0; }
 .trainee-program__text strong { font-size: var(--text-secondary-size); font-weight: 600; }
@@ -32,27 +27,7 @@
 .trainee-program__status { display: grid; justify-items: end; gap: var(--sp-1); flex: none; }
 .trainee-program__status small { color: var(--text-secondary); font-size: var(--text-caption); font-variant-numeric: tabular-nums; }
 .trainee-program :is(a, button) > svg { color: var(--text-tertiary); flex: none; }
-.trainee-learning-layout .trainee-program :is(a, button) { padding: var(--sp-4); }
-.trainee-learning-layout .trainee-program__icon { width: 32px; height: 32px; }
-.trainee-learning-layout .trainee-program__status .badge { font-size: var(--text-micro); }
-.trainee-lessons { display: grid; list-style: none; padding: 0; margin: 0; }
-.trainee-lessons > li { display: flex; gap: var(--sp-3); padding: var(--sp-5) 0; }
-.trainee-lessons > li:first-child { padding-top: 0; }
-.trainee-lessons > li:last-child { padding-bottom: 0; }
-.trainee-lessons > li + li { border-top: 1px solid var(--separator); }
-.trainee-lesson__number { display: grid; place-items: center; flex: none; width: 30px; height: 30px; border-radius: var(--radius-pill); background: var(--surface-secondary); color: var(--text-secondary); font-size: var(--text-caption); font-variant-numeric: tabular-nums; }
-.trainee-lessons [data-state=completed] .trainee-lesson__number { background: var(--status-success-tint); color: var(--status-success-text); }
-.trainee-lesson__body { display: grid; gap: var(--sp-3); min-width: 0; flex: 1; }
-.trainee-lesson__title { display: flex; justify-content: space-between; align-items: start; flex-wrap: wrap; gap: var(--sp-2); }
-.trainee-lesson__title h3 { min-width: 0; font-size: var(--text-body); font-weight: 600; line-height: 1.4; }
-.trainee-lesson__body p { margin: 0; color: var(--text-secondary); font-size: var(--text-secondary-size); line-height: 1.5; overflow-wrap: anywhere; }
-.trainee-lesson__body .btn { justify-self: start; white-space: normal; text-align: left; }
-.trainee-lesson__body .trainee-lesson__hint { font-size: var(--text-caption); }
-.trainee-practice { display: grid; gap: var(--sp-4); justify-items: start; }
-.trainee-practice p { margin: 0; }
-.trainee-map { height: 380px; position: relative; isolation: isolate; overflow: hidden; border-radius: var(--radius-m); }
-.trainee-map .city-world, .trainee-map .city-loading, .trainee-map .city-fallback { position: absolute; inset: 0; border-radius: inherit; }
-.trainee-map .city-map-peek, .trainee-map .city-map-hint, .trainee-map .city-label__level { display: none; }
-@media (max-width: 1100px) { .trainee-learning-layout { grid-template-columns: minmax(230px, 1fr) minmax(0, 1.5fr); }.trainee-learning-layout .trainee-program__status { display: none; } }
-@media (max-width: 800px) { .trainee-overview, .trainee-learning-layout { grid-template-columns: minmax(0, 1fr); }.trainee-learning-layout .trainee-program { display: none; }.trainee-program-mobile { display: block; }.trainee-map { height: 320px; } }
-@media (max-width: 480px) { .trainee-program :is(a, button) { padding: var(--sp-4); gap: var(--sp-2); }.trainee-program__icon { width: 32px; height: 32px; }.trainee-program__text > span { font-size: var(--text-micro); }.trainee-program__status .badge { font-size: var(--text-micro); }.trainee-program :is(a, button) > svg { display: none; }.trainee-current__actions { flex-direction: column; align-items: stretch; }.trainee-current__actions .btn { justify-content: center; }.trainee-map { height: 280px; } }
+@media (max-width: 800px) { .trainee-overview { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 480px) { .trainee-program :is(a, button) { padding: var(--sp-4); gap: var(--sp-2); }.trainee-program__icon { width: 32px; height: 32px; }.trainee-program__text > span { font-size: var(--text-micro); }.trainee-program__status .badge { font-size: var(--text-micro); }.trainee-program :is(a, button) > svg { display: none; }.trainee-current__actions { flex-direction: column; align-items: stretch; }.trainee-current__actions .btn { justify-content: center; } }
+.trainee-district-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px 3px 6px; border-radius: var(--radius-pill); background: color-mix(in srgb, var(--district) 14%, var(--surface-primary)); color: var(--text-primary); font-weight: 600; }
+.trainee-program-card .card__action .btn { white-space: nowrap; }
