@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import { team, teamError, type TeamGroup, type TeamUserSaved, type TeamUserInput } from "../api/team";
@@ -9,10 +9,12 @@ import { useAuth } from "../auth/AuthContext";
 import { GlassSurface } from "../components/GlassSurface";
 import { Sheet } from "../components/Sheet";
 import { useToast } from "../components/Toast";
+import { ChevronRightIcon } from "../components/icons";
 import { Avatar, Badge, Button, Card, EmptyState, ErrorState, Pagination, RowsSkeleton, Select } from "../components/ui";
 import { dateOnly, dateTime, ROLE_LABELS } from "../utils/format";
 import { loadTelegramDraft, normalizeTelegramUsername, telegramUpdate, type TeamTelegramDraft } from "./teamTelegram";
-import { activeTeamGroups, destinationGroupId, userTeamLabel } from "./supervisorTeams";
+import { activeTeamGroups, destinationGroupId } from "./supervisorTeams";
+import { staffCount, teamOf, teamTitles } from "./teamSection";
 import "./team.css";
 import "./users.css";
 
@@ -42,18 +44,8 @@ export function UsersPage() {
     queryFn: ({ signal }) => team.users({ search, role, group_id: group || undefined, supervisor_id: supervisor && supervisor !== "unassigned" ? supervisor : undefined, unassigned: supervisor === "unassigned" ? true : undefined, is_active: status ? status === "active" : undefined, page, size }, signal),
   });
   const activeFilters = [role, group, supervisor, status].filter(Boolean).length;
-  const teamLabel = (user: UserOut) => {
-    if (user.role !== "supervisor") {
-      const assignedGroup = groups.data?.find(item => item.id === user.group?.id);
-      const owner = assignedGroup?.supervisor;
-      if (owner && assignedGroup.name.trim().toLocaleLowerCase("ru") === owner.full_name.trim().toLocaleLowerCase("ru")) {
-        return `${owner.full_name}${assignedGroup.is_active ? "" : " · команда в архиве"}`;
-      }
-      return userTeamLabel(user, groups.data ?? []);
-    }
-    const ownTeam = teams.data?.find(item => item.supervisor.id === user.id);
-    return ownTeam ? `Своя команда · ${ownTeam.operator_count} операторов` : "Своя команда";
-  };
+  const titles = teamTitles(actor?.role);
+  const teamLabel = (user: UserOut) => teamOf(user, groups.data ?? [], teams.data ?? [], actor?.role);
 
   function filter(key: string, value: string) {
     setParams((current) => {
@@ -78,40 +70,59 @@ export function UsersPage() {
   }
 
   const canEdit = (target: UserOut) => atLeast("head") && (target.role !== "admin" || actor?.role === "admin") && (!target.is_developer || actor?.is_developer);
-  const actions = (target: UserOut) => <div className="team-actions user-row-actions">
-    <Link className="btn btn--secondary btn--s" to={`/admin/users/${target.id}`}>Открыть</Link>
-    {canEdit(target) && <Button size="s" onClick={() => setEditor(target)}>Изменить</Button>}
-    {canEdit(target) && actor?.id !== target.id && <Button className="user-row-actions__archive" size="s" variant="plain" onClick={() => setArchiving(target)}>{target.is_active ? "В архив" : "Восстановить"}</Button>}
-  </div>;
+  const actions = (target: UserOut) => canEdit(target) ? <>
+    {actor?.id !== target.id && <Button className="team-row__archive" size="s" variant="plain" onClick={() => setArchiving(target)}>{target.is_active ? "В архив" : "Восстановить"}</Button>}
+    <Button size="s" onClick={() => setEditor(target)}>Изменить</Button>
+  </> : null;
+  const filtered = Boolean(search) || activeFilters > 0;
 
   return <div className="stack team-page users-page">
-    <div className="page-head"><div><h1 className="page-title">Пользователи</h1><p className="page-subtitle">{users.data ? `${users.data.total} сотрудников по выбранным фильтрам` : "Сотрудники и доступы"}{trainer ? " · Стажёры и операторы" : ""}</p></div>
+    <div className="page-head"><div><h1 className="page-title">{titles.users}</h1><p className="page-subtitle">{users.data ? `${staffCount(users.data.total)}${filtered ? " по выбранным фильтрам" : ""}` : trainer ? "Стажёры и операторы" : "Сотрудники и их доступы"}</p></div>
       {(atLeast("head") || trainer) && <div className="page-head__actions"><Button variant="primary" onClick={() => setEditor("new")}>{trainer ? "Создать участника" : "Создать пользователя"}</Button></div>}
     </div>
     <GlassSurface variant="regular" className="team-filterbar users-filterbar">
       <label className="field team-search"><span className="field__label">Поиск</span><input className="input" type="search" placeholder="ФИО или логин" value={search} onChange={(e) => filter("search", e.target.value)} /></label>
       <div className="team-desktop-filters users-filterbar__fields">{filterFields()}</div>
       <Button className="team-mobile-filter-button" onClick={() => setFiltersOpen(true)}>Фильтры{activeFilters ? ` · ${activeFilters}` : ""}</Button>
-      {(search || activeFilters > 0) && <Button className="users-filterbar__reset" variant="plain" size="s" onClick={() => setParams({})}>Сбросить фильтры</Button>}
+      {filtered && <Button className="users-filterbar__reset" variant="plain" size="s" onClick={() => setParams({})}>Сбросить фильтры</Button>}
     </GlassSurface>
     {teams.isError && <ErrorState error={new Error("Не удалось загрузить команды супервайзеров")} onRetry={() => teams.refetch()} />}
     {groups.isError && <ErrorState error={new Error("Не удалось загрузить команды")} onRetry={() => groups.refetch()} />}
-    <Card title="Команда" padded={false}>
+    <Card title="Сотрудники" subtitle={trainer ? "Имя, роль и дата создания" : "Имя, роль и команда. Нажмите на строку — откроется карточка сотрудника."} padded={false} className="team-list">
       {users.isLoading && <div className="card__body"><RowsSkeleton /></div>}
       {users.isError && <ErrorState error={new Error(teamError(users.error, "Не удалось загрузить сотрудников"))} onRetry={() => users.refetch()} />}
       {users.data && users.data.items.length === 0 && <EmptyState title="Сотрудники не найдены" hint="Попробуйте изменить фильтры или создайте первую учётную запись." action={page > 1 ? <Button onClick={() => filter("page", "1")}>На первую страницу</Button> : undefined} />}
       {users.data && users.data.items.length > 0 && <>
-        <div className="table-wrap team-desktop-table"><table className="table users-table"><thead><tr><th>Сотрудник</th><th>Роль</th><th>{trainer ? "Создан" : "Супервайзер · команда"}</th><th>Статус</th><th className="users-table__actions-heading">Действия</th></tr></thead><tbody>
-          {users.data.items.map((u) => <tr key={u.id}><td><Link className="cell-person team-person-link" to={`/admin/users/${u.id}`}><Avatar name={u.full_name} id={u.id} size={36} /><span className="cell-person__text"><span className="cell-person__name">{u.full_name}</span>{u.hired_on && <span className="cell-person__meta">Дата приёма: {dateOnly(u.hired_on)}</span>}</span></Link></td><td>{ROLE_LABELS[u.role]}</td><td>{trainer ? u.created_at ? new Date(u.created_at).toLocaleDateString("ru") : "—" : teamLabel(u)}</td><td><UserStatus active={u.is_active} /></td><td>{actions(u)}</td></tr>)}
-        </tbody></table></div>
-        <div className="team-mobile-list">{users.data.items.map((u) => <article className="team-person-card" key={u.id}><div className="team-person-card__head"><Avatar name={u.full_name} id={u.id} /><div><Link className="team-person-link" to={`/admin/users/${u.id}`}><strong>{u.full_name}</strong></Link>{u.hired_on && <p className="muted micro">Дата приёма: {dateOnly(u.hired_on)}</p>}</div></div><div className="team-meta"><span>{ROLE_LABELS[u.role]}</span>{!trainer && <span>{teamLabel(u)}</span>}<UserStatus active={u.is_active} /></div>{actions(u)}</article>)}</div>
+        <ul className="team-rows team-rows--people" aria-label="Сотрудники">{users.data.items.map((u) => <TeamPersonRow key={u.id} person={u}
+          team={trainer ? u.created_at ? `Создан ${dateOnly(u.created_at)}` : undefined : teamLabel(u)} actions={actions(u)} />)}</ul>
         <Pagination page={page} size={size} total={users.data.total} onChange={(p) => filter("page", String(p))} />
       </>}
     </Card>
     {editor && <UserEditor target={editor === "new" ? undefined : editor} groups={groups.data ?? []} groupsReady={trainer || groups.isSuccess} onClose={() => setEditor(null)} />}
     {archiving && <UserArchive target={archiving} onClose={() => setArchiving(null)} />}
-    {filtersOpen && <Sheet title="Фильтры пользователей" onClose={() => setFiltersOpen(false)} footer={<Button variant="primary" onClick={() => setFiltersOpen(false)}>Показать сотрудников</Button>}><div className="users-mobile-filters">{filterFields()}</div></Sheet>}
+    {filtersOpen && <Sheet title="Фильтры" onClose={() => setFiltersOpen(false)} footer={<Button variant="primary" onClick={() => setFiltersOpen(false)}>Показать сотрудников</Button>}><div className="users-mobile-filters">{filterFields()}</div></Sheet>}
   </div>;
+}
+
+/**
+ * A person in a list of «Команда» (docs/TEAM_SECTION.md): photo, name, login and hire date, role and team. The whole row
+ * opens the employee's card; the actions on the right stay buttons of their own.
+ */
+export function TeamPersonRow({ person, role = true, team, actions }: { person: UserOut; role?: boolean; team?: ReactNode; actions?: ReactNode }) {
+  return <li className={`team-row${person.is_active ? "" : " is-archived"}`}>
+    <Link className="team-row__person" to={`/admin/users/${person.id}`}>
+      <Avatar name={person.full_name} id={person.id} size={40} />
+      <span className="team-row__text">
+        <span className="team-row__name">{person.full_name}{!person.is_active && <Badge tone="neutral">В архиве</Badge>}</span>
+        <span className="team-row__meta">{person.login}{person.hired_on && ` · дата приёма ${dateOnly(person.hired_on)}`}</span>
+      </span>
+    </Link>
+    <span className="team-row__role">{role && ROLE_LABELS[person.role]}</span>
+    <span className="team-row__team">{team}</span>
+    <span className="team-row__summary">{[role && ROLE_LABELS[person.role], team].filter(Boolean).join(" · ")}</span>
+    {actions && <span className="team-row__actions">{actions}</span>}
+    <span className="team-row__go" aria-hidden="true"><ChevronRightIcon size={16} /></span>
+  </li>;
 }
 
 export function UserStatus({ active }: { active: boolean }) {

@@ -7,16 +7,27 @@ import { useAuth } from "../auth/AuthContext";
 import { GlassSurface } from "../components/GlassSurface";
 import { Sheet } from "../components/Sheet";
 import { useToast } from "../components/Toast";
-import { Avatar, Badge, Button, Card, EmptyState, ErrorState, Pagination, Select, Skeleton } from "../components/ui";
+import { Avatar, Badge, Button, Card, EmptyState, ErrorState, KPI, Pagination, RowsSkeleton, Select, Skeleton } from "../components/ui";
+import { ChevronRightIcon, UsersIcon } from "../components/icons";
+import { plural } from "../utils/format";
 import { activeTeamGroups, assignmentTransferUsers, destinationGroupId, userTeamLabel } from "./supervisorTeams";
-import { UserEditor } from "./UsersPage";
+import { groupsWorthShowing, operatorCount, teamTitles } from "./teamSection";
+import { TeamPersonRow, UserEditor } from "./UsersPage";
 import "./team.css";
 
+/**
+ * «Супервайзеры» for heads and admins, «Моя команда» for a supervisor (docs/TEAM_SECTION.md). Who leads whom and how many
+ * operators are still without a team; a row opens the team's operators.
+ */
 export function GroupsPage() {
   const { user: actor } = useAuth();
-  const canManage = actor?.role === "head" || actor?.role === "admin";
+  return actor?.role === "head" || actor?.role === "admin" ? <Supervisors /> : <MyTeam />;
+}
+
+function Supervisors() {
   const groups = useQuery({ queryKey: ["team-groups"], queryFn: team.groups });
   const teams = useQuery({ queryKey: ["team-supervisor-teams", true], queryFn: ({ signal }) => team.supervisorTeams(true, signal) });
+  const free = useQuery({ queryKey: ["team-users", "unassigned-operators"], queryFn: ({ signal }) => team.users({ role: "operator", unassigned: true, is_active: true, page: 1, size: 1 }, signal) });
   const [params, setParams] = useSearchParams();
   const search = params.get("search") ?? "";
   const status = ["active", "archived", "all"].includes(params.get("status") ?? "") ? params.get("status")! : "active";
@@ -25,31 +36,91 @@ export function GroupsPage() {
   const [assignment, setAssignment] = useState<{ team: SupervisorTeam; remove: boolean } | null>(null);
   const filtered = teams.data?.filter((item) => `${item.supervisor.full_name} ${item.supervisor.login} ${item.groups.map(g => g.name).join(" ")}`.toLocaleLowerCase().includes(search.toLocaleLowerCase()) && (status === "all" || item.supervisor.is_active === (status === "active")));
   const unowned = groups.data?.filter(g => !g.supervisor && `${g.name} ${g.code}`.toLocaleLowerCase().includes(search.toLocaleLowerCase()) && (status === "all" || g.is_active === (status === "active"))) ?? [];
+  const active = teams.data?.filter(item => item.supervisor.is_active) ?? [];
+  const archived = (teams.data?.length ?? 0) - active.length;
+  const unassigned = free.data?.total ?? 0;
+  const titles = teamTitles("head");
+
   return <div className="stack team-page">
-    <div className="page-head"><div><h1 className="page-title">{canManage ? "Супервайзеры и команды" : "Моя команда"}</h1><p className="page-subtitle">{canManage ? "Создайте супервайзера и назначьте ему операторов. Команда создаётся автоматически." : "Ваши операторы. Состав команды назначает руководитель или администратор."}</p></div>{canManage && <Button variant="primary" onClick={() => setNewSupervisor(true)}>Создать супервайзера</Button>}</div>
-    {canManage && <GlassSurface variant="regular" className="team-filterbar"><label className="field team-search"><span className="field__label">Поиск супервайзера</span><input className="input" type="search" placeholder="Имя, логин или название команды" value={search} onChange={(e) => setParams({ status, search: e.target.value }, { replace: true })} /></label>
-      <label className="field team-status-filter"><span className="field__label">Статус</span><Select aria-label="Статус супервайзера" value={status} onChange={(value) => setParams({ search, status: value })} options={[{ value: "active", label: "Активные" }, { value: "archived", label: "Архивные" }, { value: "all", label: "Все" }]} /></label></GlassSurface>}
+    <div className="page-head"><div><h1 className="page-title">{titles.groups}</h1><p className="page-subtitle">Супервайзеры и их команды. Назначьте супервайзеру операторов — команда создастся сама.</p></div><Button variant="primary" onClick={() => setNewSupervisor(true)}>Создать супервайзера</Button></div>
+    {teams.data && <div className="kpi-grid team-kpis">
+      <KPI label="Супервайзеров" value={active.length} hint={archived ? `Ещё ${archived} в архиве` : "Все активны"} />
+      <KPI label="Операторов в командах" value={active.reduce((sum, item) => sum + item.operator_count, 0)} hint="У активных супервайзеров" />
+      <KPI label="Без команды" value={free.data ? unassigned : "—"} tone={unassigned > 0 ? "accent" : "neutral"}
+        hint={unassigned > 0 ? <Link to="/admin/users?role=operator&supervisor=unassigned&status=active">Показать операторов</Link> : free.data ? "Все операторы в командах" : undefined} />
+    </div>}
+    <GlassSurface variant="regular" className="team-filterbar"><label className="field team-search"><span className="field__label">Поиск</span><input className="input" type="search" placeholder="Имя, логин или название команды" value={search} onChange={(e) => setParams({ status, search: e.target.value }, { replace: true })} /></label>
+      <label className="field team-status-filter"><span className="field__label">Статус</span><Select aria-label="Статус супервайзера" value={status} onChange={(value) => setParams({ search, status: value })} options={[{ value: "active", label: "Активные" }, { value: "archived", label: "Архивные" }, { value: "all", label: "Все" }]} /></label></GlassSurface>
     {teams.isLoading && <Skeleton height={200} />}{teams.isError && <ErrorState error={new Error(teamError(teams.error, "Не удалось загрузить команды супервайзеров"))} onRetry={() => teams.refetch()} />}
-    {filtered?.length === 0 && <EmptyState title={canManage ? "Супервайзеры не найдены" : "Команда не найдена"} hint={canManage ? "Измените фильтры или создайте супервайзера." : "Попросите руководителя или администратора проверить вашу команду."} />}
-    <div className="team-group-grid">{filtered?.map((item) => <Card key={item.supervisor.id} className="team-group-card">
-      <header className="team-group-card__head">
-        <Avatar name={item.supervisor.full_name} id={item.supervisor.id} size={44} />
-        <div className="team-group-card__identity"><h2 className="card__title">{item.supervisor.full_name}</h2><p className="card__subtitle">Супервайзер</p></div>
-        <Badge dot tone={item.supervisor.is_active ? "success" : "neutral"}>{item.supervisor.is_active ? "Активен" : "Архив"}</Badge>
-      </header>
-      <div className="team-group-card__summary"><strong className="team-group-card__count">{item.operator_count}</strong><span className="secondary">операторов в команде</span></div>
-      {item.groups.length > 0 ? <div className="team-group-card__groups"><div className="team-group-card__section-label">{item.groups.length === 1 ? "Команда" : `Группы команды · ${item.groups.length}`}</div><div className="team-owned-groups">{item.groups.map(group => <div key={group.id} className="team-owned-group"><div><strong>{group.name}</strong><span className="muted small block">{group.operator_count} операторов{group.is_active ? "" : " · архив"}</span></div>{canManage && <Button size="s" variant="secondary" aria-label={`Настройки команды: ${group.name}`} onClick={() => setEditor(group)}>Настройки</Button>}</div>)}</div></div> : <p className="muted">Операторов пока нет. При назначении команда создастся автоматически.</p>}
-      {activeTeamGroups(item).length > 1 && <p className="field__note">При назначении выберите одну из групп команды. Их состав и районы сохранены.</p>}
-      <footer className="team-group-card__actions">
-        {canManage && item.supervisor.is_active && <Button variant="primary" block onClick={() => setAssignment({ team: item, remove: false })}>Назначить операторов</Button>}
-        <div className="team-group-card__secondary-actions"><Link className="btn btn--secondary btn--m" to={`/admin/users?role=operator&supervisor=${item.supervisor.id}`}>Операторы</Link>{canManage && item.operator_count > 0 && <Button variant="plain" onClick={() => setAssignment({ team: item, remove: true })}>Снять из команды</Button>}</div>
-      </footer>
-    </Card>)}</div>
-    {canManage && groups.isError && <ErrorState error={groups.error} onRetry={() => groups.refetch()} />}
-    {canManage && unowned.length > 0 && <Card title="Группы без супервайзера" subtitle="Назначьте владельца в настройках группы. Операторы получат доступ к его району."><div className="team-owned-groups">{unowned.map(group => <div key={group.id} className="team-owned-group"><div><strong>{group.name}</strong><p className="muted small">{group.operator_count} операторов{group.is_active ? "" : " · архив"}</p></div><div className="team-actions"><Link className="btn btn--secondary btn--s" to={`/admin/users?group=${group.id}`}>Открыть</Link><Button variant="plain" size="s" onClick={() => setEditor(group)}>Назначить супервайзера</Button></div></div>)}</div></Card>}
+    {filtered?.length === 0 && <EmptyState title="Супервайзеры не найдены" hint="Измените фильтры или создайте супервайзера." />}
+    {filtered && filtered.length > 0 && <Card title="Команды" subtitle="Нажмите на строку — откроется состав команды." padded={false} className="team-list">
+      <ul className="team-rows team-rows--teams" aria-label="Команды супервайзеров">{filtered.map((item) => {
+        const shown = groupsWorthShowing(item);
+        const single = item.groups.length === 1 && shown.length === 0 ? item.groups[0] : null;
+        return <li key={item.supervisor.id} className={`team-row${item.supervisor.is_active ? "" : " is-archived"}`}>
+          <Link className="team-row__person" to={`/admin/users?role=operator&supervisor=${item.supervisor.id}`}>
+            <Avatar name={item.supervisor.full_name} id={item.supervisor.id} size={40} />
+            <span className="team-row__text"><span className="team-row__name">{item.supervisor.full_name}{!item.supervisor.is_active && <Badge tone="neutral">В архиве</Badge>}</span><span className="team-row__meta">{item.supervisor.login} · Супервайзер</span></span>
+          </Link>
+          <span className="team-row__count"><strong>{item.operator_count}</strong> {plural(item.operator_count, "оператор", "оператора", "операторов")}</span>
+          <span className="team-row__actions">
+            {item.supervisor.is_active && <Button size="s" onClick={() => setAssignment({ team: item, remove: false })}>Назначить операторов</Button>}
+            {item.operator_count > 0 && <Button size="s" variant="plain" onClick={() => setAssignment({ team: item, remove: true })}>Снять из команды</Button>}
+            {single && <Button size="s" variant="plain" aria-label={`Настройки команды: ${single.name}`} onClick={() => setEditor(single)}>Настройки</Button>}
+          </span>
+          <span className="team-row__go" aria-hidden="true"><ChevronRightIcon size={16} /></span>
+          {shown.length > 0 && <ul className="team-subrows" aria-label={`Группы команды: ${item.supervisor.full_name}`}>{shown.map(group => <li key={group.id} className="team-subrow">
+            <span><strong>{group.name}</strong><small>{operatorCount(group.operator_count)}{group.is_active ? "" : " · архив"}</small></span>
+            <Button size="s" variant="plain" aria-label={`Настройки команды: ${group.name}`} onClick={() => setEditor(group)}>Настройки</Button>
+          </li>)}</ul>}
+          {item.groups.length === 0 && <p className="team-row__note">Команда создастся при первом назначении операторов.</p>}
+          {activeTeamGroups(item).length > 1 && <p className="team-row__note">При назначении выберите одну из групп: их состав и районы сохранены.</p>}
+        </li>;
+      })}</ul>
+    </Card>}
+    {groups.isError && <ErrorState error={groups.error} onRetry={() => groups.refetch()} />}
+    {unowned.length > 0 && <Card title="Группы без супервайзера" subtitle="Назначьте группе супервайзера: её операторы получат доступ к его району." padded={false} className="team-list">
+      <ul className="team-rows team-rows--teams" aria-label="Группы без супервайзера">{unowned.map(group => <li key={group.id} className={`team-row${group.is_active ? "" : " is-archived"}`}>
+        <Link className="team-row__person" to={`/admin/users?group=${group.id}`}>
+          <span className="team-row__icon" aria-hidden="true"><UsersIcon size={18} /></span>
+          <span className="team-row__text"><span className="team-row__name">{group.name}{!group.is_active && <Badge tone="neutral">В архиве</Badge>}</span><span className="team-row__meta">Супервайзер не назначен</span></span>
+        </Link>
+        <span className="team-row__count"><strong>{group.operator_count}</strong> {plural(group.operator_count, "оператор", "оператора", "операторов")}</span>
+        <span className="team-row__actions"><Button size="s" onClick={() => setEditor(group)}>Назначить супервайзера</Button></span>
+        <span className="team-row__go" aria-hidden="true"><ChevronRightIcon size={16} /></span>
+      </li>)}</ul>
+    </Card>}
     {newSupervisor && <UserEditor initialRole="supervisor" groups={groups.data ?? []} groupsReady={groups.isSuccess} onClose={() => setNewSupervisor(false)} />}
     {editor && <GroupEditor target={editor} onClose={() => setEditor(null)} />}
     {assignment && <OperatorAssignment target={assignment.team} remove={assignment.remove} groups={groups.data ?? []} onClose={() => setAssignment(null)} />}
+  </div>;
+}
+
+/** A supervisor's own team: their operators, each opening the operator's card. Membership is set by a head or an admin. */
+function MyTeam() {
+  const { user: actor } = useAuth();
+  const teams = useQuery({ queryKey: ["team-supervisor-teams", true], queryFn: ({ signal }) => team.supervisorTeams(true, signal) });
+  const own = teams.data?.find(item => item.supervisor.id === actor?.id) ?? teams.data?.[0];
+  const [page, setPage] = useState(1);
+  const size = 25;
+  const people = useQuery({ queryKey: ["team-users", "my-team", own?.supervisor.id, page], queryFn: ({ signal }) => team.users({ role: "operator", supervisor_id: own!.supervisor.id, is_active: true, page, size }, signal), enabled: Boolean(own) });
+  const groups = own ? activeTeamGroups(own) : [];
+  const titles = teamTitles("supervisor");
+
+  return <div className="stack team-page">
+    <div className="page-head"><div><h1 className="page-title">{titles.groups}</h1><p className="page-subtitle">Ваши операторы. Состав команды назначает руководитель или администратор.</p></div></div>
+    {teams.isLoading && <Skeleton height={200} />}{teams.isError && <ErrorState error={new Error(teamError(teams.error, "Не удалось загрузить команду"))} onRetry={() => teams.refetch()} />}
+    {teams.data && !own && <EmptyState title="Команда не найдена" hint="Попросите руководителя или администратора проверить вашу команду." />}
+    {own && <Card title="Операторы" subtitle={`${operatorCount(own.operator_count)}${groups.length > 1 ? ` · ${groups.length} ${plural(groups.length, "группа", "группы", "групп")}` : ""}`} padded={false} className="team-list"
+      action={<Link className="btn btn--secondary btn--s" to="/admin/operators">Показатели команды</Link>}>
+      {people.isLoading && <div className="card__body"><RowsSkeleton /></div>}
+      {people.isError && <ErrorState error={new Error(teamError(people.error, "Не удалось загрузить операторов"))} onRetry={() => people.refetch()} />}
+      {people.data && people.data.items.length === 0 && <EmptyState title="Операторов пока нет" hint="Состав команды назначает руководитель или администратор." />}
+      {people.data && people.data.items.length > 0 && <>
+        <ul className="team-rows team-rows--people" aria-label="Операторы команды">{people.data.items.map(user => <TeamPersonRow key={user.id} person={user} role={false} team={groups.length > 1 ? user.group?.name : undefined} />)}</ul>
+        <Pagination page={page} size={size} total={people.data.total} onChange={setPage} />
+      </>}
+    </Card>}
   </div>;
 }
 

@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
 import { useAccess } from "../auth/AccessContext";
@@ -26,6 +27,7 @@ import {
   StatusIcon,
 } from "../components/ui";
 import { coins, points } from "../utils/format";
+import { operatorCount, teamTitles } from "./teamSection";
 import "./operators.css";
 
 export function AdminOperatorsPage() {
@@ -73,8 +75,8 @@ export function AdminOperatorsPage() {
     <div className="stack">
       <div className="page-head">
         <div>
-          <h1 className="page-title">Операторы</h1>
-          <p className="page-subtitle">Показатели за период, балансы и ручное начисление коинов</p>
+          <h1 className="page-title">{teamTitles().metrics}</h1>
+          <p className="page-subtitle">Баллы, коины и нарушения операторов за период{canCredit ? " · ручное начисление коинов" : ""}</p>
         </div>
         <div className="page-head__actions">
           {can("reports") && <Button icon={<DownloadIcon size={17} />} disabled={!period} onClick={exportCsv}>
@@ -139,7 +141,7 @@ export function AdminOperatorsPage() {
         </div>
       )}
 
-      <Card title="Таблица операторов" padded={false}>
+      <Card title="Операторы" subtitle={operators.data ? `${operatorCount(operators.data.total)}${search ? " по запросу" : ""}` : undefined} padded={false} className="operators-list">
         {(!period || operators.isLoading) && (
           <div className="card__body">
             <RowsSkeleton />
@@ -162,7 +164,7 @@ export function AdminOperatorsPage() {
                   <tr>
                     <th className="num">Место</th>
                     <th>Оператор</th>
-                    <th>Группа</th>
+                    <th>Команда</th>
                     <th className="num">Баллы</th>
                     <th className="num">{period ? "Начислено" : "Коины"}</th>
                     <th className="num">Баланс</th>
@@ -175,17 +177,17 @@ export function AdminOperatorsPage() {
                   {operators.data.items.map((row) => (
                     <tr key={row.user_id}>
                       <td className="num">
-                        <span className="rank-badge">{!period || row.metrics_available ? row.rank ?? "—" : "—"}</span>
+                        <Rank row={row} available={!period || !!row.metrics_available} />
                       </td>
                       <td>
-                        <span className="cell-person">
+                        <Link className="cell-person operators-person" to={`/admin/users/${row.user_id}`}>
                           <Avatar name={row.full_name} id={row.user_id} size={32} />
                           <span className="cell-person__text">
                             <span className="cell-person__name">{row.full_name}</span>
                           </span>
-                        </span>
+                        </Link>
                       </td>
-                      <td className="muted" style={{ whiteSpace: "nowrap" }}>{row.group_name ?? "—"}</td>
+                      <td className="muted" style={{ whiteSpace: "nowrap" }}>{row.group_name ?? "Без команды"}</td>
                       <td className="num">{!period || row.metrics_available ? points(row.points) : "—"}</td>
                       <td className="num">{coins(row.coins_week)}</td>
                       <td className="num">
@@ -212,7 +214,7 @@ export function AdminOperatorsPage() {
                 {operators.data.items.map((row) => (
                   <li key={row.user_id} className="list-card">
                     <div className="list-card__head">
-                      <span className="cell-person">
+                      <Link className="cell-person operators-person" to={`/admin/users/${row.user_id}`}>
                         <Avatar name={row.full_name} id={row.user_id} size={36} />
                         <span className="cell-person__text">
                           <span className="cell-person__name">{row.full_name}</span>
@@ -220,8 +222,8 @@ export function AdminOperatorsPage() {
                             {row.group_name ?? "Без команды"}
                           </span>
                         </span>
-                      </span>
-                      <span className="rank-badge">{!period || row.metrics_available ? row.rank ?? "—" : "—"}</span>
+                      </Link>
+                      <Rank row={row} available={!period || !!row.metrics_available} />
                     </div>
                     <div className="list-card__metrics">
                       <span className="list-card__metric">
@@ -270,6 +272,11 @@ export function AdminOperatorsPage() {
       {target && canCredit && <ManualCoinsSheet operator={target} onClose={() => setTarget(null)} />}
     </div>
   );
+}
+
+/** Место в рейтинге — значком, когда оно есть; без завершённых недель — тихий прочерк. */
+function Rank({ row, available }: { row: OperatorRowOut; available: boolean }) {
+  return available && row.rank != null ? <span className="rank-badge">{row.rank}</span> : <span className="muted" title="Нет места за выбранный период">—</span>;
 }
 
 /** Антипоказатель: ноль помечен галочкой, нарушения — значком и цветом. */

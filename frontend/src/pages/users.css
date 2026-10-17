@@ -19,15 +19,6 @@
 .users-filterbar__fields .field { min-width: 0; }
 .users-filterbar__reset { grid-column: 1 / -1; justify-self: end; }
 
-.users-table { min-width: 1030px; }
-.users-table td:first-child { min-width: 230px; }
-.users-table td:nth-child(2), .users-table td:nth-child(4) { white-space: nowrap; }
-.users-table td:nth-child(3) { min-width: 190px; max-width: 340px; overflow-wrap: anywhere; }
-.users-table__actions-heading { text-align: right; }
-.user-row-actions { justify-content: flex-end; gap: 8px; }
-.user-row-actions .btn { min-width: 78px; }
-.user-row-actions .user-row-actions__archive { min-width: 106px; }
-
 .users-mobile-filters, .user-editor { display: grid; gap: 22px; }
 .users-mobile-filters .field, .user-editor .field { margin-bottom: 0; min-width: 0; }
 .user-editor__section { display: grid; gap: 16px; min-width: 0; }
@@ -58,9 +49,6 @@
   .users-filterbar .team-mobile-filter-button { width: 100%; }
   .users-filterbar:not(:has(.users-filterbar__reset)) .team-mobile-filter-button { grid-column: 1 / -1; }
   .users-filterbar__reset { grid-column: auto; justify-self: stretch; }
-  .user-row-actions { justify-content: stretch; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
-  .user-row-actions .btn { width: 100%; min-width: 0; }
-  .user-row-actions__archive { grid-column: 1 / -1; }
   .user-editor__profile { grid-template-columns: 1fr; }
   .user-editor__section { gap: 16px; }
 }

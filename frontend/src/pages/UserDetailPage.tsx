@@ -15,7 +15,7 @@ import { LearningResults } from "./LearningStudioPage";
 import { DriverTeamResults } from "./DriverScenarioEditor";
 import { TraineeResults } from "./TraineeResults";
 import { CoinProgress } from "../components/CoinProgress";
-import { userTeamLabel } from "./supervisorTeams";
+import { teamOf, teamTitles } from "./teamSection";
 import "./team.css";
 
 export function UserDetailPage() {
@@ -43,13 +43,12 @@ export function UserDetailPage() {
   if (user.isError) return <ErrorState error={user.error} onRetry={() => user.refetch()} />;
   if (!user.data) return <EmptyState title="Сотрудник не найден" />;
   const data = user.data;
-  const ownTeam = teams.data?.find(item => item.supervisor.id === data.id);
-  const teamLabel = data.role === "supervisor" ? ownTeam ? `Своя команда · ${ownTeam.operator_count} операторов` : "Своя команда" : userTeamLabel(data, groups.data ?? []);
+  const teamLabel = teamOf(data, groups.data ?? [], teams.data ?? [], actor?.role);
   const editable = atLeast("head") && (data.role !== "admin" || actor?.role === "admin") && (!data.is_developer || actor?.is_developer);
   const manageCredentials = canManageCredentials(actor, data) && (!data.is_developer || Boolean(actor?.is_developer));
   const canEditAvatar = editable && data.is_active && (data.role === "operator" || data.role === "trainee");
   return <div className="stack team-page">
-    <Link className="secondary" to="/admin/users">← Пользователи</Link>
+    <Link className="secondary" to="/admin/users">← {teamTitles(actor?.role).users}</Link>
     <Card><div className="team-detail-hero"><Avatar name={data.full_name} id={id} size={64} /><div className="team-detail-hero__body"><h1 className="page-title">{data.full_name}</h1><div className="team-meta"><span>{ROLE_LABELS[data.role]}</span>{!trainer && <span>{teamLabel}</span>}<UserStatus active={data.is_active} /></div></div>
       <div className="team-actions">{canEditAvatar && <Button onClick={() => setAvatarEditor(true)}>Изменить фото</Button>}{editable && <Button onClick={() => setEditor(true)}>Изменить</Button>}{editable && actor?.id !== id && <Button onClick={() => setArchive(true)}>{data.is_active ? "Архивировать" : "Восстановить"}</Button>}{manageCredentials && <Button onClick={() => setLoginEditor(true)}>Сменить логин</Button>}{manageCredentials && <Button onClick={() => setPassword(true)}>Сбросить пароль</Button>}</div></div></Card>
     <nav className="team-section-nav" aria-label="Разделы карточки">{[["profile", "Профиль"], ["learning", "Обучение"], ["results", "Результаты"], ["coins", "Коины"], ["progress", "Прогресс"], ["simulator", "Симулятор"], ["purchases", "Покупки"]].filter(([key]) => (key !== "learning" || data.role === "trainee") && tabAllowed(key)).map(([key, label]) => <Button key={key} variant={tab === key ? "primary" : "secondary"} aria-current={tab === key ? "page" : undefined} onClick={() => setParams({ tab: key })}>{label}</Button>)}</nav>
