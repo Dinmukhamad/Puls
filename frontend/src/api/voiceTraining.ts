@@ -1,5 +1,11 @@
 import { request } from "./client";
 
+export type CloudVoiceProvider = "google" | "azure";
+export type VoiceProvider = CloudVoiceProvider | "browser";
+export interface VoiceSpeechProvider { id: CloudVoiceProvider; label: string; voice: string }
+export interface VoiceSpeechConfig { default_provider: VoiceProvider; providers: VoiceSpeechProvider[] }
+export interface VoiceSpeechAudio { audio_base64: string; mime_type: "audio/mpeg"; provider: CloudVoiceProvider; voice: string }
+
 export type VoicePersona = "calm" | "confused" | "hurried" | "irritated";
 export interface VoiceScenario { key: string; title: string; description: string; minutes: number }
 export interface VoiceAttemptSummary {
@@ -35,9 +41,13 @@ const BASE = "/api/v1/learning/voice";
 const path = (id: string | number) => `${BASE}/attempts/${encodeURIComponent(id)}`;
 export const voiceKeys = {
   catalog: ["learning-voice"] as const,
+  speechConfig: (userId: string | number) => ["learning-voice-speech", String(userId)] as const,
   attempt: (id: string | number) => ["learning-voice-attempt", String(id)] as const,
 };
 export const voiceTraining = {
+  speechConfig: (signal?: AbortSignal) => request<VoiceSpeechConfig>(`${BASE}/speech/config`, { signal, timeoutMs: 20000 }),
+  speechPreview: (provider: CloudVoiceProvider, persona: VoicePersona, signal?: AbortSignal) => request<VoiceSpeechAudio>(`${BASE}/speech/preview`, { method: "POST", json: { provider, persona }, signal, timeoutMs: 20000 }),
+  speech: (id: string | number, provider: CloudVoiceProvider, turn: number, signal?: AbortSignal) => request<VoiceSpeechAudio>(`${path(id)}/speech`, { method: "POST", json: { provider, turn }, signal, timeoutMs: 20000 }),
   catalog: (signal?: AbortSignal) => request<VoiceCatalog>(BASE, { signal, timeoutMs: 15000 }),
   start: (scenarioKey: string, persona: VoicePersona) => request<VoiceAttempt>(`${BASE}/start`, { method: "POST", json: { scenario_key: scenarioKey, persona }, timeoutMs: 20000 }),
   attempt: (id: string | number, signal?: AbortSignal) => request<VoiceAttempt>(path(id), { signal, timeoutMs: 15000 }),

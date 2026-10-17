@@ -22,11 +22,24 @@ const flushEvents = async () => { await Promise.resolve(); await Promise.resolve
 
 /** Persistent hook state, browser event dispatch and an explicit unmount. */
 function fixture(t, { recognition = true, synthesis = true, server = false, voices = [russianVoice] } = {}) {
-  const original = new Map(["window", "navigator", "SpeechSynthesisUtterance", "localStorage"].map((name) => [name, Object.getOwnPropertyDescriptor(globalThis, name)]));
+  const original = new Map(["window", "navigator", "SpeechSynthesisUtterance", "localStorage", "Audio"].map((name) => [name, Object.getOwnPropertyDescriptor(globalThis, name)]));
   const calls = { streamsStopped: 0, micRequests: 0, synthesisCancelled: 0, afterUnmountUpdates: 0, transcripts: [] };
   let mounted = true;
   const recognizers = [];
   const utterances = [];
+  const audios = [];
+  const createdUrls = [], revokedUrls = [];
+  const originalCreateUrl = URL.createObjectURL, originalRevokeUrl = URL.revokeObjectURL;
+  URL.createObjectURL = (blob) => { const url = `blob:voice-${createdUrls.length}`; createdUrls.push({ url, blob }); return url; };
+  URL.revokeObjectURL = (url) => revokedUrls.push(url);
+  class FakeAudio {
+    constructor() { audios.push(this); }
+    play() { this.played = true; return Promise.resolve(); }
+    pause() { this.paused = true; }
+    removeAttribute(name) { if (name === "src") this.src = ""; }
+    load() { this.unloaded = true; }
+  }
+  Object.defineProperty(globalThis, "Audio", { configurable: true, writable: true, value: FakeAudio });
   class FakeRecognition {
     start() { this.onstart?.(); }
     stop() { this.stopped = true; }
@@ -112,7 +125,7 @@ function fixture(t, { recognition = true, synthesis = true, server = false, voic
   new Function("require", "module", "exports", compiled.outputFiles[0].text)((name) => name === "react" ? react : require(name), module, module.exports);
   let disposed = false;
   const hook = {
-    calls, recognizers, utterances, mediaDevices, stream, testWindow, localStorage,
+    calls, recognizers, utterances, audios, createdUrls, revokedUrls, mediaDevices, stream, testWindow, localStorage,
     voiceListeners() { return speechListeners.get("voiceschanged")?.size ?? 0; },
     setVoices(next, emit = true) {
       availableVoices = next;
@@ -138,6 +151,7 @@ function fixture(t, { recognition = true, synthesis = true, server = false, voic
   };
   t.after(() => {
     hook.dispose();
+    URL.createObjectURL = originalCreateUrl; URL.revokeObjectURL = originalRevokeUrl;
     for (const [name, descriptor] of original) {
       if (descriptor) Object.defineProperty(globalThis, name, descriptor);
       else delete globalThis[name];
@@ -440,4 +454,158 @@ test("changing the selected Russian voice keeps speak stable and takes effect on
   hook.localStorage.setItem = () => { throw new Error("Storage blocked"); };
   assert.doesNotThrow(() => hook.render().selectVoice(naturalRussianVoice.voiceURI));
   assert.equal(hook.render().selectedVoiceURI, naturalRussianVoice.voiceURI, "blocked device storage must not prevent selecting a voice");
+});
+
+
+const cloudResult = { audio_base64: "SUQz", mime_type: "audio/mpeg" };
+const cloud = (load) => ({ label: "Google Cloud TTS", cacheKey: "test:google:driver:0", load });
+
+test("cloud audio keeps speaking during synthesis and releases its object URL after playback", async (t) => {
+  const hook = fixture(t);
+  const response = deferred();
+  let requestSignal;
+  const playback = hook.render().speak("Сохранённая реплика водителя.", "calm", cloud(signal => { requestSignal = signal; return response.promise; }));
+  assert.equal(hook.render().speaking, true);
+  assert.equal(hook.render().loadingAudio, true);
+  await flushEvents();
+  assert.equal(requestSignal.aborted, false);
+  response.resolve(cloudResult);
+  await flushEvents(); await flushEvents();
+  assert.equal(hook.audios.length, 1);
+  assert.equal(hook.audios[0].played, true);
+  assert.equal(hook.render().loadingAudio, false);
+  assert.equal(hook.render().speaking, true);
+  assert.equal(hook.utterances.length, 0, "successful cloud output does not invoke browser TTS");
+  assert.equal(hook.createdUrls[0].blob.type, "audio/mpeg");
+  hook.audios[0].onended();
+  assert.equal(await playback, true);
+  assert.equal(hook.render().speaking, false);
+  assert.equal(hook.audios[0].paused, true);
+  assert.equal(hook.audios[0].unloaded, true);
+  assert.deepEqual(hook.revokedUrls, [hook.createdUrls[0].url]);
+});
+
+test("cancelling pending cloud synthesis aborts the request and ignores its late response", async (t) => {
+  const hook = fixture(t);
+  const response = deferred();
+  let requestSignal;
+  const playback = hook.render().speak("Алло!", "calm", cloud(signal => { requestSignal = signal; return response.promise; }));
+  await flushEvents();
+  hook.render().stopSpeaking();
+  assert.equal(await playback, false);
+  assert.equal(requestSignal.aborted, true);
+  assert.equal(hook.render().loadingAudio, false);
+  response.resolve(cloudResult);
+  await flushEvents(); await flushEvents();
+  assert.equal(hook.audios.length, 0);
+  assert.equal(hook.createdUrls.length, 0);
+  assert.equal(hook.utterances.length, 0);
+});
+
+test("cloud failure uses browser output with a visible explanation and preserves the operator draft", async (t) => {
+  const hook = fixture(t);
+  await hook.render().startRecording();
+  hook.recognizers[0].result([["Откройте Яндекс Про", true]]);
+  hook.recognizers[0].onend();
+  const playback = hook.render().speak("Как это сделать?", "calm", cloud(async () => { throw new Error("Unavailable"); }));
+  await flushEvents(); await flushEvents();
+  assert.equal(hook.utterances.length, 1);
+  assert.equal(hook.render().speaking, true);
+  assert.match(hook.render().playbackNotice, /Google Cloud TTS.*голос браузера/);
+  assert.equal(hook.render().transcript, "Откройте Яндекс Про");
+  hook.utterances[0].onend();
+  assert.equal(await playback, true);
+});
+
+test("autoplay rejection asks to repeat without silently claiming browser or cloud playback", async (t) => {
+  const hook = fixture(t);
+  globalThis.Audio.prototype.play = () => Promise.reject(Object.assign(new Error("blocked"), { name: "NotAllowedError" }));
+  const playback = hook.render().speak("Алло!", "calm", cloud(async () => cloudResult));
+  await flushEvents(); await flushEvents();
+  assert.equal(await playback, false);
+  assert.match(hook.render().error, /Повторить реплику/);
+  assert.equal(hook.render().playbackNotice, null);
+  assert.equal(hook.utterances.length, 0);
+  assert.equal(hook.revokedUrls.length, 1);
+});
+
+test("starting input stops cloud audio and stale media callbacks cannot affect the next playback", async (t) => {
+  const hook = fixture(t);
+  const first = hook.render().speak("Алло!", "calm", cloud(async () => cloudResult));
+  await flushEvents(); await flushEvents();
+  const staleEnd = hook.audios[0].onended, staleError = hook.audios[0].onerror;
+  assert.equal(await hook.render().startRecording(), true);
+  assert.equal(await first, false);
+  assert.equal(hook.audios[0].paused, true);
+  assert.equal(hook.revokedUrls.length, 1);
+  const second = hook.render().speak("Что дальше?", "calm", { ...cloud(async () => cloudResult), cacheKey: "test:google:driver:1" });
+  await flushEvents(); await flushEvents();
+  staleEnd(); staleError();
+  assert.equal(hook.render().speaking, true);
+  assert.equal(hook.utterances.length, 0);
+  hook.audios[1].onended();
+  assert.equal(await second, true);
+  assert.equal(hook.revokedUrls.length, 2);
+});
+
+test("unmount during cloud loading never creates late audio or updates disposed state", async (t) => {
+  const hook = fixture(t);
+  const response = deferred();
+  const playback = hook.render().speak("Алло!", "calm", cloud(() => response.promise));
+  await flushEvents();
+  hook.dispose();
+  assert.equal(await playback, false);
+  response.resolve(cloudResult);
+  await flushEvents(); await flushEvents();
+  assert.equal(hook.audios.length, 0);
+  assert.equal(hook.calls.afterUnmountUpdates, 0);
+});
+
+test("a stalled cloud request has a bounded wait and cannot play after browser fallback", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const hook = fixture(t);
+  const response = deferred();
+  const playback = hook.render().speak("Алло!", "calm", cloud(() => response.promise));
+  await flushEvents();
+  t.mock.timers.tick(25000);
+  assert.equal(hook.utterances.length, 1);
+  assert.equal(hook.render().loadingAudio, false);
+  response.resolve(cloudResult);
+  await flushEvents(); await flushEvents();
+  assert.equal(hook.audios.length, 0);
+  hook.utterances[0].onend();
+  assert.equal(await playback, true);
+});
+
+test("muting input preserves active cloud output and cloud works without browser synthesis", async (t) => {
+  const hook = fixture(t, { synthesis: false });
+  const playback = hook.render().speak("Алло!", "calm", cloud(async () => cloudResult));
+  await flushEvents(); await flushEvents();
+  hook.render().setMuted(true);
+  assert.equal(hook.render().speaking, true);
+  assert.equal(hook.audios[0].paused, undefined);
+  hook.audios[0].onended();
+  assert.equal(await playback, true);
+});
+
+
+test("a blocked cloud clip can be repeated in the click gesture without a second asynchronous request", async (t) => {
+  const hook = fixture(t);
+  let requests = 0;
+  const source = cloud(async () => { requests++; return cloudResult; });
+  const play = globalThis.Audio.prototype.play;
+  globalThis.Audio.prototype.play = () => Promise.reject(Object.assign(new Error("blocked"), { name: "NotAllowedError" }));
+  const first = hook.render().speak("Алло!", "calm", source);
+  await flushEvents(); await flushEvents();
+  assert.equal(await first, false);
+  assert.equal(requests, 1);
+  globalThis.Audio.prototype.play = play;
+  const repeated = hook.render().speak("Алло!", "calm", source);
+  assert.equal(hook.audios.length, 2, "construct and play the cached clip synchronously during the repeat gesture");
+  assert.equal(hook.audios[1].played, true);
+  assert.equal(requests, 1);
+  await flushEvents();
+  hook.audios[1].onended();
+  assert.equal(await repeated, true);
+  assert.equal(hook.revokedUrls.length, 2);
 });

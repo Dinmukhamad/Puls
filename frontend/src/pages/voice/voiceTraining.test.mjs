@@ -21,7 +21,7 @@ async function moduleAt(path, request = async () => ({})) {
   return loaded.exports;
 }
 const { voiceKeys, voiceWorkSite } = await moduleAt("../../api/voiceTraining.ts");
-const { VoiceSituation, VoiceResults, VoiceHistory } = await moduleAt("./VoiceTrainingPage.tsx");
+const { VoiceSituation, VoiceResults, VoiceHistory, VoiceSettings } = await moduleAt("./VoiceTrainingPage.tsx");
 const noop = () => {};
 const attempt = (patch = {}) => ({
   id: 42, scenario_key: "phone_change", title: "Смена номера телефона", description: "Водитель просит изменить номер телефона.", revision: 1,
@@ -110,4 +110,48 @@ test("history links completed results and resumable account attempts", () => {
   assert.match(html, /Продолжить/);
   assert.match(html, /75%/);
   assert.match(html, /Наставник ответил/);
+});
+
+
+test("cloud speech API sends only provider/persona or a saved driver turn with caller cancellation", async () => {
+  const calls = [];
+  const { voiceTraining } = await moduleAt("../../api/voiceTraining.ts", async (path, options) => { calls.push({ path, options }); return {}; });
+  const controller = new AbortController();
+  await voiceTraining.speechConfig(controller.signal);
+  await voiceTraining.speechPreview("google", "confused", controller.signal);
+  await voiceTraining.speech(42, "azure", 3, controller.signal);
+  assert.equal(calls[0].path, "/api/v1/learning/voice/speech/config");
+  assert.deepEqual(calls[1].options.json, { provider: "google", persona: "confused" });
+  assert.equal(calls[2].path, "/api/v1/learning/voice/attempts/42/speech");
+  assert.deepEqual(calls[2].options.json, { provider: "azure", turn: 3 });
+  for (const { options } of calls) {
+    assert.equal(options.signal, controller.signal);
+    assert.equal(options.timeoutMs, 20000);
+    assert.equal("text" in (options.json ?? {}), false, "operator text is never sent for cloud synthesis");
+  }
+});
+
+test("provider selection honors an explicit browser preference and defaults to available cloud voices", async () => {
+  const { resolveVoiceProvider } = await moduleAt("./voiceProvider.ts");
+  const providers = [{ id: "google", label: "Google Cloud TTS", voice: "ru-RU-Chirp3-HD-Fenrir" }, { id: "azure", label: "Azure Speech", voice: "ru-RU-DmitryNeural" }];
+  assert.equal(resolveVoiceProvider(null, { default_provider: "google", providers }), "google");
+  assert.equal(resolveVoiceProvider("browser", { default_provider: "google", providers }), "browser");
+  assert.equal(resolveVoiceProvider("azure", { default_provider: "google", providers }), "azure");
+  assert.equal(resolveVoiceProvider("google", { default_provider: "azure", providers: providers.slice(1) }), "browser");
+  assert.equal(resolveVoiceProvider(null, { default_provider: "azure", providers: providers.slice(1) }), "azure");
+  assert.equal(resolveVoiceProvider(null, { default_provider: "browser", providers: [] }), "browser");
+});
+
+test("voice settings show only configured cloud providers and hide browser voices for cloud output", () => {
+  const speech = { selectedVoiceURI: "", russianVoices: [{ voiceURI: "ru-browser", name: "Browser Russian" }], speaking: false, support: { synthesis: true } };
+  const config = { default_provider: "google", providers: [{ id: "google", label: "Google Cloud TTS", voice: "ru-RU-Chirp3-HD-Fenrir" }] };
+  const props = { speech, disabled: false, onPreview: noop, configLoading: false, onProviderChange: noop };
+  const html = render(VoiceSettings, { ...props, provider: "google", config });
+  assert.match(html, /Источник голоса/);
+  assert.match(html, /Google Cloud TTS/);
+  assert.match(html, /Прослушать голос/);
+  assert.doesNotMatch(html, /Browser Russian|Azure Speech|API.key|ключ/);
+  const browser = render(VoiceSettings, { ...props, provider: "browser", config: { default_provider: "browser", providers: [] } });
+  assert.match(browser, /Browser Russian/);
+  assert.match(browser, /Облачные голоса пока не подключены/);
 });

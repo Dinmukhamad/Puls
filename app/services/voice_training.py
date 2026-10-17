@@ -1,8 +1,8 @@
-"""Deterministic MVP dialogue based on the brief, not an official Yandex instruction.
+"""Versioned, contextual dialogue based on the approved training rules.
 
-Rules revision 1 is deliberately fixed. New policy changes need a new revision and
-an evaluator, leaving saved attempts reproducible. Speech recognition and playback
-live in the browser; only the learner-reviewed text is stored here.
+Revision 1 remains fixed so saved attempts and retries stay reproducible. Revision 2
+follows the channel offered by the learner instead of requiring a scripted order.
+Only the learner-reviewed text is stored here.
 """
 
 import re
@@ -21,7 +21,7 @@ from app.services.learning import lock_learner
 from app.services.scenarios import utc
 
 KEY = "phone_change"
-REVISION = 1
+REVISION = 2
 DRIVER_KEY = "kim"
 INCOMING_PHONE = "+77015550192"
 TITLE = "Смена номера телефона"
@@ -29,7 +29,7 @@ DESCRIPTION = (
     "Водитель просит изменить номер телефона. Найдите его учебный аккаунт, "
     "проверьте данные обращения и помогите определить следующий шаг."
 )
-RULES_SOURCE = "Учебные правила смены номера · CRM v2, голосовой сценарий v1"
+RULES_SOURCE = "Учебные правила смены номера · CRM v2, голосовой сценарий v2"
 MAX_TURNS = 24
 PERSONAS = {
     "calm": "Спокойный",
@@ -217,6 +217,314 @@ def next_reply(persona, stage, transcript, text):
     return "next_step", "Уточните, пожалуйста, какой следующий шаг вы мне предлагаете."
 
 
+APP_CHANNEL = r"приложени[а-я]*|(?:такси|яндекс|taxi|yandex)[\s-]*(?:про|pro)\b"
+WHATSAPP_CHANNEL = r"whats\s*app|ват[сц]ап|вотсап|вацап|ватс?апп"
+CHANGE_ACTION = r"(?:смен[а-я]*|измен[а-я]*|помен[а-я]*|замен[а-я]*|обнов[а-я]*)"
+CHANGE_NUMBER = rf"(?:{CHANGE_ACTION}.{{0,45}}(?:номер|телефон)|(?:номер|телефон).{{0,45}}{CHANGE_ACTION})"
+CHANGE_COMMAND = r"\b(?:измените|смените|поменяйте|замените|обновите)\b"
+OPEN_APP = r"\b(?:откройте|зайдите|войдите|воспользуйтесь|перейдите|запустите)\b"
+CONTACT = r"\b(?:напиш[а-я]*|пиш[а-я]*|обрат[а-я]*|свяж[а-я]*|сообщ[а-я]*)\b"
+ADVICE_COMMAND = r"\b(?:вы можете|вам нужно|вам надо|нужно|необходимо|следует|попробуйте|рекомендую)\b"
+
+
+def unsafe_account_action_v2(text):
+    deletion = r"(?:удал[а-я]*|сотр[а-я]*|стер[а-я]*).{0,25}?аккаунт"
+    for part in clauses(text):
+        for match in re.finditer(deletion, part):
+            if not affirmative(part[: match.end()], rf"{deletion}$"):
+                continue
+            # Quoting a dangerous button in a warning does not recommend it.
+            before = part[: match.start()]
+            if re.search(
+                r"\bне\s+(?:нажимайте|нажмите|выбирайте|выберите)\s+"
+                r"(?:(?:на\s+)?(?:кнопку|пункт|команду)\s*)?[«\"“']?\s*$",
+                before,
+            ):
+                continue
+            return True
+    return False
+
+
+def advice_v2(text, channel=None):
+    """Extract a proposed action, retaining its channel across short follow-ups.
+
+    A mentioned product, a question or a negated action cannot complete a step.
+    No application menu names are required: the approved rule only says that the
+    driver can change the number in the application.
+    """
+    base = intents(text)
+    result = {
+        "mismatch": base["mismatch"],
+        "critical": base["critical"],
+        "offers": [],
+        "steps": set(),
+        "rejected": set(),
+        "focus": None,
+        "unsafe": unsafe_account_action_v2(text),
+    }
+    clean = re.sub(
+        r"\b(такси|яндекс|taxi|yandex)\s*\.\s*(про|pro)\b", r"\1 \2", normalized(text)
+    )
+    parts = [
+        part.strip()
+        for part in re.split(
+            r"(?<=[.!?;])|\n+|\b(?:но|однако|зато|или|либо)\b|,\s*(?=(?:а\s|лучше\s|вместо\s))",
+            clean,
+        )
+        if part.strip()
+    ]
+    active_channel = channel
+    for part in parts:
+        mentioned = {
+            "app": re.search(APP_CHANNEL, part),
+            "whatsapp": re.search(WHATSAPP_CHANNEL, part),
+        }
+        change = affirmative(part, CHANGE_NUMBER)
+        # Purpose can precede the action: «для смены номера напишите туда».
+        purpose = bool(re.search(CHANGE_NUMBER, part))
+        rejected = {
+            "app": bool(
+                mentioned["app"]
+                and re.search(
+                    rf"(?:не\s+(?:нужно\s+|надо\s+|стоит\s+|следует\s+)?"
+                    rf"(?:открыва[а-я]*|заход[а-я]*|использ[а-я]*|польз[а-я]*|меня[а-я]*|изменя[а-я]*)"
+                    rf".{{0,35}}(?:{APP_CHANNEL})|"
+                    rf"(?:{APP_CHANNEL}).{{0,35}}(?:не работает|не открыва[а-я]*|не поможет|"
+                    r"нельзя|невозможно|не получится|не надо|не нужно|не стоит|недоступ[а-я]*|"
+                    r"не\s+(?:меняйте|изменяйте|сменяйте|поменяйте|измените|смените|открывайте)))",
+                    part,
+                )
+            ),
+            "whatsapp": bool(
+                mentioned["whatsapp"]
+                and re.search(
+                    rf"(?:не\s+(?:нужно\s+|надо\s+|стоит\s+|следует\s+)?"
+                    rf"(?:пиш[а-я]*|писать|обращ[а-я]*|связыв[а-я]*)"
+                    rf".{{0,35}}(?:{WHATSAPP_CHANNEL})|"
+                    rf"(?:{WHATSAPP_CHANNEL}).{{0,35}}(?:не поможет|не надо|не нужно|не стоит|"
+                    r"нельзя|невозможно|нет смысла|бесполез|недоступ[а-я]*|"
+                    r"не\s+(?:пишите|обращайтесь|обратитесь|напишите)))",
+                    part,
+                )
+            ),
+        }
+        # «Нельзя изменить номер в приложении» also rejects a postposed channel.
+        if mentioned["app"] and re.search(
+            rf"(?:нельзя|невозможно|не получится|не можете|не сможете).{{0,30}}"
+            rf"(?:смен|измен|помен|замен)[а-я]*.{{0,35}}(?:{APP_CHANNEL})",
+            part,
+        ):
+            rejected["app"] = True
+        for name, pattern in (("app", APP_CHANNEL), ("whatsapp", WHATSAPP_CHANNEL)):
+            if re.search(rf"\bвместо\s+(?:{pattern})", part):
+                rejected[name] = True
+        if not any(mentioned.values()) and active_channel:
+            negated = (
+                r"\bне\s+(?:нужно\s+|надо\s+|следует\s+)?"
+                r"(?:пишите|пиш[а-я]*|обращайтесь|обращаться)"
+                if active_channel == "whatsapp"
+                else r"\bне\s+(?:нужно\s+|надо\s+|следует\s+)?"
+                r"(?:меняйте|изменяйте|менять|изменять|открывайте|открывать)"
+            )
+            if re.search(negated, part):
+                rejected[active_channel] = True
+        for name, is_rejected in rejected.items():
+            if is_rejected:
+                result["rejected"].add(name)
+                result["offers"] = [item for item in result["offers"] if item != name]
+                result["steps"].discard(name)
+                if active_channel == name:
+                    active_channel = None
+        explicit = sorted(
+            (name for name, match in mentioned.items() if match),
+            key=lambda name: mentioned[name].start(),
+        )
+        correction = bool(re.search(r"\b(?:лучше|вместо|тогда|предлагаю|давайте)\b", part))
+        for name in explicit:
+            if rejected[name]:
+                continue
+            if "?" in part:
+                result["focus"] = name
+                active_channel = name
+                continue
+            actionable = (
+                (change or affirmative(part, OPEN_APP))
+                if name == "app"
+                else affirmative(part, CONTACT)
+            )
+            if actionable or correction:
+                if name not in result["offers"]:
+                    result["offers"].append(name)
+                result["rejected"].discard(name)
+        # Short references only inherit an established channel. «Напишите туда»
+        # on the first turn does not invent WhatsApp, nor does «измените его»
+        # invent an application.
+        target = next(
+            (name for name in explicit if name in result["offers"]),
+            active_channel if not explicit else None,
+        )
+        if "?" in part:
+            continue
+        if target == "app" and not rejected["app"]:
+            command = affirmative(part, CHANGE_COMMAND)
+            open_and_change = affirmative(part, OPEN_APP) and change
+            modal_advice = affirmative(part, ADVICE_COMMAND) and change and "?" not in part
+            if (
+                (command and (purpose or re.search(r"\b(?:его|там)\b", part)))
+                or open_and_change
+                or modal_advice
+            ):
+                result["steps"].add("app")
+                if "app" not in result["offers"]:
+                    result["offers"].append("app")
+        if target == "whatsapp" and not rejected["whatsapp"]:
+            contact = affirmative(part, CONTACT)
+            if contact and purpose:
+                result["steps"].add("whatsapp")
+                if "whatsapp" not in result["offers"]:
+                    result["offers"].append("whatsapp")
+        if result["offers"]:
+            active_channel = result["offers"][-1]
+    result["registered_call"] = False
+    for part in clauses(text):
+        if not re.search(r"регистр|зарегистр|стар[а-я]*\s+номер", part):
+            continue
+        # A description of this incoming call is not a request to call again.
+        request = re.sub(r"\bвы\s+(?:сейчас\s+)?звоните\b", "", part)
+        if affirmative(
+            request, r"\b(?:позвоните|перезвоните|позвонить|перезвонить|звоните|звонить)\b"
+        ):
+            result["registered_call"] = True
+    return result
+
+
+def dialogue_state_v2(transcript):
+    """Rebuild small, reviewable memory from saved utterances, never client state."""
+    state = {
+        "channel": None,
+        "offer": None,
+        "step": None,
+        "mismatch": None,
+        "lost_sim": False,
+        "critical": [],
+        "unsafe": [],
+    }
+    for entry in transcript:
+        if entry["role"] == "driver":
+            if entry["text"] == LOST_SIM or "Я же сказал, старой SIM" in entry["text"]:
+                state["lost_sim"] = True
+            continue
+        current = advice_v2(entry["text"], state["channel"])
+        if current["mismatch"]:
+            state["mismatch"] = entry
+        if current["critical"]:
+            state["critical"].append(entry)
+            continue
+        if current["unsafe"]:
+            state["unsafe"].append(entry)
+            continue
+        if state["channel"] in current["rejected"]:
+            state.update(channel=None, offer=None, step=None)
+        if current["registered_call"] and not current["offers"]:
+            state.update(channel=None, offer=None, step=None)
+        if current["focus"] and not current["offers"]:
+            if state["channel"] != current["focus"]:
+                state.update(channel=current["focus"], offer=None, step=None)
+        if current["offers"]:
+            chosen = next(
+                (name for name in reversed(current["offers"]) if name in current["steps"]),
+                (
+                    state["channel"]
+                    if state["channel"] in current["offers"]
+                    else current["offers"][0]
+                ),
+            )
+            if chosen != state["channel"]:
+                state.update(channel=chosen, offer=entry, step=None)
+            else:
+                state["offer"] = entry
+            if chosen in current["steps"]:
+                state["step"] = entry
+    return state
+
+
+def driver_fact_reply_v2(text, snapshot=None):
+    """Answer ordinary verification questions from the attempt's own scenario data."""
+    value = normalized(text)
+    identity = (snapshot or {}).get("driver", {})
+    if re.search(r"как.{0,12}вас зовут|назовите.{0,20}(?:фио|фамили|имя)|представьтесь", value):
+        return f"Меня зовут {identity.get('name', 'Ким Виктор Андреевич')}."
+    if re.search(
+        r"(?:с какого|назовите|какой).{0,25}(?:номер|телефон).{0,25}(?:звон|обращ)", value
+    ):
+        return f"Сейчас звоню с номера {(snapshot or {}).get('incoming_phone', INCOMING_PHONE)}."
+    if identity.get("phone") and re.search(
+        r"(?:какой|назовите|подскажите).{0,30}(?:регистрацион|стар[а-я]*\s+номер|номер.{0,20}регистрац)",
+        value,
+    ):
+        return f"В аккаунте зарегистрирован номер {identity['phone']}."
+    if re.search(
+        r"(?:есть|остал[а-я]*|доступ[а-я]*|можете).{0,25}(?:стар[а-я]*\s+(?:sim|сим|номер)|"
+        r"регистрацион[а-я]*\s+номер)|(?:стар[а-я]*\s+(?:sim|сим|номер)).{0,25}(?:есть|доступ|остал)",
+        value,
+    ) and ("?" in text or re.search(r"\b(?:подскажите|скажите|у вас)\b", value)):
+        return LOST_SIM
+    return None
+
+
+def next_reply_v2(persona, stage, transcript, text, snapshot=None):
+    previous = dialogue_state_v2(transcript)
+    current = advice_v2(text, previous["channel"])
+    state = dialogue_state_v2([*transcript, {"role": "operator", "text": text, "turn": 0}])
+    if current["critical"]:
+        return "clarify", "Вы действительно можете поменять номер по этому звонку? Уточните способ."
+    if current["unsafe"]:
+        return "clarify", "Вы предлагаете удалить аккаунт? Мне нужно изменить номер. Уточните безопасный способ."
+    fact = driver_fact_reply_v2(text, snapshot)
+    if fact and not current["offers"]:
+        return ("lost_sim" if fact == LOST_SIM else stage), fact
+    if current["focus"] == "app" and not current["offers"]:
+        return "next_step", "Могу открыть Такси Про. Что мне дальше сделать в приложении?"
+    if current["focus"] == "whatsapp" and not current["offers"]:
+        return "next_step", "Могу написать в WhatsApp. Что именно нужно сообщить?"
+    channel = state["channel"]
+    if channel and channel in current["steps"]:
+        if channel == "app":
+            return "resolved", "Понял. Открою Такси Про и изменю номер в приложении."
+        return "resolved", "Хорошо, напишу в WhatsApp, что хочу изменить номер телефона."
+    if channel:
+        if channel == "app":
+            if persona == "confused":
+                return "clarify", "Хорошо, Такси Про. Объясните простыми словами: что мне сделать в приложении?"
+            if persona == "hurried":
+                return "next_step", "Хорошо, выбираю Такси Про. Назовите одно действие, с которого мне начать."
+            return "next_step", "Вы предлагаете Такси Про. Что мне сейчас сделать в приложении, чтобы изменить номер?"
+        if persona == "confused":
+            return "clarify", "Хорошо, WhatsApp. Объясните простыми словами: что именно мне туда написать?"
+        return "next_step", "Хорошо, обращусь в WhatsApp. Что именно мне написать о смене номера?"
+    if current["registered_call"]:
+        if previous["lost_sim"]:
+            return "lost_sim", "Я же сказал, старой SIM больше нет. Какой другой способ есть?"
+        return "lost_sim", LOST_SIM
+    if current["mismatch"]:
+        return "next_step", "Понял, входящий номер отличается от регистрационного. Как мне теперь изменить номер?"
+    if current["rejected"]:
+        return "next_step", "Этот способ не подходит. Какой доступный шаг вы предлагаете вместо него?"
+    if re.search(r"(?:не могу|нельзя|не получится).{0,40}(?:смен|измен|помен)|ограничен", normalized(text)):
+        return "next_step", "Понял, по этому звонку нельзя. Каким способом я могу изменить номер?"
+    return "opening", "Расскажите, пожалуйста, как мне изменить номер в аккаунте?"
+
+
+def dialogue_for(revision, snapshot=None):
+    if revision == 1:
+        return next_reply
+    if revision == 2:
+        return lambda persona, stage, transcript, text: next_reply_v2(
+            persona, stage, transcript, text, snapshot=snapshot
+        )
+    raise ConflictError("Версия правил недоступна. Обратитесь к наставнику.")
+
+
 def attempt_data(attempt):
     """No rules, detected intents, answer keys or feedback before explicit finish."""
     return {
@@ -362,7 +670,9 @@ async def answer(session, user, attempt_id, body):
         raise ConflictError("Водителю понятен следующий шаг. Завершите тренировку.")
     if attempt.turn >= MAX_TURNS:
         raise ConflictError("Достигнут предел реплик. Завершите тренировку и изучите разбор.")
-    stage, reply = next_reply(attempt.persona, attempt.stage, attempt.transcript, body.text)
+    stage, reply = dialogue_for(attempt.revision, attempt.snapshot)(
+        attempt.persona, attempt.stage, attempt.transcript, body.text
+    )
     attempt.transcript = [
         *attempt.transcript,
         {"role": "operator", "text": body.text, "turn": body.turn},
@@ -554,11 +864,117 @@ def evaluate_v1(attempt):
     }
 
 
+def evaluate_v2(attempt):
+    state = dialogue_state_v2(attempt.transcript)
+    operators = operator_entries(attempt.transcript)
+    fallback = operators[-1] if operators else attempt.transcript[0]
+    events = attempt.practice.get("events", [])
+    practice_ok = all(
+        any(event["system"] == key for event in events)
+        for key in ("dispatch", "oktell", "compared")
+    )
+    critical_errors = [
+        {
+            "text": "Обещана прямая смена номера оператором по звонку с другого номера.",
+            "quote": entry["text"],
+            "turn": entry["turn"],
+        }
+        for entry in state["critical"]
+    ]
+    critical_errors.extend(
+        {
+            "text": "Вместо смены номера предложено удалить аккаунт.",
+            "quote": entry["text"],
+            "turn": entry["turn"],
+        }
+        for entry in state["unsafe"]
+    )
+    solution_ok = (
+        state["channel"] in ("app", "whatsapp")
+        and state["offer"] is not None
+        and not critical_errors
+    )
+    next_ok = state["step"] is not None and attempt.stage == "resolved"
+    criteria = [
+        criterion(
+            "verification",
+            "Проверка данных",
+            practice_ok,
+            (
+                "Правильный аккаунт и входящий номер сверены в учебных системах."
+                if practice_ok
+                else "Не зафиксированы открытие аккаунта, чтение звонка и явная сверка номеров."
+            ),
+            state["mismatch"] or fallback,
+            "Откройте аккаунт водителя, данные звонка в OKTEL и сравните номера.",
+        ),
+        criterion(
+            "solution",
+            "Правильность решения",
+            solution_ok,
+            (
+                "Предложен доступный способ смены номера, подходящий к разговору."
+                if solution_ok
+                else (
+                    "Зафиксировано недопустимое обещание или действие при смене номера."
+                    if critical_errors
+                    else "Не предложен доступный способ смены номера."
+                )
+            ),
+            state["offer"] or fallback,
+            "Можно изменить номер в Такси Про или обратиться в WhatsApp. "
+            "Предложите подходящий водителю способ; при утрате SIM не настаивайте на звонке со старого номера.",
+        ),
+        criterion(
+            "clarity",
+            "Понятность объяснения",
+            state["mismatch"] is not None,
+            (
+                "Причина ограничения объяснена через несовпадение номеров."
+                if state["mismatch"] is not None
+                else "Не объяснено, что входящий номер отличается от регистрационного."
+            ),
+            state["mismatch"] or fallback,
+            "Вы звоните с номера, который не совпадает с регистрационным. "
+            "По этому звонку изменить номер нельзя.",
+        ),
+        criterion(
+            "next_step",
+            "Конкретный следующий шаг",
+            next_ok,
+            (
+                "Водитель подтвердил понятный шаг в предложенном канале."
+                if next_ok
+                else "Не зафиксированы конкретный доступный шаг и подтверждение понимания водителем."
+            ),
+            state["step"] or fallback,
+            (
+                "Откройте Такси Про и измените номер в приложении."
+                if state["channel"] == "app"
+                else "Напишите в WhatsApp, что хотите изменить номер телефона."
+            ),
+        ),
+    ]
+    score = sum(25 for item in criteria if item["passed"])
+    return {
+        "score": min(score, 50) if critical_errors else score,
+        "criteria": criteria,
+        "critical_errors": critical_errors,
+        "rules_revision": attempt.revision,
+        "assessment_note": (
+            "Оценка содержания по учебным правилам и контексту разговора. "
+            "Достаточно одного доступного способа с понятным следующим шагом. "
+            "Интонация и темп не оцениваются."
+        ),
+        "review_status": None,
+    }
+
+
 async def finish(session, user, attempt_id):
     attempt = await own_attempt(session, user, attempt_id, lock=True)
     if attempt.state == "completed":
         return attempt
-    evaluators = {1: evaluate_v1}
+    evaluators = {1: evaluate_v1, 2: evaluate_v2}
     evaluator = evaluators.get(attempt.revision)
     if evaluator is None:
         raise ConflictError("Версия правил недоступна. Обратитесь к наставнику.")
@@ -585,7 +1001,9 @@ async def retry(session, user, attempt_id, body):
     # Derive state using the same versioned dialogue, never trust a client stage.
     stage, replay = "opening", [deepcopy(original.transcript[0])]
     for entry in operator_entries(prefix):
-        stage, _ = next_reply(original.persona, stage, replay, entry["text"])
+        stage, _ = dialogue_for(original.revision, original.snapshot)(
+            original.persona, stage, replay, entry["text"]
+        )
         replay.extend(
             [
                 entry,

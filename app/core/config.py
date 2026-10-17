@@ -49,6 +49,18 @@ class Settings(BaseSettings):
     DRIVER_ROUTING_URL: str = "https://routing.openstreetmap.de"
     DRIVER_GEOCODING_URL: str = "https://photon.komoot.io"
 
+    # --- озвучка учебного водителя: ключи используются только сервером ---
+    GOOGLE_TTS_API_KEY: SecretStr = SecretStr("")
+    GOOGLE_TTS_VOICE: str = Field(
+        default="ru-RU-Chirp3-HD-Charon", pattern=r"^ru-RU-[A-Za-z0-9-]{1,80}$"
+    )
+    AZURE_SPEECH_KEY: SecretStr = SecretStr("")
+    # Пустой регион отключает Azure. Только имя региона, без URL/пути.
+    AZURE_SPEECH_REGION: str = Field(default="", pattern=r"^(?:[a-z][a-z0-9]{1,40})?$")
+    AZURE_TTS_VOICE: str = Field(
+        default="ru-RU-DmitryNeural", pattern=r"^ru-RU-[A-Za-z0-9-]{1,80}$"
+    )
+
     # --- CORS ---
     #: Задаётся списком через запятую: "https://app.example.com,https://admin.example.com"
     #: либо "*" для всех источников. NoDecode отключает разбор значения как JSON:
