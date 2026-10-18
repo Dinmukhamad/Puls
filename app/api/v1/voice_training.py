@@ -148,6 +148,12 @@ async def review(attempt_id: int, body: VoiceReview, session: SessionDep, user: 
     return voice_training.attempt_data(attempt)
 
 
+@router.get("/ai")
+async def ai_status(session: SessionDep, user: CurrentUser, response: Response):
+    response.headers["Cache-Control"] = "private, no-store"
+    return await voice_training.ai_status(session, user)
+
+
 @router.get("/reviews")
 async def reviews(session: SessionDep, user: CurrentUser, response: Response):
     response.headers["Cache-Control"] = "private, no-store"

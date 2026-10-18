@@ -163,3 +163,26 @@ test("a call from the scenario editor waits for the mentor's score, then shows i
   const history = render(VoiceHistory, { attempts: [{ ...attempt({ state: "completed" }), score: null, review_status: "awaiting_grade" }] });
   assert.match(history, /Ждёт оценки/);
 });
+
+test("a call graded by the AI says so, shows its summary and the right solution, and can be disputed", () => {
+  const value = attempt({ state: "completed", custom: true, transcript: [{ role: "driver", text: "Заказов нет", turn: 0 }, { role: "operator", text: "Не пройден фотоконтроль", turn: 0 }], result: {
+    score: 75, ai: true, manual: false, review_status: null, solution: "Пройти фотоконтроль в Такси Про.", summary: "Решение найдено, вежливости не хватило.",
+    criteria: [{ key: "s1", label: "Причина", passed: true, feedback: "Назвал причину.", quote: "Не пройден фотоконтроль", turn: 0, role: "operator", example: null }],
+    critical_errors: [],
+  } });
+  const html = render(VoiceResults, resultProps(value));
+  assert.match(html, /Оценка ИИ/);
+  assert.match(html, /Решение найдено, вежливости не хватило/);
+  assert.match(html, /Правильное решение/);
+  assert.match(html, /Оспорить оценку/);
+  assert.doesNotMatch(html, /Ждёт оценки наставника/);
+});
+
+test("mentors see whether the AI plays the drivers and what it cost this month", async () => {
+  const { aiLine } = await moduleAt("./VoiceMentorReviews.tsx");
+  assert.match(aiLine({ configured: false, active: false, model: "claude-haiku-5-5", budget_usd: 5, spent_usd: 0, calls: 0 }), /ИИ не подключён/);
+  assert.match(aiLine({ configured: true, active: false, model: "claude-haiku-5-5", budget_usd: 5, spent_usd: 5.01, calls: 900 }), /Лимит ИИ на месяц \(\$5\) исчерпан/);
+  const on = aiLine({ configured: true, active: true, model: "claude-haiku-5-5", budget_usd: 5, spent_usd: 0.4213, calls: 37 });
+  assert.match(on, /\$0\.42 из \$5/);
+  assert.match(on, /обращений — 37/);
+});

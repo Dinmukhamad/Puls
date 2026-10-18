@@ -19,7 +19,7 @@ from app.models.enums import Role
 from app.models.user import Group, User
 from app.models.voice_training import VoiceTrainingAttempt
 from app.schemas.voice_training import VoiceRetry, VoiceStart
-from app.services import dispatch, voice_scenarios
+from app.services import dispatch, voice_ai, voice_scenarios
 from app.services.learning import lock_learner
 from app.services.scenarios import support_allowed, utc
 
@@ -1334,9 +1334,20 @@ async def answer(session, user, attempt_id, body):
         raise ConflictError("Водителю понятен следующий шаг. Завершите тренировку.")
     if attempt.turn >= MAX_TURNS:
         raise ConflictError("Достигнут предел реплик. Завершите тренировку и изучите разбор.")
-    stage, reply, *line = dialogue_for(attempt.revision, attempt.snapshot)(
-        attempt.persona, attempt.stage, attempt.transcript, body.text
+    # A scenario from the editor: Claude plays its driver when it is connected and in budget;
+    # otherwise (or if it fails) the author's keyword steps answer.
+    spoken = (
+        await voice_ai.driver_reply(session, attempt, body.text)
+        if attempt.snapshot.get("custom")
+        else None
     )
+    if spoken:
+        reply, step, resolved = spoken
+        stage, line = ("resolved" if resolved else step), ["ai"]
+    else:
+        stage, reply, *line = dialogue_for(attempt.revision, attempt.snapshot)(
+            attempt.persona, attempt.stage, attempt.transcript, body.text
+        )
     driver = {"role": "driver", "text": reply, "turn": body.turn + 1}
     if line:
         driver["line"] = line[0]
@@ -1749,6 +1760,14 @@ async def finish(session, user, attempt_id):
     if attempt.state == "completed":
         return attempt
     if attempt.snapshot.get("custom"):
+        # Claude grades the call when it can; otherwise the call waits for a mentor's score.
+        graded = await voice_ai.grade(session, attempt)
+        if graded:
+            attempt.result = graded
+            attempt.state = "completed"
+            attempt.finished_at = datetime.now(UTC)
+            await session.flush()
+            return attempt
         attempt.result = evaluate_custom(attempt)
         attempt.state = "completed"
         attempt.finished_at = datetime.now(UTC)
@@ -1864,6 +1883,12 @@ def mentor_query(user):
             )
         )
     return query
+
+
+async def ai_status(session, user):
+    """For mentors: whether Claude plays the drivers and what it cost this month."""
+    mentor_query(user)
+    return await voice_ai.status(session)
 
 
 async def reviews(session, user):

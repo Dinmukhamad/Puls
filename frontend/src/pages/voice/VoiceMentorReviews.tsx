@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { request } from "../../api/client";
-import type { VoiceAttempt } from "../../api/voiceTraining";
+import { voiceKeys, voiceTraining, type VoiceAIStatus, type VoiceAttempt } from "../../api/voiceTraining";
 import { useAuth } from "../../auth/AuthContext";
 import "./voice-mentor.css";
 
@@ -21,6 +21,7 @@ export function VoiceMentorReviews() {
   const [comment, setComment] = useState("");
   const [score, setScore] = useState("");
   const queueKey = ["voice-mentor-reviews", user?.id] as const;
+  const ai = useQuery({ queryKey: voiceKeys.ai(user?.id ?? "account"), queryFn: ({ signal }) => voiceTraining.aiStatus(signal), retry: false, staleTime: 60000 });
   const queue = useQuery({ queryKey: queueKey, queryFn: ({ signal }) => request<{ reviews: ReviewSummary[] }>(BASE, { signal }), retry: false, refetchOnWindowFocus: true });
   const detailKey = ["voice-mentor-review", user?.id, selected] as const;
   const detail = useQuery({ queryKey: detailKey, queryFn: ({ signal }) => request<ReviewDetail>(`${BASE}/${selected}`, { signal }), enabled: selected !== null, retry: false });
@@ -43,7 +44,7 @@ export function VoiceMentorReviews() {
   const validScore = /^\d{1,3}$/.test(score) && Number(score) <= 100;
   const review = queue.data?.reviews.find(item => item.attempt_id === selected);
   return <section className="card voice-mentor" aria-labelledby="voice-mentor-title">
-    <header><div><span className="voice-mentor__eyebrow">ДЛЯ НАСТАВНИКА</span><h2 id="voice-mentor-title">Оценка звонков</h2><p>Звонки по сценариям из конструктора ждут вашей оценки, а спорные оценки — ответа. Ответ сохранится в разборе попытки оператора.</p></div><button type="button" className="btn btn--secondary btn--s" onClick={() => void queue.refetch()} disabled={queue.isFetching}>Обновить</button></header>
+    <header><div><span className="voice-mentor__eyebrow">ДЛЯ НАСТАВНИКА</span><h2 id="voice-mentor-title">Оценка звонков</h2><p>Сюда попадают звонки из конструктора, которые ждут оценки, и спорные оценки. Ответ сохранится в разборе попытки оператора.</p>{ai.data && <p className="voice-mentor__ai" role="status">{aiLine(ai.data)}</p>}</div><button type="button" className="btn btn--secondary btn--s" onClick={() => void queue.refetch()} disabled={queue.isFetching}>Обновить</button></header>
     {queue.isPending && <p role="status">Загружаем обращения…</p>}
     {queue.isError && <p role="alert">{errorText(queue.error)}</p>}
     {queue.data?.reviews.length === 0 && <p className="voice-mentor__empty">Звонков на проверку и спорных оценок пока нет.</p>}
@@ -63,4 +64,12 @@ export function VoiceMentorReviews() {
       </div>
     </div>}
   </section>;
+}
+
+/** One line for mentors about the AI: on and what it cost, off, or out of this month's budget. */
+export function aiLine(status: VoiceAIStatus) {
+  const money = (value: number) => `$${value.toFixed(value < 1 ? 2 : 0)}`;
+  if (!status.configured) return "ИИ не подключён: водитель сценариев из конструктора отвечает по ключевым словам, звонки оцениваете вы.";
+  if (!status.active) return `Лимит ИИ на месяц (${money(status.budget_usd)}) исчерпан: до конца месяца водитель отвечает по ключевым словам, звонки из конструктора оцениваете вы.`;
+  return `ИИ (Claude) играет водителя и оценивает звонки из конструктора: ${money(status.spent_usd)} из ${money(status.budget_usd)} за месяц, обращений — ${status.calls}. Здесь — звонки, которые ИИ не оценил, и спорные оценки.`;
 }

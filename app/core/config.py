@@ -65,6 +65,14 @@ class Settings(BaseSettings):
     #: Каталог нужен только для IAM-токена; с API-ключом его можно не задавать.
     YANDEX_FOLDER_ID: str = Field(default="", pattern=r"^(?:[a-z0-9]{1,50})?$")
 
+    # --- ИИ в голосовом тренажёре (Claude) ---
+    #: Ключ Anthropic API. Пустой ключ отключает ИИ: водитель отвечает по ключевым словам,
+    #: звонки из конструктора оценивает наставник.
+    ANTHROPIC_API_KEY: SecretStr = SecretStr("")
+    VOICE_AI_MODEL: str = Field(default="claude-haiku-5-5", pattern=r"^claude-[a-z0-9-]{1,40}$")
+    #: Потолок расходов на ИИ за календарный месяц (UTC), в долларах. Сверх него — без ИИ.
+    VOICE_AI_MONTHLY_BUDGET_USD: float = Field(default=5.0, ge=0, le=10000)
+
     # --- CORS ---
     #: Задаётся списком через запятую: "https://app.example.com,https://admin.example.com"
     #: либо "*" для всех источников. NoDecode отключает разбор значения как JSON:

@@ -62,5 +62,6 @@ const BASE = "/api/v1/learning/oktell";
 export const oktell = {
   state: (signal?: AbortSignal) => request<OktellState>(BASE, { signal, timeoutMs: 20000 }),
   // The caller creates an id once. A retry reuses the exact command, including its id.
-  action: (command: OktellCommand) => request<OktellState>(`${BASE}/actions`, { method: "POST", json: command, timeoutMs: 20000 }),
+  // Hanging up a driver's call waits for its review by the AI: give it time.
+  action: (command: OktellCommand) => request<OktellState>(`${BASE}/actions`, { method: "POST", json: command, timeoutMs: command.action === "call_end" ? 45000 : 20000 }),
 };

@@ -32,3 +32,4 @@
 .voice-mentor__score { max-width: 160px; }
 .voice-mentor__solution { padding: 14px 16px; margin: 12px 0; border-radius: var(--radius-m); background: var(--surface-secondary); }
 .voice-mentor__solution p { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text-secondary); }
+.voice-mentor__ai { margin-top: var(--sp-2); padding: var(--sp-2) var(--sp-3); border-left: 2px solid var(--accent, var(--control-border)); background: var(--surface-secondary); color: var(--text-secondary); font-size: var(--text-caption); line-height: 1.5; }

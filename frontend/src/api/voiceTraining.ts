@@ -30,7 +30,11 @@ export interface VoiceResult {
   review_status?: "pending" | "reviewed" | "awaiting_grade" | null; mentor_comment?: string | null; mentor_name?: string;
   /** A scenario from the editor: the score is the mentor's, the steps show what the trainer understood. */
   manual?: boolean; solution?: string; reached_end?: boolean;
+  /** Graded by the AI model from the scenario card; a mentor answers a dispute. */
+  ai?: boolean; model?: string; summary?: string;
 }
+/** For mentors: whether Claude plays the editor's drivers and grades their calls, and its spend. */
+export interface VoiceAIStatus { configured: boolean; active: boolean; model: string; budget_usd: number; spent_usd: number; calls: number }
 export interface VoiceAttempt {
   id: number; scenario_key: string; title: string; description: string; revision: number;
   persona: VoicePersona; language?: VoiceLanguage; state: "in_progress" | "completed";
@@ -51,6 +55,7 @@ const path = (id: string | number) => `${BASE}/attempts/${encodeURIComponent(id)
 export const voiceKeys = {
   catalog: ["learning-voice"] as const,
   speechConfig: (userId: string | number) => ["learning-voice-speech", String(userId)] as const,
+  ai: (userId: string | number) => ["learning-voice-ai", String(userId)] as const,
   attempt: (id: string | number) => ["learning-voice-attempt", String(id)] as const,
 };
 export const voiceTraining = {
@@ -58,11 +63,12 @@ export const voiceTraining = {
   speechPreview: (provider: CloudVoiceProvider, persona: VoicePersona, language: VoiceLanguage = "ru", signal?: AbortSignal) => request<VoiceSpeechAudio>(`${BASE}/speech/preview`, { method: "POST", json: { provider, persona, language }, signal, timeoutMs: 20000 }),
   speech: (id: string | number, provider: CloudVoiceProvider, turn: number, signal?: AbortSignal) => request<VoiceSpeechAudio>(`${path(id)}/speech`, { method: "POST", json: { provider, turn }, signal, timeoutMs: 20000 }),
   catalog: (signal?: AbortSignal) => request<VoiceCatalog>(BASE, { signal, timeoutMs: 15000 }),
+  aiStatus: (signal?: AbortSignal) => request<VoiceAIStatus>(`${BASE}/ai`, { signal, timeoutMs: 15000 }),
   start: (scenarioKey: string, persona: VoicePersona, language: VoiceLanguage = "ru") => request<VoiceAttempt>(`${BASE}/start`, { method: "POST", json: { scenario_key: scenarioKey, persona, language }, timeoutMs: 20000 }),
   attempt: (id: string | number, signal?: AbortSignal) => request<VoiceAttempt>(path(id), { signal, timeoutMs: 15000 }),
-  answer: (id: string | number, input: { request_id: string; turn: number; text: string }) => request<VoiceAttempt>(`${path(id)}/answer`, { method: "POST", json: input, timeoutMs: 25000 }),
+  answer: (id: string | number, input: { request_id: string; turn: number; text: string }) => request<VoiceAttempt>(`${path(id)}/answer`, { method: "POST", json: input, timeoutMs: 30000 }),
   inspect: (id: string | number, input: VoiceInspection) => request<VoiceAttempt>(`${path(id)}/inspect`, { method: "POST", json: input, timeoutMs: 20000 }),
-  finish: (id: string | number) => request<VoiceAttempt>(`${path(id)}/finish`, { method: "POST", json: {}, timeoutMs: 20000 }),
+  finish: (id: string | number) => request<VoiceAttempt>(`${path(id)}/finish`, { method: "POST", json: {}, timeoutMs: 45000 }),
   retry: (id: string | number, turn: number) => request<VoiceAttempt>(`${path(id)}/retry`, { method: "POST", json: { turn }, timeoutMs: 20000 }),
   review: (id: string | number, comment: string) => request<VoiceAttempt>(`${path(id)}/review`, { method: "POST", json: { comment }, timeoutMs: 20000 }),
 };
