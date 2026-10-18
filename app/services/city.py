@@ -505,7 +505,8 @@ async def evidence(session, user_ids):
             facts["voice_started"] = 1
             continue
         facts["voice_calls"] += 1
-        facts["voice_good"] += int((outcome or {}).get("score", 0) >= VOICE_GOOD_SCORE)
+        # A mentor-graded call counts once it has its score.
+        facts["voice_good"] += int(((outcome or {}).get("score") or 0) >= VOICE_GOOD_SCORE)
         facts["voice_kazakh"] += int((snapshot or {}).get("language") == "kk")
     return result
 

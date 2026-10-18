@@ -1,0 +1,89 @@
+/* The scenario editor in the site's look: cards, fields and buttons come from styles/app.css. */
+.vs-page { min-width: 0; }
+.vs-page p, .vs-page h2 { margin: 0; }
+.vs-back { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; margin-bottom: var(--sp-1); color: var(--text-secondary); font-size: var(--text-caption); font-weight: 550; text-decoration: none; }
+.vs-back:hover { color: var(--text-primary); }
+.vs-head__titles { min-width: 0; }
+.vs-muted { color: var(--text-tertiary); font-size: var(--text-secondary-size); margin-bottom: var(--sp-3) !important; }
+.vs-inline { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
+
+.vs-how { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-3); }
+.vs-how > div { display: flex; gap: var(--sp-3); padding: var(--sp-4); border: 1px solid var(--separator); border-radius: var(--radius-l); background: var(--surface-primary); }
+.vs-how span { display: grid; place-items: center; flex: none; width: 28px; height: 28px; border-radius: 50%; background: var(--btn-primary-bg); color: var(--btn-primary-fg); font-size: var(--text-caption); font-weight: 650; }
+.vs-how p { color: var(--text-secondary); font-size: var(--text-caption); line-height: 1.5; }
+.vs-how strong { display: block; margin-bottom: 2px; color: var(--text-primary); font-size: var(--text-secondary-size); }
+
+.vs-list { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--separator); }
+.vs-list li + li { border-top: 1px solid var(--separator); }
+.vs-row { display: flex; align-items: center; gap: var(--sp-3); min-height: 72px; padding: var(--sp-3) var(--sp-6); color: var(--text-primary); text-decoration: none; }
+@media (hover: hover) { .vs-row:hover { background: var(--surface-hover); } }
+.vs-row__icon { display: grid; place-items: center; flex: none; width: 40px; height: 40px; border-radius: var(--radius-s); background: var(--surface-secondary); color: var(--text-secondary); }
+.vs-row__text { flex: 1; min-width: 0; }
+.vs-row__text strong { display: block; font-size: var(--text-body); font-weight: 600; overflow-wrap: anywhere; }
+.vs-row__text small { display: block; margin-top: 2px; color: var(--text-tertiary); font-size: var(--text-caption); }
+
+/* Editor: the form on the left, the test call beside it. */
+.vs-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 400px); gap: var(--sp-6); align-items: start; }
+.vs-main { display: grid; gap: var(--sp-6); min-width: 0; }
+.vs-aside { position: sticky; top: calc(env(safe-area-inset-top, 0px) + var(--sp-4)); min-width: 0; }
+.vs-side { display: grid; gap: var(--sp-4); }
+.vs-row2 { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: var(--sp-4); }
+.vs-row3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-4); }
+.vs-page textarea.input { min-height: 80px; resize: vertical; line-height: 1.55; }
+
+.vs-steps, .vs-replies, .vs-forbidden { display: grid; gap: var(--sp-4); margin: 0 0 var(--sp-4); padding: 0; list-style: none; }
+.vs-step { display: grid; gap: var(--sp-3); padding: var(--sp-4); border: 1px solid var(--separator); border-radius: var(--radius-l); background: var(--surface-secondary); }
+.vs-step__head { display: flex; align-items: center; gap: var(--sp-3); }
+.vs-step__head .input { flex: 1; min-width: 0; font-weight: 600; }
+.vs-step__number { display: grid; place-items: center; flex: none; width: 32px; height: 32px; border-radius: 50%; background: var(--btn-primary-bg); color: var(--btn-primary-fg); font-weight: 650; font-variant-numeric: tabular-nums; }
+.vs-replies { margin: 0; }
+.vs-block { padding: var(--sp-4) var(--sp-4) 0; border: 1px solid var(--separator); border-radius: var(--radius-m); background: var(--surface-primary); }
+.vs-block__head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); margin-bottom: var(--sp-3); font-size: var(--text-secondary-size); }
+.vs-step > .field:last-child { margin-bottom: 0; }
+
+.vs-keywords { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 44px; padding: 6px 8px; border: 1px solid var(--control-border); border-radius: var(--radius-s); background: var(--surface-primary); }
+.vs-keywords:focus-within { border-color: var(--control-border-hover); box-shadow: 0 0 0 3px var(--accent-tint); }
+.vs-keywords input { flex: 1; min-width: 120px; min-height: 30px; border: 0; outline: 0; background: transparent; color: var(--text-primary); font: inherit; font-size: var(--text-secondary-size); }
+.vs-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 4px 3px 10px; border-radius: var(--radius-pill); background: var(--accent-tint-strong); color: var(--text-primary); font-size: var(--text-caption); font-weight: 600; }
+.vs-chip button { display: grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--text-secondary); cursor: pointer; }
+.vs-chip button:hover { background: var(--surface-tertiary); color: var(--text-primary); }
+
+.vs-danger { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); color: var(--text-secondary); font-size: var(--text-secondary-size); }
+
+/* The test call: a short chat with what the engine understood. */
+.vs-test .card__head { padding-bottom: var(--sp-3); }
+.vs-chat { display: grid; gap: var(--sp-3); max-height: min(52vh, 520px); margin: 0; padding: 0 var(--sp-5) var(--sp-3); overflow-y: auto; list-style: none; }
+.vs-bubble { display: grid; gap: 4px; max-width: 92%; padding: var(--sp-3); border-radius: var(--radius-m) var(--radius-m) var(--radius-m) 4px; background: var(--surface-secondary); }
+.vs-bubble--operator { justify-self: end; border-radius: var(--radius-m) var(--radius-m) 4px var(--radius-m); background: var(--accent-tint-strong); }
+.vs-bubble__who { color: var(--text-tertiary); font-size: var(--text-micro); font-weight: 650; }
+.vs-bubble p { font-size: var(--text-secondary-size); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.vs-bubble em { color: var(--text-quaternary); }
+.vs-bubble__notes { display: flex; flex-wrap: wrap; gap: 4px; }
+.vs-bubble__notes .badge { white-space: normal; }
+.vs-done, .vs-ready { display: flex; align-items: center; gap: var(--sp-2); color: var(--status-success-text); font-size: var(--text-secondary-size); font-weight: 600; }
+.vs-done { margin: 0 var(--sp-5) var(--sp-3) !important; }
+.vs-error { margin: 0 var(--sp-5) var(--sp-3) !important; color: var(--status-danger-text); font-size: var(--text-caption); }
+.vs-test__input { display: grid; gap: var(--sp-2); padding: var(--sp-3) var(--sp-5) var(--sp-5); border-top: 1px solid var(--separator); }
+.vs-test__input textarea.input { min-height: 64px; }
+.vs-problems { display: grid; gap: var(--sp-2); margin: 0; padding-left: 1.1em; color: var(--status-warning-text); font-size: var(--text-caption); line-height: 1.5; }
+.vs-warning { margin-top: var(--sp-2) !important; color: var(--text-tertiary); font-size: var(--text-caption); }
+
+@media (max-width: 1100px) {
+  .vs-grid { grid-template-columns: 1fr; }
+  .vs-aside { position: static; }
+}
+@media (max-width: 640px) {
+  .vs-how, .vs-row2, .vs-row3 { grid-template-columns: 1fr; }
+  .vs-row3 { gap: 0; }
+  .vs-row { padding-inline: var(--sp-4); }
+  .vs-step { padding: var(--sp-3); }
+  .vs-block { padding: var(--sp-3) var(--sp-3) 0; }
+  .vs-chat { padding-inline: var(--sp-4); }
+  .vs-test__input { padding-inline: var(--sp-4); }
+}
+/* The status and both buttons wrap instead of squeezing the button text. */
+.vs-head .page-head__actions > * { flex-shrink: 0; }
+@media (max-width: 640px) {
+  .vs-head .page-head__actions { width: 100%; }
+  .vs-head .page-head__actions .btn { flex: 1 1 auto; }
+}

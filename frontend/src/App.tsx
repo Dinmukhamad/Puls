@@ -51,6 +51,7 @@ const QrAccessPage = lazy(() => import("./pages/qr/QrAccessPage").then(module =>
 const CityAdminPage = lazy(() => import("./pages/city/CityAdminPage").then(module => ({ default: module.CityAdminPage })));
 const ScenarioPage = lazy(() => import("./pages/scenarios/ScenarioPage").then(module => ({ default: module.ScenarioPage })));
 const VoiceTrainingPage = lazy(() => import("./pages/voice/VoiceTrainingPage").then(module => ({ default: module.VoiceTrainingPage })));
+const VoiceScenariosPage = lazy(() => import("./pages/voice/VoiceScenariosPage").then(module => ({ default: module.VoiceScenariosPage })));
 
 export function App() {
   const { user, loading, atLeast, restoreError, retryRestore } = useAuth();
@@ -94,6 +95,8 @@ export function App() {
         <Route path="/training/scenarios/:key" element={<Suspense fallback={<Skeleton height={400} />}><ScenarioPage /></Suspense>} />
         <Route path="/training/scenarios/attempts/:attemptId" element={<Suspense fallback={<Skeleton height={400} />}><ScenarioPage /></Suspense>} />
         <Route path="/admin/learning/city" element={<Suspense fallback={<Skeleton height={400} />}><CityAdminPage /></Suspense>} />
+        <Route path="/admin/learning/voice-scenarios" element={<Suspense fallback={<Skeleton height={400} />}><VoiceScenariosPage /></Suspense>} />
+        <Route path="/admin/learning/voice-scenarios/:scenarioId" element={<Suspense fallback={<Skeleton height={400} />}><VoiceScenariosPage /></Suspense>} />
         <Route path="/qr-access" element={<Suspense fallback={<Skeleton height={300} />}><QrAccessPage /></Suspense>} />
         <Route index element={<Navigate to={access.home} replace />} />
         <Route path="/admin/access" element={atLeast("admin") ? <Suspense fallback={<Skeleton height={300} />}><AccessAdminPage /></Suspense> : <AccessPage />} />

@@ -29,3 +29,6 @@
 .voice-mentor form > .btn { justify-self: start; }
 .voice-mentor__answer { padding: 18px; margin-top: 14px; background: var(--status-success-tint); border-radius: var(--radius-s); }
 @media (max-width: 700px) { .voice-mentor { padding: 20px; } .voice-mentor__layout { grid-template-columns: 1fr; } .voice-mentor header { flex-wrap: wrap; } }
+.voice-mentor__score { max-width: 160px; }
+.voice-mentor__solution { padding: 14px 16px; margin: 12px 0; border-radius: var(--radius-m); background: var(--surface-secondary); }
+.voice-mentor__solution p { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text-secondary); }
