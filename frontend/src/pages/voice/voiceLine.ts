@@ -27,6 +27,21 @@ export const LINE_SCENES: Record<VoicePlaybackPersona, LineScene> = {
 export const PRE_ROLL = 0.35;
 export const TAIL = 0.3;
 
+/**
+ * iOS mutes Web Audio while the ring/silent switch is on, unlike the browser's own voice.
+ * "playback" makes the page's audio a media session the switch does not mute (Safari 16.4+);
+ * "auto" gives the microphone back its play-and-record session before the operator answers.
+ */
+export type AudioSessionType = "auto" | "playback";
+interface AudioSessionNavigator { audioSession?: { type: string } }
+
+export function setAudioSession(type: AudioSessionType, nav: AudioSessionNavigator | undefined = typeof navigator === "undefined" ? undefined : navigator as AudioSessionNavigator) {
+  try {
+    const session = nav?.audioSession;
+    if (session && session.type !== type) session.type = type;
+  } catch { /* Not supported: the switch keeps its usual effect. */ }
+}
+
 export interface LinePlayback {
   ended: Promise<void>;
   stop(): void;

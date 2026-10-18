@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createVoicePlaybackPlan, rankRussianVoices, type VoicePlaybackPersona } from "./voicePlayback";
-import { PhoneLine, type LinePlayback } from "./voiceLine";
+import { PhoneLine, setAudioSession, type LinePlayback } from "./voiceLine";
 
 // Web Speech recognition is still vendor-prefixed in some browsers and is not
 // included in TypeScript's DOM declarations. Keep its small interface local.
@@ -217,6 +217,7 @@ export function useVoiceSpeech({ onTranscript, voicePreferenceKey = "puls:voice-
   }, []);
   /** Call from a click: browsers start audio only after the user's gesture. */
   const unlockAudio = useCallback(() => {
+    setAudioSession("playback");
     const line = ensureLine();
     if (line && line.context.state !== "running") void line.context.resume().catch(() => {});
   }, [ensureLine]);
@@ -286,6 +287,7 @@ export function useVoiceSpeech({ onTranscript, voicePreferenceKey = "puls:voice-
     setCheckingMic(true);
     setError(null);
     try {
+      setAudioSession("auto");
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       // Permissions can resolve after cancellation, route changes or unmount.
       if (micCheckRef.current !== check || !mounted.current) {
@@ -366,6 +368,7 @@ export function useVoiceSpeech({ onTranscript, voicePreferenceKey = "puls:voice-
     try {
       if (!micCheckedRef.current && !await checkMicrophone()) return false;
       if (!mounted.current || generation !== inputGeneration.current || mutedRef.current) return false;
+      setAudioSession("auto");
       const recognition = new Constructor();
       const session: RecordingSession = { recognition, finalText: "", interimText: "", hasResult: false, failed: false, stopTimer: null };
       recordingRef.current = session;
@@ -530,6 +533,7 @@ export function useVoiceSpeech({ onTranscript, voicePreferenceKey = "puls:voice-
       setError(null);
       if (!cloudSource) { playBrowser(); return; }
       const playLine = (blob: Blob) => {
+        setAudioSession("playback");
         const line = options.line ? ensureLine() : null;
         if (!line) { playBlob(blob); return; }
         if (output.timer !== null) window.clearTimeout(output.timer);
