@@ -131,7 +131,8 @@ async def test_start_catalog_private_before_qr_no_solution_and_all_operator_grou
     assert len(response.json()["scenarios"][0]["personas"]) == 4
     attempt = await start(client, headers)
     assert attempt["turn"] == 0 and attempt["stage"] == "opening"
-    assert attempt["revision"] == 2
+    assert attempt["revision"] == voice_training.REVISION == 3
+    assert attempt["language"] == "ru"
     assert attempt["result"] is None and "requests" not in attempt and "snapshot" not in attempt
     assert attempt["driver"]["phone"] != attempt["incoming_phone"]
     assert attempt["driver"]["name"] == "Ким Виктор Андреевич"
@@ -639,3 +640,218 @@ async def test_v1_saved_attempt_keeps_original_dialogue_evaluation_and_retry(cli
     assert retry["revision"] == 1 and retry["stage"] == "lost_sim"
     retry = (await answer(client, headers, retry, NEXT)).json()
     assert retry["stage"] == "resolved"
+
+
+# --- Revision 3: the driver in character, Russian or Kazakh -----------------------------
+
+SNAPSHOT_KK = {
+    "language": "kk",
+    "driver": {"name": "Ким Виктор Андреевич", "phone": "+77015550999"},
+    "incoming_phone": "+77015550192",
+}
+
+
+def conversation_v3(*answers, persona="calm", language="ru"):
+    snapshot = {**SNAPSHOT_KK, "language": language}
+    transcript = [{
+        "role": "driver", "text": voice_training.OPENING_V3[language][persona],
+        "turn": 0, "line": "opening",
+    }]
+    stage = "opening"
+    for turn, text in enumerate(answers):
+        stage, reply, line = voice_training.next_reply_v3(
+            persona, stage, transcript, text, snapshot=snapshot
+        )
+        transcript.extend([
+            {"role": "operator", "text": text, "turn": turn},
+            {"role": "driver", "text": reply, "turn": turn + 1, "line": line},
+        ])
+    return SimpleNamespace(
+        revision=3, transcript=transcript, stage=stage, snapshot=snapshot,
+        practice={"events": [{"system": key} for key in ("dispatch", "oktell", "compared")]},
+    )
+
+
+def lines(attempt):
+    return [entry["line"] for entry in attempt.transcript if entry["role"] == "driver"]
+
+
+KK_EXPLAIN = (
+    "Сіз тіркелген нөмірден емес, басқа нөмірден хабарласып тұрсыз, сондықтан бұл қоңырау "
+    "арқылы нөмірді ауыстыру мүмкін емес."
+)
+
+
+async def test_v3_russian_decisions_match_v2_while_the_wording_follows_the_character():
+    answers = (
+        "Вы звоните с номера, который не совпадает с номером регистрации.",
+        "Позвоните с номера регистрации.",
+        "Тогда откройте Такси Про и измените номер.",
+    )
+    v2 = conversation_v2(*answers, persona="irritated")
+    for persona in ("calm", "confused", "hurried", "irritated"):
+        v3 = conversation_v3(*answers, persona=persona)
+        assert v3.stage == v2.stage == "resolved"
+        assert lines(v3) == ["opening", "mismatch", "lost_sim", "resolved_app"]
+    calm = conversation_v3(*answers, persona="calm")
+    # The calm driver says exactly the revision 2 words.
+    assert [e["text"] for e in calm.transcript[2::2]] == [e["text"] for e in v2.transcript[2::2]]
+    irritated = conversation_v3(*answers, persona="irritated")
+    assert irritated.transcript[2]["text"].startswith("Мне некогда. ")
+    assert irritated.transcript[4]["text"].startswith("Я уже теряю время. ")
+    assert irritated.transcript[6]["text"].startswith("Ну наконец-то. ")
+    confused = conversation_v3(*answers, persona="confused")
+    assert confused.transcript[0]["text"].startswith("Здравствуйте… э-э")
+    assert confused.transcript[2]["text"].startswith("Э-э… ")
+    hurried = conversation_v3(*answers, persona="hurried")
+    assert "Давайте быстро" in hurried.transcript[0]["text"]
+    for attempt in (calm, irritated, confused, hurried):
+        assert voice_training.evaluate_v2(attempt)["score"] == 100
+
+
+async def test_v3_irritation_builds_up_and_then_alternates():
+    texts = [voice_training.say("ru", "irritated", "ask_how", turn) for turn in range(1, 8)]
+    prefixes = [text.removesuffix(voice_training.V2_LINES["ask_how"]) for text in texts]
+    assert prefixes[:4] == voice_training.MANNER["ru"]["irritated"]
+    assert prefixes[4:] == ["Ну сколько можно! ", "Да что ж такое! ", "Ну сколько можно! "]
+
+
+async def test_v3_kazakh_call_reaches_the_app_step_through_the_lost_sim():
+    attempt = conversation_v3(
+        KK_EXPLAIN,
+        "Тіркелген нөміріңізден қоңырау шалыңыз.",
+        "Онда Такси Про қосымшасын ашып, нөміріңізді сол жерде ауыстырыңыз.",
+        persona="irritated", language="kk",
+    )
+    assert lines(attempt) == ["opening", "mismatch", "lost_sim", "resolved_app"]
+    assert attempt.stage == "resolved"
+    assert "Ескі SIM-картам енді жоқ" in attempt.transcript[4]["text"]
+    assert attempt.transcript[-1]["text"].startswith("Әйтеуір. ")
+    result = voice_training.evaluate_v2(attempt, "kk")
+    assert result["score"] == 100 and not result["critical_errors"]
+
+
+@pytest.mark.parametrize(
+    ("answers", "expected", "stage"),
+    [
+        (["WhatsApp-қа нөмірді ауыстырғыңыз келетінін жазыңыз."], "resolved_whatsapp", "resolved"),
+        (["Қосымшаның орнына WhatsApp-қа жазыңыз, нөмірді ауыстыру керек деп."],
+         "resolved_whatsapp", "resolved"),
+        (["Қосымшада нөміріңізді өзгерте аласыз."], "resolved_app", "resolved"),
+        (["Приложениеге кіріп, номерді ауыстырыңыз."], "resolved_app", "resolved"),
+        (["Откройте Такси Про и измените номер."], "resolved_app", "resolved"),
+        (["Такси Про қолдана аласыз ба"], "focus_app", "next_step"),
+        (["WhatsApp-қа жаза аласыз ба"], "focus_whatsapp", "next_step"),
+        (["Қосымшада нөмірді өзгерте алмайсыз."], "rejected", "next_step"),
+        (["WhatsApp-қа жазбаңыз, нөмірді ауыстыру үшін."], "rejected", "next_step"),
+        (["Аты-жөніңізді айтыңызшы."], "fact_name", "opening"),
+        (["Қай нөмірден хабарласып тұрсыз?"], "fact_incoming", "opening"),
+        (["Тіркелген нөміріңіз қандай?"], "fact_registered", "opening"),
+        (["Ескі SIM-карта қолыңызда ма?"], "lost_sim", "lost_sim"),
+        (["Бұл қоңырау арқылы нөмірді ауыстыруға болмайды."], "limit", "next_step"),
+        (["Сәлеметсіз бе, қалайсыз?"], "ask_how", "opening"),
+    ],
+)
+async def test_v3_kazakh_answers_are_understood(answers, expected, stage):
+    attempt = conversation_v3(*answers, language="kk")
+    assert attempt.transcript[-1]["line"] == expected, attempt.transcript[-1]
+    assert attempt.stage == stage
+    assert attempt.transcript[-1]["text"] == voice_training.say(
+        "kk", "calm", expected, 1, voice_training._identity(SNAPSHOT_KK)
+    )
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Мен нөміріңізді қазір ауыстырып беремін.",
+        "Нөміріңізді ауыстырдым, енді Такси Про-ны ашыңыз.",
+        "Аккаунтты өшіріңіз де, қайта тіркеліңіз.",
+    ],
+)
+async def test_v3_kazakh_promises_and_account_deletion_are_critical(text):
+    attempt = conversation_v3(text, language="kk")
+    assert attempt.stage == "clarify"
+    result = voice_training.evaluate_v2(attempt, "kk")
+    assert result["critical_errors"] and result["score"] <= 50
+
+
+async def test_v3_kazakh_warnings_and_refusals_are_not_offers():
+    warning = conversation_v3(
+        "«Аккаунтты өшіру» батырмасын баспаңыз. Такси Про қосымшасын ашып, нөмірді ауыстырыңыз.",
+        language="kk",
+    )
+    assert warning.stage == "resolved"
+    assert not voice_training.evaluate_v2(warning, "kk")["critical_errors"]
+    refusal = conversation_v3("Нөміріңізді ауыстыра алмаймын.", language="kk")
+    assert refusal.transcript[-1]["line"] == "limit"
+    assert not voice_training.advice_kk("Тіркелген нөмір жоқ болса, WhatsApp арқылы хабарласыңыз.")[
+        "registered_call"
+    ]
+
+
+async def test_v3_kazakh_examples_pass_their_own_criteria():
+    examples = voice_training.EXAMPLES["kk"]
+    for step in ("app", "whatsapp"):
+        attempt = conversation_v3(examples["clarity"], examples[step], language="kk")
+        assert attempt.stage == "resolved", step
+        assert voice_training.evaluate_v2(attempt, "kk")["score"] == 100
+
+
+async def test_v3_kazakh_letters_are_optional_in_typed_answers():
+    attempt = conversation_v3(
+        "Такси Про косымшасын ашып, номиринизди сол жерде ауыстырыныз.", language="kk"
+    )
+    assert attempt.stage == "resolved"
+
+
+async def test_v3_start_answer_retry_keep_language_and_line_keys(client, session, operator):
+    headers = auth(await login(client, operator.login))
+    catalog = (await client.get(BASE, headers=headers)).json()
+    assert catalog["scenarios"][0]["languages"] == [
+        {"key": "ru", "label": "Русский"}, {"key": "kk", "label": "Қазақша"},
+    ]
+    response = await client.post(
+        BASE + "/start", headers=headers,
+        json={"scenario_key": "phone_change", "persona": "hurried", "language": "kk"},
+    )
+    assert response.status_code == 200, response.text
+    attempt = response.json()
+    assert attempt["language"] == "kk" and attempt["revision"] == 3
+    assert attempt["transcript"][0]["text"] == voice_training.OPENING_V3["kk"]["hurried"]
+    attempt = (await answer(client, headers, attempt, KK_EXPLAIN)).json()
+    row = await session.get(VoiceTrainingAttempt, attempt["id"])
+    await session.refresh(row)
+    assert [entry.get("line") for entry in row.transcript if entry["role"] == "driver"] == [
+        "opening", "mismatch",
+    ]
+    assert attempt["transcript"][-1]["text"].startswith("Тезірек болайықшы. ")
+    attempt = (await answer(
+        client, headers, attempt, "WhatsApp-қа нөмірді ауыстырғыңыз келетінін жазыңыз."
+    )).json()
+    assert attempt["stage"] == "resolved"
+    finished = await finish(client, headers, attempt)
+    assert finished["result"]["rules_revision"] == 3
+    assert finished["result"]["criteria"][2]["passed"]
+    retry = await client.post(
+        BASE + f"/attempts/{attempt['id']}/retry", headers=headers, json={"turn": 1}
+    )
+    assert retry.status_code == 200, retry.text
+    retry = retry.json()
+    assert retry["language"] == "kk" and retry["stage"] == "next_step"
+    summary = (await client.get(BASE, headers=headers)).json()["attempts"]
+    assert {item["language"] for item in summary} == {"kk"}
+
+
+async def test_v2_attempt_in_progress_keeps_its_own_dialogue(client, session, operator):
+    headers = auth(await login(client, operator.login))
+    attempt = await start(client, headers, persona="irritated")
+    saved = await session.get(VoiceTrainingAttempt, attempt["id"])
+    saved.revision = 2
+    saved.transcript = [
+        {"role": "driver", "text": voice_training.OPENING["irritated"], "turn": 0}
+    ]
+    await session.commit()
+    attempt = (await answer(client, headers, attempt, "Позвоните с номера регистрации.")).json()
+    assert attempt["revision"] == 2
+    assert attempt["transcript"][-1]["text"] == voice_training.LOST_SIM

@@ -77,14 +77,18 @@ test("personas use bounded, deterministic prosody with a subtle question rise", 
     assert.ok(plan[1].pitch > plan[0].pitch);
     assert.ok(new Set(plan.map((item) => item.rate)).size > 1);
     for (const segment of plan) {
-      assert.ok(segment.rate >= 0.9 && segment.rate <= 1.12);
-      assert.ok(segment.pitch >= 0.96 && segment.pitch <= 1.04);
-      assert.ok(segment.pauseAfterMs >= 0 && segment.pauseAfterMs <= 260);
+      assert.ok(segment.rate >= 0.8 && segment.rate <= 1.3);
+      assert.ok(segment.pitch >= 0.86 && segment.pitch <= 1.12);
+      assert.ok(segment.pauseAfterMs >= 0 && segment.pauseAfterMs <= 460);
     }
   }
   assert.ok(byPersona.hurried[0].rate > byPersona.calm[0].rate);
   assert.ok(byPersona.confused[0].rate < byPersona.calm[0].rate);
   assert.ok(byPersona.confused[0].pauseAfterMs > byPersona.hurried[0].pauseAfterMs);
+  // The characters differ enough to be told apart by ear, not by a few percent.
+  assert.ok(byPersona.hurried[0].rate - byPersona.calm[0].rate >= 0.15);
+  assert.ok(byPersona.calm[0].rate - byPersona.confused[0].rate >= 0.1);
+  assert.ok(byPersona.calm[0].pitch - byPersona.irritated[0].pitch >= 0.08);
 });
 
 test("long speech uses phrase or word boundaries without losing words or splitting a phone number", () => {

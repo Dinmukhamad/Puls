@@ -10,6 +10,7 @@ class VoiceStart(BaseModel):
     model_config = ConfigDict(extra="forbid")
     scenario_key: Literal["phone_change"]
     persona: Literal["calm", "confused", "hurried", "irritated"] = "calm"
+    language: Literal["ru", "kk"] = "ru"
 
 
 class VoiceAnswer(BaseModel):
@@ -40,11 +41,12 @@ class VoiceReview(BaseModel):
 
 class VoiceSpeechPreview(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    provider: Literal["google", "azure"]
+    provider: Literal["yandex", "google", "azure"]
     persona: Literal["calm", "confused", "hurried", "irritated"] = "calm"
+    language: Literal["ru", "kk"] = "ru"
 
 
 class VoiceSpeechTurn(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    provider: Literal["google", "azure"]
+    provider: Literal["yandex", "google", "azure"]
     turn: int = Field(ge=0, le=100)

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createVoicePlaybackPlan, rankRussianVoices, type VoicePlaybackPersona } from "./voicePlayback";
+import { PhoneLine, type LinePlayback } from "./voiceLine";
 
 // Web Speech recognition is still vendor-prefixed in some browsers and is not
 // included in TypeScript's DOM declarations. Keep its small interface local.
@@ -54,6 +55,16 @@ interface SpeakingSession {
   audio?: HTMLAudioElement;
   audioUrl?: string;
   controller?: AbortController;
+  line?: LinePlayback;
+  ambience?: () => void;
+}
+
+export type VoiceLanguage = "ru" | "kk";
+export interface SpeakOptions {
+  /** The call's language: the browser voice and its pronunciation follow it. */
+  language?: VoiceLanguage;
+  /** Telephone sound with the driver's backdrop; plain playback when unavailable. */
+  line?: boolean;
 }
 
 export interface VoiceAudioSource {
@@ -99,6 +110,10 @@ function clearPlayback(session: SpeakingSession) {
 function clearCloudPlayback(session: SpeakingSession) {
   session.controller?.abort();
   session.controller = undefined;
+  session.line?.stop();
+  session.line = undefined;
+  session.ambience?.();
+  session.ambience = undefined;
   if (session.audio) {
     session.audio.onended = null;
     session.audio.onerror = null;
@@ -132,6 +147,7 @@ function recognitionError(code: string): string {
   }
   if (code === "audio-capture") return "Не удалось получить звук. Проверь микрофон и повтори запись или введи ответ текстом.";
   if (code === "no-speech") return "Речь не распознана. Повтори запись или введи ответ текстом. Этап разговора сохранён.";
+  if (code === "language-not-supported") return "Браузер не распознаёт казахскую речь. Открой тренажёр в Google Chrome или введи ответ текстом. Этап разговора сохранён.";
   if (code === "network") return "Сервис распознавания недоступен. Повтори запись или введи ответ текстом. Этап разговора сохранён.";
   return "Не удалось распознать речь. Повтори запись или введи ответ текстом. Этап разговора сохранён.";
 }
@@ -188,6 +204,22 @@ export function useVoiceSpeech({ onTranscript, voicePreferenceKey = "puls:voice-
   const inputGeneration = useRef(0);
   const speakingRef = useRef<SpeakingSession | null>(null);
   const audioCacheRef = useRef(new Map<string, Blob>());
+  const lineRef = useRef<PhoneLine | null>(null);
+
+  /** One audio context per page for the telephone sound, created on first use. */
+  const ensureLine = useCallback((): PhoneLine | null => {
+    if (lineRef.current) return lineRef.current;
+    const currentWindow = browser();
+    const Context = currentWindow?.AudioContext || currentWindow?.webkitAudioContext;
+    if (!Context) return null;
+    try { lineRef.current = new PhoneLine(new Context()); } catch { return null; }
+    return lineRef.current;
+  }, []);
+  /** Call from a click: browsers start audio only after the user's gesture. */
+  const unlockAudio = useCallback(() => {
+    const line = ensureLine();
+    if (line && line.context.state !== "running") void line.context.resume().catch(() => {});
+  }, [ensureLine]);
 
   const speechWindow = browser();
   const support = {
@@ -316,7 +348,7 @@ export function useVoiceSpeech({ onTranscript, voicePreferenceKey = "puls:voice-
     }
   }, []);
 
-  const startRecording = useCallback(async (): Promise<boolean> => {
+  const startRecording = useCallback(async (language: VoiceLanguage = "ru"): Promise<boolean> => {
     if (!mounted.current || recordingRef.current || startingRef.current) return false;
     if (mutedRef.current) {
       setError("Микрофон выключен. Включи его перед записью или введи ответ текстом.");
@@ -338,7 +370,7 @@ export function useVoiceSpeech({ onTranscript, voicePreferenceKey = "puls:voice-
       const session: RecordingSession = { recognition, finalText: "", interimText: "", hasResult: false, failed: false, stopTimer: null };
       recordingRef.current = session;
       const isCurrent = () => mounted.current && recordingRef.current === session;
-      recognition.lang = "ru-RU";
+      recognition.lang = language === "kk" ? "kk-KZ" : "ru-RU";
       recognition.continuous = true;
       recognition.interimResults = true;
       recognition.maxAlternatives = 1;
@@ -404,7 +436,7 @@ export function useVoiceSpeech({ onTranscript, voicePreferenceKey = "puls:voice-
     try { session.recognition.stop(); } catch { endRecording(session, true); }
   }, [endRecording]);
 
-  const speak = useCallback((text: string, persona: VoicePlaybackPersona = "calm", cloudSource?: VoiceAudioSource): Promise<boolean> => {
+  const speak = useCallback((text: string, persona: VoicePlaybackPersona = "calm", cloudSource?: VoiceAudioSource, options: SpeakOptions = {}): Promise<boolean> => {
     stopSpeaking();
     inputGeneration.current += 1;
     startingRef.current = false;
@@ -446,14 +478,18 @@ export function useVoiceSpeech({ onTranscript, voicePreferenceKey = "puls:voice-
           if (!active()) return;
           clearPlayback(output);
           const voices = availableRussianVoices();
-          const voice = voices.find(candidate => candidate.voiceURI === selectedVoiceRef.current) ?? voices[0];
+          // A Kazakh call uses a Kazakh browser voice when the device has one.
+          const kazakh = options.language === "kk"
+            ? (() => { try { return synthesis.getVoices().find(item => item.lang?.toLowerCase().startsWith("kk")); } catch { return undefined; } })()
+            : undefined;
+          const voice = kazakh ?? voices.find(candidate => candidate.voiceURI === selectedVoiceRef.current) ?? voices[0];
           const play = (index: number) => {
             if (!active()) return;
             clearPlayback(output);
             const segment = plan[index];
             if (!segment) { finish(true); return; }
             const utterance = new SpeechSynthesisUtterance(segment.text);
-            utterance.lang = "ru-RU";
+            utterance.lang = kazakh ? "kk-KZ" : "ru-RU";
             if (voice) utterance.voice = voice;
             utterance.rate = segment.rate;
             utterance.pitch = segment.pitch;
@@ -468,6 +504,10 @@ export function useVoiceSpeech({ onTranscript, voicePreferenceKey = "puls:voice-
             utterance.onerror = () => { if (isCurrent()) finish(false, failureMessage); };
             utterance.onstart = () => {
               if (!isCurrent()) return;
+              if (options.line && !output.ambience) {
+                const line = ensureLine();
+                if (line?.context.state === "running") output.ambience = line.ambience(persona);
+              }
               if (output.timer !== null) window.clearTimeout(output.timer);
               output.timer = window.setTimeout(() => finish(false, failureMessage), Math.min(120000, Math.max(20000, segment.text.length * 180)));
             };
@@ -489,6 +529,18 @@ export function useVoiceSpeech({ onTranscript, voicePreferenceKey = "puls:voice-
       setPlaybackNotice(null);
       setError(null);
       if (!cloudSource) { playBrowser(); return; }
+      const playLine = (blob: Blob) => {
+        const line = options.line ? ensureLine() : null;
+        if (!line) { playBlob(blob); return; }
+        if (output.timer !== null) window.clearTimeout(output.timer);
+        output.timer = window.setTimeout(() => { if (active()) playBrowser(true); }, 120000);
+        void line.play(blob, persona).then(playback => {
+          if (!active()) { playback.stop(); return; }
+          output.line = playback;
+          setLoadingAudio(false);
+          void playback.ended.then(() => { if (active() && output.line === playback) finish(true); });
+        }, () => { if (active()) playBlob(blob); });
+      };
       const playBlob = (blob: Blob) => {
         if (!active()) return;
         const url = URL.createObjectURL(blob);
@@ -516,7 +568,7 @@ export function useVoiceSpeech({ onTranscript, voicePreferenceKey = "puls:voice-
       if (cached) {
         // A blocked initial autoplay can be retried directly inside the repeat
         // button's user gesture, without awaiting synthesis or a second fetch.
-        try { playBlob(cached); } catch { playBrowser(true); }
+        try { playLine(cached); } catch { playBrowser(true); }
         return;
       }
       const controller = new AbortController();
@@ -536,10 +588,10 @@ export function useVoiceSpeech({ onTranscript, voicePreferenceKey = "puls:voice-
           cache.set(cloudSource.cacheKey, blob);
           if (cache.size > 4) cache.delete(cache.keys().next().value!);
         }
-        playBlob(blob);
+        playLine(blob);
       }).catch(() => { if (active() && !controller.signal.aborted) playBrowser(true); });
     });
-  }, [cancelMicCheck, endRecording, stopSpeaking]);
+  }, [cancelMicCheck, endRecording, ensureLine, stopSpeaking]);
 
   const setMuted = useCallback((value: boolean) => {
     mutedRef.current = value;
@@ -602,13 +654,16 @@ export function useVoiceSpeech({ onTranscript, voicePreferenceKey = "puls:voice-
       mounted.current = false;
       cancel();
       audioCacheRef.current.clear();
+      const line = lineRef.current;
+      lineRef.current = null;
+      if (line && line.context.state !== "closed") void line.context.close().catch(() => {});
     };
   }, [cancel]);
 
   return {
     support, recording, speaking, loadingAudio, playbackNotice, checkingMic, micChecked, micSignal, muted,
     transcript, interimTranscript, error, russianVoices, selectedVoiceURI, selectVoice,
-    checkMicrophone, startRecording, stopRecording, speak, stopSpeaking,
+    checkMicrophone, startRecording, stopRecording, speak, stopSpeaking, unlockAudio,
     setMuted, clearError, resetTranscript, cancel,
   };
 }

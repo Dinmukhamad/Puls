@@ -25,6 +25,8 @@ def clean_speech(monkeypatch):
     monkeypatch.setattr(settings, "GOOGLE_TTS_API_KEY", SecretStr(""))
     monkeypatch.setattr(settings, "AZURE_SPEECH_KEY", SecretStr(""))
     monkeypatch.setattr(settings, "AZURE_SPEECH_REGION", "")
+    monkeypatch.setattr(settings, "YANDEX_SPEECHKIT_API_KEY", SecretStr(""))
+    monkeypatch.setattr(settings, "YANDEX_FOLDER_ID", "")
     monkeypatch.setattr(voice_tts, "engine", voice_tts.SpeechEngine())
 
 
@@ -357,3 +359,176 @@ async def test_concurrency_queue_and_cancellation_release_all_slots(monkeypatch)
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
     assert voice_tts.engine.pending == 0 and voice_tts.engine.semaphore._value == 2
+
+
+def yandex(monkeypatch):
+    monkeypatch.setattr(settings, "YANDEX_SPEECHKIT_API_KEY", SecretStr("fixture-yandex-key"))
+
+
+def yandex_stream(audio: bytes, parts: int = 2) -> bytes:
+    """SpeechKit v3 answers with one JSON object per line, each carrying an audio chunk."""
+    size = -(-len(audio) // parts)
+    chunks = [audio[index:index + size] for index in range(0, len(audio), size)]
+    return "\n".join(
+        json.dumps({"result": {"audioChunk": {"data": base64.b64encode(chunk).decode()},
+                               "textChunk": {"text": "…"}}})
+        for chunk in chunks
+    ).encode()
+
+
+async def test_yandex_comes_first_and_hides_its_key(client, operator, monkeypatch):
+    yandex(monkeypatch)
+    google(monkeypatch)
+    headers = auth(await login(client, operator.login))
+    response = await client.get(BASE + "/speech/config", headers=headers)
+    assert response.json()["default_provider"] == "yandex"
+    assert response.json()["providers"][0] == {
+        "id": "yandex", "label": "Yandex SpeechKit", "voice": "persona-v1",
+    }
+    assert "fixture-yandex-key" not in response.text
+
+
+@pytest.mark.parametrize(
+    ("persona", "voice", "role", "speed"),
+    [
+        ("calm", "alexander", None, 1.0),
+        ("confused", "zahar", None, 0.88),
+        ("hurried", "anton", None, 1.28),
+        ("irritated", "kirill", "strict", 1.12),
+    ],
+)
+async def test_yandex_gives_every_character_his_own_voice(persona, voice, role, speed, monkeypatch):
+    yandex(monkeypatch)
+    requests = []
+
+    def respond(request):
+        requests.append(request)
+        return httpx.Response(200, content=yandex_stream(MP3))
+
+    transport(monkeypatch, respond)
+    result = await voice_tts.engine.synthesize("yandex", "SIM-карты нет. WhatsApp?", persona, 1)
+    assert result.audio == MP3 and result.provider == "yandex"
+    request = requests[0]
+    assert str(request.url) == voice_tts.YANDEX_URL
+    assert request.headers["Authorization"] == "Api-Key fixture-yandex-key"
+    assert "x-folder-id" not in request.headers
+    payload = json.loads(request.content)
+    expected = [{"voice": voice}, *([{"role": role}] if role else []), {"speed": speed}]
+    assert payload == {
+        "text": "сим-карты нет. ватсап?",
+        "hints": expected,
+        "outputAudioSpec": {"containerAudio": {"containerAudioType": "MP3"}},
+        "loudnessNormalizationType": "LUFS",
+    }
+
+
+async def test_yandex_kazakh_uses_the_kazakh_voice_and_folder_when_set(monkeypatch):
+    yandex(monkeypatch)
+    monkeypatch.setattr(settings, "YANDEX_FOLDER_ID", "b1gfolder")
+    requests = []
+
+    def respond(request):
+        requests.append(request)
+        return httpx.Response(200, content=yandex_stream(MP3, parts=3))
+
+    transport(monkeypatch, respond)
+    await voice_tts.engine.synthesize("yandex", voice_tts.PREVIEW_TEXT_KK, "hurried", 1, "kk")
+    payload = json.loads(requests[0].content)
+    assert payload["hints"] == [{"voice": "madi"}, {"speed": 1.25}]
+    assert requests[0].headers["x-folder-id"] == "b1gfolder"
+    # The same text in another language is another clip.
+    await voice_tts.engine.synthesize("yandex", voice_tts.PREVIEW_TEXT_KK, "hurried", 1, "ru")
+    assert len(requests) == 2
+
+
+async def test_yandex_retries_without_a_role_the_voice_does_not_take(monkeypatch):
+    yandex(monkeypatch)
+    requests = []
+
+    def respond(request):
+        requests.append(json.loads(request.content)["hints"])
+        if len(requests) == 1:
+            return httpx.Response(400, json={"error": "role is not supported"})
+        return httpx.Response(200, content=yandex_stream(MP3))
+
+    transport(monkeypatch, respond)
+    result = await voice_tts.engine.synthesize("yandex", "Сколько можно!", "irritated", 1)
+    assert result.audio == MP3
+    assert requests == [
+        [{"voice": "kirill"}, {"role": "strict"}, {"speed": 1.12}],
+        [{"voice": "kirill"}, {"speed": 1.12}],
+    ]
+
+
+@pytest.mark.parametrize("status", [401, 403, 429, 500])
+async def test_yandex_errors_are_not_retried_and_hide_diagnostics(status, monkeypatch):
+    yandex(monkeypatch)
+    calls = []
+
+    def respond(request):
+        calls.append(request)
+        return httpx.Response(status, text="fixture-yandex-key upstream details")
+
+    transport(monkeypatch, respond)
+    with pytest.raises(voice_tts.SpeechUnavailable) as error:
+        await voice_tts.engine.synthesize("yandex", "Сколько можно!", "irritated", 1)
+    assert len(calls) == 1
+    assert "fixture" not in str(error.value) and "upstream" not in str(error.value)
+
+
+@pytest.mark.parametrize(
+    "body",
+    [b"not json", json.dumps({"result": {}}).encode(), yandex_stream(b"not-mp3")],
+)
+async def test_yandex_malformed_audio_is_unavailable(body, monkeypatch):
+    yandex(monkeypatch)
+    transport(monkeypatch, lambda _: httpx.Response(200, content=body))
+    with pytest.raises(voice_tts.SpeechUnavailable):
+        await voice_tts.engine.synthesize("yandex", "Текст", "calm", 1)
+    assert not voice_tts.engine.cache
+
+
+async def test_google_has_no_kazakh_voice_and_azure_uses_a_kazakh_one(monkeypatch):
+    google(monkeypatch)
+    calls = []
+    def respond(request):
+        calls.append(request)
+        return httpx.Response(200, content=MP3)
+
+    transport(monkeypatch, respond)
+    with pytest.raises(voice_tts.SpeechUnavailable):
+        await voice_tts.engine.synthesize("google", voice_tts.PREVIEW_TEXT_KK, "calm", 1, "kk")
+    assert not calls
+    monkeypatch.setattr(settings, "AZURE_SPEECH_KEY", SecretStr("fixture-azure-key"))
+    monkeypatch.setattr(settings, "AZURE_SPEECH_REGION", "westeurope")
+    await voice_tts.engine.synthesize("azure", voice_tts.PREVIEW_TEXT_KK, "calm", 1, "kk")
+    ssml = calls[0].content.decode()
+    assert 'xml:lang="kk-KZ"' in ssml and voice_tts.AZURE_KK_VOICE in ssml
+
+
+async def test_turn_speech_follows_the_call_language(client, session, operator, monkeypatch):
+    yandex(monkeypatch)
+    calls = []
+
+    async def audio(provider, text, persona):
+        calls.append((provider.language, text, persona))
+        return MP3
+
+    monkeypatch.setattr(voice_tts, "_request_audio", audio)
+    headers = auth(await login(client, operator.login))
+    started = (await client.post(
+        BASE + "/start", headers=headers,
+        json={"scenario_key": "phone_change", "persona": "confused", "language": "kk"},
+    )).json()
+    response = await client.post(
+        BASE + f"/attempts/{started['id']}/speech", headers=headers,
+        json={"provider": "yandex", "turn": 0},
+    )
+    assert response.status_code == 200, response.text
+    assert calls == [("kk", started["transcript"][0]["text"], "confused")]
+    response = await client.post(
+        BASE + "/speech/preview", headers=headers,
+        json={"provider": "yandex", "persona": "calm", "language": "kk"},
+    )
+    assert response.status_code == 200
+    assert calls[-1] == ("kk", voice_tts.PREVIEW_TEXT_KK, "calm")

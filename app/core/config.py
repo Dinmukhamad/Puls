@@ -60,6 +60,10 @@ class Settings(BaseSettings):
     AZURE_TTS_VOICE: str = Field(
         default="ru-RU-DmitryNeural", pattern=r"^ru-RU-[A-Za-z0-9-]{1,80}$"
     )
+    #: API-ключ сервисного аккаунта Yandex Cloud с ролью ai.speechkit-tts.user.
+    YANDEX_SPEECHKIT_API_KEY: SecretStr = SecretStr("")
+    #: Каталог нужен только для IAM-токена; с API-ключом его можно не задавать.
+    YANDEX_FOLDER_ID: str = Field(default="", pattern=r"^(?:[a-z0-9]{1,50})?$")
 
     # --- CORS ---
     #: Задаётся списком через запятую: "https://app.example.com,https://admin.example.com"
