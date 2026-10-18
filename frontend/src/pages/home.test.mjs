@@ -1,6 +1,6 @@
 /**
- * The operator's home is the week's race (docs/OPERATOR_HOME.md): the place, the axis of everyone's points, the moves,
- * the month's contest and what can be done today.
+ * The operator's home (docs/OPERATOR_HOME.md) is built from the site's own blocks: «Ваше место», «Что подтянуть» and the
+ * table of «Гонка недели», beside them the month's contest and what can be done today.
  */
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
@@ -31,7 +31,7 @@ const built = await build({
 });
 const module = { exports: {} };
 new Function("require", "module", "exports", built.outputFiles[0].text)((name) => name.startsWith("test:") ? mocks[name.slice(5)] : require(name), module, module.exports);
-const { CabinetPage, trackScale, trackLabels, ladderRows, monthGap, nextMission } = module.exports;
+const { CabinetPage, weekCaption, monthGap, nextMission } = module.exports;
 const render = () => renderToStaticMarkup(React.createElement(CabinetPage));
 
 const names = ["Данияр А.", "Мадина Е.", "Айгерим А.", "Асель Н.", "Салтанат К.", "Ерлан М.", "Арман И.", "Тимур Асхатович Дюсенов", "Жанна Б.", "Динара С.", "Руслан О.", "Нурлан Т."];
@@ -44,7 +44,7 @@ const race = (patch = {}) => ({
   me: { rank: 8, points: 83.63, rank_delta: -5, shared_with: [] },
   next: { rank: 7, name: "Арман И.", points: 84.15, gap: 0.52, rank_delta: -2, is_me: false },
   behind: { rank: 9, name: "Жанна Б.", points: 82.25, gap: -1.38, rank_delta: -8, is_me: false, lead: 1.38 },
-  podium: [{ place: 3, name: "Айгерим А.", points: 89.59, gap: 5.96, reached: false }],
+  podium: [{ place: 1, name: "Данияр А.", points: 96.18, gap: 12.55, reached: false }, { place: 2, name: "Мадина Е.", points: 92.07, gap: 8.44, reached: false }, { place: 3, name: "Айгерим А.", points: 89.59, gap: 5.96, reached: false }],
   standings: standings(),
   metrics: [
     { code: "thanks", title: "Благодарности от водителей", unit: "шт", direction: "higher_is_better", value: 0, target: 5, points: 0, max_points: 5, lost: 5, reported: true, per_unit: 1 },
@@ -57,7 +57,7 @@ const race = (patch = {}) => ({
   },
   ...patch,
 });
-const dashboard = (weekId = 3) => ({ full_name: "Тимур Асхатович Дюсенов", balance: { balance: 300, available: 300, reserved: 0 }, week: { week_id: weekId, coins_total: 167, is_final: false } });
+const dashboard = (weekId = 3) => ({ full_name: "Тимур Асхатович Дюсенов", group_name: "Группа 2 - ночная смена", balance: { balance: 300, available: 300, reserved: 0 }, week: { week_id: weekId, coins_total: 167, is_final: false } });
 const month = { year: 2026, month: 10, name: "октябрь 2026", status: "calculated", weeks: [{ status: "closed" }, { status: "closed" }, { status: "open" }], weeks_planned: 5,
   standings: [{ name: "Тимур Асхатович Дюсенов", rank: 1, points: 185.45, weeks: 2, coins_rank_bonus: 300, coins_nomination_bonus: 100, mine: true }, { name: "Данияр А.", rank: 2, points: 185.06, weeks: 2, coins_rank_bonus: 200, coins_nomination_bonus: 0, mine: false }], nominations: [] };
 const mission = (key, state, patch = {}) => ({ key, title: `Миссия ${key}`, district: "academy", state, enabled: true, current: 0, target: 1, xp: 25, coins: 0, ...patch });
@@ -65,36 +65,6 @@ const city = { can_claim: true, preview: false, inspecting: false, districts: [{
   missions: [mission("welcome", "ready", { title: "Твой город начинается здесь" })], quests: { day: "2026-10-18", coins: 3, items: [{ answered: false }, { answered: false }, { answered: false }] } };
 const wheel = { enabled: false, free_left: 1, chest: { unlocked: false, answered: 0, total: 3 } };
 const everything = (patch = {}) => ({ race: race(), dashboard: dashboard(), "contest-month": month, city, wheel, ...patch });
-
-test("the axis of points has room around the field and at most seven round ticks", () => {
-  const scale = trackScale(scores);
-  assert.deepEqual([scale.min, scale.max, scale.ticks], [76, 100, [76, 80, 84, 88, 92, 96, 100]]);
-  assert.equal(scale.at(88), 50);
-  // One operator, or nobody with points yet: the axis still has width and never goes below zero.
-  assert.deepEqual(trackScale([50]).ticks, [49, 50, 51, 52, 53]);
-  assert.deepEqual(trackScale([0, 0]).ticks, [0, 1, 2, 3, 4]);
-});
-
-test("names on the axis: you, the leader, the neighbours and the third place, clear of each other", () => {
-  const data = race();
-  const labels = trackLabels(data, trackScale(scores));
-  assert.deepEqual(labels.map((label) => [label.key, label.row, label.align]), [
-    ["me", "above", "center"], ["lead", "above", "center"], ["next", "below", "start"], ["behind", "below", "end"], ["third", "below", "center"]]);
-  assert.equal(labels[2].text, "7 · Арман И.");
-  // The leader is you: no separate leader label, no third place, the one behind on the left.
-  const lead = trackLabels({ standings: standings(0), next: null, behind: { ...data.next, rank: 2, name: "Мадина Е.", points: 92.07, lead: 4.11 } }, trackScale(scores));
-  assert.deepEqual(lead.map((label) => label.key), ["me", "behind"]);
-  // At the left edge a label grows inwards.
-  const last = trackLabels({ standings: standings(11), next: { rank: 11, name: "Руслан О.", points: 78.23 }, behind: null }, trackScale(scores));
-  assert.equal(last.find((label) => label.key === "me").align, "start");
-});
-
-test("on a phone the ladder shows the leader and two places either side of you", () => {
-  const rows = ladderRows(standings());
-  assert.deepEqual(rows.map((row) => row === "gap" ? "…" : row.rank), [1, "…", 6, 7, 8, 9, 10]);
-  assert.deepEqual(ladderRows(standings(1)).map((row) => row === "gap" ? "…" : row.rank), [1, 2, 3, 4]);
-  assert.deepEqual(ladderRows(standings().map((row) => ({ ...row, is_me: false }))).map((row) => row.rank), [1, 2, 3, 4, 5]);
-});
 
 test("the month's gap reads without declining names", () => {
   assert.equal(monthGap(month.standings, month.standings[0]), "Отрыв 0,39 балла · следом Данияр А.");
@@ -110,68 +80,75 @@ test("the next mission follows the city's order and skips locked, disabled and c
   assert.equal(nextMission(undefined), undefined);
 });
 
-test("the home leads with the place, then the moves, the month and today", () => {
+test("an old week is named as the latest calculated one, not passed off as this week", () => {
+  const data = race();
+  assert.equal(weekCaption(data, "2026-10-17"), "Гонка недели · 12.10–18.10.2026 · места по загруженным показателям");
+  assert.equal(weekCaption({ ...data, live: false, week: { ...data.week, status: "closed" } }, "2026-10-18"), "Гонка недели · 12.10–18.10.2026 · итог опубликован");
+  assert.equal(weekCaption({ ...data, live: false }, "2026-10-19"), "Последняя рассчитанная неделя: 12.10–18.10.2026. Показатели этой недели ещё не загружены");
+  assert.equal(weekCaption({ ...data, week: null }), "");
+});
+
+test("the home is the site's own cards: the place, what to improve and the table, the month and today beside them", () => {
   state = everything();
   const html = render();
   assert.match(html, /data-tour="home"/);
-  assert.match(html, /<h1 class="page-title">Тимур, вы на 8-м месте из 12<\/h1>/);
-  assert.match(html, /Гонка недели · 12\.10–18\.10\.2026 · места по загруженным показателям/);
-  assert.match(html, />83,63 из 100 баллов</);
-  assert.match(html, />≈167 коинов за неделю</);
-  assert.match(html, /Все 12 операторов по баллам недели/);
-  assert.match(html, /aria-label="Шкала баллов от 76 до 100\. Вы — 83,63, 8-е место из 12\. Впереди Арман И\. с 84,15\. Позади Жанна Б\. с 82,25\."/);
-  assert.match(html, /мест к прошлой неделе/);
-  // Moves: one of three options is enough for the place above; never «И..».
-  assert.match(html, /Подняться на 7-е место/);
-  assert.match(html, /\+0,52 балла/);
-  assert.match(html, /Впереди — Арман И\. Хватит одного из этого:/);
-  assert.doesNotMatch(html, /И\.\.|Б\.\./);
-  assert.equal((html.match(/class="race-options__title"/g) ?? []).length - 2, 3, "three options for the place above, two steps to the top three");
-  assert.match(html, /Удержать 8-е место/);
-  assert.match(html, /Переработки: на максимуме — держите\./);
-  assert.match(html, /До тройки лидеров/);
-  assert.match(html, /Где теряются баллы/);
-  assert.match(html, /Можно добрать ещё 16,37 балла/);
-  // The month pays the prizes.
+  assert.match(html, /<h1 class="page-title">Мой кабинет<\/h1>/);
+  assert.match(html, /(Доброе утро|Добрый день|Добрый вечер|Доброй ночи), Тимур · Группа 2 - ночная смена/);
+  // «Ваше место» of «Гонка недели», with the week it comes from and a link there.
+  assert.match(html, /data-tour="home-race"/);
+  assert.match(html, /Ваше место/);
+  assert.match(html, /class="race-hero__place"><strong>8<\/strong><span>место из 12<\/span>/);
+  assert.match(html, /<strong>83,63<\/strong> из 100 баллов/);
+  assert.match(html, /До 7-го места/);
+  assert.match(html, /До призовой тройки/);
+  assert.match(html, /href="\/race"[^>]*>Гонка недели →/);
+  // «Что подтянуть», compact: the goals and the three biggest losses, the rest in «Гонка недели».
+  assert.match(html, /data-tour="home-moves"/);
+  assert.match(html, /Подняться на 7-е место \(Арман И\.\): нужно \+0,52 балла/);
+  assert.match(html, /Где вы теряете больше всего/);
+  assert.equal((html.match(/class="race-metric"/g) ?? []).length, 1, "only the metrics that lose points");
+  assert.match(html, /href="\/race"[^>]*>Все показатели →/);
+  // The table of the race, with the gap to you.
+  assert.match(html, /Таблица гонки/);
+  assert.match(html, /<th class="num">От вас<\/th>/);
+  // Beside them: the month pays the prizes, and what can be done today.
   assert.match(html, /Конкурс месяца/);
   assert.match(html, />1-е место</);
   assert.match(html, /Отрыв 0,39 балла · следом Данияр А\./);
   assert.match(html, /Приз сейчас — 400 коинов/);
   assert.match(html, /Закрыто 2 из 5 недель/);
-  // Today: the situations, the ready mission, the coins.
   assert.match(html, /Ситуации дня · 0 из 3/);
   assert.match(html, /\+3 коина/);
   assert.match(html, /Миссия готова/);
   assert.match(html, /\+25 опыта/);
   assert.match(html, /id="wallet"/);
   assert.match(html, /На счету 300 коинов/);
-  for (const href of ["/race", "/rating", "/progress", "/training/city?open=quests", "/training/city?district=academy&amp;mission=welcome", "/shop", "/wallet"]) assert.ok(html.includes(`href="${href}"`), href);
-  assert.ok(html.indexOf("home-track") < html.indexOf("home-moves") && html.indexOf("home-moves") < html.indexOf("Где теряются баллы"));
-  assert.doesNotMatch(html, /NaN|undefined/);
+  for (const href of ["/rating", "/training/city?open=quests", "/training/city?district=academy&amp;mission=welcome", "/shop", "/wallet"]) assert.ok(html.includes(`href="${href}"`), href);
+  assert.ok(html.indexOf("home-slot--hero") < html.indexOf("home-slot--advice") && html.indexOf("home-slot--advice") < html.indexOf("home-slot--table") && html.indexOf("home-slot--table") < html.indexOf("home-slot--month"));
+  assert.doesNotMatch(html, /home-track|class="home-move|NaN|undefined/);
 });
 
-test("a forecast of another week, a weekly contest and an open chest change only their own parts", () => {
-  state = everything({ dashboard: dashboard(99), race: race({ period: "week", prizes: [300, 200, 150] }), wheel: { enabled: true, free_left: 1, chest: { unlocked: true, answered: 3, total: 3 } } });
+test("a weekly contest and an open chest change only their own parts", () => {
+  state = everything({ race: race({ period: "week", prizes: [300, 200, 150] }), wheel: { enabled: true, free_left: 1, chest: { unlocked: true, answered: 3, total: 3 } } });
   const html = render();
-  assert.doesNotMatch(html, /за неделю</);
   assert.doesNotMatch(html, /Конкурс месяца/);
   assert.match(html, /Сундук дня открыт/);
   assert.match(html, /href="\/games\?tab=wheel"/);
   assert.doesNotMatch(html, /Ситуации дня · /);
 });
 
-test("without one's own metrics the home greets, keeps the field and today, and offers no moves", () => {
+test("without one's own metrics the home says so, keeps the table without gaps and today, and offers no advice", () => {
   state = everything({ race: race({ me: null, next: null, behind: null, advice: null, standings: standings().map((row) => ({ ...row, is_me: false })) }) });
   let html = render();
-  assert.match(html, /<h1 class="page-title">(Доброе утро|Добрый день|Добрый вечер|Доброй ночи), Тимур<\/h1>/);
-  assert.match(html, /Вас пока нет в гонке 12\.10–18\.10\.2026/);
-  assert.match(html, /Первое место — Данияр А\. с 96,18/);
-  assert.doesNotMatch(html, /home-moves|Где теряются баллы|из 100 баллов/);
-  assert.match(html, /Сегодня ещё/);
+  assert.match(html, /<h1 class="page-title">Мой кабинет<\/h1>/);
+  assert.match(html, /Вас пока нет в гонке этой недели/);
+  assert.match(html, /Таблица гонки/);
+  assert.doesNotMatch(html, /От вас|home-moves|Что подтянуть|из 100 баллов/);
+  assert.match(html, />Сегодня</);
   // Before the first week there is nothing to race in yet.
   state = everything({ race: race({ week: null, me: null, standings: [], advice: null }) });
   html = render();
   assert.match(html, /Гонка ещё не началась/);
-  assert.match(html, /Гонка недели начнётся, когда загрузят показатели/);
-  assert.match(html, /Сегодня ещё/);
+  assert.doesNotMatch(html, /Таблица гонки/);
+  assert.match(html, />Сегодня</);
 });

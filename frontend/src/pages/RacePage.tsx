@@ -1,5 +1,5 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import { rating } from "../api/endpoints";
@@ -74,9 +74,10 @@ export function RacePage() {
   );
 }
 
-function RaceHero({ data }: { data: RaceOut }) {
+/** The place among everyone: shared by «Гонка недели» and the operator's home, which adds the week and a link here. */
+export function RaceHero({ data, subtitle, action }: { data: RaceOut; subtitle?: string; action?: ReactNode }) {
   const { me, next, behind } = data;
-  if (!me) return <Card title="Ваше место" variant="highlight">
+  if (!me) return <Card title="Ваше место" subtitle={subtitle} action={action} variant="highlight">
     <div className="race-hero race-hero--out">
       <p className="race-hero__lead">Вас пока нет в гонке этой недели</p>
       <p className="secondary small">Ваши показатели за эту неделю ещё не загружены. Участников: {data.participants}.</p>
@@ -84,7 +85,7 @@ function RaceHero({ data }: { data: RaceOut }) {
   </Card>;
   const top = data.max_points || 100;
   const third = data.podium[2];
-  return <Card title="Ваше место" variant="highlight" tour="race-place">
+  return <Card title="Ваше место" subtitle={subtitle} action={action} variant="highlight" tour="race-place">
     <div className="race-hero">
       <div className="race-hero__place">
         <strong>{me.rank}</strong>
@@ -142,7 +143,8 @@ export function PlanText({ plan, closed }: { plan: RacePlan; closed: boolean }) 
   return <p className="small secondary">{closed ? "Этот разрыв за неделю было не закрыть" : "За эту неделю разрыв не закрыть"}: по загруженным показателям можно добрать только {pointsLabel(plan.gain)}. Держите темп — баллы недели идут в конкурс месяца.</p>;
 }
 
-function RaceAdvice({ data }: { data: RaceOut }) {
+/** What to improve. On the home it is `compact`: the goals and the three biggest losses, the rest in «Гонка недели». */
+export function RaceAdvice({ data, compact = false }: { data: RaceOut; compact?: boolean }) {
   const advice = data.advice!;
   const closed = data.week?.status === "closed";
   const next = advice.next, podium = advice.podium;
@@ -158,9 +160,9 @@ function RaceAdvice({ data }: { data: RaceOut }) {
       </section>}
       {!next && <p className="race-advice__lead">Вы на первом месте. Чтобы удержать его, не теряйте баллы там, где они уходят.</p>}
       <section>
-        <h3>Где вы теряете баллы</h3>
-        <ul className="race-metrics">{data.metrics.map((m) => <MetricRow key={m.code} metric={m} />)}</ul>
-        {advice.room > 0 && <p className="small secondary">Всего можно добрать ещё {pointsLabel(advice.room)}.</p>}
+        <h3>{compact ? "Где вы теряете больше всего" : "Где вы теряете баллы"}</h3>
+        <ul className="race-metrics">{(compact ? data.metrics.filter((m) => !m.reported || m.lost > 0).slice(0, 3) : data.metrics).map((m) => <MetricRow key={m.code} metric={m} />)}</ul>
+        {advice.room > 0 && <p className="small secondary">Всего можно добрать ещё {pointsLabel(advice.room)}.{compact && <> <Link to="/race">Все показатели →</Link></>}</p>}
       </section>
     </div>
   </Card>;
@@ -181,20 +183,20 @@ export function MetricRow({ metric: m }: { metric: RaceMetric }) {
   </li>;
 }
 
-function RaceTable({ data }: { data: RaceOut }) {
+export function RaceTable({ data }: { data: RaceOut }) {
   const [all, setAll] = useState(false);
   const rows = visibleRows(data.standings, all);
   const hidden = data.standings.length > 12;
   return <Card title="Таблица гонки" subtitle={`Все операторы недели · ${data.participants}`} padded={false}>
     <div className="table-wrap"><table className="table race-table">
-      <thead><tr><th>Место</th><th>Оператор</th><th className="num">Баллы</th><th className="num">От вас</th></tr></thead>
+      <thead><tr><th>Место</th><th>Оператор</th><th className="num">Баллы</th>{data.me && <th className="num">От вас</th>}</tr></thead>
       <tbody>{rows.map((row, i) => row === "gap"
-        ? <tr key={`gap-${i}`} className="race-table__gap"><td colSpan={4}>…</td></tr>
+        ? <tr key={`gap-${i}`} className="race-table__gap"><td colSpan={data.me ? 4 : 3}>…</td></tr>
         : <tr key={`${row.rank}-${row.name}`} className={row.is_me ? "row--me" : undefined}>
           <td><span className="rank-badge">{row.rank}</span></td>
           <td>{row.is_me ? <>Вы<span className="tag-me">это вы</span></> : row.name}{row.rank_delta != null && row.rank_delta !== 0 && <span className="race-table__delta"><Delta value={row.rank_delta} /></span>}</td>
           <td className="num">{points(row.points)}</td>
-          <td className="num race-table__diff">{row.is_me || row.gap == null ? "—" : row.gap === 0 ? "поровну" : row.gap > 0 ? `+${points(row.gap)}` : `−${points(-row.gap)}`}</td>
+          {data.me && <td className="num race-table__diff">{row.is_me || row.gap == null ? "—" : row.gap === 0 ? "поровну" : row.gap > 0 ? `+${points(row.gap)}` : `−${points(-row.gap)}`}</td>}
         </tr>)}</tbody>
     </table></div>
     {hidden && <div className="race-table__more"><button type="button" className="btn btn--plain btn--s" onClick={() => setAll(!all)}>{all ? "Показать только рядом со мной" : `Показать всех (${data.standings.length})`}</button></div>}
