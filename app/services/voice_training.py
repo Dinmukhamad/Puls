@@ -1348,6 +1348,13 @@ async def answer(session, user, attempt_id, body):
         stage, reply, *line = dialogue_for(attempt.revision, attempt.snapshot)(
             attempt.persona, attempt.stage, attempt.transcript, body.text
         )
+        # The built-in call: its rules keep the course and the grade, Claude says the line in the
+        # driver's own words; without it the prepared line is said.
+        if not attempt.snapshot.get("custom") and attempt.revision == REVISION:
+            reply = await voice_ai.phone_reply(
+                session, attempt, body.text, reply,
+                resolved=stage == "resolved", understood=line[0] != "ask_how",
+            ) or reply
     driver = {"role": "driver", "text": reply, "turn": body.turn + 1}
     if line:
         driver["line"] = line[0]

@@ -185,4 +185,5 @@ test("mentors see whether the AI plays the drivers and what it cost this month",
   const on = aiLine({ configured: true, active: true, model: "claude-haiku-5-5", budget_usd: 5, spent_usd: 0.4213, calls: 37 });
   assert.match(on, /\$0\.42 из \$5/);
   assert.match(on, /обращений — 37/);
+  assert.match(on, /говорит за водителя во всех звонках/);
 });

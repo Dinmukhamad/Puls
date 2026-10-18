@@ -69,7 +69,7 @@ export function VoiceMentorReviews() {
 /** One line for mentors about the AI: on and what it cost, off, or out of this month's budget. */
 export function aiLine(status: VoiceAIStatus) {
   const money = (value: number) => `$${value.toFixed(value < 1 ? 2 : 0)}`;
-  if (!status.configured) return "ИИ не подключён: водитель сценариев из конструктора отвечает по ключевым словам, звонки оцениваете вы.";
-  if (!status.active) return `Лимит ИИ на месяц (${money(status.budget_usd)}) исчерпан: до конца месяца водитель отвечает по ключевым словам, звонки из конструктора оцениваете вы.`;
-  return `ИИ (Claude) играет водителя и оценивает звонки из конструктора: ${money(status.spent_usd)} из ${money(status.budget_usd)} за месяц, обращений — ${status.calls}. Здесь — звонки, которые ИИ не оценил, и спорные оценки.`;
+  if (!status.configured) return "ИИ не подключён: водитель говорит заготовленными фразами и в сценариях из конструктора отвечает по ключевым словам, звонки из конструктора оцениваете вы.";
+  if (!status.active) return `Лимит ИИ на месяц (${money(status.budget_usd)}) исчерпан: до конца месяца водитель говорит заготовленными фразами, звонки из конструктора оцениваете вы.`;
+  return `ИИ (Claude) говорит за водителя во всех звонках и оценивает звонки из конструктора: ${money(status.spent_usd)} из ${money(status.budget_usd)} за месяц, обращений — ${status.calls}. Здесь — звонки, которые ИИ не оценил, и спорные оценки.`;
 }

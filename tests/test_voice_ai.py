@@ -11,7 +11,7 @@ from pydantic import SecretStr
 from sqlalchemy import func, select
 
 from app.models.voice_ai import VoiceAIUsage
-from app.services import voice_ai
+from app.services import voice_ai, voice_training
 from tests.conftest import auth, login
 from tests.test_voice_scenarios import EDITOR, VOICE, support_city, write
 
@@ -211,3 +211,63 @@ async def test_the_aggressive_driver_is_graded_on_calming_him_down(
     result = finished.json()["result"]
     assert result["criteria"][-1]["key"] == "deescalation" and result["score"] == 0
     assert result["criteria"][0]["feedback"] == "ИИ не оценил этот пункт."
+
+
+async def test_claude_says_the_built_in_drivers_lines_while_the_rules_keep_course_and_grade(
+    client, operator, monkeypatch
+):
+    from tests.test_voice_training import EXPLAIN, NEXT, answer, finish, start
+
+    first = "Подождите, а с номера-то что не так? Я же сам Виктор Ким."
+    fake = FakeClaude(
+        {"reply": first},
+        {"reply": "Старой симки у меня уже нет, со старого номера не позвоню."},
+        {"reply": "Ну ладно. А что мне написать в WhatsApp?"},
+        {"reply": "Понял, напишу им в WhatsApp. Спасибо, до свидания!"},
+    )
+    connect(monkeypatch, fake)
+    headers = auth(await login(client, operator.login))
+    attempt = await start(client, headers, "irritated")
+    opening = attempt["transcript"][0]["text"]
+    attempt = (await answer(client, headers, attempt, "Секунду, я проверяю ваши данные")).json()
+    # Claude's words are said; the rules' move stays in the transcript for the grade.
+    assert attempt["transcript"][0]["text"] == opening
+    assert attempt["transcript"][-1]["text"] == first
+    assert attempt["transcript"][-1]["line"] == "ask_how" and attempt["stage"] == "opening"
+    call = fake.calls[0]
+    assert call["model"] == "claude-haiku-5-5" and call["output_config"]["effort"] == "low"
+    assert call["output_config"]["format"]["schema"]["required"] == ["reply"]
+    card = call["system"][0]["text"]
+    assert attempt["driver"]["phone"] in card and attempt["incoming_phone"] in card
+    assert "раздражённый" in card and "Такси Про" in card
+    assert "Правила не узнали" in call["messages"][0]["content"]
+    assert "Черновик ответа водителя: «" in call["messages"][0]["content"]
+    attempt = (await answer(client, headers, attempt, "Позвоните со старого номера.")).json()
+    assert attempt["stage"] == "lost_sim" and attempt["transcript"][-1]["line"] == "lost_sim"
+    attempt = (await answer(client, headers, attempt, EXPLAIN)).json()
+    assert "Вопрос ещё не решён" in fake.calls[2]["messages"][0]["content"]
+    assert attempt["stage"] != "resolved"
+    attempt = (await answer(client, headers, attempt, NEXT)).json()
+    assert attempt["stage"] == "resolved" and attempt["can_finish"]
+    assert attempt["transcript"][-1]["text"] == "Понял, напишу им в WhatsApp. Спасибо, до свидания!"
+    assert "Шаг водителю понятен" in fake.calls[3]["messages"][0]["content"]
+    # The grade is the training rules', as before: no Work Sites events here.
+    result = (await finish(client, headers, attempt))["result"]
+    assert result["score"] == 75 and "ai" not in result and len(fake.calls) == 4
+
+
+@pytest.mark.parametrize("failure", ["error", "no key"])
+async def test_without_claude_the_built_in_driver_says_the_prepared_line(
+    client, operator, monkeypatch, failure
+):
+    from tests.test_voice_training import answer, start
+
+    fake = FakeClaude(
+        anthropic.APIConnectionError(request=httpx2.Request("POST", "https://api.anthropic.com"))
+    )
+    connect(monkeypatch, fake, key="" if failure == "no key" else "sk-ant-test")
+    headers = auth(await login(client, operator.login))
+    attempt = await start(client, headers)
+    attempt = (await answer(client, headers, attempt, "Позвоните со старого номера.")).json()
+    assert attempt["transcript"][-1]["text"] == voice_training.LOST_SIM
+    assert len(fake.calls) == (0 if failure == "no key" else 1)
