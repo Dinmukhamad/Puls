@@ -396,6 +396,7 @@ async def test_yandex_comes_first_and_hides_its_key(client, operator, monkeypatc
         ("confused", "zahar", None, 0.88),
         ("hurried", "anton", None, 1.28),
         ("irritated", "kirill", "strict", 1.12),
+        ("aggressive", "kirill", "strict", 1.25),
     ],
 )
 async def test_yandex_gives_every_character_his_own_voice(persona, voice, role, speed, monkeypatch):
@@ -414,7 +415,10 @@ async def test_yandex_gives_every_character_his_own_voice(persona, voice, role, 
     assert request.headers["Authorization"] == "Api-Key fixture-yandex-key"
     assert "x-folder-id" not in request.headers
     payload = json.loads(request.content)
-    expected = [{"voice": voice}, *([{"role": role}] if role else []), {"speed": speed}]
+    expected = [
+        {"voice": voice}, *([{"role": role}] if role else []), {"speed": speed},
+        *voice_tts.YANDEX_EXTRA_HINTS.get(persona, []),
+    ]
     assert payload == {
         "text": "сим-карты нет. ватсап?",
         "hints": expected,
@@ -606,3 +610,23 @@ async def test_turn_speech_follows_the_call_language(client, session, operator, 
     )
     assert response.status_code == 200
     assert calls[-1] == ("kk", voice_tts.PREVIEW_TEXT_KK, "calm")
+
+
+async def test_a_voice_refusing_the_aggressive_pitch_and_volume_is_asked_plainly(monkeypatch):
+    yandex(monkeypatch)
+    hints = []
+
+    def respond(request):
+        hints.append(json.loads(request.content)["hints"])
+        if len(hints) == 1:
+            return httpx.Response(400, json={"error": "unsupported hint"})
+        return httpx.Response(200, content=yandex_stream(MP3))
+
+    transport(monkeypatch, respond)
+    await voice_tts.engine.synthesize("yandex", "Позовите старшего!", "aggressive", 1)
+    assert hints == [
+        [{"voice": "kirill"}, {"role": "strict"}, {"speed": 1.25}, {"pitchShift": 40},
+         {"volume": -14}],
+        [{"voice": "kirill"}, {"speed": 1.25}],
+    ]
+

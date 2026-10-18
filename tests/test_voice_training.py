@@ -128,7 +128,7 @@ async def test_start_catalog_private_before_qr_no_solution_and_all_operator_grou
     response = await client.get(BASE, headers=headers)
     assert response.status_code == 200
     assert response.headers["cache-control"] == "private, no-store"
-    assert len(response.json()["scenarios"][0]["personas"]) == 4
+    assert len(response.json()["scenarios"][0]["personas"]) == 5
     attempt = await start(client, headers)
     assert attempt["turn"] == 0 and attempt["stage"] == "opening"
     assert attempt["revision"] == voice_training.REVISION == 3
@@ -667,7 +667,7 @@ def conversation_v3(*answers, persona="calm", language="ru"):
             {"role": "driver", "text": reply, "turn": turn + 1, "line": line},
         ])
     return SimpleNamespace(
-        revision=3, transcript=transcript, stage=stage, snapshot=snapshot,
+        revision=3, transcript=transcript, stage=stage, snapshot=snapshot, persona=persona,
         practice={"events": [{"system": key} for key in ("dispatch", "oktell", "compared")]},
     )
 
@@ -714,6 +714,41 @@ async def test_v3_irritation_builds_up_and_then_alternates():
     prefixes = [text.removesuffix(voice_training.V2_LINES["ask_how"]) for text in texts]
     assert prefixes[:4] == voice_training.MANNER["ru"]["irritated"]
     assert prefixes[4:] == ["Ну сколько можно! ", "Да что ж такое! ", "Ну сколько можно! "]
+
+
+async def test_v3_the_aggressive_driver_shouts_until_his_frustration_is_owned():
+    answers = (
+        "Вы звоните с номера, который не совпадает с номером регистрации.",
+        "Позвоните с номера регистрации.",
+        "Тогда откройте Такси Про и измените номер.",
+    )
+    rude = conversation_v3(*answers, persona="aggressive")
+    assert lines(rude) == ["opening", "mismatch", "lost_sim", "resolved_app"]
+    said = [entry["text"] for entry in rude.transcript if entry["role"] == "driver"]
+    assert said[0].endswith("Вы там вообще работаете?!")
+    shouted = voice_training.AGGRESSIVE_LINES["ru"]["mismatch"]
+    assert said[1] == "Алло, вы меня слышите вообще?! " + shouted
+    assert said[2].startswith("Я уже третий раз звоню! ")
+    assert said[3].startswith("Ну наконец-то нормальный ответ. ")
+    result = voice_training.evaluate_v2(rude)
+    deescalation = next(item for item in result["criteria"] if item["key"] == "deescalation")
+    assert not deescalation["passed"] and result["score"] == 80
+    # An apology turns the shouting into grudging calm for the rest of the call.
+    owned = conversation_v3(
+        "Понимаю ваше недовольство, извините. " + answers[0], *answers[1:], persona="aggressive"
+    )
+    said = [entry["text"] for entry in owned.transcript if entry["role"] == "driver"]
+    assert said[1] == "Ладно. " + voice_training.V2_LINES["mismatch"]
+    assert said[2].startswith("Хорошо, слушаю. ")
+    result = voice_training.evaluate_v2(owned)
+    assert [item["key"] for item in result["criteria"]][-1] == "deescalation"
+    assert result["criteria"][-1]["passed"] and result["score"] == 100
+    kazakh = conversation_v3(
+        "Түсінемін, кешіріңіз. " + KK_EXPLAIN, persona="aggressive", language="kk"
+    )
+    assert kazakh.transcript[2]["text"].startswith("Жарайды. ")
+    assert voice_training.calmed_down([], "Мне очень жаль, что так вышло")
+    assert not voice_training.calmed_down([], "Успокойтесь и слушайте")
 
 
 async def test_v3_kazakh_call_reaches_the_app_step_through_the_lost_sim():

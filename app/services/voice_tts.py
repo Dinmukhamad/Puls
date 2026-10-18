@@ -27,7 +27,7 @@ from app.core.errors import DomainError
 logger = logging.getLogger(__name__)
 
 ProviderId = Literal["yandex", "google", "azure"]
-Persona = Literal["calm", "confused", "hurried", "irritated"]
+Persona = Literal["calm", "confused", "hurried", "irritated", "aggressive"]
 Language = Literal["ru", "kk"]
 PREVIEW_TEXT = "Здравствуйте. Мне нужно поменять номер телефона. Подскажите, как это сделать?"
 PREVIEW_TEXT_KK = "Сәлеметсіз бе. Маған телефон нөмірін ауыстыру керек. Мұны қалай істеуге болады?"
@@ -50,14 +50,19 @@ YANDEX_VOICES = {
         "confused": ("zahar", None, 0.88),
         "hurried": ("anton", None, 1.28),
         "irritated": ("kirill", "strict", 1.12),
+        "aggressive": ("kirill", "strict", 1.25),
     },
     "kk": {
         "calm": ("madi", None, 1.0),
         "confused": ("madi", None, 0.88),
         "hurried": ("madi", None, 1.25),
         "irritated": ("madi", None, 1.12),
+        "aggressive": ("madi", None, 1.25),
     },
 }
+#: Yandex has no angry male voice: the aggressive driver is pitched up and louder than the rest.
+#: A voice that refuses these hints is asked again without them.
+YANDEX_EXTRA_HINTS = {"aggressive": [{"pitchShift": 40}, {"volume": -14}]}
 AZURE_KK_VOICE = "kk-KZ-DauletNeural"
 MAX_AUDIO_BYTES = 512 * 1024
 MAX_CACHE_BYTES = 8 * 1024 * 1024
@@ -151,7 +156,9 @@ def _yandex_hints(provider: Provider, persona: Persona) -> list[list[dict]]:
     """The hints to try in order: with the persona's role, without it, then a common voice."""
     voice, role, speed = YANDEX_VOICES[provider.language][persona]
     base = [{"voice": voice}, {"speed": speed}]
-    attempts = [[base[0], {"role": role}, base[1]], base] if role else [base]
+    extra = YANDEX_EXTRA_HINTS.get(persona, [])
+    full = [base[0], *([{"role": role}] if role else []), base[1], *extra]
+    attempts = [full, base] if full != base else [base]
     fallback = YANDEX_FALLBACK_VOICE[provider.language]
     if fallback != voice:
         attempts.append([{"voice": fallback}, {"speed": speed}])
@@ -274,7 +281,10 @@ async def _request_audio(provider: Provider, text: str, persona: Persona) -> byt
         region = settings.AZURE_SPEECH_REGION
         if not re.fullmatch(r"[a-z][a-z0-9]{1,40}", region):
             raise SpeechUnavailable()
-        rate = {"calm": "-2%", "confused": "-6%", "hurried": "+6%", "irritated": "+2%"}[persona]
+        rate = {
+            "calm": "-2%", "confused": "-6%", "hurried": "+6%", "irritated": "+2%",
+            "aggressive": "+12%",
+        }[persona]
         lang, voice = (
             ("kk-KZ", AZURE_KK_VOICE) if provider.language == "kk" else ("ru-RU", provider.voice)
         )

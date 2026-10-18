@@ -7,7 +7,7 @@ export interface VoiceSpeechProvider { id: CloudVoiceProvider; label: string; vo
 export interface VoiceSpeechConfig { default_provider: VoiceProvider; providers: VoiceSpeechProvider[] }
 export interface VoiceSpeechAudio { audio_base64: string; mime_type: "audio/mpeg"; provider: CloudVoiceProvider; voice: string }
 
-export type VoicePersona = "calm" | "confused" | "hurried" | "irritated";
+export type VoicePersona = "calm" | "confused" | "hurried" | "irritated" | "aggressive";
 export interface VoiceScenario { key: string; title: string; description: string; minutes: number; languages?: { key: VoiceLanguage; label: string }[]; custom?: boolean }
 export interface VoiceAttemptSummary {
   id: number; scenario_key: string; title: string; persona: VoicePersona; language?: VoiceLanguage;

@@ -70,7 +70,7 @@ test("numbers, initials, abbreviations and quoted questions are not incorrectly 
 
 test("personas use bounded, deterministic prosody with a subtle question rise", () => {
   const text = "Здравствуйте. Как мне поменять номер? Старой сим-карты нет. Я вас слушаю.";
-  const byPersona = Object.fromEntries(["calm", "confused", "hurried", "irritated"].map((persona) => [persona, createVoicePlaybackPlan(text, persona)]));
+  const byPersona = Object.fromEntries(["calm", "confused", "hurried", "irritated", "aggressive"].map((persona) => [persona, createVoicePlaybackPlan(text, persona)]));
   for (const [persona, plan] of Object.entries(byPersona)) {
     assert.deepEqual(plan, createVoicePlaybackPlan(text, persona));
     assert.equal(plan.at(-1).pauseAfterMs, 0);
@@ -89,6 +89,10 @@ test("personas use bounded, deterministic prosody with a subtle question rise", 
   assert.ok(byPersona.hurried[0].rate - byPersona.calm[0].rate >= 0.15);
   assert.ok(byPersona.calm[0].rate - byPersona.confused[0].rate >= 0.1);
   assert.ok(byPersona.calm[0].pitch - byPersona.irritated[0].pitch >= 0.08);
+  // The aggressive driver is lower, faster and barely pauses: harsher than the irritated one.
+  assert.ok(byPersona.aggressive[0].pitch < byPersona.irritated[0].pitch);
+  assert.ok(byPersona.aggressive[0].rate > byPersona.irritated[0].rate);
+  assert.ok(byPersona.aggressive[0].pauseAfterMs < byPersona.irritated[0].pauseAfterMs);
 });
 
 test("long speech uses phrase or word boundaries without losing words or splitting a phone number", () => {

@@ -14,6 +14,7 @@ const personas: { key: VoicePersona; label: string; hint: string; symbol: string
   { key: "confused", label: "Растерянный", hint: "Нуждается в ясности", symbol: "?" },
   { key: "hurried", label: "Торопящийся", hint: "Хочет решить быстрее", symbol: "↗" },
   { key: "irritated", label: "Раздражённый", hint: "Возражает и спорит", symbol: "!" },
+  { key: "aggressive", label: "Агрессивный", hint: "Кричит и требует старшего", symbol: "‼" },
 ];
 const languages: { key: VoiceLanguage; label: string; hint: string; symbol: string }[] = [
   { key: "ru", label: "Русский", hint: "Водитель говорит по-русски", symbol: "Ру" },

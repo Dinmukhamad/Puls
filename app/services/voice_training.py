@@ -37,6 +37,7 @@ PERSONAS = {
     "confused": "Растерянный",
     "hurried": "Торопящийся",
     "irritated": "Раздражённый",
+    "aggressive": "Агрессивный",
 }
 OPENING = {
     "calm": "Здравствуйте, это Виктор Ким. Хочу изменить номер телефона в аккаунте. Поможете?",
@@ -852,6 +853,8 @@ OPENING_V3 = {
         "я на линии. Давайте быстро.",
         "irritated": "Алло! Это Виктор Ким. Мне надо сменить номер в аккаунте. "
         "Почему это так сложно, а?",
+        "aggressive": "Алло! Это Виктор Ким. Я уже полчаса не могу сменить номер в аккаунте! "
+        "Вы там вообще работаете?!",
     },
     "kk": {
         "calm": "Сәлеметсіз бе, бұл Виктор Ким. Аккаунттағы телефон нөмірін ауыстырғым келеді. "
@@ -862,6 +865,8 @@ OPENING_V3 = {
         "мен линиядамын. Тезірек болайықшы.",
         "irritated": "Алло! Бұл Виктор Ким. Аккаунттағы нөмірді ауыстыруым керек. "
         "Неге бәрі осыншама қиын?",
+        "aggressive": "Алло! Бұл Виктор Ким. Жарты сағаттан бері аккаунттағы нөмірді ауыстыра "
+        "алмай жүрмін! Сіздер мүлде жұмыс істейсіздер ме?!",
     },
 }
 LINES = {
@@ -903,6 +908,8 @@ MANNER = {
                     "У меня заказ через пять минут. "],
         "irritated": ["Мне некогда. ", "Я уже теряю время. ", "Ну сколько можно! ",
                       "Да что ж такое! "],
+        "aggressive": ["Алло, вы меня слышите вообще?! ", "Я уже третий раз звоню! ",
+                       "Позовите старшего! ", "Я на вас жалобу напишу! "],
     },
     "kk": {
         "confused": ["Э-э… ", "Тоқтаңызшы… ", "Ой, шатасып кеттім… "],
@@ -910,29 +917,85 @@ MANNER = {
                     "Бес минуттан кейін тапсырысым бар. "],
         "irritated": ["Уақытым жоқ. ", "Уақытымды алып жатырсыз. ", "Қашанға дейін?! ",
                       "Ой, қойыңызшы! "],
+        "aggressive": ["Алло, мені естіп тұрсыз ба?! ", "Үшінші рет хабарласып тұрмын! ",
+                       "Басшыңызды шақырыңыз! ", "Сізге шағым жазамын! "],
     },
 }
 RELIEF = {
     "ru": {"confused": "А, вот оно что! ", "hurried": "Супер, спасибо. ",
-           "irritated": "Ну наконец-то. "},
+           "irritated": "Ну наконец-то. ", "aggressive": "Ну наконец-то нормальный ответ. "},
     "kk": {"confused": "А, солай ма! ", "hurried": "Жарайды, рақмет. ",
-           "irritated": "Әйтеуір. "},
+           "irritated": "Әйтеуір. ", "aggressive": "Әйтеуір дұрыс жауап. "},
 }
+# The aggressive driver shouts until the operator owns his frustration and apologises; then he
+# speaks with the ordinary lines, grudgingly.
+AGGRESSIVE_LINES = {
+    "ru": {
+        "ask_how": "Мне нужно сменить номер, всё! Как это сделать?!",
+        "limit": "Нельзя, нельзя… А как тогда?! Говорите, как мне сменить номер!",
+        "rejected": "Не подходит мне это! Что ещё вы можете предложить?!",
+        "lost_sim_again": "Я же сказал — нет старой SIM! Вы меня не слушаете?!",
+        "app_next": "Такси Про, допустим. И что мне там делать?! Конкретно!",
+        "whatsapp_next": "WhatsApp?! И что мне туда писать? Говорите конкретно!",
+        "critical": "Так вы сами поменяете или нет?! Отвечайте прямо!",
+        "unsafe": "Удалить аккаунт?! Вы с ума сошли? Мне номер поменять надо!",
+        "mismatch": "Да какая разница, с какого номера я звоню?! Как мне поменять номер?!",
+    },
+    "kk": {
+        "ask_how": "Маған нөмірді ауыстыру керек, болды! Қалай істеймін?!",
+        "limit": "Болмайды, болмайды… Онда қалай?! Нөмірді қалай ауыстырамын, айтыңыз!",
+        "rejected": "Бұл маған келмейді! Тағы не ұсына аласыз?!",
+        "lost_sim_again": "Айттым ғой — ескі SIM жоқ! Мені тыңдамай отырсыз ба?!",
+        "app_next": "Такси Про, жарайды. Онда не істеймін?! Нақты айтыңыз!",
+        "whatsapp_next": "WhatsApp па?! Оған не жазамын? Нақты айтыңыз!",
+        "critical": "Сонда өзіңіз ауыстырасыз ба, жоқ па?! Тура жауап беріңіз!",
+        "unsafe": "Аккаунтты өшіру ме?! Есіңіз дұрыс па? Маған нөмірді ауыстыру керек!",
+        "mismatch": "Қай нөмірден хабарласқанымның не айырмашылығы бар?! "
+        "Нөмірді қалай ауыстырамын?!",
+    },
+}
+CALMED = {
+    "ru": ["Ладно. ", "Хорошо, слушаю. ", "Ну допустим. "],
+    "kk": ["Жарайды. ", "Жақсы, тыңдап тұрмын. ", "Мейлі. "],
+}
+# Owning the driver's frustration: «понимаю», «извините», «мне жаль»; «түсінемін», «кешіріңіз».
+EMPATHY = re.compile(
+    r"\bпонима(?:ю|ем)\b|извин|\bпрости(?:те)?\b|сожале|\b(?:мне|нам) (?:очень )?жаль"
+    r"|неприятн|разделя(?:ю|ем)|приношу|могу понять"
+    r"|түсінем|кешір|өкінем|өкінішт|ренжімеңіз"
+)
 
 
-def say(language, persona, key, turn, params=None):
+def empathic(text):
+    return bool(EMPATHY.search(normalized(text)))
+
+
+def calmed_down(transcript, text=""):
+    """Whether the operator has owned the driver's frustration in this call so far."""
+    return empathic(text) or any(
+        empathic(entry["text"]) for entry in transcript if entry["role"] == "operator"
+    )
+
+
+def say(language, persona, key, turn, params=None, *, calmed=False):
     """The line in the driver's own manner; the calm driver speaks plainly."""
-    line = LINES[language][key].format(**(params or {}))
-    return in_manner(language, persona, line, turn, relief=key.startswith("resolved_"))
+    angry = persona == "aggressive" and not calmed
+    line = (AGGRESSIVE_LINES[language] if angry else {}).get(key) or LINES[language][key]
+    return in_manner(
+        language, persona, line.format(**(params or {})), turn,
+        relief=key.startswith("resolved_"), calmed=calmed,
+    )
 
 
-def in_manner(language, persona, line, turn, *, relief=False):
+def in_manner(language, persona, line, turn, *, relief=False, calmed=False):
     if persona == "calm":
         return line
     if relief:
         return RELIEF[language][persona] + line
+    if persona == "aggressive" and calmed:
+        return CALMED[language][(turn - 1) % len(CALMED[language])] + line
     manner = MANNER[language][persona]
-    if persona == "irritated":
+    if persona in ("irritated", "aggressive"):
         # Irritation builds up over the call, then alternates between the last two.
         index = turn - 1 if turn - 1 < len(manner) else len(manner) - 2 + (turn - 1) % 2
     else:
@@ -944,7 +1007,8 @@ def next_reply_v3(persona, stage, transcript, text, snapshot=None):
     language = (snapshot or {}).get("language", "ru")
     stage, key, params = reply_plan(persona, stage, transcript, text, snapshot, ANALYZERS[language])
     turn = sum(1 for entry in transcript if entry["role"] == "operator") + 1
-    return stage, say(language, persona, key, turn, params), key
+    calmed = calmed_down(transcript, text)
+    return stage, say(language, persona, key, turn, params, calmed=calmed), key
 
 
 def custom_reply(persona, stage, transcript, text, snapshot):
@@ -952,7 +1016,10 @@ def custom_reply(persona, stage, transcript, text, snapshot):
     content = snapshot["content"]
     stage, line, key, _ = voice_scenarios.reply(content, stage, text)
     turn = sum(1 for entry in transcript if entry["role"] == "operator") + 1
-    spoken = in_manner(content["language"], persona, line, turn, relief=stage == "resolved")
+    spoken = in_manner(
+        content["language"], persona, line, turn,
+        relief=stage == "resolved", calmed=calmed_down(transcript, text),
+    )
     return stage, spoken, key
 
 
@@ -1394,6 +1461,34 @@ EXAMPLES = {
 }
 
 
+DEESCALATION_EXAMPLE = {
+    "ru": "Понимаю, что ситуация неприятная, извините за неудобства. "
+    "Давайте вместе решим вопрос с номером.",
+    "kk": "Түсінемін, жағдай жағымсыз, кешіріңіз. Нөмір мәселесін бірге шешейік.",
+}
+
+
+def deescalation(attempt, language="ru"):
+    """The aggressive driver's own criterion: was his frustration owned before the solution."""
+    if getattr(attempt, "persona", None) != "aggressive":
+        return None
+    operators = operator_entries(attempt.transcript)
+    owned = next((entry for entry in operators if empathic(entry["text"])), None)
+    fallback = operators[0] if operators else attempt.transcript[0]
+    return criterion(
+        "deescalation",
+        "Снятие напряжения",
+        owned is not None,
+        (
+            "Недовольство водителя признано, разговор перешёл в спокойное русло."
+            if owned is not None
+            else "Недовольство водителя не признано: он оставался агрессивным весь разговор."
+        ),
+        owned or fallback,
+        DEESCALATION_EXAMPLE[language],
+    )
+
+
 def evaluate_v2(attempt, language="ru"):
     """Revision 3 is judged by the same rules, reading the answers in the call's language."""
     state = dialogue_state_v2(attempt.transcript, ANALYZERS[language].advice)
@@ -1481,7 +1576,11 @@ def evaluate_v2(attempt, language="ru"):
             examples["app" if state["channel"] == "app" else "whatsapp"],
         ),
     ]
-    score = sum(25 for item in criteria if item["passed"])
+    extra = deescalation(attempt, language)
+    if extra:
+        criteria.append(extra)
+    # Four criteria are 25 points each; the aggressive driver's fifth makes them 20.
+    score = round(100 * sum(1 for item in criteria if item["passed"]) / len(criteria))
     return {
         "score": min(score, 50) if critical_errors else score,
         "criteria": criteria,
@@ -1532,6 +1631,9 @@ def evaluate_custom(attempt):
             "role": "operator",
             "example": None,
         })
+    extra = deescalation(attempt, content["language"])
+    if extra:
+        criteria.append(extra)
     return {
         "score": None,
         "manual": True,

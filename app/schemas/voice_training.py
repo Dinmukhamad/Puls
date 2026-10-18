@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 class VoiceStart(BaseModel):
     model_config = ConfigDict(extra="forbid")
     scenario_key: str = Field(pattern=r"^(?:phone_change|custom:\d{1,9})$")
-    persona: Literal["calm", "confused", "hurried", "irritated"] = "calm"
+    persona: Literal["calm", "confused", "hurried", "irritated", "aggressive"] = "calm"
     language: Literal["ru", "kk"] = "ru"
 
 
@@ -42,7 +42,7 @@ class VoiceReview(BaseModel):
 class VoiceSpeechPreview(BaseModel):
     model_config = ConfigDict(extra="forbid")
     provider: Literal["yandex", "google", "azure"]
-    persona: Literal["calm", "confused", "hurried", "irritated"] = "calm"
+    persona: Literal["calm", "confused", "hurried", "irritated", "aggressive"] = "calm"
     language: Literal["ru", "kk"] = "ru"
 
 

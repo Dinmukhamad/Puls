@@ -1,4 +1,4 @@
-export type VoicePlaybackPersona = "calm" | "confused" | "hurried" | "irritated";
+export type VoicePlaybackPersona = "calm" | "confused" | "hurried" | "irritated" | "aggressive";
 
 export interface VoicePlaybackSegment {
   text: string;
@@ -110,12 +110,14 @@ function phrases(sentence: string): string[] {
 }
 
 // Each character must be told apart by ear even with one browser voice: the confused
-// driver drags with long pauses, the hurried one rushes, the irritated one is low and clipped.
+// driver drags with long pauses, the hurried one rushes, the irritated one is low and clipped,
+// the aggressive one lower, faster and with almost no pauses.
 const profiles: Record<VoicePlaybackPersona, { rate: number; pitch: number; pause: number }> = {
   calm: { rate: 1, pitch: 1, pause: 200 },
   confused: { rate: 0.86, pitch: 1.07, pause: 420 },
   hurried: { rate: 1.22, pitch: 1.03, pause: 70 },
   irritated: { rate: 1.1, pitch: 0.9, pause: 120 },
+  aggressive: { rate: 1.2, pitch: 0.87, pause: 50 },
 };
 const bounded = (value: number, minimum: number, maximum: number) => Math.round(Math.max(minimum, Math.min(maximum, value)) * 1000) / 1000;
 
