@@ -17,9 +17,9 @@ from app.core.visibility import identity_filter
 from app.models.enums import Role
 from app.models.user import Group, User
 from app.models.voice_training import VoiceTrainingAttempt
-from app.services import dispatch
+from app.services import dispatch, voice_scenarios
 from app.services.learning import lock_learner
-from app.services.scenarios import utc
+from app.services.scenarios import support_allowed, utc
 
 KEY = "phone_change"
 REVISION = 3
@@ -923,9 +923,13 @@ RELIEF = {
 def say(language, persona, key, turn, params=None):
     """The line in the driver's own manner; the calm driver speaks plainly."""
     line = LINES[language][key].format(**(params or {}))
+    return in_manner(language, persona, line, turn, relief=key.startswith("resolved_"))
+
+
+def in_manner(language, persona, line, turn, *, relief=False):
     if persona == "calm":
         return line
-    if key.startswith("resolved_"):
+    if relief:
         return RELIEF[language][persona] + line
     manner = MANNER[language][persona]
     if persona == "irritated":
@@ -943,7 +947,20 @@ def next_reply_v3(persona, stage, transcript, text, snapshot=None):
     return stage, say(language, persona, key, turn, params), key
 
 
+def custom_reply(persona, stage, transcript, text, snapshot):
+    """A scenario from the editor: its keyword steps, said in the driver's manner."""
+    content = snapshot["content"]
+    stage, line, key, _ = voice_scenarios.reply(content, stage, text)
+    turn = sum(1 for entry in transcript if entry["role"] == "operator") + 1
+    spoken = in_manner(content["language"], persona, line, turn, relief=stage == "resolved")
+    return stage, spoken, key
+
+
 def dialogue_for(revision, snapshot=None):
+    if snapshot and snapshot.get("custom"):
+        return lambda persona, stage, transcript, text: custom_reply(
+            persona, stage, transcript, text, snapshot
+        )
     if revision == 1:
         return next_reply
     if revision == 2:
@@ -978,6 +995,9 @@ def attempt_data(attempt):
             key: any(e["system"] == key for e in attempt.practice.get("events", []))
             for key in ("dispatch", "oktell", "compared")
         },
+        # A scenario from the editor: no training systems, the author's notes instead.
+        "custom": bool(attempt.snapshot.get("custom")),
+        "notes": attempt.snapshot.get("notes", ""),
         "result": deepcopy(attempt.result) if attempt.state == "completed" else None,
         "can_finish": attempt.stage == "resolved",
         "retry_of": attempt.retry_of,
@@ -986,8 +1006,18 @@ def attempt_data(attempt):
     }
 
 
+async def custom_allowed(session, user):
+    """Scenarios from the editor are for ТП operators and trainees; staff look at them too."""
+    return user.role not in (Role.OPERATOR,) or await support_allowed(session, user)
+
+
 async def catalog(session, user):
     await require_scope(session, user)
+    custom = (
+        [voice_scenarios.catalog_item(row) for row in await voice_scenarios.playable(session)]
+        if await custom_allowed(session, user)
+        else []
+    )
     attempts = list(
         await session.scalars(
             select(VoiceTrainingAttempt)
@@ -1006,7 +1036,8 @@ async def catalog(session, user):
                 "languages": [{"key": key, "label": label} for key, label in LANGUAGES.items()],
                 "revision": REVISION,
                 "rules_source": RULES_SOURCE,
-            }
+            },
+            *custom,
         ],
         "attempts": [
             {
@@ -1028,11 +1059,43 @@ async def catalog(session, user):
     }
 
 
+async def start_custom(session, user, body):
+    scenario = await session.get(
+        voice_scenarios.VoiceScenario, voice_scenarios.scenario_id(body.scenario_key),
+        populate_existing=True,
+    )
+    if scenario is None or not scenario.active or scenario.published is None:
+        raise NotFoundError("Сценарий снят с публикации или не найден.")
+    if not await custom_allowed(session, user):
+        raise PermissionDeniedError("Сценарии звонков доступны операторам ТП и стажёрам.")
+    snapshot = voice_scenarios.snapshot(scenario)
+    attempt = VoiceTrainingAttempt(
+        user_id=user.id,
+        scenario_key=body.scenario_key,
+        revision=scenario.revision,
+        persona=body.persona,
+        state="in_progress",
+        stage=voice_scenarios.first_stage(snapshot["content"]),
+        turn=0,
+        snapshot=snapshot,
+        transcript=[{
+            "role": "driver", "text": snapshot["content"]["opening"], "turn": 0, "line": "opening",
+        }],
+        practice={"events": []},
+        requests={},
+    )
+    session.add(attempt)
+    await session.flush()
+    return attempt
+
+
 async def start(session, user, body):
     await require_scope(session, user)
     await lock_learner(session, user.id)
     await session.refresh(user)
     await require_scope(session, user)
+    if body.scenario_key != KEY:
+        return await start_custom(session, user, body)
     driver = dispatch.fold(await dispatch.history(session, user.id))["drivers"][DRIVER_KEY]
     park = dispatch.PARK_BY_ID[driver["park"]]
     if phone_digits(driver["phone"]) == phone_digits(INCOMING_PHONE):
@@ -1132,6 +1195,8 @@ async def answer(session, user, attempt_id, body):
 async def inspect(session, user, attempt_id, body):
     attempt = await own_attempt(session, user, attempt_id, lock=True)
     require_active(attempt)
+    if attempt.snapshot.get("custom"):
+        raise ConflictError("В этом сценарии учебные системы не проверяются.")
     identity = attempt.snapshot["driver"]
     driver = dispatch.fold(await dispatch.history(session, user.id))["drivers"][DRIVER_KEY]
     if (
@@ -1431,9 +1496,71 @@ def evaluate_v2(attempt, language="ru"):
     }
 
 
+def evaluate_custom(attempt):
+    """What the trainer understood, step by step; the score is the mentor's."""
+    content = attempt.snapshot["content"]
+    operators = operator_entries(attempt.transcript)
+    critical_errors = [
+        {"text": content["forbidden"][index]["text"], "quote": entry["text"], "turn": entry["turn"]}
+        for entry in operators
+        for index, _ in voice_scenarios.forbidden_hits(content, entry["text"])
+    ]
+    # Each driver line keeps the reply it came from ("s2:0"): the answer before it passed.
+    passed = {}
+    for entry in attempt.transcript:
+        key = entry.get("line", "")
+        step, _, option = key.partition(":")
+        if entry["role"] == "driver" and option.isdigit() and step not in passed:
+            passed[step] = next(
+                (item for item in operators if item["turn"] == entry["turn"] - 1), None
+            )
+    criteria = []
+    for number, step in enumerate(content["steps"], 1):
+        answer = passed.get(step["id"])
+        criteria.append({
+            "key": step["id"],
+            "label": step["name"].strip() or f"Шаг {number}",
+            "passed": answer is not None,
+            "feedback": (
+                "Тренажёр узнал ответ по ключевым словам шага."
+                if answer is not None
+                else "Ответ на этом шаге не узнан: водитель переспрашивал "
+                "или звонок завершён раньше."
+            ),
+            "quote": answer["text"] if answer else None,
+            "turn": answer["turn"] if answer else None,
+            "role": "operator",
+            "example": None,
+        })
+    return {
+        "score": None,
+        "manual": True,
+        "criteria": criteria,
+        "critical_errors": critical_errors,
+        "rules_revision": attempt.revision,
+        "solution": content["solution"],
+        "reached_end": attempt.stage == "resolved",
+        "assessment_note": (
+            "Оценку ставит наставник: тренер, супервайзер, руководитель или администратор. "
+            "Шаги показывают, что тренажёр узнал по ключевым словам."
+        ),
+        "review_status": "awaiting_grade",
+    }
+
+
 async def finish(session, user, attempt_id):
     attempt = await own_attempt(session, user, attempt_id, lock=True)
     if attempt.state == "completed":
+        return attempt
+    if attempt.snapshot.get("custom"):
+        attempt.result = evaluate_custom(attempt)
+        attempt.state = "completed"
+        attempt.finished_at = datetime.now(UTC)
+        # The call joins the mentors' queue: its score is theirs to give.
+        attempt.review = {
+            "kind": "grade", "comment": "", "created_at": attempt.finished_at.isoformat()
+        }
+        await session.flush()
         return attempt
     evaluators = {
         1: evaluate_v1,
@@ -1509,6 +1636,8 @@ async def review(session, user, attempt_id, body):
     attempt = await own_attempt(session, user, attempt_id, lock=True)
     if attempt.state != "completed":
         raise ConflictError("Обсудить оценку можно после завершения тренировки.")
+    if attempt.result.get("manual"):
+        raise ConflictError("Оценку этого звонка ставит наставник. Обсудите её с ним.")
     if attempt.review:
         if attempt.review["comment"] != body.comment:
             raise ConflictError("Запрос на проверку уже сохранён для этой попытки.")
@@ -1554,6 +1683,7 @@ async def reviews(session, user):
                 "group_id": learner.group_id,
                 "title": attempt.snapshot["title"],
                 "score": attempt.result["score"],
+                "manual": bool(attempt.result.get("manual")),
                 "comment": attempt.review["comment"],
                 "requested_at": attempt.review["created_at"],
                 "status": attempt.result["review_status"],
@@ -1597,8 +1727,12 @@ async def resolve_review(session, user, attempt_id, body):
         if attempt.result["mentor_comment"] != body.comment:
             raise ConflictError("Проверка уже завершена другим ответом.")
         return mentor_data(attempt, learner)
+    grading = attempt.result["review_status"] == "awaiting_grade"
+    if grading and body.score is None:
+        raise DomainError("Поставьте оценку звонку от 0 до 100.")
     attempt.result = {
         **attempt.result,
+        **({"score": body.score} if grading else {}),
         "review_status": "reviewed",
         "mentor_comment": body.comment,
         "reviewed_at": datetime.now(UTC).isoformat(),

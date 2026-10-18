@@ -154,3 +154,28 @@ test("the operator chooses no voice source, browser voice or phone sound: only a
   assert.match(browser, /голос браузера/);
   assert.doesNotMatch(browser, /Browser Russian|select/i);
 });
+
+test("a call from the scenario editor waits for the mentor's score, then shows it with the right solution", () => {
+  const manual = (patch = {}) => attempt({ state: "completed", custom: true, transcript: [{ role: "driver", text: "Заказов нет", turn: 0 }, { role: "operator", text: "Не пройден фотоконтроль", turn: 0 }], result: {
+    score: null, manual: true, review_status: "awaiting_grade", solution: "Пройти фотоконтроль в Такси Про.", reached_end: true,
+    criteria: [{ key: "s1", label: "Причина", passed: true, feedback: "Тренажёр узнал ответ.", quote: "Не пройден фотоконтроль", turn: 0, role: "operator", example: null }],
+    critical_errors: [], ...patch,
+  } });
+  const waiting = render(VoiceResults, resultProps(manual()));
+  assert.match(waiting, /Ждёт оценки наставника/);
+  assert.match(waiting, /Правильное решение/);
+  assert.match(waiting, /Узнано/);
+  assert.doesNotMatch(waiting, /Оспорить оценку|0%/);
+  const graded = render(VoiceResults, resultProps(manual({ score: 85, review_status: "reviewed", mentor_comment: "Хорошо объяснил.", mentor_name: "Супервайзер" })));
+  assert.match(graded, /85<span>%<\/span>/);
+  assert.match(graded, /Хорошо объяснил/);
+  const history = render(VoiceHistory, { attempts: [{ ...attempt({ state: "completed" }), score: null, review_status: "awaiting_grade" }] });
+  assert.match(history, /Ждёт оценки/);
+});
+
+test("a call from the scenario editor shows the author's notes instead of the training systems", () => {
+  const html = render(VoiceSituation, { attempt: attempt({ custom: true, notes: "Фотоконтроль не пройден.", incoming_phone: "+77011112233" }) });
+  assert.match(html, /Что видно в системах/);
+  assert.match(html, /Фотоконтроль не пройден/);
+  assert.doesNotMatch(html, /Данные для разговора|Диспетчерская/);
+});

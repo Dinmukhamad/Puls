@@ -37,6 +37,7 @@ from app.api.v1 import (
     telegram,
     telemetry,
     trainee,
+    voice_scenarios,
     voice_training,
     wallet,
     work_sites_access,
@@ -73,6 +74,7 @@ api_router.include_router(progress.router)
 api_router.include_router(analytics.router)
 api_router.include_router(driver.router)
 api_router.include_router(voice_training.router)
+api_router.include_router(voice_scenarios.router)
 api_router.include_router(learning.router)
 api_router.include_router(scenarios.router)
 api_router.include_router(games.router)

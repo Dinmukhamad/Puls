@@ -238,3 +238,8 @@
   .voice-orb.is-active .voice-wave i { animation: none; transform: scaleY(.7); }
   .voice-page *, .voice-page *::before, .voice-page *::after { transition: none !important; }
 }
+
+/* Calls from the scenario editor: the author's notes, the mentor's comment and the right solution. */
+.voice-notes, .voice-mentor-card p, .voice-solution p { color: var(--text-secondary); font-size: var(--text-secondary-size); line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.voice-mentor-card, .voice-solution { display: grid; gap: var(--sp-2); padding: var(--sp-6); }
+.voice-mentor-card { border-color: color-mix(in srgb, var(--status-success) 40%, var(--separator)); }

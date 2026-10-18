@@ -8,22 +8,25 @@ export interface VoiceSpeechConfig { default_provider: VoiceProvider; providers:
 export interface VoiceSpeechAudio { audio_base64: string; mime_type: "audio/mpeg"; provider: CloudVoiceProvider; voice: string }
 
 export type VoicePersona = "calm" | "confused" | "hurried" | "irritated";
-export interface VoiceScenario { key: string; title: string; description: string; minutes: number; languages?: { key: VoiceLanguage; label: string }[] }
+export interface VoiceScenario { key: string; title: string; description: string; minutes: number; languages?: { key: VoiceLanguage; label: string }[]; custom?: boolean }
 export interface VoiceAttemptSummary {
   id: number; scenario_key: string; title: string; persona: VoicePersona; language?: VoiceLanguage;
   state: "in_progress" | "completed"; stage: string; turn: number;
   score: number | null; created_at: string; finished_at: string | null;
-  review_status: "pending" | "reviewed" | null;
+  review_status: "pending" | "reviewed" | "awaiting_grade" | null;
 }
 export interface VoiceTranscript { role: "driver" | "operator"; text: string; turn: number }
 export interface VoiceCriterion {
   key: string; label: string; passed: boolean; feedback: string;
-  quote: string | null; turn: number | null; role?: "driver" | "operator"; example: string;
+  quote: string | null; turn: number | null; role?: "driver" | "operator"; example: string | null;
 }
 export interface VoiceResult {
-  score: number; criteria: VoiceCriterion[];
+  /** null while a mentor has not graded a call from the scenario editor. */
+  score: number | null; criteria: VoiceCriterion[];
   critical_errors: { text: string; quote: string; turn: number }[];
-  review_status?: "pending" | "reviewed" | null; mentor_comment?: string | null;
+  review_status?: "pending" | "reviewed" | "awaiting_grade" | null; mentor_comment?: string | null; mentor_name?: string;
+  /** A scenario from the editor: the score is the mentor's, the steps show what the trainer understood. */
+  manual?: boolean; solution?: string; reached_end?: boolean;
 }
 export interface VoiceAttempt {
   id: number; scenario_key: string; title: string; description: string; revision: number;
@@ -33,6 +36,8 @@ export interface VoiceAttempt {
   incoming_phone: string; transcript: VoiceTranscript[];
   practice: { dispatch: boolean; oktell: boolean; compared: boolean };
   result: VoiceResult | null; can_finish: boolean; retry_of?: number | null;
+  /** A scenario from the editor: no training systems, the author's notes instead. */
+  custom?: boolean; notes?: string;
   created_at: string; finished_at: string | null;
 }
 export interface VoiceCatalog { scenarios: VoiceScenario[]; attempts: VoiceAttemptSummary[] }

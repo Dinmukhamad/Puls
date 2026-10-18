@@ -27,7 +27,7 @@ const personal = [tab("/cabinet", "Мой кабинет"), tab("/progress", "М
 const learningTabs = [tab("/training/city", "Мой город · миссии"), tab("/training/voice", "Голосовой тренажёр")];
 const staffLearning = section("training", "Обучение", SparkIcon, [
   tab("/admin/learning/city", "Миссии города"), tab("/training/city", "Город оператора"),
-  tab("/training/voice", "Голосовой тренажёр"),
+  tab("/training/voice", "Голосовой тренажёр"), tab("/admin/learning/voice-scenarios", "Сценарии звонков"),
   tab("/admin/learning-analytics", "Аналитика симулятора"),
 ]);
 const team = (admin = false, supervisor = false) => section("team", "Команда", UsersIcon, [
@@ -66,7 +66,7 @@ export const ROLE_NAVIGATION: Record<Role, readonly NavItem[]> = {
   trainer: [
     section("home", "Главная", HomeIcon, [tab("/trainer", "Учебная сводка")]),
     section("team", "Команда", UsersIcon, [tab("/admin/users", "Операторы")]),
-    section("training", "Обучение", SparkIcon, [tab("/admin/learning/city", "Миссии города"), tab("/training/city", "Город оператора"), tab("/training/voice", "Голосовой тренажёр")]),
+    section("training", "Обучение", SparkIcon, [tab("/admin/learning/city", "Миссии города"), tab("/training/city", "Город оператора"), tab("/training/voice", "Голосовой тренажёр"), tab("/admin/learning/voice-scenarios", "Сценарии звонков")]),
     section("driver", "Симулятор", SparkIcon, [tab("/admin/learning?kind=simulator", "Сценарии"), tab("/training/city?district=driver", "Тестовый запуск в городе")]),
     section("learning_analytics", "Аналитика", TrophyIcon, [tab("/admin/learning-analytics", "Аналитика симулятора")]),
     QR_ACCESS_SECTION,

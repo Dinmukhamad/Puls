@@ -12,6 +12,7 @@ from app.core.work_sites import require_work_sites
 from app.schemas.voice_training import (
     VoiceAnswer,
     VoiceInspection,
+    VoiceResolve,
     VoiceRetry,
     VoiceReview,
     VoiceSpeechPreview,
@@ -163,7 +164,7 @@ async def review_detail(
 
 @router.post("/reviews/{attempt_id}/resolve")
 async def resolve_review(
-    attempt_id: int, body: VoiceReview, session: SessionDep, user: CurrentUser
+    attempt_id: int, body: VoiceResolve, session: SessionDep, user: CurrentUser
 ):
     data = await voice_training.resolve_review(session, user, attempt_id, body)
     await session.commit()

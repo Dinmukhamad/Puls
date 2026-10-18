@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class VoiceStart(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    scenario_key: Literal["phone_change"]
+    scenario_key: str = Field(pattern=r"^(?:phone_change|custom:\d{1,9})$")
     persona: Literal["calm", "confused", "hurried", "irritated"] = "calm"
     language: Literal["ru", "kk"] = "ru"
 
@@ -50,3 +50,11 @@ class VoiceSpeechTurn(BaseModel):
     model_config = ConfigDict(extra="forbid")
     provider: Literal["yandex", "google", "azure"]
     turn: int = Field(ge=0, le=100)
+
+
+class VoiceResolve(BaseModel):
+    """A mentor's answer: a comment, and the score when the call waits for one."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    comment: str = Field(min_length=3, max_length=2000)
+    score: int | None = Field(default=None, ge=0, le=100)

@@ -321,17 +321,21 @@ test("QR scanner is available to every non-operator and never granted to operato
 test("learning keeps the city and the simulator analytics, and only the trainer keeps scenarios", () => {
   for (const role of ["supervisor", "head", "admin"]) {
     const learning = nav.visibleNavigation(role).find((item) => item.id === "training");
-    assert.deepEqual(learning.tabs.map((tab) => tab.label), ["Миссии города", "Город оператора", "Голосовой тренажёр", "Аналитика симулятора"], role);
+    assert.deepEqual(learning.tabs.map((tab) => tab.label), ["Миссии города", "Город оператора", "Голосовой тренажёр", "Сценарии звонков", "Аналитика симулятора"], role);
     const can = (path) => nav.canVisit(role, path, nav.defaultAccess(role));
+    assert.equal(can("/admin/learning/voice-scenarios"), true, `${role}: writes the voice calls`);
+    assert.equal(can("/admin/learning/voice-scenarios/7"), true, `${role}: opens a scenario`);
     assert.equal(can("/admin/learning"), false, `${role}: the studio is gone`);
     // A bookmarked studio opens the simulator analytics instead of an access error.
     assert.equal(nav.appEntryRedirect("/admin/learning", "/admin/summary", can), "/admin/learning-analytics", role);
   }
   assert.deepEqual(nav.visibleNavigation("operator").find((item) => item.id === "training").tabs.map((tab) => tab.to), ["/training/city", "/training/voice"]);
   const trainer = nav.visibleNavigation("trainer");
-  assert.deepEqual(trainer.find((item) => item.id === "training").tabs.map((tab) => tab.label), ["Миссии города", "Город оператора", "Голосовой тренажёр"]);
+  assert.deepEqual(trainer.find((item) => item.id === "training").tabs.map((tab) => tab.label), ["Миссии города", "Город оператора", "Голосовой тренажёр", "Сценарии звонков"]);
   assert.deepEqual(trainer.find((item) => item.id === "driver").tabs.map((tab) => tab.label), ["Сценарии", "Тестовый запуск в городе"]);
   assert.deepEqual(trainer.find((item) => item.id === "learning_analytics").tabs.map((tab) => tab.label), ["Аналитика симулятора"]);
   const trainerCan = (path) => nav.canVisit("trainer", path, nav.defaultAccess("trainer"));
+  assert.equal(trainerCan("/admin/learning/voice-scenarios/7"), true, "the trainer writes the voice calls");
+  assert.equal(nav.canVisit("operator", "/admin/learning/voice-scenarios", nav.defaultAccess("operator")), false);
   assert.equal(nav.appEntryRedirect("/admin/learning", "/trainer", trainerCan), null, "the trainer keeps the scenarios");
 });

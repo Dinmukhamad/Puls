@@ -65,6 +65,9 @@ export function VoiceTrainingPage() {
   const catalog = useQuery({ queryKey: voiceKeys.catalog, queryFn: ({ signal }) => voiceTraining.catalog(signal), enabled: !attemptId, retry: false, staleTime: 0, refetchOnMount: "always" });
   const attempt = useQuery({ queryKey: voiceKeys.attempt(attemptId ?? ""), queryFn: ({ signal }) => voiceTraining.attempt(attemptId!, signal), enabled: !!attemptId, retry: false, refetchOnWindowFocus: true });
   const current = attempt.data;
+  // A scenario from the editor is written in one language: the call is in it.
+  const chosenScenario = catalog.data?.scenarios.find(item => item.key === scenarioKey);
+  const callLanguage: VoiceLanguage = chosenScenario?.custom ? chosenScenario.languages?.[0]?.key ?? "ru" : language;
   const speechConfig = useQuery({ queryKey: voiceKeys.speechConfig(user?.id ?? "account"), queryFn: ({ signal }) => voiceTraining.speechConfig(signal), retry: false, staleTime: 60000 });
   // Yandex SpeechKit when the server has it, otherwise the browser's own voice: the operator chooses nothing.
   const provider = resolveVoiceProvider(speechConfig.data);
@@ -90,9 +93,9 @@ export function VoiceTrainingPage() {
   const previewVoice = () => {
     const selected = providerRef.current;
     speech.unlockAudio();
-    void speak(previewText[language], persona,
-      selected ? { label: selected.label, cacheKey: `${selected.id}:${selected.voice}:preview:${language}:${persona}`, load: signal => voiceTraining.speechPreview(selected.id, persona, language, signal) } : undefined,
-      { language });
+    void speak(previewText[callLanguage], persona,
+      selected ? { label: selected.label, cacheKey: `${selected.id}:${selected.voice}:preview:${callLanguage}:${persona}`, load: signal => voiceTraining.speechPreview(selected.id, persona, callLanguage, signal) } : undefined,
+      { language: callLanguage });
   };
   const voiceOutputProps = { speech, provider, config: speechConfig.data, configLoading: speechConfig.isPending };
   useEffect(() => {
@@ -111,7 +114,7 @@ export function VoiceTrainingPage() {
     client.setQueryData(voiceKeys.attempt(value.id), value);
     void client.invalidateQueries({ queryKey: voiceKeys.catalog });
   };
-  const start = useMutation({ mutationFn: () => voiceTraining.start(scenarioKey, persona, language), onSuccess: value => { saveAttempt(value); navigate(attemptRoute(value.id)); }, onSettled: () => { actionLock.current = false; } });
+  const start = useMutation({ mutationFn: () => voiceTraining.start(scenarioKey, persona, callLanguage), onSuccess: value => { saveAttempt(value); navigate(attemptRoute(value.id)); }, onSettled: () => { actionLock.current = false; } });
   const answer = useMutation({ mutationFn: (input: DraftRequest) => voiceTraining.answer(attemptId!, input), onSuccess: (value, input) => {
     try { sessionStorage.removeItem(`voice-draft:${user?.id ?? "account"}:${value.id}:${input.turn}`); } catch { /* Optional draft. */ }
     if (activeAttemptRef.current === String(value.id)) {
@@ -187,7 +190,7 @@ export function VoiceTrainingPage() {
         <section className="card voice-setup" aria-label="Подготовка звонка">
           <div className="voice-step-block">
             <StepTitle step={1} title="Ситуация" hint="Решение появится в разборе после разговора" />
-            <fieldset className="voice-choices"><legend className="voice-sr-only">Сценарий тренировки</legend>{catalog.data.scenarios.map(item => <label className={`voice-choice voice-scenario ${scenarioKey === item.key ? "is-selected" : ""}`} key={item.key}><input type="radio" name="voice-scenario" checked={scenarioKey === item.key} onChange={() => setScenarioKey(item.key)} /><span className="voice-choice__icon"><VoiceIcon name="mic" /></span><span className="voice-choice__text"><strong>{item.title}</strong><small>{item.description}</small><span className="voice-choice__meta">Около {item.minutes} минут</span></span><span className="voice-choice__mark" aria-hidden="true">{scenarioKey === item.key && <VoiceIcon name="check" size={14} />}</span></label>)}</fieldset>
+            <fieldset className="voice-choices"><legend className="voice-sr-only">Сценарий тренировки</legend>{catalog.data.scenarios.map(item => <label className={`voice-choice voice-scenario ${scenarioKey === item.key ? "is-selected" : ""}`} key={item.key}><input type="radio" name="voice-scenario" checked={scenarioKey === item.key} onChange={() => setScenarioKey(item.key)} /><span className="voice-choice__icon"><VoiceIcon name="mic" /></span><span className="voice-choice__text"><strong>{item.title}</strong><small>{item.description}</small><span className="voice-choice__meta">Около {item.minutes} минут{item.custom && item.languages?.[0]?.key === "kk" ? " · Қазақша" : ""}</span></span><span className="voice-choice__mark" aria-hidden="true">{scenarioKey === item.key && <VoiceIcon name="check" size={14} />}</span></label>)}</fieldset>
           </div>
           <div className="voice-step-block">
             <StepTitle step={2} title="Характер водителя" hint="Одна ситуация, разные характеры" />
@@ -195,7 +198,9 @@ export function VoiceTrainingPage() {
           </div>
           <div className="voice-step-block">
             <StepTitle step={3} title="Язык звонка" hint="Отвечай на языке водителя, можно вперемешку с русскими словами" />
-            <SegmentedControl block label="Язык звонка" value={language} onChange={setLanguage} options={languages.map(item => ({ value: item.key, label: item.label }))} />
+            {chosenScenario?.custom
+              ? <p className="voice-caption">Сценарий написан на языке «{languages.find(item => item.key === callLanguage)?.label}»: водитель говорит на нём.</p>
+              : <SegmentedControl block label="Язык звонка" value={language} onChange={setLanguage} options={languages.map(item => ({ value: item.key, label: item.label }))} />}
           </div>
         </section>
         <aside className="card voice-ready" aria-label="Перед звонком">
@@ -205,7 +210,7 @@ export function VoiceTrainingPage() {
             <Button block variant="secondary" className={speech.micChecked ? "voice-mic-ok" : ""} disabled={speech.checkingMic || !speech.support.microphone} onClick={() => void speech.checkMicrophone()} icon={<VoiceIcon name={speech.micChecked ? "check" : "mic"} size={18} />}>{speech.checkingMic ? "Проверяем микрофон…" : speech.micChecked ? "Микрофон доступен" : "Проверить микрофон"}</Button>
             {speech.micChecked && <p className="voice-caption" role="status">{speech.micSignal === "quiet" ? "Сигнал тихий. Проверь громкость или говори ближе к микрофону." : speech.micSignal === "detected" ? "Слышим тебя. Можно начинать." : "Доступ получен. Если распознавание не сработает, введи ответ текстом."}</p>}
             {!speech.support.recognition && <p className="voice-caption">В этом браузере нет распознавания речи. Тренировку можно пройти с текстовыми ответами.</p>}
-            <VoiceSettings {...voiceOutputProps} language={language} disabled={pending || speech.checkingMic} onPreview={previewVoice} />
+            <VoiceSettings {...voiceOutputProps} language={callLanguage} disabled={pending || speech.checkingMic} onPreview={previewVoice} />
             {speechConfig.isError && <p className="voice-caption" role="status">Не удалось проверить облачный голос, сейчас звучит голос браузера. <button type="button" className="voice-link" onClick={() => void speechConfig.refetch()}>Проверить снова</button></p>}
           </div>
           <Button block size="l" variant="primary" className="voice-start" disabled={pending || !selectedScenario} onClick={startCall} icon={<VoiceIcon name="play" size={18} />}>{start.isPending ? "Начинаем…" : "Начать разговор"}</Button>
@@ -261,10 +266,13 @@ export function VoiceSettings({ speech, disabled, onPreview, previewLabel = "П�
 
 export function VoiceHistory({ attempts }: { attempts: VoiceAttemptSummary[] }) {
   if (!attempts.length) return <section className="card voice-empty-history"><span className="voice-history-icon"><VoiceIcon name="repeat" /></span><div><h2 className="card__title">Здесь будет твой опыт</h2><p>Разговоры и результаты сохранятся в аккаунте. Незавершённую тренировку можно продолжить.</p></div></section>;
-  return <section className="card voice-history"><header className="card__head"><div className="card__titles"><h2 className="card__title">Мои попытки</h2><p className="card__subtitle">Всего: {attempts.length}</p></div></header><div className="voice-history-list">{attempts.map(item => <Link key={item.id} to={attemptRoute(item.id)} className="voice-history-item"><span className={`voice-history-icon ${item.state === "completed" ? "is-done" : ""}`}><VoiceIcon name={item.state === "completed" ? "check" : "play"} /></span><span className="voice-history-name"><strong>{item.title}</strong><small>{personaLabel(item.persona)}{languageNote(item.language)} · {dateLabel(item.created_at)}</small></span><span className="voice-history-state">{item.state === "completed" ? <Badge tone={(item.score ?? 0) >= 80 ? "success" : "neutral"}>{`${item.score ?? 0}%`}</Badge> : <Badge tone="info">Продолжить</Badge>}{item.review_status && <small>{item.review_status === "reviewed" ? "Наставник ответил" : "Запрос на пересмотр"}</small>}</span><VoiceIcon name="arrow" size={18} /></Link>)}</div></section>;
+  return <section className="card voice-history"><header className="card__head"><div className="card__titles"><h2 className="card__title">Мои попытки</h2><p className="card__subtitle">Всего: {attempts.length}</p></div></header><div className="voice-history-list">{attempts.map(item => <Link key={item.id} to={attemptRoute(item.id)} className="voice-history-item"><span className={`voice-history-icon ${item.state === "completed" ? "is-done" : ""}`}><VoiceIcon name={item.state === "completed" ? "check" : "play"} /></span><span className="voice-history-name"><strong>{item.title}</strong><small>{personaLabel(item.persona)}{languageNote(item.language)} · {dateLabel(item.created_at)}</small></span><span className="voice-history-state">{item.state !== "completed" ? <Badge tone="info">Продолжить</Badge> : item.score === null ? <Badge tone="warning">Ждёт оценки</Badge> : <Badge tone={item.score >= 80 ? "success" : "neutral"}>{`${item.score}%`}</Badge>}{item.review_status && item.review_status !== "awaiting_grade" && <small>{item.review_status === "reviewed" ? "Наставник ответил" : "Запрос на пересмотр"}</small>}</span><VoiceIcon name="arrow" size={18} /></Link>)}</div></section>;
 }
 
 export function VoiceSituation({ attempt }: { attempt: VoiceAttempt }) {
+  if (attempt.custom) return <aside className="voice-context"><section className="card voice-situation"><h2 className="card__title">Входящий звонок</h2><p>{attempt.description}</p><dl><div><dt>Водитель</dt><dd>{attempt.driver.name}</dd></div>{attempt.incoming_phone && <div><dt>Номер звонящего</dt><dd className="voice-phone">{attempt.incoming_phone}</dd></div>}{attempt.driver.park && <div><dt>Парк</dt><dd>{attempt.driver.park}</dd></div>}</dl></section>
+    {attempt.notes && <section className="card voice-situation"><h2 className="card__title">Что видно в системах</h2><p className="voice-notes">{attempt.notes}</p></section>}
+    <p className="voice-context-note">Не торопись: можно повторить реплику водителя перед ответом.</p></aside>;
   return <aside className="voice-context"><section className="card voice-situation"><h2 className="card__title">Входящий звонок</h2><p>{attempt.description}</p><dl><div><dt>Водитель</dt><dd>{attempt.driver.name}</dd></div><div><dt>Номер звонящего</dt><dd className="voice-phone">{attempt.incoming_phone}</dd></div><div><dt>Парк</dt><dd>{attempt.driver.park}</dd></div>{attempt.practice.dispatch && <div><dt>Номер в открытом аккаунте</dt><dd className="voice-phone">{attempt.driver.phone}</dd></div>}</dl>
     {attempt.practice.dispatch && attempt.practice.oktell && <div className="voice-compare">{attempt.practice.compared ? <p><VoiceIcon name="check" size={17} /> Сравнение номеров сохранено</p> : <><p>Данные из обеих систем открыты. Сверь их и зафиксируй сравнение.</p><Link className="btn btn--secondary btn--m btn--block" to={voiceWorkSite(attempt, "oktell")}>Сверить номера в системе</Link></>}</div>}
   </section><section className="card voice-systems"><h2 className="card__title">Данные для разговора</h2><p>Открой нужную систему. Вернуться к звонку можно без потери этапа.</p>{([{ key: "dispatch", label: "Диспетчерская", hint: "Найти аккаунт водителя", done: attempt.practice.dispatch }, { key: "oktell", label: "OKTEL", hint: "Проверить данные звонка", done: attempt.practice.oktell }, { key: "crm", label: "CRM", hint: "Учебные обращения", done: false }] as const).map(item => <Link className="voice-system-link" to={voiceWorkSite(attempt, item.key)} key={item.key}><span className={`voice-system-icon ${item.done ? "is-done" : ""}`}><VoiceIcon name={item.done ? "check" : item.key === "oktell" ? "headphones" : "external"} size={18} /></span><span><strong>{item.label}</strong><small>{item.done ? "Просмотр сохранён" : item.hint}</small></span><VoiceIcon name="arrow" size={16} /></Link>)}<p className="voice-caption">Действия засчитываются после просмотра нужных данных в системе. Для рабочих сайтов нужен действующий учебный доступ.</p></section><p className="voice-context-note">Не торопись: можно повторить реплику и собрать данные до ответа.</p></aside>;
@@ -281,6 +289,7 @@ export function VoiceResults({ attempt, pending, onRetry, reviewOpen, onReviewOp
 }) {
   const result = attempt.result;
   if (!result) return <section className="card voice-error"><h2>Разговор сохранён</h2><p>Результат пока недоступен. Обнови страницу, чтобы проверить его.</p></section>;
+  if (result.manual) return <ManualResults attempt={attempt} pending={pending} onRetry={onRetry} />;
   const passed = result.criteria.filter(item => item.passed).length;
   const firstOperator = attempt.transcript.find(item => item.role === "operator");
   const tone = result.critical_errors.length ? "danger" : passed === result.criteria.length ? "success" : "warning";
@@ -289,5 +298,22 @@ export function VoiceResults({ attempt, pending, onRetry, reviewOpen, onReviewOp
     <section className="voice-feedback"><div className="voice-feedback__title"><h2 className="section-title">Что получилось и что улучшить</h2><p className="page-subtitle">По сохранённым событиям и репликам</p></div><div className="voice-criteria">{result.criteria.map(item => <article className={`card voice-criterion ${item.passed ? "is-passed" : ""}`} key={item.key}><div className="voice-criterion-title"><span className="voice-criterion-mark">{item.passed ? <VoiceIcon name="check" size={17} /> : "↗"}</span><h3>{item.label}</h3><Badge tone={item.passed ? "success" : "warning"}>{item.passed ? "Получилось" : "Стоит улучшить"}</Badge></div><p>{item.feedback}</p>{item.quote ? <blockquote>«{item.quote}»<cite>{item.turn === null ? "Сохранённые данные тренировки" : `${item.role === "driver" ? "Водитель" : "Твой ответ"} · реплика ${item.turn + 1}`}</cite></blockquote> : <p className="voice-evidence-missing">В сохранённых ответах или действиях нет подтверждения этого шага.</p>}{!item.passed && item.example && <div className="voice-example"><span>Можно сказать так</span><p>{item.example}</p></div>}{!item.passed && firstOperator && <Button size="s" variant="plain" disabled={pending} onClick={() => onRetry(item.role === "driver" ? firstOperator.turn : item.turn ?? firstOperator.turn)} icon={<VoiceIcon name="repeat" size={15} />}>Повторить момент</Button>}</article>)}</div></section>
     <section className="card voice-review-request"><div><h2 className="card__title">Есть вопрос к оценке?</h2><p>Опиши спорный момент и сохрани запрос для разбора с наставником.</p></div>{result.review_status ? <Badge tone="success" icon={<VoiceIcon name="check" size={14} />}>{result.review_status === "reviewed" ? "Наставник рассмотрел запрос" : "Запрос на пересмотр сохранён"}</Badge> : !reviewOpen ? <Button onClick={onReviewOpen}>Оспорить оценку</Button> : null}{result.review_status === "reviewed" && result.mentor_comment && <div className="voice-mentor-reply"><strong>Комментарий наставника</strong><p>{result.mentor_comment}</p></div>}{reviewOpen && !result.review_status && <form onSubmit={event => { event.preventDefault(); if (reviewComment.trim() && !reviewing) onReview(); }}><label className="field__label" htmlFor="voice-review-comment">Что стоит пересмотреть?</label><textarea id="voice-review-comment" className="input" rows={3} maxLength={2000} required value={reviewComment} onChange={event => onReviewComment(event.target.value)} disabled={reviewing} placeholder="Укажи реплику или действие и объясни, с чем ты не согласен…" /><div className="voice-inline-actions"><Button type="submit" variant="primary" disabled={reviewing || !reviewComment.trim()}>{reviewing ? "Сохраняем…" : "Сохранить для наставника"}</Button><Button disabled={reviewing} onClick={onReviewCancel}>Отмена</Button></div></form>}</section>
     <section className="card voice-result-transcript"><VoiceTranscriptView attempt={attempt} /></section><p className="voice-caption">Исходная попытка остаётся в истории. Повтор проблемного момента создаёт отдельную тренировку с сохранённым началом разговора.</p>
+  </div>;
+}
+
+/** A call from the scenario editor: the trainer shows what it understood, a mentor gives the score. */
+function ManualResults({ attempt, pending, onRetry }: { attempt: VoiceAttempt; pending: boolean; onRetry: (turn: number) => void }) {
+  const result = attempt.result!;
+  const score = result.review_status === "reviewed" ? result.score : null;
+  const firstOperator = attempt.transcript.find(item => item.role === "operator");
+  const recognized = result.criteria.filter(item => item.passed).length;
+  const tone = score === null ? "warning" : score >= 80 ? "success" : "warning";
+  return <div className="voice-results">
+    <section className="card voice-result-hero" data-tone={tone}><div><Badge tone={score === null ? "warning" : "success"}>{score === null ? "Ждёт оценки наставника" : "Оценка наставника"}</Badge><h2>{score === null ? "Звонок отправлен наставнику" : score >= 80 ? "Разговор получился" : "Есть что улучшить"}</h2><p>{score === null ? "Супервайзер, тренер или руководитель прочитает разговор и поставит оценку. Она появится здесь и в истории попыток." : `${result.mentor_name ? `Наставник: ${result.mentor_name}. ` : ""}Ниже — комментарий наставника и что тренажёр узнал в твоих ответах.`}</p><div className="voice-inline-actions"><Link className="btn btn--primary btn--m" to="/training/voice">Новая тренировка<VoiceIcon name="arrow" size={17} /></Link>{firstOperator ? <Button disabled={pending} onClick={() => onRetry(firstOperator.turn)}>Повторить разговор</Button> : null}</div></div><div className="voice-score"><strong>{score === null ? "—" : <>{score}<span>%</span></>}</strong><small>{score === null ? "Оценка появится позже" : "Оценка наставника"}</small></div></section>
+    {score !== null && result.mentor_comment && <section className="card voice-mentor-card"><h2 className="card__title">Комментарий наставника</h2><p>{result.mentor_comment}</p></section>}
+    {result.critical_errors.length > 0 && <section className="card voice-critical"><Badge tone="danger">Критические ошибки · {result.critical_errors.length}</Badge><h2>Это нужно исправить в первую очередь</h2>{result.critical_errors.map((item, index) => <article key={index}><h3>{item.text}</h3><blockquote>«{item.quote}»<cite>Твой ответ · реплика {item.turn + 1}</cite></blockquote><Button size="s" disabled={pending} onClick={() => onRetry(item.turn)} icon={<VoiceIcon name="repeat" size={16} />}>Повторить этот момент</Button></article>)}</section>}
+    {result.solution && <section className="card voice-solution"><h2 className="card__title">Правильное решение</h2><p>{result.solution}</p></section>}
+    <section className="voice-feedback"><div className="voice-feedback__title"><h2 className="section-title">Что узнал тренажёр</h2><p className="page-subtitle">{recognized} из {result.criteria.length} шагов по ключевым словам сценария{result.reached_end ? " · водитель получил ответ" : ""}</p></div><div className="voice-criteria">{result.criteria.map(item => <article className={`card voice-criterion ${item.passed ? "is-passed" : ""}`} key={item.key}><div className="voice-criterion-title"><span className="voice-criterion-mark">{item.passed ? <VoiceIcon name="check" size={17} /> : "?"}</span><h3>{item.label}</h3><Badge tone={item.passed ? "success" : "warning"}>{item.passed ? "Узнано" : "Не узнано"}</Badge></div><p>{item.feedback}</p>{item.quote && <blockquote>«{item.quote}»<cite>Твой ответ · реплика {(item.turn ?? 0) + 1}</cite></blockquote>}</article>)}</div></section>
+    <section className="card voice-result-transcript"><VoiceTranscriptView attempt={attempt} /></section>
   </div>;
 }
