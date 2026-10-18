@@ -93,7 +93,7 @@ test("feedback separates critical errors, quotes the answer and displays the men
     review_status: "reviewed", mentor_comment: "Проверка данных обязательна.",
   }) });
   const html = render(VoiceResults, resultProps(value));
-  assert.match(html, /КРИТИЧЕСКИЕ ОШИБКИ/);
+  assert.match(html, /Критические ошибки · 1/);
   assert.match(html, /Сменю без проверки/);
   assert.match(html, /Повторить этот момент/);
   assert.match(html, /Наставник рассмотрел запрос/);
@@ -131,27 +131,26 @@ test("cloud speech API sends only provider/persona or a saved driver turn with c
   }
 });
 
-test("provider selection honors an explicit browser preference and defaults to available cloud voices", async () => {
+test("the driver's voice is Yandex when the server has it, any cloud voice otherwise, the browser's last", async () => {
   const { resolveVoiceProvider } = await moduleAt("./voiceProvider.ts");
-  const providers = [{ id: "google", label: "Google Cloud TTS", voice: "ru-RU-Chirp3-HD-Fenrir" }, { id: "azure", label: "Azure Speech", voice: "ru-RU-DmitryNeural" }];
-  assert.equal(resolveVoiceProvider(null, { default_provider: "google", providers }), "google");
-  assert.equal(resolveVoiceProvider("browser", { default_provider: "google", providers }), "browser");
-  assert.equal(resolveVoiceProvider("azure", { default_provider: "google", providers }), "azure");
-  assert.equal(resolveVoiceProvider("google", { default_provider: "azure", providers: providers.slice(1) }), "browser");
-  assert.equal(resolveVoiceProvider(null, { default_provider: "azure", providers: providers.slice(1) }), "azure");
-  assert.equal(resolveVoiceProvider(null, { default_provider: "browser", providers: [] }), "browser");
+  const providers = [{ id: "yandex", label: "Yandex SpeechKit", voice: "persona-v1" }, { id: "google", label: "Google Cloud TTS", voice: "ru-RU-Chirp3-HD-Fenrir" }];
+  assert.equal(resolveVoiceProvider({ default_provider: "yandex", providers }), "yandex");
+  assert.equal(resolveVoiceProvider({ default_provider: "browser", providers }), "yandex");
+  assert.equal(resolveVoiceProvider({ default_provider: "google", providers: providers.slice(1) }), "google");
+  assert.equal(resolveVoiceProvider({ default_provider: "browser", providers: [] }), "browser");
+  assert.equal(resolveVoiceProvider(undefined), "browser");
 });
 
-test("voice settings show only configured cloud providers and hide browser voices for cloud output", () => {
+test("the operator chooses no voice source, browser voice or phone sound: only a sample to hear", () => {
   const speech = { selectedVoiceURI: "", russianVoices: [{ voiceURI: "ru-browser", name: "Browser Russian" }], speaking: false, support: { synthesis: true } };
-  const config = { default_provider: "google", providers: [{ id: "google", label: "Google Cloud TTS", voice: "ru-RU-Chirp3-HD-Fenrir" }] };
-  const props = { speech, disabled: false, onPreview: noop, configLoading: false, onProviderChange: noop };
-  const html = render(VoiceSettings, { ...props, provider: "google", config });
-  assert.match(html, /Источник голоса/);
-  assert.match(html, /Google Cloud TTS/);
-  assert.match(html, /Прослушать голос/);
-  assert.doesNotMatch(html, /Browser Russian|Azure Speech|API.key|ключ/);
+  const config = { default_provider: "yandex", providers: [{ id: "yandex", label: "Yandex SpeechKit", voice: "persona-v1" }] };
+  const props = { speech, disabled: false, onPreview: noop, configLoading: false };
+  const html = render(VoiceSettings, { ...props, provider: "yandex", config });
+  assert.match(html, /Прослушать голос водителя/);
+  assert.match(html, /Yandex SpeechKit: у каждого характера свой голос/);
+  assert.match(html, /class="btn btn--secondary/);
+  assert.doesNotMatch(html, /Источник голоса|Browser Russian|Звук как по телефону|select|checkbox|API.key|ключ/i);
   const browser = render(VoiceSettings, { ...props, provider: "browser", config: { default_provider: "browser", providers: [] } });
-  assert.match(browser, /Browser Russian/);
-  assert.match(browser, /Облачные голоса пока не подключены/);
+  assert.match(browser, /голос браузера/);
+  assert.doesNotMatch(browser, /Browser Russian|select/i);
 });

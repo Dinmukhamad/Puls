@@ -889,3 +889,67 @@ async def test_site_tour_is_ready_once_the_tour_is_finished_and_pays_once(
     # Staff look round the site without the operator's mission.
     staff = auth(await login(client, supervisor.login))
     assert (await finish(staff)).status_code == 403
+
+
+async def test_voice_district_counts_whole_calls_and_pays_each_mission_once(
+    client, session, operator
+):
+    from app.models.voice_training import VoiceTrainingAttempt
+
+    headers = auth(await login(client, operator.login))
+
+    async def call(state="completed", score=100, language="ru", retry_of=None, user_id=None):
+        row = VoiceTrainingAttempt(
+            user_id=user_id or operator.id, scenario_key="phone_change", revision=3,
+            persona="calm", state=state, snapshot={"language": language},
+            result={"score": score} if state == "completed" else None, retry_of=retry_of,
+        )
+        session.add(row)
+        await session.commit()
+        return row
+
+    async def voice():
+        data = (await client.get(BASE, headers=headers)).json()
+        return {m["key"]: m for m in data["missions"] if m["district"] == "voice"}, data
+
+    rows, data = await voice()
+    district = next(d for d in data["districts"] if d["id"] == "voice")
+    assert (district["name"], district["subtitle"], district["soon"]) == (
+        "Разговор", "Голосовой тренажёр", False,
+    )
+    assert list(rows) == ["voice_first", "voice_good", "voice_kazakh"]
+    assert {m["path"] for m in rows.values()} == {"/training/voice"}
+    assert [rows[k]["state"] for k in rows] == ["locked", "locked", "locked"]
+    assert (await claim(client, headers, "welcome")).status_code == 200
+    # A call in progress starts the first mission but does not finish it.
+    await call(state="in_progress")
+    rows, _ = await voice()
+    assert rows["voice_first"]["state"] == "in_progress"
+    assert (await claim(client, headers, "voice_first")).status_code == 409
+    # A weak whole call finishes the first mission; another account's calls and repeated
+    # moments do not count.
+    first = await call(score=50)
+    await call(score=100, language="kk", retry_of=first.id)
+    other = await make_user(session, login="voice-other")
+    await call(score=100, language="kk", user_id=other.id)
+    rows, _ = await voice()
+    assert rows["voice_first"]["state"] == "ready" and rows["voice_first"]["current"] == 1
+    claimed = await claim(client, headers, "voice_first")
+    assert claimed.status_code == 200 and claimed.json()["coins"] == 40
+    assert (await claim(client, headers, "voice_first")).json()["already_claimed"] is True
+    rows, _ = await voice()
+    assert rows["voice_good"]["state"] == "available"
+    assert rows["voice_kazakh"]["state"] == "locked"
+    # 80 % is a good call; a Kazakh call counts once the good one is rewarded.
+    await call(score=80, language="kk")
+    rows, _ = await voice()
+    assert rows["voice_good"]["state"] == "ready"
+    assert (await claim(client, headers, "voice_kazakh")).status_code == 409
+    assert (await claim(client, headers, "voice_good")).json()["coins"] == 80
+    rows, _ = await voice()
+    assert rows["voice_kazakh"]["state"] == "ready"
+    assert (await claim(client, headers, "voice_kazakh")).json()["coins"] == 100
+    account = await session.get(CoinAccount, operator.id, populate_existing=True)
+    assert account.balance == 220
+    rows, _ = await voice()
+    assert {m["state"] for m in rows.values()} == {"completed"}

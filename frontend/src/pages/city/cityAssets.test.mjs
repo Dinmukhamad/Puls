@@ -30,7 +30,7 @@ test('every landmark level is a building of its own, taller than the last, on it
   const ISLAND=7.2/1.75;
   try {
     const kit=createArchitecture();
-    for(const id of ['academy','driver','crm','dispatch','oktell','scenarios']){
+    for(const id of ['academy','driver','crm','dispatch','oktell','scenarios','voice']){
       let below=0;const shapes=new Set();
       for(let level=1;level<=5;level++){
         const {group,height}=kit.landmark(id,level,id==='oktell');

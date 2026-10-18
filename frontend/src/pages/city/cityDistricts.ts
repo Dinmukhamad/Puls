@@ -3,8 +3,8 @@ import { completedDistrictMissions, districtLevel } from "./cityLevels";
 import { ofMissions } from "./citySkills";
 import type { CityLabelInfo } from "../../city3d/types";
 
-export const DISTRICT_ICONS: Record<DistrictId, string> = { academy: "🎓", driver: "🚕", crm: "💬", dispatch: "📡", oktell: "🎧", scenarios: "🎭" };
-export const DISTRICT_COLORS: Record<DistrictId, string> = { academy: "#5b8def", driver: "#f0a23a", crm: "#7b5cff", dispatch: "#35b6a6", oktell: "#e86aa6", scenarios: "#6fa8c7" };
+export const DISTRICT_ICONS: Record<DistrictId, string> = { academy: "🎓", driver: "🚕", crm: "💬", dispatch: "📡", oktell: "🎧", scenarios: "🎭", voice: "🎙️" };
+export const DISTRICT_COLORS: Record<DistrictId, string> = { academy: "#5b8def", driver: "#f0a23a", crm: "#7b5cff", dispatch: "#35b6a6", oktell: "#e86aa6", scenarios: "#6fa8c7", voice: "#4fae7a" };
 
 /** Подписи районов: одни и те же для щитов на карте и для панели навыков. */
 export function districtLabels(districts: CityDistrict[], missions: CityMission[]): CityLabelInfo[] {

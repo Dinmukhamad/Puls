@@ -25,6 +25,7 @@ const TOOLS: Partial<Record<DistrictId, [string, string]>> = {
   crm: ["/training/work-sites", "Открыть CRM · рабочие сайты →"],
   dispatch: ["/training/work-sites?site=dispatch", "Открыть Диспетчерскую →"],
   oktell: ["/training/work-sites?site=oktell", "Открыть Oktell →"],
+  voice: ["/training/voice", "Открыть голосовой тренажёр →"],
 };
 const actionable = (m: CityMission) => !["locked", "unavailable"].includes(m.state);
 

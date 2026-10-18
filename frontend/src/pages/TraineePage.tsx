@@ -11,7 +11,7 @@ import "./trainee.css";
 export { currentTrainingMission, trainingSummary } from "./traineeLearning";
 
 /** What each district of the city teaches, in the words of the job. */
-const TEACHES: Record<DistrictId, string> = { academy: "Знакомство с городом и подготовкой", driver: "Работа в приложении со стороны водителя", crm: "Обращения и тикеты в CRM", dispatch: "Аккаунт водителя в Диспетчерской", oktell: "Звонки и сообщения в Oktell", scenarios: "Разговор с водителем от начала до конца" };
+const TEACHES: Record<DistrictId, string> = { academy: "Знакомство с городом и подготовкой", driver: "Работа в приложении со стороны водителя", crm: "Обращения и тикеты в CRM", dispatch: "Аккаунт водителя в Диспетчерской", oktell: "Звонки и сообщения в Oktell", scenarios: "Разговор с водителем от начала до конца", voice: "Голосовой звонок водителя: слушать, проверять, отвечать" };
 const STATES: Record<CityMission["state"], string> = { completed: "Пройдено", available: "Можно начать", in_progress: "В процессе", ready: "Результат проверен", locked: "Позже", unavailable: "На паузе" };
 const tint = (id: DistrictId) => ({ "--district": DISTRICT_COLORS[id] }) as CSSProperties;
 /** A district or one of its missions in the trainee's city. */
