@@ -53,8 +53,6 @@
 .race-metric__lost.is-full { color: var(--status-success-text); }
 .race-metric__lost.is-missing { color: var(--text-secondary); font-weight: 500; }
 
-/* Four short columns fit a phone: the site's tables keep 640px for wider data. */
-.race-table { min-width: 0; }
 .race-table td { vertical-align: middle; }
 .race-table__gap td { text-align: center; color: var(--text-secondary); padding-top: 2px; padding-bottom: 2px; }
 .race-table__delta { margin-left: 10px; display: inline-flex; vertical-align: middle; font-size: 12px; }

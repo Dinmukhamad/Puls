@@ -64,14 +64,8 @@ test("the tour walks every section of the operator's menu, then building, and en
   // The shell lists the sections there are: it stays in view while the menu «Ещё» closes and the next page loads.
   for (const step of SITE_TOUR.filter(step => /^\[data-tour=nav-(?!more)/.test(step.target) && step.action)) assert.equal(step.when, `.shell[data-sections~=${step.target.match(/nav-([\w-]+)/)[1]}]`);
   assert.match(read("../components/AppLayout.tsx"), /\$\{immersive \? " shell--immersive" : ""\}`\} data-sections=\{items\.map\(\(item\) => item\.id\)\.join\(" "\)\}>/);
-  const pages = { "[data-tour=home-race]": 1, "[data-tour=rating-views]": 2, "[data-tour=progress-earn]": 1, "[data-tour=chest]": 1, "[data-tour=shop-wallet]": 2, "[data-tour=profile]": 1 };
+  const pages = { "[data-tour=cabinet-progress]": 4, "[data-tour=rating-views]": 2, "[data-tour=progress-earn]": 1, "[data-tour=chest]": 1, "[data-tour=shop-wallet]": 2, "[data-tour=profile]": 1 };
   for (const [opened, count] of Object.entries(pages)) assert.equal(SITE_TOUR.filter(step => step.when === opened && !step.target.includes("nav-")).length, count, opened);
-  // The home's cards come and go with the week (no moves without one's own metrics, no month in weekly contests): each of
-  // its steps applies only while its own card is on screen, so a missing card is passed by instead of waited for.
-  const home = SITE_TOUR.filter(step => /home-(race|moves|month|today)/.test(step.target));
-  assert.deepEqual(home.map(step => step.target), ["race", "moves", "month", "today"].map(card => `[data-tour=home-${card}]`));
-  for (const step of home) assert.equal(step.when, step.target);
-  assert.equal(SITE_TOUR.find(step => step.target === "[data-tour=nav-home]").advanceWhen, "[data-tour=home]");
   // Building: what, where (the map is open to taps, a taken place or one's own building is explained), buy without buying.
   const where = SITE_TOUR.find(step => step.target === ".city-frame");
   assert.equal(where.allow, ".city-mount, .city-turn");

@@ -108,6 +108,29 @@ test("driver gratitude remains its own metric and never creates or replaces a ca
   assert.doesNotMatch(metricTiles(html), /Нет данных/);
 });
 
+test("operator cabinet keeps weekly metrics beside the wallet without removed summaries", async () => {
+  const queries = [];
+  const { CabinetPage } = await component("./CabinetPage.tsx", {
+    "@tanstack/react-query": { useQuery: ({ queryKey, enabled }) => {
+      if (enabled === false) return {};
+      queries.push(queryKey[0]);
+      const data = {
+        dashboard: { full_name: "Оператор", balance: { balance: 10, available: 10, reserved: 0, rank: null, rank_delta: null }, week: week({ metrics: [metric()], base_points: 23, final_points: 23, coins_from_points: 4, coins_total: 4 }) },
+        "coin-progress": { total: 0, current: null, next: null, progress: 0 },
+        badges: [],
+      };
+      return { data: data[queryKey[0]] };
+    } },
+  });
+  const html = renderToStaticMarkup(React.createElement(CabinetPage));
+  assert.match(html, /Показатели недели/);
+  assert.match(html, /Прогноз баллов/);
+  assert.match(html, /Прогноз коинов/);
+  assert.doesNotMatch(html, /Быстрые действия|Ожидается за неделю|Итог недели/);
+  assert.match(html, /Кошелёк|Последние операции/);
+  assert.deepEqual(queries.sort(), ["badges", "coin-progress", "dashboard", "wallet"]);
+});
+
 test("old rating progress links lead to coin progress and levels", async () => {
   const { RatingPage } = await component("./RatingPage.tsx", {
     "react-router-dom": {
@@ -169,4 +192,26 @@ test("the weekly calculation reads as two sums and keeps a zero penalty neutral"
   assert.match(penalized, /week-formula__term--penalty/);
 });
 
+const badge = (code, patch = {}) => ({ code, title: `Достижение ${code}`, description: null, icon: null, unlocked: false, awarded_at: null, progress_current: 0, progress_target: 10, progress_percent: 0, hint: "", coins_reward: 0, coins_awarded: 0, category: "work", action_url: null, ...patch });
 
+test("the cabinet lists the three achievements closest to completion and folds the rest", async () => {
+  const badges = [badge("a", { progress_percent: 10 }), badge("b", { unlocked: true }), badge("c", { progress_percent: 80 }), badge("d", { progress_target: 0 }),
+    badge("e", { progress_percent: 45 }), badge("f", { progress_percent: 45 }), badge("g", { progress_percent: 5 })];
+  const { CabinetPage, nearestBadges } = await component("./CabinetPage.tsx", {
+    "@tanstack/react-query": { useQuery: ({ queryKey }) => ({ data: {
+      dashboard: { full_name: "Оператор", balance: { balance: 10, available: 10, reserved: 0, rank: null, rank_delta: null }, week: week() },
+      "coin-progress": { total: 0, current: null, next: null, progress: 0 },
+      badges,
+    }[queryKey[0]] }) },
+  });
+  assert.deepEqual(nearestBadges(badges).map((item) => item.code), ["c", "e", "f"]);
+  assert.deepEqual(nearestBadges([badge("x", { progress_target: 0 }), badge("y", { unlocked: true })]).map((item) => item.code), ["x"]);
+  assert.deepEqual(nearestBadges([badge("y", { unlocked: true })]), []);
+  const html = renderToStaticMarkup(React.createElement(CabinetPage));
+  const card = html.slice(html.indexOf("Мои достижения"));
+  assert.equal((card.match(/class="badge-card"/g) ?? []).length, 3);
+  assert.ok(card.indexOf("Достижение c") < card.indexOf("Достижение e") && card.indexOf("Достижение e") < card.indexOf("Достижение f"));
+  assert.doesNotMatch(card, /Достижение a|Достижение b|Достижение d|Достижение g/);
+  assert.match(card, /Получено 1 из 7/);
+  assert.match(card, /aria-expanded="false"[^>]*>Все достижения · 7</);
+});

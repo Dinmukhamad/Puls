@@ -1,21 +1,16 @@
 import { useQuery } from "@tanstack/react-query";
-import { useEffect } from "react";
-import { city, type CityData, type CityMission } from "../api/city";
-import { economy } from "../api/economy";
-import { cabinet, rating } from "../api/endpoints";
-import { games } from "../api/games";
-import type { BalanceBlock, RaceOut } from "../api/types";
-import { useAccess } from "../auth/AccessContext";
+import { useState } from "react";
 import { AccessLink as Link } from "../components/AccessLink";
-import { Card, EmptyState, ErrorState, Skeleton } from "../components/ui";
-import { weekRange } from "../components/weekCalendar";
-import { coins, plural } from "../utils/format";
-import { pointsLabel, RaceAdvice, RaceHero, RaceTable } from "./RacePage";
-import "./rating.css";
-import "./race.css";
-import "./home.css";
-
-const CITY_PATH = "/training/city";
+import { cabinet } from "../api/endpoints";
+import type { BadgeOut } from "../api/types";
+import { progressApi } from "../api/progress";
+import { MedalIcon, SparkIcon } from "../components/icons";
+import { Button, Card, Delta, ErrorState, Progress, RowsSkeleton, Skeleton } from "../components/ui";
+import { coins } from "../utils/format";
+import { WeekMetricsCard } from "./WeekMetricsCard";
+import { RecentTransactions, WalletCard } from "./CabinetWallet";
+import { CabinetLearning } from "./CabinetLearning";
+import "./cabinet.css";
 
 function greeting(): string {
   const hour = new Date().getHours();
@@ -25,141 +20,147 @@ function greeting(): string {
   return "Добрый вечер";
 }
 
-const dateKey = (date = new Date()) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-
-/**
- * The line under «Ваше место»: which week the places come from. Until this week's metrics are loaded the race shows the
- * latest calculated week, and the home says so instead of passing an old week off as the current one.
- */
-export function weekCaption(data: Pick<RaceOut, "week" | "live">, today = dateKey()): string {
-  const week = data.week;
-  if (!week) return "";
-  if (week.ends_on < today) return `Последняя рассчитанная неделя: ${weekRange(week)}. Показатели этой недели ещё не загружены`;
-  return `Гонка недели · ${weekRange(week)} · ${data.live ? "места по загруженным показателям" : week.status === "closed" ? "итог опубликован" : "предварительный расчёт"}`;
-}
-
-/**
- * The operator's home (docs/OPERATOR_HOME.md), built from the site's own blocks: the place and gaps of «Гонка недели»,
- * what to improve, the table around you, and beside them the month's contest and what can be done today.
- */
 export function CabinetPage() {
-  // The same keys as «Гонка недели» and «Конкурс месяца»: opening them after the home reads the cache.
-  const race = useQuery({ queryKey: ["race", undefined], queryFn: () => rating.race() });
   const dashboard = useQuery({ queryKey: ["dashboard"], queryFn: () => cabinet.dashboard() });
-  const name = dashboard.data?.full_name.trim().split(/\s+/)[0];
-  const group = dashboard.data?.group_name;
-  const data = race.data;
-  return <div className="stack home-race" data-tour="home">
-    <header className="page-head"><div>
-      <h1 className="page-title">Мой кабинет</h1>
-      <p className="page-subtitle">{greeting()}{name ? `, ${name}` : ""}{group ? ` · ${group}` : ""}</p>
-    </div></header>
-    <div className="home-grid">
-      <div className="home-main">
-        <div className="home-slot home-slot--hero" data-tour="home-race">
-          {race.isLoading ? <Skeleton height={240} radius="var(--radius-xl)" />
-            : race.isError ? <ErrorState error={race.error} onRetry={() => race.refetch()} />
-            : !data?.week ? <Card title="Ваше место" variant="highlight"><EmptyState title="Гонка ещё не началась" hint="Места появятся, когда загрузят показатели недели" /></Card>
-            : <RaceHero data={data} subtitle={weekCaption(data)} action={<Link hideWhenDenied className="home-link" to="/race">Гонка недели →</Link>} />}
-        </div>
-        {data?.week && data.me && data.advice && <div className="home-slot home-slot--advice" data-tour="home-moves"><RaceAdvice data={data} compact /></div>}
-        {data?.week && data.standings.length > 0 && <div className="home-slot home-slot--table"><RaceTable data={data} /></div>}
+
+  if (dashboard.isLoading) {
+    return (
+      <div className="page-skeleton">
+        <Skeleton height={36} width="40%" radius="var(--radius-s)" />
+        <Skeleton height={180} radius="var(--radius-xl)" />
+        <Skeleton height={150} />
       </div>
-      <aside className="home-side" aria-label="Месяц и сегодня">
-        {data?.period !== "week" && <div className="home-slot home-slot--month"><MonthCard /></div>}
-        <div className="home-slot home-slot--today"><TodayCard balance={dashboard.data?.balance} /></div>
-      </aside>
-    </div>
-  </div>;
-}
-
-/** The month's contest: places pay once a month, every point of the week goes into its sum. */
-function MonthCard() {
-  const query = useQuery({ queryKey: ["contest-month", undefined, undefined], queryFn: () => economy.month() });
-  if (query.isLoading) return <Card title="Конкурс месяца"><Skeleton height={120} /></Card>;
-  if (query.isError) return <Card title="Конкурс месяца"><ErrorState error={query.error} onRetry={() => query.refetch()} /></Card>;
-  const data = query.data!;
-  const mine = data.standings.find((row) => row.mine);
-  const closedWeeks = data.weeks.filter((week) => week.status === "closed").length;
-  const planned = Math.max(data.weeks_planned, data.weeks.length);
-  const prize = mine ? mine.coins_rank_bonus + mine.coins_nomination_bonus : 0;
-  return <Card className="home-month" tour="home-month" title="Конкурс месяца" subtitle={data.name.charAt(0).toLocaleUpperCase() + data.name.slice(1)}
-    action={<Link hideWhenDenied className="home-link" to="/rating">Таблица →</Link>}>
-    {mine?.rank ? <div className="home-month__body">
-      <p className="home-month__place">{mine.rank}-е место</p>
-      <p className="small secondary">{pointsLabel(mine.points)} за {mine.weeks} {plural(mine.weeks, "неделю", "недели", "недель")}</p>
-      <p className="home-month__gap">{monthGap(data.standings, mine)}</p>
-      {prize > 0 && <p className="home-month__prize">{data.status === "closed" ? "Начислено" : "Приз сейчас"} — {coins(prize)} {plural(prize, "коин", "коина", "коинов")}{data.status !== "closed" && <small>Начислится, когда месяц закроется</small>}</p>}
-    </div> : <p className="secondary home-month__empty">{data.standings.length ? "Вас пока нет в таблице месяца: она считается по закрытым неделям." : "Итогов месяца пока нет: места появятся после первой закрытой недели."}</p>}
-    {planned > 0 && <div className="home-month__weeks">
-      <span className="home-month__bar" aria-hidden="true">{Array.from({ length: planned }, (_, index) =>
-        <span key={index} className={index < closedWeeks ? "is-closed" : index === closedWeeks && data.status !== "closed" ? "is-current" : undefined} />)}</span>
-      <span className="small secondary">Закрыто {closedWeeks} из {planned} {plural(planned, "недели", "недель", "недель")}</span>
-    </div>}
-  </Card>;
-}
-
-/** «Отрыв 0,39 балла · следом Данияр А.» for the leader, «До 1-го места — 2,1 балла» for the rest. */
-export function monthGap(standings: { name: string | null; rank: number | null; points: number; mine: boolean }[], mine: { rank: number | null; points: number }): string {
-  if (mine.rank === 1) {
-    const second = standings.find((row) => !row.mine && row.rank !== null);
-    if (!second) return "Вы впереди всех";
-    const lead = Math.round((mine.points - second.points) * 100) / 100;
-    // Names are not declined: «Отрыв 0,39 балла · следом Данияр А.».
-    return lead > 0 ? `Отрыв ${pointsLabel(lead)} · следом ${second.name ?? "второе место"}` : `Поровну с: ${second.name ?? "соседом"}`;
+    );
   }
-  const leader = standings.find((row) => row.rank === 1);
-  return leader ? `До 1-го места — ${pointsLabel(Math.round((leader.points - mine.points) * 100) / 100)}` : "";
+
+  if (dashboard.isError) {
+    return <ErrorState error={dashboard.error} onRetry={() => dashboard.refetch()} />;
+  }
+
+  const data = dashboard.data!;
+  const { balance, week } = data;
+  const firstName = data.full_name.trim().split(/\s+/)[0];
+
+  return (
+    <div className="stack cabinet-page">
+      <div className="page-head">
+        <div>
+          <h1 className="page-title">Мой кабинет</h1>
+          <p className="page-subtitle">
+            {data.full_name}
+            {data.group_name ? ` · ${data.group_name}` : ""}
+          </p>
+        </div>
+      </div>
+
+      <p className="cabinet-greeting">{greeting()}, {firstName}. Каждый шаг — ваш прогресс.</p>
+      <div className="cabinet-overview">
+        <ProgressCard balance={balance} />
+        <WalletCard balance={balance} />
+      </div>
+      <div className="cabinet-activity">
+        <RecentTransactions />
+        <CabinetLearning />
+      </div>
+      <WeekMetricsCard week={week} />
+      <BadgesCard />
+    </div>
+  );
 }
 
-/** The city's next mission, in the city's own order; never a locked or paused one. */
-export function nextMission(data: CityData | undefined): CityMission | undefined {
-  const missions = data?.missions.filter((mission) => mission.enabled && data.districts.some((district) => district.id === mission.district && !district.soon)) ?? [];
-  return missions.find((mission) => mission.state === "ready")
-    ?? missions.find((mission) => mission.state === "in_progress")
-    ?? missions.find((mission) => mission.state === "available");
+function ProgressCard({ balance }: {
+  balance: import("../api/types").BalanceBlock;
+}) {
+  const progress = useQuery({ queryKey: ["coin-progress", "me"], queryFn: () => progressApi.summary() });
+  return (
+    <Card title="Мой прогресс" className="cabinet-progress" tour="cabinet-progress" action={<Link hideWhenDenied className="cabinet-text-link" to="/progress">Подробнее →</Link>}>
+      {progress.isLoading && <Skeleton height={150} />}
+      {progress.isError && <ErrorState error={progress.error} onRetry={() => progress.refetch()} />}
+      {progress.data && <div className="cabinet-progress__content">
+        <div className="cabinet-progress__heading">
+          <div className="cabinet-progress__level"><span className="cabinet-progress__icon"><SparkIcon size={24} /></span><div><p className="small secondary">{progress.data.current ? `Уровень ${progress.data.level_number}` : "Ваш путь в Puls"}</p><h3>{progress.data.current?.title ?? "Начало пути"}</h3></div></div>
+          <div className="cabinet-progress__earned"><strong>{coins(progress.data.total)}</strong><span>коинов за всё время</span></div>
+        </div>
+        <Progress value={progress.data.progress} tone="accent" label="До следующего уровня" />
+        <p className="level__hint">{progress.data.next ? `${coins(progress.data.remaining)} коинов до уровня «${progress.data.next.title}»` : progress.data.current ? "Высший уровень достигнут" : "Уровни ещё не настроены"}</p>
+        <p className="small secondary">Покупки не уменьшают уровень. Возвраты не прибавляют прогресс.</p>
+      </div>}
+      <div className="cabinet-progress__stats">
+        <div><span className="small secondary">Заработано за неделю</span><strong>{coins(balance.earned_this_week ?? 0)} <span className="small secondary">коинов</span></strong></div>
+        <div>
+          <span className="small secondary">Место в недельном рейтинге</span>
+          <strong>
+            {balance.rank ? `#${balance.rank}` : "—"}
+            {balance.rank_delta !== null && balance.rank_delta !== 0 && (
+              <Delta value={balance.rank_delta} />
+            )}
+          </strong>
+          {balance.rank ? <Link className="small cabinet-progress__race" to="/race">Гонка недели →</Link> : null}
+        </div>
+      </div>
+    </Card>
+  );
 }
 
-/** What can be done right now: the day's situations or the open chest, the next mission, the coins on the account. */
-function TodayCard({ balance }: { balance?: BalanceBlock }) {
-  const access = useAccess();
-  const cityAllowed = access.canPath(CITY_PATH);
-  const wheelAllowed = access.canPath("/games");
-  const cityQuery = useQuery({ queryKey: ["city", "self"], queryFn: ({ signal }) => city.own(signal), enabled: cityAllowed, staleTime: 30_000, retry: false });
-  const wheel = useQuery({ queryKey: ["wheel"], queryFn: games.wheel, enabled: wheelAllowed });
-  const data = cityQuery.data;
-  const quests = data?.quests?.items ?? [];
-  const answered = quests.filter((quest) => quest.answered).length;
-  const chest = wheel.data?.enabled ? wheel.data.chest : undefined;
-  const chestReady = !!chest?.unlocked && (wheel.data?.free_left ?? 0) > 0;
-  const mission = nextMission(data);
-  const canReward = !!data?.can_claim && !data.preview && !data.inspecting;
-  const missionTo = mission ? `${CITY_PATH}?${new URLSearchParams({ district: mission.district, mission: mission.key })}` : CITY_PATH;
-  // «Кошелёк в кабинете» links here (/cabinet#wallet): the balance row comes into view once it is drawn.
-  useEffect(() => {
-    if (balance && window.location.hash === "#wallet") document.getElementById("wallet")?.scrollIntoView({ block: "center" });
-  }, [balance]);
-  const reward = mission ? [mission.coins > 0 ? `+${coins(mission.coins)} ${plural(mission.coins, "коин", "коина", "коинов")}` : "", mission.xp > 0 ? `+${coins(mission.xp)} опыта` : ""].filter(Boolean).join(" · ") : "";
-  return <Card className="home-today" tour="home-today" title="Сегодня" action={<Link hideWhenDenied className="home-link" to="/wallet">История коинов →</Link>}>
-    <ul className="home-today__list">
-      {cityAllowed && cityQuery.isPending && cityQuery.fetchStatus !== "paused" && <li><Skeleton height={44} /></li>}
-      {chestReady ? <li><Link hideWhenDenied className="home-today__row" to="/games?tab=wheel">
-        <span><strong>Сундук дня открыт</strong><small>Ситуации дня отвечены — заберите приз</small></span><span className="home-today__value is-coin">Открыть →</span>
-      </Link></li> : quests.length > 0 && <li><Link hideWhenDenied className={`home-today__row${answered >= quests.length ? " is-done" : ""}`} to={`${CITY_PATH}?open=quests`}>
-        <span><strong>{answered >= quests.length ? "Ситуации дня отвечены" : `Ситуации дня · ${answered} из ${quests.length}`}</strong>
-          <small>{answered >= quests.length ? "Новые — завтра" : chest ? "Ответьте на все — откроется сундук дня" : "Засчитывается каждый ответ"}</small></span>
-        <span className="home-today__value is-coin">{answered >= quests.length ? "✓" : data?.quests && data.quests.coins > 0 ? `+${coins(data.quests.coins)} ${plural(data.quests.coins, "коин", "коина", "коинов")}` : "Ответить →"}</span>
-      </Link></li>}
-      {mission && <li><Link hideWhenDenied className="home-today__row" to={missionTo}>
-        <span><strong>{mission.state === "ready" && canReward ? "Миссия готова" : mission.state === "in_progress" ? "Продолжить миссию" : "Новая миссия"}</strong>
-          <small>{mission.title}{mission.state === "in_progress" && mission.target > 0 ? ` · ${coins(Math.min(mission.current, mission.target))} из ${coins(mission.target)}` : ""}</small></span>
-        <span className="home-today__value is-xp">{mission.state === "ready" && canReward && reward ? reward : "Открыть →"}</span>
-      </Link></li>}
-      {balance && <li id="wallet"><Link hideWhenDenied className="home-today__row" to="/shop">
-        <span><strong>На счету {coins(balance.available)} {plural(balance.available, "коин", "коина", "коинов")}</strong>
-          <small>{balance.reserved > 0 ? `Ещё ${coins(balance.reserved)} в резерве на покупки` : "Обменивайте на награды в магазине"}</small></span>
-        <span className="home-today__value">Магазин →</span>
-      </Link></li>}
-    </ul>
-  </Card>;
+/** How many achievements the cabinet shows before the full list is expanded. */
+export const NEAREST_BADGES = 3;
+
+/**
+ * The achievements an operator is closest to: the largest share of the
+ * condition already done goes first. Achievements without a measurable
+ * condition (a place in the rating) have no share and come last; equal
+ * shares keep the server order.
+ */
+export function nearestBadges(badges: BadgeOut[], count = NEAREST_BADGES): BadgeOut[] {
+  return badges
+    .map((badge, index) => ({ badge, index, share: badge.progress_target > 0 ? badge.progress_percent : -1 }))
+    .filter(({ badge }) => !badge.unlocked)
+    .sort((a, b) => b.share - a.share || a.index - b.index)
+    .slice(0, count)
+    .map(({ badge }) => badge);
+}
+
+function BadgeItem({ badge }: { badge: BadgeOut }) {
+  return (
+    <li className={badge.unlocked ? "badge-card is-unlocked" : "badge-card"}>
+      <span className="badge-card__icon">
+        {badge.unlocked ? <MedalIcon size={20} /> : <SparkIcon size={20} />}
+      </span>
+      <div className="badge-card__text">
+        <span className="badge-card__title">{badge.title}</span>
+        <span className="badge-card__hint">{badge.hint || badge.description}</span>
+        {badge.coins_reward > 0 && <span className="badge-card__hint">{badge.unlocked ? badge.coins_awarded > 0 ? `Начислено: ${badge.coins_awarded} коинов` : "Достижение получено" : `Награда: ${badge.coins_reward} коинов один раз`}</span>}
+        {/* Заблокированный бейдж показывает критерий, а не серую заглушку. */}
+        {!badge.unlocked && badge.progress_target > 0 && (
+          <Progress value={badge.progress_percent / 100} size="s" label={`Прогресс: ${badge.title}`} />
+        )}
+      </div>
+      {!badge.unlocked && badge.progress_target > 0 && <span className="badge-card__percent">{Math.round(badge.progress_percent)}%</span>}
+    </li>
+  );
+}
+
+function BadgesCard() {
+  const badges = useQuery({ queryKey: ["badges"], queryFn: cabinet.badges });
+  const [expanded, setExpanded] = useState(false);
+  const all = badges.data ?? [];
+  const nearest = nearestBadges(all);
+  const unlocked = all.filter((badge) => badge.unlocked).length;
+  const hidden = all.length - nearest.length;
+  const listId = "cabinet-badges-all";
+
+  return (
+    <Card
+      title="Мои достижения"
+      subtitle={badges.data ? `Получено ${unlocked} из ${all.length}${nearest.length ? " · ближе всего к получению" : ""}` : undefined}
+      action={hidden > 0 ? <Button size="s" aria-expanded={expanded} aria-controls={expanded ? listId : undefined} onClick={() => setExpanded((value) => !value)}>{expanded ? "Свернуть" : `Все достижения · ${all.length}`}</Button> : undefined}
+    >
+      {badges.isLoading && <RowsSkeleton rows={3} />}
+      {badges.isError && <ErrorState error={badges.error} onRetry={() => badges.refetch()} />}
+      {badges.data && !expanded && (nearest.length
+        ? <ul className="badges-list">{nearest.map((badge) => <BadgeItem key={badge.code} badge={badge} />)}</ul>
+        : <p className="small secondary">{all.length ? "Все достижения получены. Отличная работа!" : "Достижения ещё не настроены."}</p>)}
+      {badges.data && expanded && <ul className="badges-list" id={listId}>{all.map((badge) => <BadgeItem key={badge.code} badge={badge} />)}</ul>}
+    </Card>
+  );
 }
