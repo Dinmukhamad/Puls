@@ -481,6 +481,38 @@ async def test_yandex_errors_are_not_retried_and_hide_diagnostics(
     assert "fixture" not in str(error.value) and "upstream" not in str(error.value)
 
 
+async def test_a_refused_request_logs_only_host_voice_and_status(monkeypatch, caplog):
+    yandex(monkeypatch)
+    transport(
+        monkeypatch, lambda _: httpx.Response(403, text="fixture-yandex-key upstream details")
+    )
+    with caplog.at_level("WARNING", logger="app.services.voice_tts"), pytest.raises(
+        voice_tts.SpeechUnavailable
+    ):
+        await voice_tts.engine.synthesize("yandex", "Сколько можно!", "irritated", 1)
+    messages = [record.getMessage() for record in caplog.records]
+    assert messages == [
+        "Yandex SpeechKit tts.api.cloud.yandex.net voice kirill: HTTP 403",
+        "Yandex SpeechKit tts.api.ml.yandexcloud.kz voice kirill: HTTP 403",
+    ]
+    assert "fixture" not in caplog.text and "upstream" not in caplog.text
+
+
+async def test_an_unreachable_installation_is_skipped(monkeypatch, caplog):
+    yandex(monkeypatch)
+
+    def respond(request):
+        if "yandexcloud.kz" not in str(request.url):
+            raise httpx.ConnectError("no route", request=request)
+        return httpx.Response(200, content=yandex_stream(MP3))
+
+    transport(monkeypatch, respond)
+    with caplog.at_level("WARNING", logger="app.services.voice_tts"):
+        result = await voice_tts.engine.synthesize("yandex", "Первая реплика", "calm", 1)
+    assert result.audio == MP3
+    assert "tts.api.cloud.yandex.net unreachable: ConnectError" in caplog.text
+
+
 async def test_a_kazakhstan_key_is_sent_to_its_installation_and_remembered(monkeypatch):
     yandex(monkeypatch)
     calls = []
