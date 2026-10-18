@@ -609,3 +609,28 @@ test("a blocked cloud clip can be repeated in the click gesture without a second
   assert.equal(await repeated, true);
   assert.equal(hook.revokedUrls.length, 2);
 });
+
+test("a Kazakh call records Kazakh speech and explains an unsupported recognizer", async (t) => {
+  const hook = fixture(t);
+  assert.equal(await hook.render().startRecording("kk"), true);
+  assert.equal(hook.recognizers[0].lang, "kk-KZ");
+  hook.recognizers[0].onerror({ error: "language-not-supported" });
+  assert.match(hook.render().error, /казахскую речь/);
+  assert.match(hook.render().error, /Этап разговора сохранён/);
+});
+
+test("a Kazakh line uses a Kazakh browser voice when the device has one", async (t) => {
+  const kazakhVoice = { voiceURI: "kk-test", name: "Aigul", lang: "kk-KZ", localService: true, default: false };
+  const hook = fixture(t, { voices: [russianVoice, kazakhVoice] });
+  const playback = hook.render().speak("Сәлеметсіз бе!", "calm", undefined, { language: "kk" });
+  assert.equal(hook.utterances[0].lang, "kk-KZ");
+  assert.equal(hook.utterances[0].voice, kazakhVoice);
+  hook.utterances[0].onend();
+  assert.equal(await playback, true);
+  const russian = fixture(t);
+  const fallback = russian.render().speak("Сәлеметсіз бе!", "calm", undefined, { language: "kk" });
+  assert.equal(russian.utterances[0].lang, "ru-RU");
+  assert.equal(russian.utterances[0].voice, russianVoice);
+  russian.utterances[0].onend();
+  assert.equal(await fallback, true);
+});

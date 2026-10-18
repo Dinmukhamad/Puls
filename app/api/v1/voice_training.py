@@ -64,7 +64,7 @@ async def speech_configuration(session: SessionDep, user: CurrentUser):
 async def speech_preview(body: VoiceSpeechPreview, session: SessionDep, user: CurrentUser):
     await voice_training.require_scope(session, user)
     audio = await voice_tts.engine.synthesize(
-        body.provider, voice_tts.PREVIEW_TEXT, body.persona, user.id
+        body.provider, voice_tts.PREVIEWS[body.language], body.persona, user.id, body.language
     )
     return audio.data()
 
@@ -84,7 +84,8 @@ async def speech_turn(
     if entry is None:
         raise NotFoundError("Реплика водителя не найдена.")
     audio = await voice_tts.engine.synthesize(
-        body.provider, entry["text"], attempt.persona, user.id
+        body.provider, entry["text"], attempt.persona, user.id,
+        attempt.snapshot.get("language", "ru"),
     )
     return audio.data()
 

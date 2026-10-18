@@ -118,10 +118,10 @@ test("cloud speech API sends only provider/persona or a saved driver turn with c
   const { voiceTraining } = await moduleAt("../../api/voiceTraining.ts", async (path, options) => { calls.push({ path, options }); return {}; });
   const controller = new AbortController();
   await voiceTraining.speechConfig(controller.signal);
-  await voiceTraining.speechPreview("google", "confused", controller.signal);
+  await voiceTraining.speechPreview("google", "confused", "kk", controller.signal);
   await voiceTraining.speech(42, "azure", 3, controller.signal);
   assert.equal(calls[0].path, "/api/v1/learning/voice/speech/config");
-  assert.deepEqual(calls[1].options.json, { provider: "google", persona: "confused" });
+  assert.deepEqual(calls[1].options.json, { provider: "google", persona: "confused", language: "kk" });
   assert.equal(calls[2].path, "/api/v1/learning/voice/attempts/42/speech");
   assert.deepEqual(calls[2].options.json, { provider: "azure", turn: 3 });
   for (const { options } of calls) {

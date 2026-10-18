@@ -109,11 +109,13 @@ function phrases(sentence: string): string[] {
   return result;
 }
 
+// Each character must be told apart by ear even with one browser voice: the confused
+// driver drags with long pauses, the hurried one rushes, the irritated one is low and clipped.
 const profiles: Record<VoicePlaybackPersona, { rate: number; pitch: number; pause: number }> = {
-  calm: { rate: 1, pitch: 1, pause: 180 },
-  confused: { rate: 0.94, pitch: 1.01, pause: 230 },
-  hurried: { rate: 1.08, pitch: 0.99, pause: 110 },
-  irritated: { rate: 1.035, pitch: 0.985, pause: 150 },
+  calm: { rate: 1, pitch: 1, pause: 200 },
+  confused: { rate: 0.86, pitch: 1.07, pause: 420 },
+  hurried: { rate: 1.22, pitch: 1.03, pause: 70 },
+  irritated: { rate: 1.1, pitch: 0.9, pause: 120 },
 };
 const bounded = (value: number, minimum: number, maximum: number) => Math.round(Math.max(minimum, Math.min(maximum, value)) * 1000) / 1000;
 
@@ -132,8 +134,8 @@ export function createVoicePlaybackPlan(text: string, persona: VoicePlaybackPers
       const lastPhrase = chunkIndex === chunks.length - 1;
       result.push({
         text: chunk,
-        rate: bounded(profile.rate + variation - (question ? 0.005 : 0), 0.9, 1.12),
-        pitch: bounded(profile.pitch + (question ? 0.015 : 0) + (sentenceIndex % 2 ? 0.004 : -0.004), 0.96, 1.04),
+        rate: bounded(profile.rate + variation - (question ? 0.005 : 0), 0.8, 1.3),
+        pitch: bounded(profile.pitch + (question ? 0.015 : 0) + (sentenceIndex % 2 ? 0.004 : -0.004), 0.86, 1.12),
         pauseAfterMs: lastPhrase ? profile.pause + (question ? 30 : 0) : Math.min(profile.pause, 120),
       });
     });

@@ -79,6 +79,7 @@
 .is-selected .voice-radio-mark { background: var(--voice-accent); border-color: var(--voice-accent); color: var(--voice-accent-ink); }
 .voice-persona-heading { margin-top: 28px; }
 .voice-personas { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.voice-personas.voice-languages { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .voice-persona { position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 0; padding: 14px 5px; border: 1px solid var(--voice-line); border-radius: 10px; text-align: center; cursor: pointer; transition: background 160ms, border-color 160ms; }
 .voice-persona.is-selected { border-color: var(--voice-accent); background: var(--voice-accent-wash); }
 .voice-persona-symbol { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--voice-raised); color: var(--voice-muted); font-size: 19px; }
@@ -353,6 +354,10 @@
 .voice-page .voice-output-settings .voice-select { width: 100%; min-width: 0; min-height: 0; height: auto; padding: 11px 12px; border: 1px solid var(--voice-line); border-radius: 10px; color: var(--voice-text); background: var(--voice-raised); font: inherit; font-weight: 500; color-scheme: dark; box-shadow: none; }
 .voice-page .voice-output-settings .voice-select:focus-visible { outline: 2px solid var(--voice-accent); outline-offset: 2px; }
 .voice-page .voice-output-settings .voice-select:disabled { opacity: .6; }
+.voice-page .voice-output-settings .voice-line-switch { display: flex; align-items: flex-start; gap: 10px; padding: 11px 12px; border: 1px solid var(--voice-line); border-radius: 10px; background: var(--voice-raised); cursor: pointer; }
+.voice-page .voice-output-settings .voice-line-switch input { flex: none; width: 18px; height: 18px; margin: 1px 0 0; accent-color: var(--voice-accent); }
+.voice-page .voice-output-settings .voice-line-switch span { display: grid; gap: 3px; min-width: 0; }
+.voice-page .voice-output-settings .voice-line-switch small { font-weight: 500; color: var(--voice-muted); }
 .voice-page .voice-output-settings .voice-caption { margin: 0; }
 .voice-page .voice-call-settings { margin: 18px 0; padding: 14px 0; border-top: 1px solid var(--voice-line); }
 .voice-page .voice-call-settings summary { cursor: pointer; color: var(--voice-muted); font-size: 13px; }
