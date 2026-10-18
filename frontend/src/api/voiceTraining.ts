@@ -14,7 +14,10 @@ export interface VoiceAttemptSummary {
   state: "in_progress" | "completed"; stage: string; turn: number;
   score: number | null; created_at: string; finished_at: string | null;
   review_status: "pending" | "reviewed" | "awaiting_grade" | null;
+  channel?: VoiceChannel;
 }
+/** «oktell»: the driver called the operator's Oktell; «page»: a call started on the trainer page before. */
+export type VoiceChannel = "oktell" | "page";
 export interface VoiceTranscript { role: "driver" | "operator"; text: string; turn: number }
 export interface VoiceCriterion {
   key: string; label: string; passed: boolean; feedback: string;
@@ -37,7 +40,7 @@ export interface VoiceAttempt {
   practice: { dispatch: boolean; oktell: boolean; compared: boolean };
   result: VoiceResult | null; can_finish: boolean; retry_of?: number | null;
   /** A scenario from the editor: no training systems, the author's notes instead. */
-  custom?: boolean; notes?: string;
+  custom?: boolean; notes?: string; channel?: VoiceChannel;
   created_at: string; finished_at: string | null;
 }
 export interface VoiceCatalog { scenarios: VoiceScenario[]; attempts: VoiceAttemptSummary[] }
@@ -64,10 +67,8 @@ export const voiceTraining = {
   review: (id: string | number, comment: string) => request<VoiceAttempt>(`${path(id)}/review`, { method: "POST", json: { comment }, timeoutMs: 20000 }),
 };
 
-/** Open a work site in the same saved voice attempt. Account selection remains a training action. */
-export function voiceWorkSite(attempt: Pick<VoiceAttempt, "id" | "driver">, site: "crm" | "dispatch" | "oktell") {
-  const params = new URLSearchParams({ site, voiceAttempt: String(attempt.id) });
-  if (site === "dispatch") { params.set("fleet", "contractors"); params.set("fpark", attempt.driver.park_id); }
-  if (site === "oktell") params.set("oscreen", "phone");
-  return `/training/work-sites?${params}`;
+export const OKTELL_CALLS = "/training/work-sites?site=oktell";
+/** «Повторить момент»: the same driver rings again in Oktell, from the chosen answer. */
+export function oktellRetry(attemptId: number, turn: number) {
+  return `${OKTELL_CALLS}&voiceRetry=${encodeURIComponent(attemptId)}&voiceTurn=${encodeURIComponent(turn)}`;
 }

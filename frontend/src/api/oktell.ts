@@ -11,9 +11,14 @@ export interface OktellContact {
 }
 export interface OktellCall {
   id: string; contact_id: string; number: string; name: string; department: string;
-  direction: "outbound" | "inbound"; status: string; started_at: string; finished_at: string;
+  direction: "outbound" | "inbound"; status: "completed" | "missed"; started_at: string; finished_at: string;
   duration_seconds: number; comment: string; tags: string[];
+  /** A driver's call of the voice trainer: its review is this attempt. */
+  voice_attempt_id?: number;
 }
+/** A driver's call ringing now. Who calls, and why, is known only after answering. */
+export interface OktellRinging { id: string; number: string; name: string; department: string; started_at: string }
+export type OktellVoiceLanguage = "ru" | "kk";
 export interface OktellMessage { id: string; contact_id: string; recipient: string; text: string; sent_at: string }
 export interface OktellExercise { id: string; title: string; description: string; screen: OktellScreen; done: boolean }
 export interface OktellState {
@@ -22,7 +27,13 @@ export interface OktellState {
   logged_in: boolean; center_joined: boolean; office_status: OfficeStatus;
   center_mode: "automatic" | "manual"; pause_reason: PauseReason | null; pause_seconds: number;
   forward_number: string; web_phone: boolean; auto_answer: boolean;
-  active_call: { id: string; contact_id: string; number: string; name: string; department: string; started_at: string } | null;
+  active_call: {
+    id: string; contact_id: string; number: string; name: string; department: string; started_at: string;
+    direction?: "outbound" | "inbound"; voice_attempt_id?: number;
+  } | null;
+  ringing: OktellRinging | null; ring_seconds: number;
+  /** Drivers call this account in the call-centre; the language they speak. */
+  voice_calls: boolean; voice_language: OktellVoiceLanguage;
   /** Set when Oktell ended the session by itself: «Перезвон» lasted longer than its limit. */
   notice: { kind: "callback_timeout"; at: string } | null;
   /** Codes dialled before a driver's number, e.g. 0880 for iTaxi. */
@@ -34,7 +45,9 @@ export interface OktellState {
 }
 export type OktellAction =
   | { action: "login"; login: string; password: string }
-  | { action: "join" | "leave" | "logout" | "resume" | "call_end" | "reset" }
+  | { action: "join" | "leave" | "logout" | "resume" | "call_end" | "reset" | "answer" }
+  | { action: "voice_language"; language: OktellVoiceLanguage }
+  | { action: "ring"; retry?: { attempt_id: number; turn: number } }
   | { action: "office_status"; status: OfficeStatus; number?: string }
   | { action: "center_mode"; mode: "automatic" | "manual" }
   | { action: "pause"; reason: PauseReason }

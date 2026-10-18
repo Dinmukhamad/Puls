@@ -5,8 +5,8 @@ import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
-const built = await build({ stdin: { contents: "export * from './oktellTour.ts'; export * from './oktellDial.ts';", resolveDir: here, loader: "ts" }, bundle: true, platform: "node", format: "esm", write: false });
-const { OKTELL_TOUR, checkDial, looksLikeNumber, formatNumber } = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString("base64")}`);
+const built = await build({ stdin: { contents: "export * from './oktellTour.ts'; export * from './oktellDial.ts'; export * from './oktellVoice.ts';", resolveDir: here, loader: "ts" }, bundle: true, platform: "node", format: "esm", write: false });
+const { OKTELL_TOUR, checkDial, looksLikeNumber, formatNumber, callsBlocked, readyForCall, nextRingDelay, answerReady, formatCaller, SILENCE_MS } = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString("base64")}`);
 const site = readFileSync(new URL("./OktellSite.tsx", import.meta.url), "utf8");
 const PARKS = { "0880": "iTaxi" };
 const at = (target, from = 0) => OKTELL_TOUR.findIndex((step, i) => i >= from && step.target === target);
@@ -62,4 +62,46 @@ test("a driver's number is the park's code, then 11 digits from 7 without «+»"
   assert.equal(looksLikeNumber("0880 7"), true);
   assert.equal(formatNumber("088077075053636", PARKS), "0880 · 7 707 505 36 36");
   assert.equal(formatNumber("6602", PARKS), "6602");
+});
+
+const line = (patch = {}) => ({ voice_calls: true, logged_in: true, center_joined: true, web_phone: true, pause_reason: null, center_mode: "automatic", office_status: "available", active_call: null, ringing: null, ...patch });
+
+test("a driver calls only an operator who takes calls, and the cabinet says why one does not", () => {
+  assert.equal(callsBlocked(line()), "");
+  assert.equal(readyForCall(line()), true);
+  for (const [patch, reason] of [
+    [{ voice_calls: false }, "недоступны"], [{ logged_in: false }, "Войдите в Oktell"], [{ center_joined: false }, "call-центр"],
+    [{ web_phone: false }, "Веб-телефон"], [{ pause_reason: "callback" }, "паузе"], [{ center_mode: "manual" }, "автоматический"], [{ office_status: "dnd" }, "На связи"],
+  ]) {
+    assert.match(callsBlocked(line(patch)), new RegExp(reason), JSON.stringify(patch));
+    assert.equal(readyForCall(line(patch)), false);
+  }
+  // One driver at a time: nothing rings during a call or over another ringing call.
+  assert.equal(readyForCall(line({ active_call: { id: "a" } })), false);
+  assert.equal(readyForCall(line({ ringing: { id: "r" } })), false);
+});
+
+test("the first driver calls soon, the next after a pause; a pause in speech sends the answer", () => {
+  assert.equal(nextRingDelay(true, () => 0), 5000);
+  assert.equal(nextRingDelay(true, () => 1), 9000);
+  assert.equal(nextRingDelay(false, () => 0), 15000);
+  assert.equal(nextRingDelay(false, () => 1), 25000);
+  assert.equal(answerReady("Здравствуйте", 1000, 1000 + SILENCE_MS), true);
+  assert.equal(answerReady("Здравствуйте", 1000, 1000 + SILENCE_MS - 1), false, "still speaking");
+  assert.equal(answerReady(" а ", 0, 10000), false, "a sound is not an answer");
+  assert.equal(formatCaller("+77015550192"), "+7 701 555 01 92");
+  assert.equal(formatCaller("6602"), "6602");
+});
+
+test("the call lives in Oktell: its panel, the cabinet's line and the journal's review link", () => {
+  const call = readFileSync(new URL("./OktellVoiceCall.tsx", import.meta.url), "utf8");
+  const pages = readFileSync(new URL("../WorkSitesPage.tsx", import.meta.url), "utf8");
+  assert.match(site, /data-coach="oktell-voice"/);
+  assert.match(site, /action: "voice_language"/);
+  assert.match(site, /\/training\/voice\/attempts\/\$\{call\.voice_attempt_id\}/);
+  assert.match(call, /action: "ring"/);
+  assert.match(call, /action: "answer"/);
+  assert.match(call, /state\.auto_answer/);
+  // No driver rings while Pulsar walks the operator through Oktell or before Oktell is opened.
+  assert.match(pages, /<OktellVoiceCall quiet=\{!!coach \|\| !oktellOpened\}/);
 });

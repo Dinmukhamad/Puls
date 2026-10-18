@@ -5,6 +5,7 @@ follows the channel offered by the learner instead of requiring a scripted order
 Only the learner-reviewed text is stored here.
 """
 
+import random
 import re
 from collections import namedtuple
 from copy import deepcopy
@@ -17,6 +18,7 @@ from app.core.visibility import identity_filter
 from app.models.enums import Role
 from app.models.user import Group, User
 from app.models.voice_training import VoiceTrainingAttempt
+from app.schemas.voice_training import VoiceRetry, VoiceStart
 from app.services import dispatch, voice_scenarios
 from app.services.learning import lock_learner
 from app.services.scenarios import support_allowed, utc
@@ -51,15 +53,19 @@ HURRIED_CLARIFY = "Я тороплюсь. Назовите одно действ
 IRRITATED_CLARIFY = "Это мой аккаунт! Объясните, почему нельзя изменить номер по этому звонку."
 
 
-async def require_scope(session, user):
-    if not user.is_active or user.role not in (
+def can_call(user):
+    return user.is_active and user.role in (
         Role.TRAINEE,
         Role.OPERATOR,
         Role.TRAINER,
         Role.SUPERVISOR,
         Role.HEAD,
         Role.ADMIN,
-    ):
+    )
+
+
+async def require_scope(session, user):
+    if not can_call(user):
         raise PermissionDeniedError("Голосовой тренажёр недоступен для этой учётной записи.")
 
 
@@ -1065,6 +1071,8 @@ def attempt_data(attempt):
         # A scenario from the editor: no training systems, the author's notes instead.
         "custom": bool(attempt.snapshot.get("custom")),
         "notes": attempt.snapshot.get("notes", ""),
+        # «oktell»: the driver called the operator's Oktell; earlier calls were started on the page.
+        "channel": attempt.snapshot.get("channel", "page"),
         "result": deepcopy(attempt.result) if attempt.state == "completed" else None,
         "can_finish": attempt.stage == "resolved",
         "retry_of": attempt.retry_of,
@@ -1120,6 +1128,7 @@ async def catalog(session, user):
                 "created_at": utc(a.created_at),
                 "finished_at": utc(a.finished_at) if a.finished_at else None,
                 "review_status": a.result.get("review_status") if a.result else None,
+                "channel": a.snapshot.get("channel", "page"),
             }
             for a in attempts
         ],
@@ -1200,6 +1209,90 @@ async def start(session, user, body):
         requests={},
     )
     session.add(attempt)
+    await session.flush()
+    return attempt
+
+
+async def incoming(session, user, language, previous=None):
+    """A driver calling the operator's Oktell: any published situation in the chosen language, any
+    character, and not the same pair as the last call when there is another."""
+    await require_scope(session, user)
+    lines = []
+    driver = dispatch.fold(await dispatch.history(session, user.id))["drivers"][DRIVER_KEY]
+    # A changed training number would contradict the call; the other situations still ring.
+    if phone_digits(driver["phone"]) != phone_digits(INCOMING_PHONE):
+        park = dispatch.PARK_BY_ID[driver["park"]]["name"]
+        lines.append({"scenario_key": KEY, "number": INCOMING_PHONE, "park": park})
+    if await custom_allowed(session, user):
+        lines.extend(
+            {
+                "scenario_key": f"{voice_scenarios.KEY_PREFIX}{row.id}",
+                "number": row.published["driver"]["phone"],
+                "park": row.published["driver"]["park"],
+            }
+            for row in await voice_scenarios.playable(session)
+            if row.published["language"] == language
+        )
+    if not lines:
+        raise ConflictError(
+            "Учебных звонков сейчас нет: восстановите учебного водителя в Диспетчерской "
+            "или выберите другой язык звонков."
+        )
+    calls = [{**line, "persona": persona} for line in lines for persona in PERSONAS]
+    fresh = [c for c in calls if [c["scenario_key"], c["persona"]] != list(previous or [])]
+    return {**random.choice(fresh or calls), "language": language}
+
+
+async def retry_call(session, user, attempt_id, turn):
+    """«Повторить момент» rings as the next call: the same driver from the chosen answer."""
+    original = await own_attempt(session, user, attempt_id)
+    if original.state != "completed":
+        raise ConflictError("Повторить можно момент завершённого звонка.")
+    if not any(e["role"] == "operator" and e["turn"] == turn for e in original.transcript):
+        raise DomainError("В разговоре нет указанного ответа оператора.")
+    return {
+        "scenario_key": original.scenario_key,
+        "persona": original.persona,
+        "language": original.snapshot.get("language", "ru"),
+        "number": original.snapshot["incoming_phone"],
+        "park": original.snapshot["driver"]["park"],
+        "retry_of": original.id,
+        "turn": turn,
+    }
+
+
+async def answer_call(session, user, call):
+    """The operator took the driver's call in Oktell: the attempt starts with its data on screen."""
+    if call.get("retry_of"):
+        attempt = await retry(session, user, call["retry_of"], VoiceRetry(turn=call["turn"]))
+    else:
+        attempt = await start(
+            session,
+            user,
+            VoiceStart(
+                scenario_key=call["scenario_key"],
+                persona=call["persona"],
+                language=call["language"],
+            ),
+        )
+    attempt.snapshot = {**attempt.snapshot, "channel": "oktell"}
+    events = attempt.practice.get("events", [])
+    # The incoming number is in front of the operator: reading the call is done by answering it.
+    if not attempt.snapshot.get("custom") and not any(e["system"] == "oktell" for e in events):
+        attempt.practice = {
+            "events": [
+                *events,
+                {
+                    "system": "oktell",
+                    "turn": attempt.turn,
+                    "at": datetime.now(UTC).isoformat(),
+                    "driver_id": attempt.snapshot["driver"]["id"],
+                    "park_id": attempt.snapshot["driver"]["park_id"],
+                    "registered_phone": attempt.snapshot["driver"]["phone"],
+                    "incoming_phone": attempt.snapshot["incoming_phone"],
+                },
+            ]
+        }
     await session.flush()
     return attempt
 
@@ -1530,10 +1623,11 @@ def evaluate_v2(attempt, language="ru"):
             (
                 "Правильный аккаунт и входящий номер сверены в учебных системах."
                 if practice_ok
-                else "Не зафиксированы открытие аккаунта, чтение звонка и явная сверка номеров."
+                else "Не зафиксированы открытие аккаунта водителя и явная сверка номеров."
             ),
             state["mismatch"] or fallback,
-            "Откройте аккаунт водителя, данные звонка в OKTEL и сравните номера.",
+            "Во время звонка откройте аккаунт водителя в Диспетчерской и сверьте номер "
+            "регистрации с номером звонка в окне Oktell.",
         ),
         criterion(
             "solution",

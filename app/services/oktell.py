@@ -2,9 +2,11 @@
 
 The document supplies interface examples, not production phone credentials. The team's rules
 are enforced here: a driver is called back through the park's code in «Перезвон», and more than
-three minutes in that status ends the session. Calls and messages here stay in this database;
-this service has no telephony client. Exercise completion is derived by the server and survives
-resetting the practice workspace.
+three minutes in that status ends the session. Drivers of the voice trainer call in: an operator in
+the call-centre, in automatic mode, without a pause, gets a call that rings, is answered (by hand
+or by «Автоответ») and opens a voice attempt; hanging up finishes it. Calls and messages here stay
+in this database; this service has no telephony client. Exercise completion is derived by the
+server and survives resetting the practice workspace.
 """
 
 from copy import deepcopy
@@ -15,6 +17,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.core.errors import ConflictError, DomainError, NotFoundError
 from app.models.oktell import OktellEvent
+from app.services import voice_training
 from app.services.learning import lock_learner
 
 DEMO_LOGIN = "6600"
@@ -75,6 +78,10 @@ CONTACT_BY_ID = {item["id"]: item for item in CONTACTS}
 PARK_CODES = {"0880": "iTaxi"}
 # The team's rule: «Перезвон» for longer than this ends the operator's Oktell session.
 CALLBACK_LIMIT_SECONDS = 180
+# A driver's call rings this long; unanswered, the queue moves it on and it is missed.
+RING_SECONDS = 25
+# What the operator may do while a call rings; anything else lets the call go.
+KEEP_RINGING = frozenset({"answer", "voice_language", "call_comment", "message"})
 PAUSE_TITLES = {
     "technical": "Тех.причина",
     "callback": "Перезвон",
@@ -132,6 +139,8 @@ def initial() -> dict:
         "web_phone": False,
         "auto_answer": False,
         "active_call": None,
+        "ringing": None,
+        "voice_language": "ru",
         "notice": None,
         "calls": [],
         "messages": [],
@@ -147,11 +156,16 @@ def initial() -> dict:
         "_center_since": None,
         "_pause_since": None,
         "_break_cycle": 0,
+        # Who rings now and who called last: the server's choice, never shown before answering.
+        "_ring_call": None,
+        "_last_voice": None,
     }
 
 
 def apply(workspace: dict, kind: str, payload: dict, request_id: str, when: datetime) -> None:
     """Fold one validated action. The private clocks never come from a client."""
+    if workspace["ringing"] and kind not in KEEP_RINGING:
+        miss(workspace, when)
     if kind == "reset":
         completed = workspace["completed"]
         workspace.clear()
@@ -208,6 +222,30 @@ def apply(workspace: dict, kind: str, payload: dict, request_id: str, when: date
             "department": line["park"],
             "started_at": when.isoformat(),
         }
+    elif kind == "voice_language":
+        workspace["voice_language"] = payload["language"]
+    elif kind == "ring":
+        call = payload["call"]
+        workspace["ringing"] = {
+            "id": request_id,
+            "number": call["number"],
+            "name": "Водитель",
+            "department": call["park"],
+            "started_at": when.isoformat(),
+        }
+        workspace["_ring_call"] = call
+    elif kind == "answer":
+        call = workspace["_ring_call"]
+        workspace["active_call"] = {
+            **workspace["ringing"],
+            "contact_id": "",
+            "started_at": when.isoformat(),
+            "direction": "inbound",
+            "voice_attempt_id": payload["call"]["attempt_id"],
+        }
+        workspace.update(
+            ringing=None, _ring_call=None, _last_voice=[call["scenario_key"], call["persona"]]
+        )
     elif kind == "call_end":
         call = workspace["active_call"]
         seconds = elapsed(datetime.fromisoformat(call["started_at"]), when)
@@ -215,7 +253,7 @@ def apply(workspace: dict, kind: str, payload: dict, request_id: str, when: date
             0,
             {
                 **call,
-                "direction": "outbound",
+                "direction": call.get("direction", "outbound"),
                 "status": "completed",
                 "finished_at": when.isoformat(),
                 "duration_seconds": seconds,
@@ -270,6 +308,25 @@ def driver_line(number: str) -> dict:
     return {"code": code, "park": park, "phone": phone, "number": code + phone}
 
 
+def miss(workspace: dict, when: datetime) -> None:
+    """The driver was not answered: the journal keeps the call as missed."""
+    workspace["calls"].insert(
+        0,
+        {
+            **workspace["ringing"],
+            "contact_id": "",
+            "direction": "inbound",
+            "status": "missed",
+            "finished_at": when.isoformat(),
+            "duration_seconds": 0,
+            "comment": "",
+            "tags": [],
+        },
+    )
+    workspace["metrics"]["calls"] += 1
+    workspace.update(ringing=None, _ring_call=None)
+
+
 def resume(workspace: dict, when: datetime) -> None:
     workspace["_break_cycle"] = 2 if workspace["pause_reason"] == "break" else 0
     close_pause(workspace, when)
@@ -288,7 +345,13 @@ def expel(workspace: dict, when: datetime) -> None:
 
 
 def advance(workspace: dict, until: datetime) -> None:
-    """Rules that act with time alone: «Перезвон» past its limit, unless a call is still going."""
+    """Rules that act with time alone: an unanswered call is missed, «Перезвон» past its limit
+    ends the session unless a call is still going."""
+    ring = workspace["ringing"]
+    if ring:
+        missed = datetime.fromisoformat(ring["started_at"]) + timedelta(seconds=RING_SECONDS)
+        if until >= missed:
+            miss(workspace, missed)
     deadline = callback_deadline(workspace)
     if deadline and not workspace["active_call"] and until >= deadline:
         expel(workspace, deadline)
@@ -335,8 +398,9 @@ def build(workspace: dict, user, now: datetime) -> dict:
         metrics["talk_seconds"] += live_seconds
         if not result["pause_reason"]:
             metrics["busy_seconds"] += live_seconds
-    for key in ("_center_since", "_pause_since", "_break_cycle"):
+    for key in ("_center_since", "_pause_since", "_break_cycle", "_ring_call", "_last_voice"):
         result.pop(key)
+    result["ring_seconds"] = RING_SECONDS
     result["operator"] = {"name": user.full_name, "login": user.login, "number": DEMO_LOGIN}
     result["demo_credentials"] = {"login": DEMO_LOGIN, "password": DEMO_PASSWORD}
     result["contacts"] = deepcopy(CONTACTS)
@@ -357,7 +421,9 @@ async def history(session, user_id: int) -> list[OktellEvent]:
 
 
 async def state(session, user) -> dict:
-    return build(fold(await history(session, user.id)), user, datetime.now(UTC))
+    result = build(fold(await history(session, user.id)), user, datetime.now(UTC))
+    result["voice_calls"] = voice_training.can_call(user)
+    return result
 
 
 def validate(workspace: dict, kind: str, payload: dict) -> None:
@@ -378,7 +444,7 @@ def validate(workspace: dict, kind: str, payload: dict) -> None:
     if kind == "join" and workspace["center_joined"]:
         raise DomainError("Вы уже в call-центре")
     if (
-        kind in ("leave", "pause", "resume", "call_start", "dial")
+        kind in ("leave", "pause", "resume", "call_start", "dial", "ring")
         and not workspace["center_joined"]
     ):
         raise DomainError("Сначала войдите в call-центр")
@@ -420,6 +486,24 @@ def validate(workspace: dict, kind: str, payload: dict) -> None:
                 "тогда вам не будут поступать звонки"
             )
         driver_line(payload["number"])
+    if kind == "ring":
+        if workspace["active_call"] or workspace["ringing"]:
+            raise DomainError("Учебный звонок уже идёт")
+        if not workspace["web_phone"]:
+            raise DomainError("Включите веб-телефон: звонки поступают через него")
+        if (
+            workspace["pause_reason"]
+            or workspace["center_mode"] != "automatic"
+            or workspace["office_status"] != "available"
+        ):
+            raise DomainError(
+                "Звонки поступают в автоматическом режиме без паузы и со статусом «На связи»"
+            )
+    if kind == "answer":
+        if not workspace["ringing"]:
+            raise DomainError("Звонок уже не поступает: он ушёл в пропущенные")
+        if workspace["active_call"]:
+            raise DomainError("Сначала завершите текущий звонок")
     if kind == "call_end" and not workspace["active_call"]:
         raise DomainError("Нет активного учебного звонка")
     if kind == "call_comment" and not any(
@@ -446,9 +530,34 @@ def achievements(before: dict, after: dict, kind: str) -> list[str]:
     return [key for key in earned if key not in before["completed"]]
 
 
+async def voice_payload(session, user, workspace: dict, kind: str, payload: dict) -> dict:
+    """The server's part of a driver's call, kept in the event: who rings, the attempt the answer
+    opens. Hanging up (or resetting the workspace) during the call finishes its attempt."""
+    if kind == "ring":
+        retry = payload.get("retry")
+        call = await (
+            voice_training.retry_call(session, user, retry["attempt_id"], retry["turn"])
+            if retry
+            else voice_training.incoming(
+                session, user, workspace["voice_language"], workspace["_last_voice"]
+            )
+        )
+        return {**payload, "call": call}
+    if kind == "answer":
+        attempt = await voice_training.answer_call(session, user, workspace["_ring_call"])
+        return {**payload, "call": {"attempt_id": attempt.id}}
+    attempt_id = (workspace["active_call"] or {}).get("voice_attempt_id")
+    if kind in ("call_end", "reset") and attempt_id:
+        await voice_training.finish(session, user, attempt_id)
+    return payload
+
+
 async def act(session, user, body) -> dict:
     request_id, kind = str(body.request_id), body.action
-    payload = body.model_dump(mode="json", exclude={"request_id", "action", "password"})
+    payload = body.model_dump(
+        mode="json", exclude={"request_id", "action", "password"}, exclude_none=kind == "ring"
+    )
+    sent = payload
     # Credentials in the document are not reused. Even retries accept only the public demo pair.
     if kind == "login" and (body.login != DEMO_LOGIN or body.password != DEMO_PASSWORD):
         raise DomainError("Используйте учебный логин 6600 и пароль training")
@@ -460,6 +569,7 @@ async def act(session, user, body) -> dict:
         before, now = fold(events), datetime.now(UTC)
         advance(before, now)
         validate(before, kind, payload)
+        payload = await voice_payload(session, user, before, kind, payload)
         after = deepcopy(before)
         apply(after, kind, payload, request_id, now)
         existing = OktellEvent(
@@ -483,7 +593,8 @@ async def act(session, user, body) -> dict:
             )
             if existing is None:
                 raise
-    if existing.kind != kind or existing.payload != payload:
+    # A retry repeats what the client sent; the server's part of a call is not compared.
+    if existing.kind != kind or {k: v for k, v in existing.payload.items() if k != "call"} != sent:
         raise ConflictError("Этот запрос уже выполнен с другими данными. Повторите действие заново")
     return await state(session, user)
 

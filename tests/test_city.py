@@ -915,10 +915,10 @@ async def test_voice_district_counts_whole_calls_and_pays_each_mission_once(
     rows, data = await voice()
     district = next(d for d in data["districts"] if d["id"] == "voice")
     assert (district["name"], district["subtitle"], district["soon"]) == (
-        "Разговор", "Голосовой тренажёр", False,
+        "Разговор", "Звонки водителей", False,
     )
     assert list(rows) == ["voice_first", "voice_good", "voice_kazakh"]
-    assert {m["path"] for m in rows.values()} == {"/training/voice"}
+    assert {m["path"] for m in rows.values()} == {"/training/work-sites?site=oktell"}
     assert [rows[k]["state"] for k in rows] == ["locked", "locked", "locked"]
     assert (await claim(client, headers, "welcome")).status_code == 200
     # A call in progress starts the first mission but does not finish it.

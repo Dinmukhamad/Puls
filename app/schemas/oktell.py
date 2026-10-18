@@ -18,7 +18,7 @@ class LoginInput(RequestInput):
 
 
 class SimpleInput(RequestInput):
-    action: Literal["join", "leave", "logout", "resume", "call_end", "reset"]
+    action: Literal["join", "leave", "logout", "resume", "call_end", "reset", "answer"]
 
 
 class OfficeStatusInput(RequestInput):
@@ -63,6 +63,26 @@ class DialInput(RequestInput):
     number: str = Field(min_length=1, max_length=24)
 
 
+class VoiceLanguageInput(RequestInput):
+    """The language drivers speak in the operator's training calls."""
+
+    action: Literal["voice_language"]
+    language: Literal["ru", "kk"]
+
+
+class RingRetry(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    attempt_id: int = Field(ge=1)
+    turn: int = Field(ge=0, le=100)
+
+
+class RingInput(RequestInput):
+    """A driver's call reaches the operator; «Повторить момент» names the call to ring again."""
+
+    action: Literal["ring"]
+    retry: RingRetry | None = None
+
+
 class MessageInput(RequestInput):
     action: Literal["message"]
     contact_id: str = Field(min_length=1, max_length=40)
@@ -92,6 +112,8 @@ ActionInput = Annotated[
     | PhoneSettingsInput
     | CallStartInput
     | DialInput
+    | VoiceLanguageInput
+    | RingInput
     | MessageInput
     | CallCommentInput,
     Field(discriminator="action"),

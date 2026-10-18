@@ -41,5 +41,5 @@ export const OKTELL_TOUR: CoachStep[] = [
   { target: "[data-coach=oktell-join]", advanceWhen: JOINED, action: "Нажми", title: "Войди в call-центр", text: "Нажми «Войти в call-центр», чтобы звонки снова поступали." },
   { target: NAV("journal"), when: `${ROOT}[data-journal=calls]`, advanceWhen: SCREEN("journal"), action: "Нажми", title: "Прослушай свой звонок", text: "Твой звонок водителю уже в журнале. Открой «Журнал»." },
   { target: "[data-coach=oktell-play]", when: "[data-coach=oktell-play]", advanceWhen: "[data-coach=oktell-player]", action: "Нажми ▶", title: "Запись разговора", text: "Нажми ▶ у звонка — так ты сам прослушиваешь свои разговоры. В учебной копии записи без звука." },
-  { target: "[data-coach=oktell-status]", title: "Готово! Запомни главное", text: "Автоматический режим, веб-телефон и автоответ включены всегда. Перезвон — через код парка и не дольше 3 минут." },
+  { target: "[data-coach=oktell-status]", title: "Готово! Запомни главное", text: "Автоматический режим, веб-телефон и автоответ — всегда. Перезвон — через код парка, до 3 минут. Теперь водители будут звонить сами: отвечай голосом." },
 ];

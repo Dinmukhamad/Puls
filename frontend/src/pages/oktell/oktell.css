@@ -278,3 +278,18 @@
   .oktell-version { right:6px; bottom:5px; font-size:9px; padding:2px 7px; }
   .oktell-toast { right:10px; }
 }
+/* Drivers of the voice trainer call the operator: the line's state and the language of the calls. */
+.oktell-voice { margin-bottom:6px; }
+.oktell-voice-state { display:flex; align-items:center; gap:8px; margin:12px 10px 8px; color:#71777a; font-size:13px; }
+.oktell-voice-state i { flex:none; width:9px; height:9px; border-radius:50%; background:#b9bfc3; }
+.oktell-voice-state.is-on { color:#3f5a2a; }
+.oktell-voice-state.is-on i { background:#85a936; box-shadow:0 0 0 3px #85a93633; }
+.oktell-voice-language { display:flex; align-items:center; flex-wrap:wrap; gap:6px; margin:0 10px 8px; }
+.oktell-voice-language>span { margin-right:4px; color:#71777a; font-size:12px; }
+.oktell .oktell-voice-language .oktell-btn.is-current { border-color:#86a638; background:#eef5e6; color:#3f5a2a; opacity:1; }
+.oktell-voice-hint { margin:0 10px; color:#87939e; font-size:12px; }
+.oktell-voice-hint a, .oktell .oktell-review { color:#2364a2; }
+.oktell .oktell-review { display:flex; align-items:center; flex:none; padding:0 10px; border-left:1px solid #eef1f3; background:#fff; font-size:12px; text-decoration:none; }
+.oktell .oktell-review:hover { background:#eef3f8; text-decoration:underline; }
+.oktell-call-list article:nth-child(odd) .oktell-review { background:#fafbfc; }
+.oktell-direction.is-missed { color:#b24b45; }

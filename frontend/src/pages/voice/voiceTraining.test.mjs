@@ -20,8 +20,9 @@ async function moduleAt(path, request = async () => ({})) {
   new Function("require", "module", "exports", built.outputFiles[0].text)(name => name === "test:client" ? { request } : require(name), loaded, loaded.exports);
   return loaded.exports;
 }
-const { voiceKeys, voiceWorkSite } = await moduleAt("../../api/voiceTraining.ts");
-const { VoiceSituation, VoiceResults, VoiceHistory, VoiceSettings } = await moduleAt("./VoiceTrainingPage.tsx");
+const { voiceKeys, oktellRetry, OKTELL_CALLS } = await moduleAt("../../api/voiceTraining.ts");
+const { VoiceResults, VoiceHistory, VoiceSettings } = await moduleAt("./VoiceTrainingPage.tsx");
+const { retryFromParams } = await moduleAt("../oktell/oktellVoice.ts");
 const noop = () => {};
 const attempt = (patch = {}) => ({
   id: 42, scenario_key: "phone_change", title: "Смена номера телефона", description: "Водитель просит изменить номер телефона.", revision: 1,
@@ -35,16 +36,13 @@ const result = (patch = {}) => ({ score: 0, criteria: [{ key: "check", label: "�
 const resultProps = (value) => ({ attempt: value, pending: false, onRetry: noop, reviewOpen: false, onReviewOpen: noop, reviewComment: "", onReviewComment: noop, reviewing: false, onReview: noop, onReviewCancel: noop });
 const render = (Component, props) => renderToStaticMarkup(React.createElement(StaticRouter, { location: "/training/voice" }, React.createElement(Component, props)));
 
-test("work site links preserve the voice attempt and leave account search to the learner", () => {
-  for (const site of ["dispatch", "oktell", "crm"]) {
-    const url = new URL(voiceWorkSite(attempt(), site), "https://puls.test");
-    assert.equal(url.pathname, "/training/work-sites");
-    assert.equal(url.searchParams.get("voiceAttempt"), "42");
-    assert.equal(url.searchParams.get("site"), site);
-    assert.equal(url.searchParams.has("scenarioAttempt"), false);
-    assert.equal(url.searchParams.has("driver"), false);
-    if (site === "dispatch") assert.equal(url.searchParams.get("fleet"), "contractors");
-  }
+test("calls are taken in Oktell, and a repeated moment asks it for the same driver from that answer", () => {
+  assert.equal(OKTELL_CALLS, "/training/work-sites?site=oktell");
+  const url = new URL(oktellRetry(42, 2), "https://puls.test");
+  assert.equal(url.pathname, "/training/work-sites");
+  assert.equal(url.searchParams.get("site"), "oktell");
+  assert.deepEqual(retryFromParams(url.searchParams), { attempt_id: 42, turn: 2 });
+  for (const broken of ["voiceRetry=x&voiceTurn=1", "voiceRetry=42", "voiceRetry=-1&voiceTurn=0", "voiceRetry=42&voiceTurn=101"]) assert.equal(retryFromParams(new URLSearchParams(broken)), null, broken);
 });
 
 test("API sends the same request ID and turn for a retried answer and all explicit comparison fields", async () => {
@@ -69,22 +67,13 @@ test("numeric mutation IDs update the string route's saved attempt", () => {
   client.clear();
 });
 
-test("situation hides the account phone before an actual profile inspection and offers no solution", () => {
-  const html = render(VoiceSituation, { attempt: attempt() });
-  assert.match(html, /\+77015550192/);
-  assert.doesNotMatch(html, /\+77057314482|WhatsApp|изменить номер в приложении|позвонить с номера регистрации/);
-  const inspected = render(VoiceSituation, { attempt: attempt({ practice: { dispatch: true, oktell: true, compared: false } }) });
-  assert.match(inspected, /\+77057314482/);
-  assert.match(inspected, /Сверить номера в системе/);
-  assert.doesNotMatch(inspected, /Зафиксировать сравнение/);
-});
-
 test("an empty conversation labels driver evidence correctly and offers no invalid retry", () => {
   const html = render(VoiceResults, resultProps(attempt({ state: "completed", result: result() })));
   assert.match(html, /Водитель · реплика 1/);
   assert.match(html, /Сначала проверю аккаунт/);
   assert.doesNotMatch(html, /Повторить момент|Повторить разговор|Твой ответ · реплика 1/);
-  assert.match(html, /Новая тренировка/);
+  assert.match(html, /Принять новый звонок/);
+  assert.match(html, /href="\/training\/work-sites\?site=oktell"/);
 });
 
 test("feedback separates critical errors, quotes the answer and displays the mentor's saved response", () => {
@@ -101,13 +90,15 @@ test("feedback separates critical errors, quotes the answer and displays the men
   assert.doesNotMatch(html, /Оспорить оценку/);
 });
 
-test("history links completed results and resumable account attempts", () => {
+test("history links completed results and tells a call still going in Oktell from an old unfinished one", () => {
   const html = render(VoiceHistory, { attempts: [
-    { ...attempt(), score: null, review_status: null },
+    { ...attempt(), score: null, review_status: null, channel: "oktell" },
+    { ...attempt({ id: 41 }), score: null, review_status: null, channel: "page" },
     { ...attempt({ id: 43, state: "completed" }), score: 75, review_status: "reviewed" },
   ] });
   assert.match(html, /\/training\/voice\/attempts\/42/);
-  assert.match(html, /Продолжить/);
+  assert.match(html, /Идёт в Oktell/);
+  assert.match(html, /Не завершён/);
   assert.match(html, /75%/);
   assert.match(html, /Наставник ответил/);
 });
@@ -171,11 +162,4 @@ test("a call from the scenario editor waits for the mentor's score, then shows i
   assert.match(graded, /Хорошо объяснил/);
   const history = render(VoiceHistory, { attempts: [{ ...attempt({ state: "completed" }), score: null, review_status: "awaiting_grade" }] });
   assert.match(history, /Ждёт оценки/);
-});
-
-test("a call from the scenario editor shows the author's notes instead of the training systems", () => {
-  const html = render(VoiceSituation, { attempt: attempt({ custom: true, notes: "Фотоконтроль не пройден.", incoming_phone: "+77011112233" }) });
-  assert.match(html, /Что видно в системах/);
-  assert.match(html, /Фотоконтроль не пройден/);
-  assert.doesNotMatch(html, /Данные для разговора|Диспетчерская/);
 });

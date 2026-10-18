@@ -1,0 +1,58 @@
+/* The training Oktell's web phone: a driver's call in the corner of the work sites, in Oktell's own look. */
+.oktell-call { position:fixed; z-index:90; right:max(16px,env(safe-area-inset-right,0px)); bottom:max(16px,env(safe-area-inset-bottom,0px)); display:flex; flex-direction:column; width:340px; max-width:calc(100vw - 32px); max-height:calc(100dvh - 32px); overflow:auto; border:1px solid #bfc5c8; background:#f3f4f7; color:#37454f; font:13px/1.4 Arial,sans-serif; text-align:left; box-shadow:0 10px 30px #0005; }
+.oktell-call>header { display:flex; align-items:center; gap:8px; flex:none; height:24px; padding:0 8px; border-bottom:1px solid #bfc5c8; background:#e6e8eb; color:#4a5762; font-size:12px; }
+.oktell-call>header .oktell-tiny-logo { width:13px; height:13px; }
+.oktell-call-body { display:flex; align-items:center; gap:12px; padding:14px 14px 10px; }
+.oktell-call-bell { display:grid; place-items:center; flex:none; width:40px; height:40px; border-radius:50%; background:#85a936; color:#fff; }
+.oktell-call-bell svg { width:19px; height:19px; }
+.oktell-call.is-ringing .oktell-call-bell { animation:oktell-call-ring 1.3s ease-in-out infinite; }
+.oktell-call-bell.is-speaking { background:#4f7fae; }
+.oktell-call-bell.is-listening { background:#b24b45; animation:oktell-call-live 1.4s ease-in-out infinite; }
+.oktell-call-caller { display:flex; flex-direction:column; flex:1; min-width:0; }
+.oktell-call-caller strong { font-size:15px; font-weight:normal; color:#243b54; }
+.oktell-call-from { color:#738796; font-variant-numeric:tabular-nums; }
+.oktell-call-caller small { margin-top:2px; color:#6f7f8a; font-size:11px; }
+.oktell-call-caller .oktell-call-status { color:#243b54; font-size:12px; }
+.oktell-call-time { flex:none; color:#37454f; font-size:20px; font-variant-numeric:tabular-nums; }
+.oktell-call-heard { margin:0 14px 10px; padding:6px 8px; border:1px solid #d4dadf; background:#fff; color:#243b54; font-size:12px; overflow-wrap:anywhere; }
+.oktell-call-heard span { color:#738796; }
+.oktell-call-tools { display:flex; flex-wrap:wrap; gap:6px; padding:0 14px 10px; }
+.oktell-call-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:auto; padding:10px 14px; border-top:1px solid #bbc4ca; background:#e4e8ea; }
+.oktell-call-actions .oktell-btn--red { flex:1; }
+.oktell-call .oktell-btn { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:30px; margin:0; padding:5px 10px; border:1px solid #bec1c3; border-radius:3px; background:linear-gradient(#fafafa,#e5e5e5); color:#243b54; font:12px/1.4 Arial,sans-serif; text-decoration:none; cursor:pointer; box-shadow:none; }
+.oktell-call .oktell-btn:hover:not(:disabled) { border-color:#a5afb5; background:#dde3e7; }
+.oktell-call .oktell-btn:focus-visible, .oktell-call summary:focus-visible, .oktell-call input:focus-visible, .oktell-link:focus-visible { outline:2px solid #2364a2; outline-offset:1px; }
+.oktell-call .oktell-btn[aria-pressed=true] { border-color:#8f9aa1; background:#dde3e7; box-shadow:inset 0 1px 2px #0002; }
+.oktell-call .oktell-btn:disabled { opacity:.55; cursor:default; }
+.oktell-call .oktell-btn--green { border-color:#86a638; background:linear-gradient(#a7c35b,#85a936); color:#fff; text-shadow:0 1px #587227; }
+.oktell-call .oktell-btn--green:hover:not(:disabled) { background:#7a9d34; }
+.oktell-call .oktell-btn--red { border-color:#98423c; background:#b24b45; color:#fff; }
+.oktell-call .oktell-btn--red:hover:not(:disabled) { background:#9c3f3a; }
+.oktell-call details { margin:0 14px 10px; border:1px solid #d4dadf; background:#fff; }
+.oktell-call summary { padding:6px 8px; color:#243b54; font-size:12px; cursor:pointer; }
+.oktell-call details>p { margin:0; padding:0 8px 8px; font-size:12px; }
+.oktell-call form { margin:0; padding:0 8px 8px; }
+.oktell-call form label { display:block; margin-bottom:4px; color:#6f7f8a; font-size:11px; }
+.oktell-call form>div { display:flex; gap:6px; }
+.oktell-call form small { display:block; margin-top:4px; color:#7a2c25; font-size:11px; }
+.oktell-call input { flex:1; min-width:0; height:30px; padding:4px 8px; border:1px solid #bec1c3; border-radius:3px; background:#fff; color:#243b54; font:13px Arial,sans-serif; }
+.oktell-call .oktell-call-text { margin:0 14px 10px; padding:0; }
+.oktell-call-transcript ol { display:grid; gap:6px; max-height:170px; margin:0; padding:0 8px 8px; overflow:auto; list-style:none; font-size:12px; }
+.oktell-call-transcript li { overflow-wrap:anywhere; }
+.oktell-call-transcript li span { display:block; color:#738796; font-size:10px; letter-spacing:.04em; text-transform:uppercase; }
+.oktell-call-transcript li.is-operator { color:#2b4a63; }
+.oktell-call-alert { margin:0 14px 10px; padding:6px 8px; border:1px solid #e4a9a3; background:#fbe3e1; color:#7a2c25; font-size:12px; }
+.oktell-call.is-after .oktell-call-alert { margin-top:12px; }
+.oktell-call-note { margin:0; padding:8px 14px 12px; color:#6f7f8a; font-size:11px; }
+.oktell-call.is-after>.oktell-call-note:first-of-type { padding-top:12px; }
+.oktell-link { padding:0; border:0; background:none; color:#2364a2; font:inherit; text-decoration:underline; cursor:pointer; }
+@keyframes oktell-call-ring { 0%,50%,100% { transform:rotate(0); } 10%,30% { transform:rotate(-14deg); } 20%,40% { transform:rotate(14deg); } }
+@keyframes oktell-call-live { 0%,100% { box-shadow:0 0 0 0 #b24b4566; } 50% { box-shadow:0 0 0 7px #b24b4500; } }
+@media (prefers-reduced-motion: reduce) { .oktell-call.is-ringing .oktell-call-bell, .oktell-call-bell.is-listening { animation:none; } }
+@media (max-width:600px) {
+  .oktell-call { left:max(8px,env(safe-area-inset-left,0px)); right:max(8px,env(safe-area-inset-right,0px)); bottom:max(8px,env(safe-area-inset-bottom,0px)); width:auto; max-width:none; max-height:70dvh; }
+}
+.oktell-call-fold { display:grid; place-items:center; width:22px; height:20px; margin-left:auto; padding:0; border:1px solid #bfc5c8; border-radius:2px; background:#f3f4f7; color:#4a5762; font-size:11px; line-height:1; cursor:pointer; }
+.oktell-call-fold:hover { background:#dde3e7; }
+.oktell-call.is-folded .oktell-call-body { padding-bottom:8px; }
+.oktell-call.is-folded .oktell-call-actions { padding-top:8px; padding-bottom:8px; }

@@ -27,7 +27,8 @@ import { canCheckScenarioAppeal, scenarioInspection, ScenarioPracticePanel, type
 import { OKTELL_QUERY, oktell as oktellApi, type OktellScreen } from "../api/oktell";
 import { OKTELL_TOUR } from "./oktell/oktellTour";
 import { voiceKeys, voiceTraining, type VoiceInspection } from "../api/voiceTraining";
-import { VoicePracticePanel, voiceDispatchInspection } from "./voice/VoicePracticePanel";
+import { voiceDispatchInspection } from "./voice/voiceInspection";
+import { retryFromParams } from "./oktell/oktellVoice";
 import "./crm/coach.css";
 import { CrmDrivers, type DriverScreen } from "./crm/drivers/CrmDrivers";
 import { driverName, fromFleet, parkLabel, type TrainingDriver } from "./crm/drivers/driverData";
@@ -38,6 +39,7 @@ import "./crm/pulsar.css";
 import "./scenarios/scenario-workspace.css";
 
 const OktellSite = lazy(() => import("./oktell/OktellSite").then(module => ({ default: module.OktellSite })));
+const OktellVoiceCall = lazy(() => import("./oktell/OktellVoiceCall").then(module => ({ default: module.OktellVoiceCall })));
 
 export function WorkSitesPage() {
   const { user } = useAuth(), navigate = useNavigate();
@@ -45,14 +47,16 @@ export function WorkSitesPage() {
   const currentParams = useRef(params);
   currentParams.current = params;
   const scenarioAttemptId = params.get("scenarioAttempt") ?? undefined;
-  const voiceAttemptId = params.get("voiceAttempt") ?? undefined;
-  const guidedAttempt = !!scenarioAttemptId || !!voiceAttemptId;
+  const guidedAttempt = !!scenarioAttemptId;
+  // A driver on the line in Oktell: opening his account in the Диспетчерская counts for the call.
+  const oktellState = useQuery({ queryKey: [...OKTELL_QUERY, user?.id], queryFn: ({ signal }) => oktellApi.state(signal), enabled: false }).data;
+  const voiceAttemptId = oktellState?.active_call?.voice_attempt_id ? String(oktellState.active_call.voice_attempt_id) : undefined;
   const scenario = useQuery({ queryKey: scenarioKeys.attempt(scenarioAttemptId ?? ""), queryFn: ({ signal }) => scenarios.attempt(scenarioAttemptId!, signal), enabled: !!scenarioAttemptId, retry: false, refetchOnWindowFocus: true });
   const voice = useQuery({ queryKey: voiceKeys.attempt(voiceAttemptId ?? ""), queryFn: ({ signal }) => voiceTraining.attempt(voiceAttemptId!, signal), enabled: !!voiceAttemptId, retry: false, refetchOnWindowFocus: true });
   useEffect(() => {
     if (user?.id && scenarioAttemptId && scenario.data) rememberScenarioWorkspace(user.id, scenarioAttemptId, params);
   }, [user?.id, scenarioAttemptId, params, scenario.data]);
-  const workspaceReady = (!scenarioAttemptId || !!scenario.data && !scenario.isError) && (!voiceAttemptId || !!voice.data && !voice.isError);
+  const workspaceReady = !scenarioAttemptId || !!scenario.data && !scenario.isError;
   const catalog = useQuery({ queryKey: ["crm-catalog"], queryFn: crm.catalog, refetchInterval: 30000, enabled: workspaceReady });
   const training = useQuery({ queryKey: crmTrainingKey(user?.id), queryFn: ({ signal }) => crmTraining.state(signal), enabled: workspaceReady && !guidedAttempt, retry: false, refetchOnWindowFocus: true });
   const startTraining = useMutation({ mutationFn: crmTraining.start, onSuccess: value => client.setQueryData(crmTrainingKey(user?.id), value) });
@@ -103,7 +107,8 @@ export function WorkSitesPage() {
   const [oktellVisited, setOktellOpened] = useState(site === "oktell");
   const oktellOpened = oktellVisited || site === "oktell";
   // The workspace's own query fetches; this one only learns that Oktell is on screen for Pulsar.
-  const oktellLoaded = !!useQuery({ queryKey: [...OKTELL_QUERY, user?.id], queryFn: ({ signal }) => oktellApi.state(signal), enabled: false }).data;
+  const oktellLoaded = !!oktellState;
+  const voiceRetry = retryFromParams(params);
   const fleetRoute = parseRoute(params.get("fleet")), fleetPark = params.get("fpark") ?? DEFAULT_PARK;
   const [fleetVisited, setFleetOpened] = useState(site === "dispatch");
   // Browser «Back» can return to the dispatch tab after a reload, so the address alone mounts it too.
@@ -142,10 +147,6 @@ export function WorkSitesPage() {
     const visible = shell.current?.querySelector<HTMLElement>(".fleet-app:not([hidden]) .fleet[data-page=\"driver\"] .fleet-driver[data-driver] [data-coach=\"tab-details\"][aria-current=\"page\"]");
     return !!visible?.getClientRects().length && visible.closest<HTMLElement>("[data-driver]")?.dataset.driver === voiceInspection.driver_id;
   }
-  function retryVoiceInspection() {
-    if (!voiceAttemptId || !voiceInspection || inspectVoice.isPending || !visibleVoiceInspection()) return;
-    inspectVoice.mutate({ attemptId: voiceAttemptId, input: voiceInspection });
-  }
   useEffect(() => {
     if (!voiceAttemptId || !voiceInspection || !voiceInspectionKey || inspectVoice.isPending || voiceInspectedViews.current.has(voiceInspectionKey)) return;
     const frame = requestAnimationFrame(() => {
@@ -159,11 +160,11 @@ export function WorkSitesPage() {
   const [copied, setCopied] = useState(false);
   // The call a CRM request is made for: the appeal is about its driver until the call is solved.
   const [crmCall, setCrmCall] = useState<string | null>(null);
-  const activeTraining = voiceAttemptId ? undefined : training.data?.tasks.find(task => task.key === training.data.active_task && task.state === "in_progress");
+  const activeTraining = training.data?.tasks.find(task => task.key === training.data.active_task && task.state === "in_progress");
   // An appeal outside the tasks: written for practice, never checked and never counted for them.
   const [freeAppeal, setFreeAppeal] = useState(false);
   const trainingTask = !guidedAttempt && !crmCall && !freeAppeal && ["crm_phone_v2", "crm_practice_v2"].includes(activeTraining?.key ?? "") ? activeTraining?.key : undefined;
-  const availableTraining = voiceAttemptId ? undefined : training.data?.tasks.find(task => task.state === "available");
+  const availableTraining = training.data?.tasks.find(task => task.state === "available");
   const trainingEdit = useQuery({ queryKey: ["crm-appeal", id], queryFn: () => crm.appeal(id), enabled: workspaceReady && !scenarioAttemptId && view === "edit" && id > 0, retry: false });
   // What the operator copied last, recognised against the appeal's account: Pulsar waits for the right piece.
   const [copiedKind, setCopiedKind] = useState<CopyKind | "">("");
@@ -195,7 +196,6 @@ export function WorkSitesPage() {
   function go(query: string, force = false) {
     if (!force && dirty && !window.confirm("В обращении есть несохранённые изменения. Покинуть форму?")) return;
     const next = preserveScenarioContext(new URLSearchParams(query), params);
-    if (voiceAttemptId) next.set("voiceAttempt", voiceAttemptId);
     for (const key of ["fleet", "fpark", "oscreen"]) { const value = params.get(key); if (value) next.set(key, value); }
     setDirty(false); setParams(next); setNotice(""); if (!query.includes("view=create") && !query.includes("view=edit")) setSelection([]);
   }
@@ -302,7 +302,7 @@ export function WorkSitesPage() {
     let seen = true; try { seen = !!localStorage.getItem(seenKey("oktell")); } catch { /* Without storage the tour stays manual. */ }
     if (!seen) { const timer = window.setTimeout(() => setCoach({ id: "oktell", steps: OKTELL_TOUR }), 700); return () => window.clearTimeout(timer); }
   }, [oktellLoaded, site, guidedAttempt]); // eslint-disable-line react-hooks/exhaustive-deps
-  const exit = () => { if (!dirty || window.confirm("В обращении есть несохранённые изменения. Покинуть форму?")) navigate(voiceAttemptId ? `/training/voice/attempts/${encodeURIComponent(voiceAttemptId)}` : scenarioAttemptId ? `/training/scenarios/attempts/${encodeURIComponent(scenarioAttemptId)}` : `/training/city?district=${site}`); };
+  const exit = () => { if (!dirty || window.confirm("В обращении есть несохранённые изменения. Покинуть форму?")) navigate(scenarioAttemptId ? `/training/scenarios/attempts/${encodeURIComponent(scenarioAttemptId)}` : `/training/city?district=${site}`); };
   // On a driver's page the address is the link operators copy into CRM: its ID finds the same account there.
   const fleetDriver = fleetRoute.page === "driver" ? fleetQuery.data?.drivers.find(d => d.id === fleetRoute.id) : undefined;
   const fleetDriverLink = fleetDriver && fleetLink(fleetDriver, fleetQuery.data?.parks.find(p => p.id === fleetDriver.park));
@@ -326,19 +326,11 @@ export function WorkSitesPage() {
     : view === "create" || view === "edit" ? { place: "form" } : id > 0 ? { place: "appeal", id } : view === "list" ? { place: "list" } : null;
   const courseDock = <CrmCourseDock data={training.data} loading={training.isPending} error={training.error} busy={startTraining.isPending} actionError={startTraining.error} location={courseLocation} passed={justPassed} onDismissPassed={dismissPassed} onReload={() => void training.refetch()} onStart={key => void beginTraining(key)} onShow={showCourse} onInstructions={() => { setShowInstructions(true); setHelpRequest(n => n + 1); }} onCity={exit} />;
   const fleetAddress = fleetDriverLink ? fleetDriverLink.replace("https://", "") : `fleet.training / ${routePath(fleetRoute).replace(/\//g, " / ")} · ${fleetPark}`;
-  function inspectVoiceCall(input: VoiceInspection) {
-    if (!voiceAttemptId || !voice.data || voice.data.state !== "in_progress" || site !== "oktell" || inspectVoice.isPending) return;
-    const visible = shell.current?.querySelector<HTMLElement>(".oktell-app:not([hidden]) [data-voice-call]");
-    if (!visible?.getClientRects().length || visible.dataset.voiceCall !== String(voice.data.id)) return;
-    if (input.system === "compare" && (!voice.data.practice.dispatch || !voice.data.practice.oktell)) return;
-    inspectVoice.mutate({ attemptId: voiceAttemptId, input });
+  function takeRetry() {
+    const next = new URLSearchParams(currentParams.current); next.delete("voiceRetry"); next.delete("voiceTurn"); setParams(next, { replace: true });
   }
-  return <div className={`work-sites${callWorkspace ? " work-sites--call" : ""}${scenarioAttemptId ? " work-sites--scenario" : ""}${voiceAttemptId ? " work-sites--voice" : ""}${coach && !guidedAttempt ? " is-coaching" : ""}`} data-site={site} data-copied={copiedKind} data-link={needsLink ? "need" : ""} data-course-target={courseLocation ? courseTarget(activeTraining) : undefined} ref={shell}>
-    <header className="work-sites-heading"><button onClick={exit}>{voiceAttemptId ? "← К разговору" : scenarioAttemptId ? "← К сценарию" : "← Мой город"}</button><h1>Рабочие сайты</h1><span className="work-sites-training">Учебная среда</span>{!guidedAttempt && <button className="work-sites-guide-button" onClick={() => site === "oktell" ? setCoach({ id: "oktell", steps: OKTELL_TOUR }) : site === "dispatch" ? startFleetTour("fleet") : startCoach(helpTour)}>✦ {guide.text("Помощь Пульсара")}</button>}</header>
-    {voiceAttemptId && <VoicePracticePanel key={voiceAttemptId} attempt={voice.data} loading={voice.isPending} error={voice.error} onReload={() => void voice.refetch()}
-      pending={inspectVoice.isPending && inspectVoice.variables?.input.system === "dispatch"}
-      actionError={inspectVoice.variables?.attemptId === voiceAttemptId && inspectVoice.variables.input.system === "dispatch" ? inspectVoice.error : undefined}
-      onRetryInspection={voiceInspection ? retryVoiceInspection : undefined} />}
+  return <div className={`work-sites${callWorkspace ? " work-sites--call" : ""}${scenarioAttemptId ? " work-sites--scenario" : ""}${coach && !guidedAttempt ? " is-coaching" : ""}`} data-site={site} data-copied={copiedKind} data-link={needsLink ? "need" : ""} data-course-target={courseLocation ? courseTarget(activeTraining) : undefined} ref={shell}>
+    <header className="work-sites-heading"><button onClick={exit}>{scenarioAttemptId ? "← К сценарию" : "← Мой город"}</button><h1>Рабочие сайты</h1><span className="work-sites-training">Учебная среда</span>{!guidedAttempt && <button className="work-sites-guide-button" onClick={() => site === "oktell" ? setCoach({ id: "oktell", steps: OKTELL_TOUR }) : site === "dispatch" ? startFleetTour("fleet") : startCoach(helpTour)}>✦ {guide.text("Помощь Пульсара")}</button>}</header>
     {scenarioAttemptId && <ScenarioPracticePanel attempt={scenario.data} loading={scenario.isPending} error={scenario.error} onReload={() => void scenario.refetch()}
       inspectionPending={inspect.isPending && inspect.variables?.attemptId === scenarioAttemptId}
       inspectionError={(inspection || scenario.data?.practice.required_section === "classifier") && inspect.variables?.attemptId === scenarioAttemptId ? inspect.error : undefined} onRetryInspection={inspection ? retryInspection : undefined}
@@ -352,7 +344,9 @@ export function WorkSitesPage() {
     : site === "dispatch" ? <div className="work-browser-address"><button aria-label="Назад" disabled={!fleetHistory.back.length} onClick={() => fleetStep("back")}>←</button><button aria-label="Вперёд" disabled={!fleetHistory.forward.length} onClick={() => fleetStep("forward")}>→</button><button aria-label="Обновить Диспетчерскую" onClick={() => { client.invalidateQueries({ queryKey: FLEET_QUERY }); }}>⟳</button><div className="work-address-text"><span aria-hidden="true">▣</span><span data-coach="fleet-address">{fleetDriver && fleetDriverLink ? <AddressWithId address={fleetAddress} id={fleetDriver.id} /> : fleetAddress}</span><small>Учебная копия</small></div>{fleetDriverLink && <button className={copied ? "is-done" : undefined} aria-label={copied ? "Ссылка скопирована" : "Скопировать ссылку на водителя"} title="Скопировать ссылку на водителя: по ID из неё водителя находят в CRM" data-coach="copy-link" onClick={() => { void copyText(fleetDriverLink).then(ok => { if (!ok) return; setCopied(true); window.setTimeout(() => setCopied(false), 2000); }); }}>{copied ? "✓" : "⧉"}</button>}<button aria-label="Развернуть окно" onClick={() => { const action = document.fullscreenElement ? document.exitFullscreen() : shell.current?.requestFullscreen(); action?.catch(() => undefined); }}>⛶</button></div>
     : <div className="work-browser-address"><button aria-label="Назад к обращениям" disabled={view === "list" && !id} onClick={() => { if (dirty && !window.confirm("Покинуть форму без сохранения?")) return; setForward(params.toString()); go("", true); }}>←</button><button aria-label="Вперёд" disabled={!forward || view !== "list" || !!id} onClick={() => { go(forward); setForward(""); }}>→</button><button aria-label="Обновить данные CRM" onClick={() => { client.invalidateQueries({ queryKey: ["crm-catalog"] }); client.invalidateQueries({ queryKey: ["crm-appeals"] }); client.invalidateQueries({ queryKey: ["crm-appeal"] }); client.invalidateQueries({ queryKey: FLEET_QUERY }); setNotice("Данные обновляются. Введённые поля сохранены в форме."); }}>⟳</button><div className="work-address-text"><span aria-hidden="true">▣</span><span>{sectionView ? `crm.training / ${sectionView.address}${params.get("reg") ? ` / ${params.get("reg")}` : ""}` : view === "drivers" ? `crm.training / водители / учётные записи${currentDriver ? ` / ${currentDriver.id}${driverScreen && driverScreen !== "details" ? ` / ${driverScreen}` : ""}` : ""}` : `crm.training / обращения${view === "create" ? " / создать" : view === "edit" ? ` / ${id} / исправить` : view === "lesson" ? " / учебный звонок" : view === "categories" ? " / категории" : ticketId ? ` / тикет ${ticketId}` : id ? ` / ${id}` : ""}`}</span><small>Учебная копия</small></div><button aria-label="Развернуть окно" onClick={() => { const action = document.fullscreenElement ? document.exitFullscreen() : shell.current?.requestFullscreen(); action?.catch(() => setNotice("Полноэкранный режим недоступен в этом браузере.")); }}>⛶</button></div>}
     {fleetOpened && <div className="fleet-app" hidden={site !== "dispatch"}><DispatchSite route={fleetRoute} parkId={fleetPark} go={goFleet} onResult={setFleetFeedback} /></div>}
-    {!scenarioAttemptId && oktellOpened && <div className="oktell-app" hidden={site !== "oktell"}>{voiceAttemptId && <VoicePracticePanel key={`call:${voiceAttemptId}`} mode="oktell" attempt={voice.data} active={site === "oktell"} pending={inspectVoice.isPending} actionError={inspectVoice.variables?.attemptId === voiceAttemptId && inspectVoice.variables.input.system !== "dispatch" ? inspectVoice.error : undefined} onInspect={inspectVoiceCall} />}<Suspense fallback={<div className="crm-empty" role="status">Открываем Oktell…</div>}><OktellSite screen={oktellScreen} go={goOktell} active={site === "oktell"} /></Suspense></div>}
+    {!scenarioAttemptId && oktellOpened && <div className="oktell-app" hidden={site !== "oktell"}><Suspense fallback={<div className="crm-empty" role="status">Открываем Oktell…</div>}><OktellSite screen={oktellScreen} go={goOktell} active={site === "oktell"} /></Suspense></div>}
+    {/* A driver's call stays on screen on every tab; new ones ring once Oktell is open here. */}
+    {!scenarioAttemptId && <Suspense fallback={null}><OktellVoiceCall quiet={!!coach || !oktellOpened} retry={voiceRetry} onRetryTaken={takeRetry} /></Suspense>}
     <div className="crm-app" hidden={site !== "crm"}><header className="crm-header"><button className="crm-logo" onClick={() => go("")}>iTaxi</button><span>CRM-система</span><div className="crm-account"><span className="crm-avatar">{user?.full_name.split(" ").filter(Boolean).slice(0, 2).map(word => word[0]).join("")}</span><strong>{user?.full_name}</strong></div></header>
     <div className="crm-layout"><CrmSidebar view={view} open={target => target === "drivers" ? openDriver() : target === "list" ? go("") : go(`view=${target}`)} />
     <main className="crm-main"><div className="crm-breadcrumb"><button onClick={() => go("")}>Главная</button><span>/</span>{sectionView ? <><span>{sectionView.group}</span><span>/</span>{view === "registration-new" || params.get("reg") ? <><button onClick={() => go("view=registration")}>Регистрация водителей</button><span>/</span><span>{view === "registration-new" ? "Новый водитель" : `№${params.get("reg")}`}</span></> : <span>{sectionView.title}</span>}</> : view === "drivers" ? <><button onClick={() => openDriver()}>Учётные записи водителей</button>{currentDriver && <><span>/</span><button onClick={() => openDriver(currentDriver.id)}>{driverName(currentDriver)}</button>{driverScreen && driverScreen !== "details" && <><span>/</span><span>{driverScreenTitle[driverScreen]}</span></>}</>}</> : <><button onClick={() => go("")}>Обращения</button>{pageTitle !== "Обращения" && <><span>/</span><span>{pageTitle}</span></>}</>}{editor && view !== "drivers" && !sectionView && <button className="crm-manage-link" onClick={() => go("view=categories")}>Настроить категории</button>}</div>

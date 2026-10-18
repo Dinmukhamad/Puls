@@ -27,13 +27,14 @@ DISTRICTS = [
     {"id": "crm", "name": "CRM-центр", "subtitle": "На стороне водителя", "soon": False},
     {"id": "dispatch", "name": "Диспетчерская", "subtitle": "Кабинет таксопарка", "soon": False},
     {"id": "scenarios", "name": "Сценарии ТП", "subtitle": "Диалог и практика", "soon": False},
-    {"id": "voice", "name": "Разговор", "subtitle": "Голосовой тренажёр", "soon": False},
+    {"id": "voice", "name": "Разговор", "subtitle": "Звонки водителей", "soon": False},
     {"id": "oktell", "name": "Oktell", "subtitle": "Телефония и сообщения", "soon": False},
 ]
 # Conditions and destinations are server-owned. Editors can tune the curriculum,
 # but cannot inject arbitrary URLs or client-side completion rules.
 DISPATCH = "/training/work-sites?site=dispatch"
-VOICE = "/training/voice"
+# Drivers of the voice trainer call into Oktell; the trainer page keeps the reviews.
+VOICE = "/training/work-sites?site=oktell"
 CRM_TASK_KEYS = ("crm_first", "crm_phone", "crm_closed")
 # Keep legacy award keys identifiable while the Oktell curriculum is deferred. They are
 # excluded from all effective settings, prerequisites and claims; persisted awards stay intact.
@@ -268,10 +269,10 @@ def default_missions():
         (
             "voice_first",
             "Первый звонок",
-            "Проведи учебный звонок голосом от начала до конца: выслушай водителя, "
+            "Прими в Oktell звонок водителя и проведи его до конца: выслушай водителя, "
             "проверь данные и помоги ему с решением.",
-            "Нажми «Начать разговор» и отвечай своими словами. Разбор появится сразу "
-            "после звонка.",
+            "Войди в call-центр в автоматическом режиме без паузы: водитель позвонит сам. "
+            "Отвечай голосом, своими словами. Разбор откроется после звонка.",
             1,
             100,
             40,
@@ -281,8 +282,8 @@ def default_missions():
             "voice_good",
             "Спокойный ответ",
             "Заверши звонок с результатом 80% и выше.",
-            "Перед ответом открой данные водителя в учебных системах: проверенные действия "
-            "тоже входят в оценку.",
+            "Во время звонка открой аккаунт водителя в Диспетчерской и сверь номера: "
+            "проверенные действия тоже входят в оценку.",
             1,
             180,
             80,
@@ -292,7 +293,8 @@ def default_missions():
             "voice_kazakh",
             "Звонок на казахском",
             "Проведи до конца звонок, в котором водитель говорит по-казахски.",
-            "Перед звонком выбери язык «Қазақша». Отвечать можно вперемешку с русскими словами.",
+            "В кабинете Oktell выбери язык учебных звонков «Қазақша». Отвечать можно "
+            "вперемешку с русскими словами.",
             1,
             200,
             100,
