@@ -15,10 +15,13 @@ export interface VoiceAttemptSummary {
   score: number | null; created_at: string; finished_at: string | null;
   review_status: "pending" | "reviewed" | "awaiting_grade" | null;
   channel?: VoiceChannel;
+  /** Claude spoke for the driver; Claude graded the call (or gave its review beside the rules'). */
+  ai_driver?: boolean; ai_grade?: boolean;
 }
 /** «oktell»: the driver called the operator's Oktell; «page»: a call started on the trainer page before. */
 export type VoiceChannel = "oktell" | "page";
-export interface VoiceTranscript { role: "driver" | "operator"; text: string; turn: number }
+/** `ai`: a driver's line said by Claude; without it the trainer's prepared line was said. */
+export interface VoiceTranscript { role: "driver" | "operator"; text: string; turn: number; ai?: boolean }
 export interface VoiceCriterion {
   key: string; label: string; passed: boolean; feedback: string;
   quote: string | null; turn: number | null; role?: "driver" | "operator"; example: string | null;
@@ -32,6 +35,8 @@ export interface VoiceResult {
   manual?: boolean; solution?: string; reached_end?: boolean;
   /** Graded by the AI model from the scenario card; a mentor answers a dispute. */
   ai?: boolean; model?: string; summary?: string;
+  /** A call the rules graded, sent to Claude afterwards: its grade stands beside this one. */
+  ai_review?: VoiceResult | null; rules_score?: number;
 }
 /** For mentors: whether Claude plays the editor's drivers and grades their calls, and its spend. */
 export interface VoiceAIStatus { configured: boolean; active: boolean; model: string; budget_usd: number; spent_usd: number; calls: number }
@@ -45,9 +50,12 @@ export interface VoiceAttempt {
   result: VoiceResult | null; can_finish: boolean; retry_of?: number | null;
   /** A scenario from the editor: no training systems, the author's notes instead. */
   custom?: boolean; notes?: string; channel?: VoiceChannel;
+  /** Claude spoke for the driver in this call. */
+  ai_driver?: boolean;
   created_at: string; finished_at: string | null;
 }
-export interface VoiceCatalog { scenarios: VoiceScenario[]; attempts: VoiceAttemptSummary[] }
+/** `ai_active`: Claude takes part in calls right now (connected, within the month's budget). */
+export interface VoiceCatalog { scenarios: VoiceScenario[]; attempts: VoiceAttemptSummary[]; ai_active?: boolean }
 export interface VoiceInspection { system: "dispatch" | "oktell" | "compare"; driver_id?: string; park_id?: string; incoming_phone?: string; registration_phone?: string }
 
 const BASE = "/api/v1/learning/voice";
@@ -71,6 +79,8 @@ export const voiceTraining = {
   finish: (id: string | number) => request<VoiceAttempt>(`${path(id)}/finish`, { method: "POST", json: {}, timeoutMs: 45000 }),
   retry: (id: string | number, turn: number) => request<VoiceAttempt>(`${path(id)}/retry`, { method: "POST", json: { turn }, timeoutMs: 20000 }),
   review: (id: string | number, comment: string) => request<VoiceAttempt>(`${path(id)}/review`, { method: "POST", json: { comment }, timeoutMs: 20000 }),
+  /** «Оценить с ИИ»: Claude grades a finished call the rules graded; both grades stay. */
+  aiReview: (id: string | number) => request<VoiceAttempt>(`${path(id)}/ai-review`, { method: "POST", json: {}, timeoutMs: 45000 }),
 };
 
 export const OKTELL_CALLS = "/training/work-sites?site=oktell";

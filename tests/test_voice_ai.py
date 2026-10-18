@@ -12,7 +12,7 @@ from sqlalchemy import func, select
 
 from app.models.voice_ai import VoiceAIUsage
 from app.services import voice_ai, voice_training
-from tests.conftest import auth, login
+from tests.conftest import auth, login, login_with_work_sites
 from tests.test_voice_scenarios import EDITOR, VOICE, support_city, write
 
 pytestmark = pytest.mark.asyncio
@@ -213,61 +213,207 @@ async def test_the_aggressive_driver_is_graded_on_calming_him_down(
     assert result["criteria"][0]["feedback"] == "ИИ не оценил этот пункт."
 
 
-async def test_claude_says_the_built_in_drivers_lines_while_the_rules_keep_course_and_grade(
+OKTELL = "/api/v1/learning/oktell"
+EXPLAINED = (
+    "Вы звоните не с номера регистрации, поэтому по звонку я номер не поменяю. Скачайте "
+    "Такси Про, зайдите в профиль, там кнопка номера: впишите новый, придёт код, введите его."
+)
+PHONE_GRADE = {
+    "criteria": [
+        {"key": "solution", "passed": True, "feedback": "Способ доступный.",
+         "quote": "Скачайте Такси Про", "turn": 2, "example": ""},
+        {"key": "clarity", "passed": True, "feedback": "Причина названа.",
+         "quote": "звоните не с номера регистрации", "turn": 2, "example": ""},
+        {"key": "next_step", "passed": True, "feedback": "Шаги понятны.",
+         "quote": "впишите новый, придёт код", "turn": 2, "example": ""},
+    ],
+    "critical_errors": [],
+    "summary": "Причина и способ объяснены понятно.",
+}
+
+
+async def test_claude_leads_the_phone_change_call_and_grades_it_by_meaning(
     client, operator, monkeypatch
 ):
-    from tests.test_voice_training import EXPLAIN, NEXT, answer, finish, start
+    from tests.test_voice_training import answer, finish, start
 
     first = "Подождите, а с номера-то что не так? Я же сам Виктор Ким."
     fake = FakeClaude(
-        {"reply": first},
-        {"reply": "Старой симки у меня уже нет, со старого номера не позвоню."},
-        {"reply": "Ну ладно. А что мне написать в WhatsApp?"},
-        {"reply": "Понял, напишу им в WhatsApp. Спасибо, до свидания!"},
+        {"reply": first, "resolved": False},
+        {"reply": "Старой симки у меня уже нет, со старого номера не позвоню.", "resolved": False},
+        {"reply": "Понял, скачаю Такси Про и поменяю номер. Спасибо, до свидания!",
+         "resolved": True},
+        PHONE_GRADE,
+    )
+    connect(monkeypatch, fake)
+    sites = auth(await login_with_work_sites(client, operator.login))
+    assert (await client.get(OKTELL, headers=sites)).json()["voice_ai"] is True
+    headers = auth(await login(client, operator.login))
+    attempt = await start(client, headers, "irritated")
+    attempt = (await answer(client, headers, attempt, "Секунду, я проверяю ваши данные")).json()
+    assert attempt["transcript"][-1]["text"] == first and attempt["transcript"][-1]["ai"]
+    assert attempt["ai_driver"] and attempt["stage"] == "opening"
+    call = fake.calls[0]
+    assert call["model"] == "claude-haiku-5-5" and call["output_config"]["effort"] == "low"
+    assert call["output_config"]["format"]["schema"]["required"] == ["reply", "resolved"]
+    card = call["system"][0]["text"]
+    assert attempt["driver"]["phone"] in card and attempt["incoming_phone"] in card
+    assert "Правильное решение" in card and "раздражённый" in card
+    assert "не узнали эту реплику" in call["messages"][0]["content"]
+    assert "Черновик ответа водителя: «" in call["messages"][0]["content"]
+    attempt = (await answer(client, headers, attempt, "Позвоните со старого номера.")).json()
+    # The rules' move stays on the line: the lost SIM is remembered for them.
+    assert attempt["stage"] == "lost_sim" and attempt["transcript"][-1]["line"] == "lost_sim"
+    attempt = (await answer(client, headers, attempt, EXPLAINED)).json()
+    # Claude understood the steps the rules did not: the driver got his answer.
+    assert attempt["stage"] == "resolved" and attempt["can_finish"]
+    result = (await finish(client, headers, attempt))["result"]
+    assert result["ai"] and result["model"] == "claude-haiku-5-5" and not result["manual"]
+    assert [c["key"] for c in result["criteria"]] == [
+        "verification", "solution", "clarity", "next_step"
+    ]
+    # «Проверка данных» is the systems' record: nothing was opened in Диспетчерская.
+    assert not result["criteria"][0]["passed"] and result["score"] == 75
+    assert result["criteria"][2]["quote"] == "звоните не с номера регистрации"
+    assert result["criteria"][2]["turn"] == 2
+    assert result["solution"] == voice_training.EXAMPLES["ru"]["solution"]
+    assert result["summary"] and "rules_score" in result
+    grade = fake.calls[3]
+    assert grade["output_config"]["effort"] == "medium"
+    assert "оценивается отдельно" in grade["messages"][0]["content"]
+    catalog = (await client.get(f"{VOICE}", headers=headers)).json()
+    assert catalog["ai_active"] and catalog["attempts"][0]["ai_driver"]
+    assert catalog["attempts"][0]["ai_grade"]
+
+
+async def test_a_forbidden_promise_never_ends_the_call_and_rules_errors_stay(
+    client, operator, monkeypatch
+):
+    from tests.test_voice_training import answer, finish, start
+
+    fake = FakeClaude(
+        {"reply": "Отлично, спасибо!", "resolved": True},
+        {"criteria": [], "critical_errors": [], "summary": "Пообещал сам сменить номер."},
     )
     connect(monkeypatch, fake)
     headers = auth(await login(client, operator.login))
-    attempt = await start(client, headers, "irritated")
-    opening = attempt["transcript"][0]["text"]
-    attempt = (await answer(client, headers, attempt, "Секунду, я проверяю ваши данные")).json()
-    # Claude's words are said; the rules' move stays in the transcript for the grade.
-    assert attempt["transcript"][0]["text"] == opening
-    assert attempt["transcript"][-1]["text"] == first
-    assert attempt["transcript"][-1]["line"] == "ask_how" and attempt["stage"] == "opening"
-    call = fake.calls[0]
-    assert call["model"] == "claude-haiku-5-5" and call["output_config"]["effort"] == "low"
-    assert call["output_config"]["format"]["schema"]["required"] == ["reply"]
-    card = call["system"][0]["text"]
-    assert attempt["driver"]["phone"] in card and attempt["incoming_phone"] in card
-    assert "раздражённый" in card and "Такси Про" in card
-    assert "Правила не узнали" in call["messages"][0]["content"]
-    assert "Черновик ответа водителя: «" in call["messages"][0]["content"]
-    attempt = (await answer(client, headers, attempt, "Позвоните со старого номера.")).json()
-    assert attempt["stage"] == "lost_sim" and attempt["transcript"][-1]["line"] == "lost_sim"
-    attempt = (await answer(client, headers, attempt, EXPLAIN)).json()
-    assert "Вопрос ещё не решён" in fake.calls[2]["messages"][0]["content"]
+    attempt = await start(client, headers)
+    promise = "Я могу изменить вам номер прямо сейчас"
+    attempt = (await answer(client, headers, attempt, promise)).json()
     assert attempt["stage"] != "resolved"
-    attempt = (await answer(client, headers, attempt, NEXT)).json()
-    assert attempt["stage"] == "resolved" and attempt["can_finish"]
-    assert attempt["transcript"][-1]["text"] == "Понял, напишу им в WhatsApp. Спасибо, до свидания!"
-    assert "Шаг водителю понятен" in fake.calls[3]["messages"][0]["content"]
-    # The grade is the training rules', as before: no Work Sites events here.
+    assert "недопустимое" in fake.calls[0]["messages"][0]["content"]
     result = (await finish(client, headers, attempt))["result"]
-    assert result["score"] == 75 and "ai" not in result and len(fake.calls) == 4
+    assert result["ai"] and result["critical_errors"] and result["score"] <= 50
+    assert result["criteria"][1]["feedback"] == "ИИ не оценил этот пункт."
 
 
 @pytest.mark.parametrize("failure", ["error", "no key"])
-async def test_without_claude_the_built_in_driver_says_the_prepared_line(
+async def test_without_claude_the_phone_change_call_is_the_rules_own(
     client, operator, monkeypatch, failure
 ):
-    from tests.test_voice_training import answer, start
+    from tests.test_voice_training import EXPLAIN, NEXT, answer, finish, start
 
-    fake = FakeClaude(
-        anthropic.APIConnectionError(request=httpx2.Request("POST", "https://api.anthropic.com"))
+    timeout = anthropic.APIConnectionError(
+        request=httpx2.Request("POST", "https://api.anthropic.com")
     )
+    fake = FakeClaude(*[timeout] * 4)
     connect(monkeypatch, fake, key="" if failure == "no key" else "sk-ant-test")
+    sites = auth(await login_with_work_sites(client, operator.login))
+    assert (await client.get(OKTELL, headers=sites)).json()["voice_ai"] is (failure == "error")
     headers = auth(await login(client, operator.login))
     attempt = await start(client, headers)
     attempt = (await answer(client, headers, attempt, "Позвоните со старого номера.")).json()
     assert attempt["transcript"][-1]["text"] == voice_training.LOST_SIM
-    assert len(fake.calls) == (0 if failure == "no key" else 1)
+    assert "ai" not in attempt["transcript"][-1] and not attempt["ai_driver"]
+    attempt = (await answer(client, headers, attempt, EXPLAIN)).json()
+    attempt = (await answer(client, headers, attempt, NEXT)).json()
+    result = (await finish(client, headers, attempt))["result"]
+    assert "ai" not in result and result["score"] == 75
+    assert len(fake.calls) == (0 if failure == "no key" else 4)
+
+
+async def test_a_past_call_graded_by_the_rules_can_be_sent_to_claude(
+    client, session, operator, supervisor, monkeypatch
+):
+    from tests.test_voice_training import EXPLAIN, NEXT, answer, finish, start
+
+    headers = auth(await login(client, operator.login))
+    attempt = await start(client, headers)
+    attempt = (await answer(client, headers, attempt, EXPLAIN)).json()
+    attempt = (await answer(client, headers, attempt, NEXT)).json()
+    attempt = await finish(client, headers, attempt)
+    rules = attempt["result"]
+    url = f"{VOICE}/attempts/{attempt['id']}/ai-review"
+    refused = await client.post(url, headers=headers)
+    assert refused.status_code == 409 and "не подключён" in refused.json()["detail"]
+    fake = FakeClaude("не JSON", {**PHONE_GRADE, "summary": "Хорошо объяснено."})
+    connect(monkeypatch, fake)
+    failed = await client.post(url, headers=headers)
+    assert failed.status_code == 409 and "не смог" in failed.json()["detail"]
+    # The failed answer was paid for and is counted.
+    assert await session.scalar(select(func.count()).select_from(VoiceAIUsage)) == 1
+    reviewed = await client.post(url, headers=headers)
+    assert reviewed.status_code == 200, reviewed.text
+    result = reviewed.json()["result"]
+    # Both grades stay: the rules' as it was, Claude's beside it.
+    assert result["score"] == rules["score"] and result["criteria"] == rules["criteria"]
+    assert result["ai_review"]["ai"] and result["ai_review"]["summary"] == "Хорошо объяснено."
+    assert result["ai_review"]["rules_score"] == rules["score"]
+    again = await client.post(url, headers=headers)
+    assert again.json()["result"]["ai_review"] == result["ai_review"] and len(fake.calls) == 2
+    other = auth(await login(client, supervisor.login))
+    assert (await client.post(url, headers=other)).status_code == 404
+    in_progress = await start(client, headers)
+    assert (
+        await client.post(f"{VOICE}/attempts/{in_progress['id']}/ai-review", headers=headers)
+    ).status_code == 409
+    silent = await finish(client, headers, in_progress)
+    response = await client.post(f"{VOICE}/attempts/{silent['id']}/ai-review", headers=headers)
+    assert response.status_code == 409 and "нет ваших ответов" in response.json()["detail"]
+    assert len(fake.calls) == 2
+
+
+async def test_a_call_claude_already_graded_or_from_the_editor_is_not_sent_again(
+    client, session, operator, supervisor, monkeypatch
+):
+    headers, _, attempt = await published_call(client, session, operator, supervisor)
+    fake = FakeClaude(
+        {"reply": "Понял, спасибо!", "step": "end", "resolved": True},
+        {"criteria": [], "critical_errors": [], "summary": ""},
+    )
+    connect(monkeypatch, fake)
+    attempt = await say(client, headers, attempt, "Пройдите фотоконтроль в Такси Про")
+    finished = await client.post(f"{VOICE}/attempts/{attempt['id']}/finish", headers=headers)
+    assert finished.json()["transcript"][-1]["ai"]
+    response = await client.post(f"{VOICE}/attempts/{attempt['id']}/ai-review", headers=headers)
+    assert response.status_code == 409
+
+
+async def test_a_moment_of_a_call_claude_kept_open_can_be_repeated(client, operator, monkeypatch):
+    from tests.test_voice_training import EXPLAIN, NEXT, answer, finish, start
+
+    fake = FakeClaude(
+        {"reply": "Хорошо, а что именно написать?", "resolved": False},
+        {"reply": "Подождите, а что написать-то?", "resolved": False},
+        {"reply": "Понял, спасибо!", "resolved": True},
+        {"criteria": [], "critical_errors": [], "summary": ""},
+        {"reply": "Понял, напишу.", "resolved": True},
+    )
+    connect(monkeypatch, fake)
+    headers = auth(await login(client, operator.login))
+    attempt = await start(client, headers)
+    attempt = (await answer(client, headers, attempt, EXPLAIN)).json()
+    # The rules would end the call here; Claude's driver still asks.
+    attempt = (await answer(client, headers, attempt, NEXT)).json()
+    assert attempt["stage"] == "next_step"
+    attempt = (await answer(client, headers, attempt, "Напишите: прошу сменить номер.")).json()
+    assert attempt["stage"] == "resolved"
+    attempt = await finish(client, headers, attempt)
+    retried = await client.post(
+        f"{VOICE}/attempts/{attempt['id']}/retry", headers=headers, json={"turn": 2}
+    )
+    assert retried.status_code == 200, retried.text
+    assert retried.json()["stage"] != "resolved"
+    text = "Напишите в WhatsApp о смене номера"
+    again = (await answer(client, headers, retried.json(), text)).json()
+    assert again["stage"] == "resolved" and again["transcript"][-1]["ai"]

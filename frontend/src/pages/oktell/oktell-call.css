@@ -56,3 +56,10 @@
 .oktell-call-fold:hover { background:#dde3e7; }
 .oktell-call.is-folded .oktell-call-body { padding-bottom:8px; }
 .oktell-call.is-folded .oktell-call-actions { padding-top:8px; padding-bottom:8px; }
+/* Claude takes part in the call: a chip in the header (seen when folded too) and a line under the caller. */
+.oktell-call-chip { display:inline-flex; align-items:center; gap:3px; height:16px; padding:0 6px; border:1px solid #9fb6cf; border-radius:8px; background:#e8f0f8; color:#2c4f73; font-size:10px; font-weight:bold; letter-spacing:.04em; }
+.oktell-call-chip svg { width:10px; height:10px; }
+.oktell-call>header .oktell-call-chip { margin-left:auto; }
+.oktell-call>header .oktell-call-chip + .oktell-call-fold { margin-left:6px; }
+.oktell-call-ai { display:flex; align-items:flex-start; gap:6px; margin:0 14px 10px; padding:6px 8px; border:1px solid #c5d4e3; background:#eef4fa; color:#2c4f73; font-size:11px; line-height:1.4; }
+.oktell-call-ai svg { flex:none; width:12px; height:12px; margin-top:1px; }

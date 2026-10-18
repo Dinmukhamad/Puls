@@ -185,5 +185,59 @@ test("mentors see whether the AI plays the drivers and what it cost this month",
   const on = aiLine({ configured: true, active: true, model: "claude-haiku-5-5", budget_usd: 5, spent_usd: 0.4213, calls: 37 });
   assert.match(on, /\$0\.42 из \$5/);
   assert.match(on, /обращений — 37/);
-  assert.match(on, /говорит за водителя во всех звонках/);
+  assert.match(on, /играет водителя и оценивает все звонки/);
+});
+
+test("the AI's part is marked: who spoke and graded, its lines, the history and where it works", async () => {
+  const conversation = [{ role: "driver", text: "Хочу сменить номер", turn: 0 }, { role: "operator", text: "Откройте Такси Про", turn: 0 }, { role: "driver", text: "Понял, спасибо!", turn: 1, ai: true }];
+  const graded = attempt({ revision: 3, state: "completed", ai_driver: true, transcript: conversation, result: result({ score: 75, ai: true, summary: "Способ назван понятно.", solution: "Такси Про или WhatsApp." }) });
+  const html = render(VoiceResults, resultProps(graded));
+  assert.match(html, /Водитель: ИИ \(Claude\)/);
+  assert.match(html, /Оценка: ИИ \(Claude\)/);
+  assert.match(html, /Реплику сказал ИИ/);
+  assert.match(html, /Способ назван понятно/);
+  // Claude graded it: nothing to send again.
+  assert.doesNotMatch(html, /Оценить с ИИ/);
+  const prepared = render(VoiceResults, resultProps(attempt({ revision: 3, state: "completed", transcript: conversation.slice(0, 2), result: result({ score: 50 }) })));
+  assert.match(prepared, /Водитель: заготовленные фразы/);
+  assert.match(prepared, /Оценка: правила тренажёра/);
+  assert.match(prepared, /Оценка по правилам/);
+  const history = render(VoiceHistory, { attempts: [{ ...attempt({ state: "completed" }), score: 75, review_status: null, ai_driver: true, ai_grade: true }, { ...attempt({ id: 43, state: "completed" }), score: 50, review_status: null }] });
+  assert.equal((history.match(/voice-ai-mark/g) ?? []).length, 1);
+  assert.match(history, /звонок оценил ИИ/);
+  const { VoiceAIPlaces } = await moduleAt("./VoiceTrainingPage.tsx");
+  const on = render(VoiceAIPlaces, { active: true }), off = render(VoiceAIPlaces, { active: false });
+  assert.match(on, /Где работает ИИ \(Claude\)/);
+  assert.match(on, /Включён/);
+  assert.match(on, /«Смена номера телефона»/);
+  assert.match(on, /Сценарии из конструктора/);
+  assert.match(on, /Оценить с ИИ/);
+  assert.match(off, /Выключен/);
+  assert.match(off, /заготовленными фразами/);
+});
+
+test("a call the rules graded can be sent to the AI, and its grade stands beside the rules'", async () => {
+  const conversation = [{ role: "driver", text: "Хочу сменить номер", turn: 0 }, { role: "operator", text: "Напишите в WhatsApp", turn: 0 }];
+  const control = { run: noop, pending: false, error: "" };
+  const rules = attempt({ revision: 3, state: "completed", transcript: conversation, result: result({ score: 50 }) });
+  const offer = render(VoiceResults, { ...resultProps(rules), aiReview: control });
+  assert.match(offer, /Оценить с ИИ/);
+  assert.match(offer, /Этот звонок оценили правила тренажёра/);
+  assert.match(render(VoiceResults, { ...resultProps(rules), aiReview: { ...control, pending: true } }), /ИИ оценивает…/);
+  assert.match(render(VoiceResults, { ...resultProps(rules), aiReview: { ...control, error: "Лимит ИИ на этот месяц исчерпан" } }), /Лимит ИИ на этот месяц исчерпан/);
+  // Old revisions and calls without the operator's answers are not sent.
+  assert.doesNotMatch(render(VoiceResults, { ...resultProps({ ...rules, revision: 2 }), aiReview: control }), /Оценить с ИИ/);
+  assert.doesNotMatch(render(VoiceResults, { ...resultProps({ ...rules, transcript: conversation.slice(0, 1) }), aiReview: control }), /Оценить с ИИ/);
+  const review = { score: 75, ai: true, summary: "Способ назван, причина не объяснена.", rules_score: 50, critical_errors: [], criteria: [{ key: "clarity", label: "Понятность объяснения", passed: false, feedback: "Причина не названа.", quote: null, turn: null, role: "operator", example: "Вы звоните не с номера регистрации." }] };
+  const both = render(VoiceResults, { ...resultProps({ ...rules, result: { ...rules.result, ai_review: review } }), aiReview: control });
+  assert.match(both, /50<span>%<\/span><\/strong><small>По правилам/);
+  assert.match(both, /75<span>%<\/span><\/strong><small>Оценка ИИ/);
+  assert.match(both, /Способ назван, причина не объяснена/);
+  assert.match(both, /Вы звоните не с номера регистрации/);
+  assert.doesNotMatch(both, />Оценить с ИИ</);
+  const calls = [];
+  const { voiceTraining } = await moduleAt("../../api/voiceTraining.ts", async (path, options) => { calls.push({ path, options }); return rules; });
+  await voiceTraining.aiReview(42);
+  assert.equal(calls[0].path, "/api/v1/learning/voice/attempts/42/ai-review");
+  assert.equal(calls[0].options.method, "POST");
 });

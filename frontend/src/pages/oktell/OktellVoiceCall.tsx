@@ -21,14 +21,15 @@ const message = (error: unknown) => error instanceof Error ? error.message : "Н
 const lower = (text: string) => text.charAt(0).toLowerCase() + text.slice(1);
 const clock = (seconds: number) => { const value = Math.max(0, Math.floor(seconds)); return `${Math.floor(value / 60)}:${String(value % 60).padStart(2, "0")}`; };
 
-function Icon({ name }: { name: "phone" | "mic" | "muted" | "repeat" | "keyboard" | "end" }) {
+function Icon({ name }: { name: "phone" | "mic" | "muted" | "repeat" | "keyboard" | "end" | "spark" }) {
   return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     {name === "phone" ? <path d="m5 3 4 4-2 3c2 3 4 5 7 7l3-2 4 4c-1 3-4 3-7 2C8 19 4 15 3 9c-1-3-1-5 2-6Z" />
       : name === "mic" ? <><rect x="9" y="2" width="6" height="13" rx="3" /><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3" /></>
         : name === "muted" ? <path d="m3 3 18 18M9 9v3a3 3 0 0 0 5.1 2.1M9 5V4a3 3 0 0 1 6 0v7M5 10v2a7 7 0 0 0 12 4.9M12 19v3" />
           : name === "repeat" ? <path d="M3 10a9 9 0 1 1 2 8M3 4v6h6" />
             : name === "keyboard" ? <><rect x="2" y="6" width="20" height="12" rx="2" /><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10" /></>
-              : <path d="M3 15c5-5 13-5 18 0l-3 3-3-2v-3c-2-1-4-1-6 0v3l-3 2Z" />}
+              : name === "spark" ? <path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6" />
+                : <path d="M3 15c5-5 13-5 18 0l-3 3-3-2v-3c-2-1-4-1-6 0v3l-3 2Z" />}
   </svg>;
 }
 
@@ -148,15 +149,18 @@ export function OktellVoiceCall({ quiet, retry, onRetryTaken }: { quiet: boolean
 
   if (!state?.voice_calls) return null;
   const caller = (call: { number: string; department: string }) => <><strong>Водитель · {call.department}</strong><span className="oktell-call-from">{formatCaller(call.number)}</span></>;
-  const head = (title: string) => <header><span className="oktell-tiny-logo" aria-hidden="true" /><span>Oktell · {title}</span></header>;
-  if (voiceCall) return <section className={`oktell-call${folded ? " is-folded" : ""}`} aria-label="Звонок водителя" data-call="voice">
-    <header><span className="oktell-tiny-logo" aria-hidden="true" /><span>Oktell · Входящий звонок</span><button type="button" className="oktell-call-fold" aria-expanded={!folded} aria-label={folded ? "Развернуть окно звонка" : "Свернуть окно звонка"} title={folded ? "Развернуть" : "Свернуть"} onClick={() => setFolded(value => !value)}>{folded ? "▴" : "▾"}</button></header>
-    <LiveCall key={voiceCall.voice_attempt_id} attemptId={voiceCall.voice_attempt_id!} call={voiceCall} speech={speech} sink={sink} onHangUp={hangUp} caller={caller(voiceCall)} folded={folded} fresh={rangHere.current === voiceCall.id} />
+  const ai = !!state.voice_ai;
+  const chip = ai && <span className="oktell-call-chip" title="Водителя играет ИИ (Claude)"><Icon name="spark" />ИИ</span>;
+  const head = (title: string) => <header><span className="oktell-tiny-logo" aria-hidden="true" /><span>Oktell · {title}</span>{chip}</header>;
+  if (voiceCall) return <section className={`oktell-call${folded ? " is-folded" : ""}`} aria-label="Звонок водителя" data-call="voice" data-ai={ai || undefined}>
+    <header><span className="oktell-tiny-logo" aria-hidden="true" /><span>Oktell · Входящий звонок</span>{chip}<button type="button" className="oktell-call-fold" aria-expanded={!folded} aria-label={folded ? "Развернуть окно звонка" : "Свернуть окно звонка"} title={folded ? "Развернуть" : "Свернуть"} onClick={() => setFolded(value => !value)}>{folded ? "▴" : "▾"}</button></header>
+    <LiveCall key={voiceCall.voice_attempt_id} attemptId={voiceCall.voice_attempt_id!} call={voiceCall} speech={speech} sink={sink} onHangUp={hangUp} caller={caller(voiceCall)} folded={folded} fresh={rangHere.current === voiceCall.id} ai={ai} />
     {notice && <p className="oktell-call-alert" role="alert">{notice}</p>}
   </section>;
   if (ringing) return <section className="oktell-call is-ringing" aria-label="Входящий звонок" data-call="ringing">
     {head("Входящий звонок")}
     <div className="oktell-call-body"><span className="oktell-call-bell" aria-hidden="true"><Icon name="phone" /></span><div className="oktell-call-caller" role="status" aria-live="assertive">{caller(ringing)}<small>{state.auto_answer ? "Автоответ: соединяем…" : "Звонит…"}</small></div></div>
+    {ai && <p className="oktell-call-ai"><Icon name="spark" />Водителя играет ИИ (Claude): он поймёт ответ по смыслу и оценит звонок.</p>}
     {!state.auto_answer && <div className="oktell-call-actions"><button type="button" className="oktell-btn oktell-btn--green" data-coach="oktell-answer" onClick={() => void answer()}><Icon name="phone" />Ответить</button></div>}
     {notice && <p className="oktell-call-alert" role="alert">{notice}</p>}
   </section>;
@@ -183,9 +187,11 @@ export function OktellVoiceCall({ quiet, retry, onRetryTaken }: { quiet: boolean
 }
 
 /** One driver on the line: he speaks, then the microphone listens until the operator pauses. */
-function LiveCall({ attemptId, call, speech, sink, onHangUp, caller, folded, fresh }: {
+function LiveCall({ attemptId, call, speech, sink, onHangUp, caller, folded, fresh, ai }: {
   attemptId: number; call: NonNullable<OktellState["active_call"]>; speech: Speech;
   sink: MutableRefObject<((text: string) => void) | null>; onHangUp: (byDriver: boolean) => Promise<void>; caller: React.ReactNode; folded: boolean; fresh: boolean;
+  /** Claude takes part in calls now: it speaks for the driver and grades the call. */
+  ai: boolean;
 }) {
   const client = useQueryClient(), { user } = useAuth();
   const attempt = useQuery({ queryKey: voiceKeys.attempt(attemptId), queryFn: ({ signal }) => voiceTraining.attempt(attemptId, signal), retry: 1 });
@@ -289,8 +295,11 @@ function LiveCall({ attemptId, call, speech, sink, onHangUp, caller, folded, fre
     } catch (error) { setChecking(message(error)); }
   };
 
-  const status = ending ? "Завершаем звонок…" : phase === "connecting" ? "Соединение…" : phase === "driver" ? speech.loadingAudio ? "Водитель на линии…" : "Говорит водитель"
-    : phase === "sending" ? "Водитель слушает…" : phase === "failed" ? "Ответ не отправлен"
+  const aiOn = ai || !!current?.ai_driver;
+  // The driver answered with a prepared line although Claude was expected: it did not answer in time.
+  const prepared = aiOn && !!lastDriver && lastDriver.turn > 0 && !lastDriver.ai;
+  const status = ending ? aiOn ? "ИИ оценивает звонок…" : "Завершаем звонок…" : phase === "connecting" ? "Соединение…" : phase === "driver" ? speech.loadingAudio ? "Водитель на линии…" : "Говорит водитель"
+    : phase === "sending" ? aiOn ? "ИИ готовит ответ водителя…" : "Водитель слушает…" : phase === "failed" ? "Ответ не отправлен"
       : phase === "resolved" ? "Водитель всё понял. Завершите звонок"
         : textMode ? "Напишите ответ водителю" : speech.muted ? "Микрофон выключен" : speech.recording ? "Говорите — водитель слушает" : "Включаем микрофон…";
   return <>
@@ -301,6 +310,7 @@ function LiveCall({ attemptId, call, speech, sink, onHangUp, caller, folded, fre
     </div>
     {attempt.isError && <p className="oktell-call-alert" role="alert">{message(attempt.error)} <button type="button" className="oktell-link" onClick={() => void attempt.refetch()}>Повторить</button></p>}
     {!folded && <>
+    {aiOn && <p className="oktell-call-ai"><Icon name="spark" />{prepared ? "ИИ не успел ответить — водитель сказал заготовленную фразу. Продолжайте разговор." : "Водителя играет ИИ (Claude): отвечайте своими словами, он поймёт по смыслу и оценит звонок."}</p>}
     {phase === "listening" && !textMode && heard && <p className="oktell-call-heard"><span>Вы:</span> {heard}</p>}
     {failed && <p className="oktell-call-alert" role="alert">{failed.problem} <button type="button" className="oktell-link" onClick={() => void send(failed.text, failed)}>Отправить ещё раз</button></p>}
     {textMode && (phase === "listening" || phase === "failed") && <form className="oktell-call-text" onSubmit={typedAnswer}>
@@ -321,7 +331,7 @@ function LiveCall({ attemptId, call, speech, sink, onHangUp, caller, folded, fre
     </details>}
     {current && <details className="oktell-call-transcript" open={(!cloud && !speech.support.synthesis) || undefined}>
       <summary>Текст разговора</summary>
-      <ol>{current.transcript.map((item, index) => <li key={`${index}:${item.turn}`} className={item.role === "operator" ? "is-operator" : undefined}><span>{item.role === "driver" ? "Водитель" : "Вы"}</span>{item.text}</li>)}</ol>
+      <ol>{current.transcript.map((item, index) => <li key={`${index}:${item.turn}`} className={item.role === "operator" ? "is-operator" : undefined}><span>{item.role === "driver" ? item.ai ? "Водитель · ИИ" : "Водитель" : "Вы"}</span>{item.text}</li>)}</ol>
     </details>}
     </>}
     <div className="oktell-call-actions"><button type="button" className="oktell-btn oktell-btn--red" data-coach="oktell-voice-hangup" disabled={ending} onClick={hangUp}><Icon name="end" />Завершить звонок</button></div>

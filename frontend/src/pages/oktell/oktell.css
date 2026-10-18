@@ -287,6 +287,8 @@
 .oktell-voice-language { display:flex; align-items:center; flex-wrap:wrap; gap:6px; margin:0 10px 8px; }
 .oktell-voice-language>span { margin-right:4px; color:#71777a; font-size:12px; }
 .oktell .oktell-voice-language .oktell-btn.is-current { border-color:#86a638; background:#eef5e6; color:#3f5a2a; opacity:1; }
+.oktell-voice-ai { margin:0 10px 8px; padding:6px 8px; border:1px solid #dde2e6; background:#f6f7f9; color:#71777a; font-size:12px; }
+.oktell-voice-ai.is-on { border-color:#c5d4e3; background:#eef4fa; color:#2c4f73; }
 .oktell-voice-hint { margin:0 10px; color:#87939e; font-size:12px; }
 .oktell-voice-hint a, .oktell .oktell-review { color:#2364a2; }
 .oktell .oktell-review { display:flex; align-items:center; flex:none; padding:0 10px; border-left:1px solid #eef1f3; background:#fff; font-size:12px; text-decoration:none; }

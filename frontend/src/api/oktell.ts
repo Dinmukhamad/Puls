@@ -34,6 +34,8 @@ export interface OktellState {
   ringing: OktellRinging | null; ring_seconds: number;
   /** Drivers call this account in the call-centre; the language they speak. */
   voice_calls: boolean; voice_language: OktellVoiceLanguage;
+  /** Claude speaks for the drivers and grades their calls (connected and within the month's budget). */
+  voice_ai?: boolean;
   /** Set when Oktell ended the session by itself: «Перезвон» lasted longer than its limit. */
   notice: { kind: "callback_timeout"; at: string } | null;
   /** Codes dialled before a driver's number, e.g. 0880 for iTaxi. */

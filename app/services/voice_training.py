@@ -1073,12 +1073,18 @@ def attempt_data(attempt):
         "notes": attempt.snapshot.get("notes", ""),
         # «oktell»: the driver called the operator's Oktell; earlier calls were started on the page.
         "channel": attempt.snapshot.get("channel", "page"),
+        "ai_driver": ai_driver(attempt),
         "result": deepcopy(attempt.result) if attempt.state == "completed" else None,
         "can_finish": attempt.stage == "resolved",
         "retry_of": attempt.retry_of,
         "created_at": utc(attempt.created_at),
         "finished_at": utc(attempt.finished_at) if attempt.finished_at else None,
     }
+
+
+def ai_driver(attempt):
+    """Whether Claude spoke for the driver in this call (each of its lines is marked)."""
+    return any(entry.get("ai") for entry in attempt.transcript if entry["role"] == "driver")
 
 
 async def custom_allowed(session, user):
@@ -1129,9 +1135,13 @@ async def catalog(session, user):
                 "finished_at": utc(a.finished_at) if a.finished_at else None,
                 "review_status": a.result.get("review_status") if a.result else None,
                 "channel": a.snapshot.get("channel", "page"),
+                "ai_driver": ai_driver(a),
+                "ai_grade": bool(a.result and (a.result.get("ai") or a.result.get("ai_review"))),
             }
             for a in attempts
         ],
+        # Whether Claude takes part in calls right now (connected and within the month's budget).
+        "ai_active": await voice_ai.available(session),
     }
 
 
@@ -1341,6 +1351,7 @@ async def answer(session, user, attempt_id, body):
         if attempt.snapshot.get("custom")
         else None
     )
+    voiced = bool(spoken)
     if spoken:
         reply, step, resolved = spoken
         stage, line = ("resolved" if resolved else step), ["ai"]
@@ -1348,16 +1359,25 @@ async def answer(session, user, attempt_id, body):
         stage, reply, *line = dialogue_for(attempt.revision, attempt.snapshot)(
             attempt.persona, attempt.stage, attempt.transcript, body.text
         )
-        # The built-in call: its rules keep the course and the grade, Claude says the line in the
-        # driver's own words; without it the prepared line is said.
+        # The built-in call: Claude understands the operator by meaning and decides when the
+        # driver got his answer; the rules' line is its draft, and what is left when it is out.
         if not attempt.snapshot.get("custom") and attempt.revision == REVISION:
-            reply = await voice_ai.phone_reply(
+            led = await voice_ai.phone_reply(
                 session, attempt, body.text, reply,
-                resolved=stage == "resolved", understood=line[0] != "ask_how",
-            ) or reply
+                rules_resolved=stage == "resolved", understood=line[0] != "ask_how",
+                unsafe=line[0] in ("critical", "unsafe"),
+            )
+            if led:
+                (reply, resolved), voiced = led, True
+                if resolved:
+                    stage = "resolved"
+                elif stage == "resolved":
+                    stage = "next_step"
     driver = {"role": "driver", "text": reply, "turn": body.turn + 1}
     if line:
         driver["line"] = line[0]
+    if voiced:
+        driver["ai"] = True
     attempt.transcript = [
         *attempt.transcript,
         {"role": "operator", "text": body.text, "turn": body.turn},
@@ -1792,11 +1812,48 @@ async def finish(session, user, attempt_id):
     evaluator = evaluators.get(attempt.revision)
     if evaluator is None:
         raise ConflictError("Версия правил недоступна. Обратитесь к наставнику.")
-    attempt.result = evaluator(attempt)
+    rules = evaluator(attempt)
+    # The current call is graded by Claude by meaning; the rules grade it when it cannot.
+    graded = (
+        await voice_ai.grade_phone(session, attempt, rules, phone_solution(attempt))
+        if attempt.revision == REVISION
+        else None
+    )
+    attempt.result = graded or rules
     attempt.state = "completed"
     attempt.finished_at = datetime.now(UTC)
     await session.flush()
     return attempt
+
+
+def phone_solution(attempt):
+    return EXAMPLES[attempt.snapshot.get("language", "ru")]["solution"]
+
+
+async def ai_review(session, user, attempt_id):
+    """«Оценить с ИИ»: Claude grades a finished call the rules graded; both grades stay.
+    Returns the attempt and, when Claude could not answer, why (the spend is still kept)."""
+    attempt = await own_attempt(session, user, attempt_id, lock=True)
+    if attempt.state != "completed":
+        raise ConflictError("Оценить с ИИ можно завершённый звонок.")
+    if attempt.snapshot.get("custom") or attempt.revision != REVISION:
+        raise ConflictError("С ИИ можно оценить звонок «Смена номера телефона» в Oktell.")
+    if attempt.result.get("ai"):
+        raise ConflictError("Этот звонок уже оценил ИИ.")
+    if attempt.result.get("ai_review"):
+        return attempt, None
+    if not operator_entries(attempt.transcript):
+        raise ConflictError("В звонке нет ваших ответов: ИИ нечего оценивать.")
+    if not voice_ai.configured():
+        raise ConflictError("ИИ не подключён: оценить звонок с ИИ пока нельзя.")
+    if not await voice_ai.available(session):
+        raise ConflictError("Лимит ИИ на этот месяц исчерпан: оценить звонок с ИИ пока нельзя.")
+    graded = await voice_ai.grade_phone(session, attempt, attempt.result, phone_solution(attempt))
+    if graded is None:
+        return attempt, "ИИ не смог оценить звонок. Попробуйте ещё раз чуть позже."
+    attempt.result = {**attempt.result, "ai_review": graded}
+    await session.flush()
+    return attempt, None
 
 
 async def retry(session, user, attempt_id, body):
@@ -1828,6 +1885,10 @@ async def retry(session, user, attempt_id, body):
                 ),
             ]
         )
+    # The operator answered at this turn in the original call, so the driver had not got his answer
+    # yet; the rules alone may think otherwise of a call Claude led.
+    if stage == "resolved":
+        stage = "next_step"
     attempt = VoiceTrainingAttempt(
         user_id=user.id,
         scenario_key=original.scenario_key,

@@ -19,7 +19,7 @@ const errorText = (value: unknown) => value instanceof Error ? value.message : "
 const personaLabel = (key: VoicePersona) => personas.find(item => item.key === key)?.label ?? key;
 const attemptRoute = (id: number) => `/training/voice/attempts/${id}`;
 const dateLabel = (value: string) => new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Qyzylorda" }).format(new Date(value));
-type IconName = "mic" | "play" | "repeat" | "arrow" | "back" | "check" | "stop" | "headphones" | "phone";
+type IconName = "mic" | "play" | "repeat" | "arrow" | "back" | "check" | "stop" | "headphones" | "phone" | "spark";
 
 function VoiceIcon({ name, size = 20 }: { name: IconName; size?: number }) {
   const paths: Record<IconName, React.ReactNode> = {
@@ -32,6 +32,7 @@ function VoiceIcon({ name, size = 20 }: { name: IconName; size?: number }) {
     stop: <rect x="6" y="6" width="12" height="12" rx="2" />,
     headphones: <><path d="M4 14v-3a8 8 0 0 1 16 0v3" /><rect x="2" y="12" width="5" height="9" rx="2" /><rect x="17" y="12" width="5" height="9" rx="2" /></>,
     phone: <path d="m5 3 4 4-2 3c2 3 4 5 7 7l3-2 4 4c-1 3-4 3-7 2C8 19 4 15 3 9c-1-3-1-5 2-6Z" />,
+    spark: <path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6" />,
   };
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
 }
@@ -67,7 +68,8 @@ export function VoiceTrainingPage() {
   // A call started on this page before the calls moved to Oktell: it can only be finished now.
   const finish = useMutation({ mutationFn: () => voiceTraining.finish(attemptId!), onSuccess: saveAttempt });
   const review = useMutation({ mutationFn: () => voiceTraining.review(attemptId!, reviewComment.trim()), onSuccess: value => { saveAttempt(value); setReviewOpen(false); setReviewComment(""); } });
-  useEffect(() => { setReviewOpen(false); setReviewComment(""); finish.reset(); review.reset(); }, [attemptId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const aiReview = useMutation({ mutationFn: () => voiceTraining.aiReview(attemptId!), onSuccess: saveAttempt });
+  useEffect(() => { setReviewOpen(false); setReviewComment(""); finish.reset(); review.reset(); aiReview.reset(); }, [attemptId]); // eslint-disable-line react-hooks/exhaustive-deps
   // «Повторить момент»: the same driver calls again in Oktell, from that answer on.
   const retryTurn = (turn: number) => { if (current) navigate(oktellRetry(current.id, turn)); };
   const query = attemptId ? attempt : catalog;
@@ -111,16 +113,17 @@ export function VoiceTrainingPage() {
           <p className="voice-privacy">Речь распознаёт браузер. На сервер тренажёра уходит только текст ответа, а облачный голос получает только учебные реплики водителя.</p>
         </aside>
       </div>
+      <VoiceAIPlaces active={!!catalog.data.ai_active} />
       <VoiceHistory attempts={catalog.data.attempts} />
       {user && user.role !== "operator" && user.role !== "trainee" && <VoiceMentorReviews />}
-      <p className="voice-note"><VoiceIcon name="headphones" size={18} /><span><strong>Учимся объяснять, а не читать скрипт.</strong> Пилот проверяет содержание ответов по правилам учебного сценария. Интонация и темп речи не оцениваются.</span></p>
+      <p className="voice-note"><VoiceIcon name="headphones" size={18} /><span><strong>Учимся объяснять, а не читать скрипт.</strong> ИИ оценивает содержание ответов по смыслу, а когда он недоступен — правила учебного сценария. Интонация и темп речи не оцениваются.</span></p>
     </>}
     {attemptId && current && <>
       {current.state === "in_progress" ? current.channel === "oktell"
         ? <section className="card voice-update-notice"><div><strong>Звонок идёт в Oktell</strong><p>Вернитесь к звонку в Oktell и завершите его — разбор появится здесь.</p></div><Link className="btn btn--primary btn--m" to={OKTELL_CALLS}>Вернуться к звонку</Link></section>
         : <section className="card voice-update-notice"><div><strong>Звонок не завершён</strong><p>Звонки теперь проходят в Oktell. Этот разговор можно только завершить и посмотреть разбор.</p></div><Button variant="primary" disabled={finish.isPending} onClick={() => finish.mutate()}>{finish.isPending ? "Завершаем…" : "Завершить и открыть разбор"}</Button></section>
-        : <VoiceResults attempt={current} pending={false} onRetry={retryTurn} reviewOpen={reviewOpen} onReviewOpen={() => setReviewOpen(true)} reviewComment={reviewComment} onReviewComment={setReviewComment} reviewing={review.isPending} onReview={() => review.mutate()} onReviewCancel={() => setReviewOpen(false)} />}
-      <p className="voice-caption">Учебный пилот: содержание ответов оценивается по правилам сценария, действия — по сохранённым событиям. Интонация и темп речи не оцениваются.</p>
+        : <VoiceResults attempt={current} pending={false} onRetry={retryTurn} reviewOpen={reviewOpen} onReviewOpen={() => setReviewOpen(true)} reviewComment={reviewComment} onReviewComment={setReviewComment} reviewing={review.isPending} onReview={() => review.mutate()} onReviewCancel={() => setReviewOpen(false)} aiReview={{ run: () => aiReview.mutate(), pending: aiReview.isPending, error: aiReview.error ? errorText(aiReview.error) : "" }} />}
+      <p className="voice-caption">{current.result?.ai ? "Оценку поставил ИИ (Claude): ответы он читает по смыслу, а «Проверку данных» берёт из действий в Диспетчерской и Oktell." : "Учебный пилот: содержание ответов оценивается по правилам сценария, действия — по сохранённым событиям."} Интонация и темп речи не оцениваются.</p>
     </>}
     {speech.playbackNotice && <p className="voice-playback-notice" role="status">{speech.playbackNotice}</p>}
     {speech.error && !attemptId && <section className="card voice-speech-error" role="alert"><strong>Не удалось использовать голос</strong><p>{speech.error}</p></section>}
@@ -142,17 +145,62 @@ export function VoiceSettings({ speech, disabled, onPreview, previewLabel = "П�
 
 export function VoiceHistory({ attempts }: { attempts: VoiceAttemptSummary[] }) {
   if (!attempts.length) return <section className="card voice-empty-history"><span className="voice-history-icon"><VoiceIcon name="repeat" /></span><div><h2 className="card__title">Здесь будет твой опыт</h2><p>Звонки из Oktell и их разборы сохранятся в аккаунте.</p></div></section>;
-  return <section className="card voice-history"><header className="card__head"><div className="card__titles"><h2 className="card__title">Мои звонки</h2><p className="card__subtitle">Всего: {attempts.length}</p></div></header><div className="voice-history-list">{attempts.map(item => <Link key={item.id} to={attemptRoute(item.id)} className="voice-history-item"><span className={`voice-history-icon ${item.state === "completed" ? "is-done" : ""}`}><VoiceIcon name={item.state === "completed" ? "check" : "play"} /></span><span className="voice-history-name"><strong>{item.title}</strong><small>{personaLabel(item.persona)}{languageNote(item.language)} · {dateLabel(item.created_at)}</small></span><span className="voice-history-state">{item.state !== "completed" ? <Badge tone="info">{item.channel === "oktell" ? "Идёт в Oktell" : "Не завершён"}</Badge> : item.score === null ? <Badge tone="warning">Ждёт оценки</Badge> : <Badge tone={item.score >= 80 ? "success" : "neutral"}>{`${item.score}%`}</Badge>}{item.review_status && item.review_status !== "awaiting_grade" && <small>{item.review_status === "reviewed" ? "Наставник ответил" : "Запрос на пересмотр"}</small>}</span><VoiceIcon name="arrow" size={18} /></Link>)}</div></section>;
+  return <section className="card voice-history"><header className="card__head"><div className="card__titles"><h2 className="card__title">Мои звонки</h2><p className="card__subtitle">Всего: {attempts.length}</p></div></header><div className="voice-history-list">{attempts.map(item => <Link key={item.id} to={attemptRoute(item.id)} className="voice-history-item"><span className={`voice-history-icon ${item.state === "completed" ? "is-done" : ""}`}><VoiceIcon name={item.state === "completed" ? "check" : "play"} /></span><span className="voice-history-name"><strong>{item.title}{(item.ai_driver || item.ai_grade) && <AIMark title={item.ai_grade ? "Водителя играл и звонок оценил ИИ (Claude)" : "Водителя играл ИИ (Claude)"} />}</strong><small>{personaLabel(item.persona)}{languageNote(item.language)} · {dateLabel(item.created_at)}</small></span><span className="voice-history-state">{item.state !== "completed" ? <Badge tone="info">{item.channel === "oktell" ? "Идёт в Oktell" : "Не завершён"}</Badge> : item.score === null ? <Badge tone="warning">Ждёт оценки</Badge> : <Badge tone={item.score >= 80 ? "success" : "neutral"}>{`${item.score}%`}</Badge>}{item.review_status && item.review_status !== "awaiting_grade" && <small>{item.review_status === "reviewed" ? "Наставник ответил" : "Запрос на пересмотр"}</small>}</span><VoiceIcon name="arrow" size={18} /></Link>)}</div></section>;
 }
 
 function VoiceTranscriptView({ attempt, forceOpen = false }: { attempt: VoiceAttempt; forceOpen?: boolean }) {
-  return <details className="voice-transcript" open={forceOpen || undefined}><summary><span>Расшифровка разговора</span><span>{attempt.transcript.length} реплик</span></summary><ol>{attempt.transcript.map((item, index) => <li className={item.role === "operator" ? "is-operator" : ""} key={`${index}:${item.turn}`}><span>{item.role === "driver" ? "Водитель" : "Ты"}<small>Реплика {item.turn + 1}</small></span><p>{item.text}</p></li>)}</ol></details>;
+  return <details className="voice-transcript" open={forceOpen || undefined}><summary><span>Расшифровка разговора</span><span>{attempt.transcript.length} реплик</span></summary><ol>{attempt.transcript.map((item, index) => <li className={item.role === "operator" ? "is-operator" : ""} key={`${index}:${item.turn}`}><span><span>{item.role === "driver" ? "Водитель" : "Ты"}{item.ai && <AIMark title="Реплику сказал ИИ (Claude)" />}</span><small>Реплика {item.turn + 1}</small></span><p>{item.text}</p></li>)}</ol></details>;
 }
 
-export function VoiceResults({ attempt, pending, onRetry, reviewOpen, onReviewOpen, reviewComment, onReviewComment, reviewing, onReview, onReviewCancel }: {
+/** «ИИ»: Claude took part — in a line, a call or a grade. */
+function AIMark({ title, label = "ИИ" }: { title: string; label?: string }) {
+  return <span className="voice-ai-mark" title={title}><VoiceIcon name="spark" size={12} />{label}<span className="sr-only"> — {title}</span></span>;
+}
+
+/** Where Claude takes part, and whether it does right now. */
+export function VoiceAIPlaces({ active }: { active: boolean }) {
+  const places = [
+    { title: "«Смена номера телефона»", driver: "ИИ понимает ответ по смыслу и сам решает, понял ли водитель", grade: "ИИ; «Проверка данных» — по действиям в Диспетчерской и Oktell" },
+    { title: "Сценарии из конструктора", driver: "ИИ по карточке автора: ситуация, факты, решение", grade: "ИИ: шаги автора, правильное решение, понятность" },
+    { title: "Когда ИИ недоступен", driver: "Заготовленные фразы и ключевые слова сценария", grade: "Правила тренажёра, для конструктора — наставник" },
+  ];
+  return <section className="card voice-ai-places" aria-labelledby="voice-ai-title">
+    <header className="voice-ai-places__head"><span className="voice-ai-places__icon"><VoiceIcon name="spark" size={20} /></span><div><h2 className="card__title" id="voice-ai-title">Где работает ИИ (Claude)</h2><p className="card__subtitle">{active ? "Сейчас включён: водитель говорит своими словами, звонки оценивает ИИ." : "Сейчас не подключён или исчерпан лимит месяца: водитель говорит заготовленными фразами."}</p></div><Badge tone={active ? "success" : "neutral"}>{active ? "Включён" : "Выключен"}</Badge></header>
+    <ul className="voice-ai-places__list">{places.map(item => <li key={item.title}><strong>{item.title}</strong><p><span>Водитель</span>{item.driver}</p><p><span>Оценка</span>{item.grade}</p></li>)}</ul>
+    <p className="voice-caption">Реплики ИИ отмечены знаком «ИИ» в окне звонка и в расшифровке. Звонок, который оценили правила, можно отправить ИИ: кнопка «Оценить с ИИ» в разборе.</p>
+  </section>;
+}
+
+/** Who spoke for the driver and who graded the call. */
+function VoiceWho({ attempt }: { attempt: VoiceAttempt }) {
+  const result = attempt.result;
+  const grade = result?.ai ? "ИИ (Claude)" : result?.manual ? "наставник" : "правила тренажёра";
+  return <p className="voice-who"><span className={attempt.ai_driver ? "is-ai" : ""}>{attempt.ai_driver && <VoiceIcon name="spark" size={13} />}Водитель: {attempt.ai_driver ? "ИИ (Claude)" : "заготовленные фразы"}</span><span className={result?.ai ? "is-ai" : ""}>{result?.ai && <VoiceIcon name="spark" size={13} />}Оценка: {grade}</span></p>;
+}
+
+type AIReviewControl = { run: () => void; pending: boolean; error: string };
+
+/** «Оценить с ИИ»: a call the rules graded, read again by Claude; both grades stay. */
+function VoiceAIReview({ attempt, control, pending, onRetry }: { attempt: VoiceAttempt; control: AIReviewControl; pending: boolean; onRetry: (turn: number) => void }) {
+  const result = attempt.result!, review = result.ai_review;
+  return <section className="card voice-ai-review" aria-labelledby="voice-ai-review-title">
+    <header className="voice-ai-places__head"><span className="voice-ai-places__icon"><VoiceIcon name="spark" size={20} /></span><div><h2 className="card__title" id="voice-ai-review-title">Оценка ИИ</h2><p className="card__subtitle">{review ? "Claude прочитал расшифровку и оценил ответы по смыслу. Оценка по правилам осталась прежней." : "Этот звонок оценили правила тренажёра. Claude прочитает расшифровку и оценит ответы по смыслу — с цитатами и примерами."}</p></div>{!review && <Button variant="primary" disabled={control.pending} onClick={control.run} icon={<VoiceIcon name="spark" size={16} />}>{control.pending ? "ИИ оценивает…" : "Оценить с ИИ"}</Button>}</header>
+    {control.error && !review && <p className="voice-ai-review__error" role="alert">{control.error}</p>}
+    {review && <>
+      <div className="voice-ai-review__scores"><div><strong>{result.score}<span>%</span></strong><small>По правилам</small></div><div className="is-ai"><strong>{review.score}<span>%</span></strong><small>Оценка ИИ</small></div></div>
+      {review.summary && <p className="voice-ai-review__summary">{review.summary}</p>}
+      {review.critical_errors.length > 0 && <ul className="voice-ai-review__critical">{review.critical_errors.map((item, index) => <li key={index}><strong>{item.text}</strong><blockquote>«{item.quote}»<cite>Твой ответ · реплика {item.turn + 1}</cite></blockquote></li>)}</ul>}
+      <ul className="voice-ai-review__list">{review.criteria.map(item => <li key={item.key} className={item.passed ? "is-passed" : ""}><span className="voice-criterion-mark">{item.passed ? <VoiceIcon name="check" size={15} /> : "↗"}</span><div><strong>{item.label}</strong><p>{item.feedback}</p>{item.quote && <blockquote>«{item.quote}»<cite>{item.turn === null ? "Сохранённые данные тренировки" : `${item.role === "driver" ? "Водитель" : "Твой ответ"} · реплика ${item.turn + 1}`}</cite></blockquote>}{!item.passed && item.example && <div className="voice-example"><span>Можно сказать так</span><p>{item.example}</p></div>}{!item.passed && item.turn !== null && item.role !== "driver" && <Button size="s" variant="plain" disabled={pending} onClick={() => onRetry(item.turn!)} icon={<VoiceIcon name="repeat" size={15} />}>Повторить момент</Button>}</div></li>)}</ul>
+    </>}
+  </section>;
+}
+
+export function VoiceResults({ attempt, pending, onRetry, reviewOpen, onReviewOpen, reviewComment, onReviewComment, reviewing, onReview, onReviewCancel, aiReview }: {
   attempt: VoiceAttempt; pending: boolean; onRetry: (turn: number) => void;
   reviewOpen: boolean; onReviewOpen: () => void; reviewComment: string; onReviewComment: (value: string) => void;
   reviewing: boolean; onReview: () => void; onReviewCancel: () => void;
+  /** «Оценить с ИИ» for a call «Смена номера» the rules graded. */
+  aiReview?: AIReviewControl;
 }) {
   const result = attempt.result;
   if (!result) return <section className="card voice-error"><h2>Разговор сохранён</h2><p>Результат пока недоступен. Обнови страницу, чтобы проверить его.</p></section>;
@@ -160,10 +208,11 @@ export function VoiceResults({ attempt, pending, onRetry, reviewOpen, onReviewOp
   const passed = result.criteria.filter(item => item.passed).length;
   const firstOperator = attempt.transcript.find(item => item.role === "operator");
   const tone = result.critical_errors.length ? "danger" : passed === result.criteria.length ? "success" : "warning";
-  return <div className="voice-results"><section className="card voice-result-hero" data-tone={tone}><div><Badge tone={tone}>{result.ai ? "Оценка ИИ" : "Разбор разговора"}</Badge><h2>{result.critical_errors.length ? "Есть важный момент для разбора" : passed === result.criteria.length ? "Разговор получился" : "Хорошая основа для следующей попытки"}</h2><p>{passed} из {result.criteria.length} критериев выполнено. {result.ai ? result.summary || "ИИ оценил звонок по карточке сценария." : "Оценка относится к содержанию ответов и проверенным действиям."}</p><div className="voice-inline-actions"><Link className="btn btn--primary btn--m" to={OKTELL_CALLS}>Принять новый звонок<VoiceIcon name="arrow" size={17} /></Link>{firstOperator ? <Button disabled={pending} onClick={() => onRetry(firstOperator.turn)}>Повторить разговор</Button> : null}</div></div><div className="voice-score"><strong>{result.score}<span>%</span></strong><small>Результат попытки</small></div></section>
+  return <div className="voice-results"><section className="card voice-result-hero" data-tone={tone}><div><Badge tone={tone}>{result.ai ? "Оценка ИИ" : "Оценка по правилам"}</Badge><VoiceWho attempt={attempt} /><h2>{result.critical_errors.length ? "Есть важный момент для разбора" : passed === result.criteria.length ? "Разговор получился" : "Хорошая основа для следующей попытки"}</h2><p>{passed} из {result.criteria.length} критериев выполнено. {result.ai ? result.summary || "ИИ оценил звонок по смыслу ответов." : "Оценка относится к содержанию ответов и проверенным действиям."}</p><div className="voice-inline-actions"><Link className="btn btn--primary btn--m" to={OKTELL_CALLS}>Принять новый звонок<VoiceIcon name="arrow" size={17} /></Link>{firstOperator ? <Button disabled={pending} onClick={() => onRetry(firstOperator.turn)}>Повторить разговор</Button> : null}</div></div><div className="voice-score"><strong>{result.score}<span>%</span></strong><small>Результат попытки</small></div></section>
     {result.critical_errors.length > 0 && <section className="card voice-critical"><Badge tone="danger">Критические ошибки · {result.critical_errors.length}</Badge><h2>Это нужно исправить в первую очередь</h2>{result.critical_errors.map((item, index) => <article key={index}><h3>{item.text}</h3><blockquote>«{item.quote}»<cite>Твой ответ · реплика {item.turn + 1}</cite></blockquote><Button size="s" disabled={pending} onClick={() => onRetry(item.turn)} icon={<VoiceIcon name="repeat" size={16} />}>Повторить этот момент</Button></article>)}</section>}
     <section className="voice-feedback"><div className="voice-feedback__title"><h2 className="section-title">Что получилось и что улучшить</h2><p className="page-subtitle">По сохранённым событиям и репликам</p></div><div className="voice-criteria">{result.criteria.map(item => <article className={`card voice-criterion ${item.passed ? "is-passed" : ""}`} key={item.key}><div className="voice-criterion-title"><span className="voice-criterion-mark">{item.passed ? <VoiceIcon name="check" size={17} /> : "↗"}</span><h3>{item.label}</h3><Badge tone={item.passed ? "success" : "warning"}>{item.passed ? "Получилось" : "Стоит улучшить"}</Badge></div><p>{item.feedback}</p>{item.quote ? <blockquote>«{item.quote}»<cite>{item.turn === null ? "Сохранённые данные тренировки" : `${item.role === "driver" ? "Водитель" : "Твой ответ"} · реплика ${item.turn + 1}`}</cite></blockquote> : <p className="voice-evidence-missing">В сохранённых ответах или действиях нет подтверждения этого шага.</p>}{!item.passed && item.example && <div className="voice-example"><span>Можно сказать так</span><p>{item.example}</p></div>}{!item.passed && firstOperator && <Button size="s" variant="plain" disabled={pending} onClick={() => onRetry(item.role === "driver" ? firstOperator.turn : item.turn ?? firstOperator.turn)} icon={<VoiceIcon name="repeat" size={15} />}>Повторить момент</Button>}</article>)}</div></section>
-    {result.ai && result.solution && <section className="card voice-solution"><h2 className="card__title">Правильное решение</h2><p>{result.solution}</p><p className="voice-caption">Оценку поставил ИИ (Claude) по карточке сценария. Если не согласен — оспорь её, ответит наставник.</p></section>}
+    {result.ai && result.solution && <section className="card voice-solution"><h2 className="card__title">Правильное решение</h2><p>{result.solution}</p><p className="voice-caption">Оценку поставил ИИ (Claude). Если не согласен — оспорь её, ответит наставник.</p></section>}
+    {!result.ai && !attempt.custom && attempt.revision === 3 && firstOperator && aiReview && <VoiceAIReview attempt={attempt} control={aiReview} pending={pending} onRetry={onRetry} />}
     <section className="card voice-review-request"><div><h2 className="card__title">Есть вопрос к оценке?</h2><p>Опиши спорный момент и сохрани запрос для разбора с наставником.</p></div>{result.review_status ? <Badge tone="success" icon={<VoiceIcon name="check" size={14} />}>{result.review_status === "reviewed" ? "Наставник рассмотрел запрос" : "Запрос на пересмотр сохранён"}</Badge> : !reviewOpen ? <Button onClick={onReviewOpen}>Оспорить оценку</Button> : null}{result.review_status === "reviewed" && result.mentor_comment && <div className="voice-mentor-reply"><strong>Комментарий наставника</strong><p>{result.mentor_comment}</p></div>}{reviewOpen && !result.review_status && <form onSubmit={event => { event.preventDefault(); if (reviewComment.trim() && !reviewing) onReview(); }}><label className="field__label" htmlFor="voice-review-comment">Что стоит пересмотреть?</label><textarea id="voice-review-comment" className="input" rows={3} maxLength={2000} required value={reviewComment} onChange={event => onReviewComment(event.target.value)} disabled={reviewing} placeholder="Укажи реплику или действие и объясни, с чем ты не согласен…" /><div className="voice-inline-actions"><Button type="submit" variant="primary" disabled={reviewing || !reviewComment.trim()}>{reviewing ? "Сохраняем…" : "Сохранить для наставника"}</Button><Button disabled={reviewing} onClick={onReviewCancel}>Отмена</Button></div></form>}</section>
     <section className="card voice-result-transcript"><VoiceTranscriptView attempt={attempt} /></section><p className="voice-caption">Повтор момента: этот водитель снова позвонит в Oktell и продолжит с того же места. Исходный звонок остаётся в истории.</p>
   </div>;
@@ -177,7 +226,7 @@ function ManualResults({ attempt, pending, onRetry }: { attempt: VoiceAttempt; p
   const recognized = result.criteria.filter(item => item.passed).length;
   const tone = score === null ? "warning" : score >= 80 ? "success" : "warning";
   return <div className="voice-results">
-    <section className="card voice-result-hero" data-tone={tone}><div><Badge tone={score === null ? "warning" : "success"}>{score === null ? "Ждёт оценки наставника" : "Оценка наставника"}</Badge><h2>{score === null ? "Звонок отправлен наставнику" : score >= 80 ? "Разговор получился" : "Есть что улучшить"}</h2><p>{score === null ? "Супервайзер, тренер или руководитель прочитает разговор и поставит оценку. Она появится здесь и в истории попыток." : `${result.mentor_name ? `Наставник: ${result.mentor_name}. ` : ""}Ниже — комментарий наставника и что тренажёр узнал в твоих ответах.`}</p><div className="voice-inline-actions"><Link className="btn btn--primary btn--m" to={OKTELL_CALLS}>Принять новый звонок<VoiceIcon name="arrow" size={17} /></Link>{firstOperator ? <Button disabled={pending} onClick={() => onRetry(firstOperator.turn)}>Повторить разговор</Button> : null}</div></div><div className="voice-score"><strong>{score === null ? "—" : <>{score}<span>%</span></>}</strong><small>{score === null ? "Оценка появится позже" : "Оценка наставника"}</small></div></section>
+    <section className="card voice-result-hero" data-tone={tone}><div><Badge tone={score === null ? "warning" : "success"}>{score === null ? "Ждёт оценки наставника" : "Оценка наставника"}</Badge><VoiceWho attempt={attempt} /><h2>{score === null ? "Звонок отправлен наставнику" : score >= 80 ? "Разговор получился" : "Есть что улучшить"}</h2><p>{score === null ? "Супервайзер, тренер или руководитель прочитает разговор и поставит оценку. Она появится здесь и в истории попыток." : `${result.mentor_name ? `Наставник: ${result.mentor_name}. ` : ""}Ниже — комментарий наставника и что тренажёр узнал в твоих ответах.`}</p><div className="voice-inline-actions"><Link className="btn btn--primary btn--m" to={OKTELL_CALLS}>Принять новый звонок<VoiceIcon name="arrow" size={17} /></Link>{firstOperator ? <Button disabled={pending} onClick={() => onRetry(firstOperator.turn)}>Повторить разговор</Button> : null}</div></div><div className="voice-score"><strong>{score === null ? "—" : <>{score}<span>%</span></>}</strong><small>{score === null ? "Оценка появится позже" : "Оценка наставника"}</small></div></section>
     {score !== null && result.mentor_comment && <section className="card voice-mentor-card"><h2 className="card__title">Комментарий наставника</h2><p>{result.mentor_comment}</p></section>}
     {result.critical_errors.length > 0 && <section className="card voice-critical"><Badge tone="danger">Критические ошибки · {result.critical_errors.length}</Badge><h2>Это нужно исправить в первую очередь</h2>{result.critical_errors.map((item, index) => <article key={index}><h3>{item.text}</h3><blockquote>«{item.quote}»<cite>Твой ответ · реплика {item.turn + 1}</cite></blockquote><Button size="s" disabled={pending} onClick={() => onRetry(item.turn)} icon={<VoiceIcon name="repeat" size={16} />}>Повторить этот момент</Button></article>)}</section>}
     {result.solution && <section className="card voice-solution"><h2 className="card__title">Правильное решение</h2><p>{result.solution}</p></section>}

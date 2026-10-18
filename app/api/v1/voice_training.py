@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 
 from app.core.deps import CurrentUser, SessionDep
-from app.core.errors import DomainError, NotFoundError
+from app.core.errors import ConflictError, DomainError, NotFoundError
 from app.core.work_sites import require_work_sites
 from app.schemas.voice_training import (
     VoiceAnswer,
@@ -145,6 +145,16 @@ async def retry(attempt_id: int, body: VoiceRetry, session: SessionDep, user: Cu
 async def review(attempt_id: int, body: VoiceReview, session: SessionDep, user: CurrentUser):
     attempt = await voice_training.review(session, user, attempt_id, body)
     await session.commit()
+    return voice_training.attempt_data(attempt)
+
+
+@router.post("/attempts/{attempt_id}/ai-review")
+async def ai_review(attempt_id: int, session: SessionDep, user: CurrentUser):
+    attempt, problem = await voice_training.ai_review(session, user, attempt_id)
+    # A paid answer that did not come out right still counts towards the month's budget.
+    await session.commit()
+    if problem:
+        raise ConflictError(problem)
     return voice_training.attempt_data(attempt)
 
 

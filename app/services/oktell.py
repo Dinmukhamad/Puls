@@ -17,7 +17,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.core.errors import ConflictError, DomainError, NotFoundError
 from app.models.oktell import OktellEvent
-from app.services import voice_training
+from app.services import voice_ai, voice_training
 from app.services.learning import lock_learner
 
 DEMO_LOGIN = "6600"
@@ -423,6 +423,8 @@ async def history(session, user_id: int) -> list[OktellEvent]:
 async def state(session, user) -> dict:
     result = build(fold(await history(session, user.id)), user, datetime.now(UTC))
     result["voice_calls"] = voice_training.can_call(user)
+    # Claude speaks for the drivers while it is connected and within the month's budget.
+    result["voice_ai"] = result["voice_calls"] and await voice_ai.available(session)
     return result
 
 
