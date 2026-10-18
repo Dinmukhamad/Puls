@@ -28,7 +28,16 @@ Language = Literal["ru", "kk"]
 PREVIEW_TEXT = "Здравствуйте. Мне нужно поменять номер телефона. Подскажите, как это сделать?"
 PREVIEW_TEXT_KK = "Сәлеметсіз бе. Маған телефон нөмірін ауыстыру керек. Мұны қалай істеуге болады?"
 PREVIEWS = {"ru": PREVIEW_TEXT, "kk": PREVIEW_TEXT_KK}
-YANDEX_URL = "https://tts.api.cloud.yandex.net/tts/v3/utteranceSynthesis"
+#: SpeechKit runs in two installations with their own addresses: the global one and the
+#: Kazakhstan one (kz.console.yandex.cloud). A key belongs to one of them; the first that
+#: accepts it is remembered for the process.
+YANDEX_URLS = (
+    "https://tts.api.cloud.yandex.net/tts/v3/utteranceSynthesis",
+    "https://tts.api.ml.yandexcloud.kz/tts/v3/utteranceSynthesis",
+)
+YANDEX_URL = YANDEX_URLS[0]
+#: A voice every installation has, asked last when the character's own voice is refused.
+YANDEX_FALLBACK_VOICE = {"ru": "ermil", "kk": "madi"}
 #: Every character is a different man: his own voice, manner and tempo. Kazakh has one
 #: male voice, so there the characters differ by tempo, wording and the line's sound.
 YANDEX_VOICES = {
@@ -131,11 +140,18 @@ def normalize_text(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+yandex_home: dict[str, str | None] = {"url": None}
+
+
 def _yandex_hints(provider: Provider, persona: Persona) -> list[list[dict]]:
-    """The hints to try in order: with the persona's role, then without it."""
+    """The hints to try in order: with the persona's role, without it, then a common voice."""
     voice, role, speed = YANDEX_VOICES[provider.language][persona]
     base = [{"voice": voice}, {"speed": speed}]
-    return [[base[0], {"role": role}, base[1]], base] if role else [base]
+    attempts = [[base[0], {"role": role}, base[1]], base] if role else [base]
+    fallback = YANDEX_FALLBACK_VOICE[provider.language]
+    if fallback != voice:
+        attempts.append([{"voice": fallback}, {"speed": speed}])
+    return attempts
 
 
 def _yandex_audio(body: bytes) -> bytes:
@@ -182,18 +198,26 @@ async def _request_yandex(provider: Provider, text: str, persona: Persona) -> by
     headers = {"Authorization": f"Api-Key {settings.YANDEX_SPEECHKIT_API_KEY.get_secret_value()}"}
     if settings.YANDEX_FOLDER_ID:
         headers["x-folder-id"] = settings.YANDEX_FOLDER_ID
-    # A voice that does not take the persona's role is asked again without it.
-    for hints in _yandex_hints(provider, persona):
-        payload = {
-            "text": text,
-            "hints": hints,
-            "outputAudioSpec": {"containerAudio": {"containerAudioType": "MP3"}},
-            "loudnessNormalizationType": "LUFS",
-        }
-        status, body = await _post(YANDEX_URL, headers, MAX_RESPONSE_BYTES * 2, json=payload)
-        if status == 200:
-            return _checked_mp3(_yandex_audio(body))
-        if status != 400:
+    home = yandex_home["url"]
+    urls = [home] if home else list(YANDEX_URLS)
+    for url in urls:
+        # A voice that does not take the persona's role is asked again without it.
+        for hints in _yandex_hints(provider, persona):
+            payload = {
+                "text": text,
+                "hints": hints,
+                "outputAudioSpec": {"containerAudio": {"containerAudioType": "MP3"}},
+                "loudnessNormalizationType": "LUFS",
+            }
+            status, body = await _post(url, headers, MAX_RESPONSE_BYTES * 2, json=payload)
+            if status == 200:
+                audio = _checked_mp3(_yandex_audio(body))
+                yandex_home["url"] = url
+                return audio
+            if status != 400:
+                break
+        # Only a key the installation does not know is tried at the other one.
+        if status not in (401, 403):
             break
     raise SpeechUnavailable()
 

@@ -27,6 +27,7 @@ def clean_speech(monkeypatch):
     monkeypatch.setattr(settings, "AZURE_SPEECH_REGION", "")
     monkeypatch.setattr(settings, "YANDEX_SPEECHKIT_API_KEY", SecretStr(""))
     monkeypatch.setattr(settings, "YANDEX_FOLDER_ID", "")
+    monkeypatch.setattr(voice_tts, "yandex_home", {"url": None})
     monkeypatch.setattr(voice_tts, "engine", voice_tts.SpeechEngine())
 
 
@@ -460,20 +461,61 @@ async def test_yandex_retries_without_a_role_the_voice_does_not_take(monkeypatch
     ]
 
 
-@pytest.mark.parametrize("status", [401, 403, 429, 500])
-async def test_yandex_errors_are_not_retried_and_hide_diagnostics(status, monkeypatch):
+@pytest.mark.parametrize(("status", "installations"), [(401, 2), (403, 2), (429, 1), (500, 1)])
+async def test_yandex_errors_are_not_retried_and_hide_diagnostics(
+    status, installations, monkeypatch
+):
     yandex(monkeypatch)
     calls = []
 
     def respond(request):
-        calls.append(request)
+        calls.append(str(request.url))
         return httpx.Response(status, text="fixture-yandex-key upstream details")
 
     transport(monkeypatch, respond)
     with pytest.raises(voice_tts.SpeechUnavailable) as error:
         await voice_tts.engine.synthesize("yandex", "Сколько можно!", "irritated", 1)
-    assert len(calls) == 1
+    # An unknown key is asked once at each installation; other errors end at once.
+    assert calls == list(voice_tts.YANDEX_URLS[:installations])
+    assert voice_tts.yandex_home["url"] is None
     assert "fixture" not in str(error.value) and "upstream" not in str(error.value)
+
+
+async def test_a_kazakhstan_key_is_sent_to_its_installation_and_remembered(monkeypatch):
+    yandex(monkeypatch)
+    calls = []
+
+    def respond(request):
+        calls.append(str(request.url))
+        if "yandexcloud.kz" not in str(request.url):
+            return httpx.Response(401, json={"error": "unknown api key"})
+        return httpx.Response(200, content=yandex_stream(MP3))
+
+    transport(monkeypatch, respond)
+    await voice_tts.engine.synthesize("yandex", "Первая реплика", "calm", 1)
+    assert calls == list(voice_tts.YANDEX_URLS)
+    assert voice_tts.yandex_home["url"] == "https://tts.api.ml.yandexcloud.kz/tts/v3/utteranceSynthesis"
+    await voice_tts.engine.synthesize("yandex", "Вторая реплика", "calm", 1)
+    assert calls[2:] == [voice_tts.YANDEX_URLS[1]]
+
+
+async def test_a_refused_character_voice_falls_back_to_a_common_one(monkeypatch):
+    yandex(monkeypatch)
+    hints = []
+
+    def respond(request):
+        hints.append(json.loads(request.content)["hints"])
+        if hints[-1][0]["voice"] != "ermil":
+            return httpx.Response(400, json={"error": "unknown voice"})
+        return httpx.Response(200, content=yandex_stream(MP3))
+
+    transport(monkeypatch, respond)
+    await voice_tts.engine.synthesize("yandex", "Сколько можно!", "irritated", 1)
+    assert hints == [
+        [{"voice": "kirill"}, {"role": "strict"}, {"speed": 1.12}],
+        [{"voice": "kirill"}, {"speed": 1.12}],
+        [{"voice": "ermil"}, {"speed": 1.12}],
+    ]
 
 
 @pytest.mark.parametrize(
