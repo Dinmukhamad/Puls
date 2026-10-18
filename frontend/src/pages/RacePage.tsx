@@ -19,7 +19,7 @@ export function pointsLabel(value: number): string {
   return `${points(rounded)} ${word}`;
 }
 
-const withUnit = (value: number | null, unit: string | null) => value == null ? "—" : `${points(value)}${unit ? ` ${unit}` : ""}`;
+export const withUnit = (value: number | null, unit: string | null) => value == null ? "—" : `${points(value)}${unit ? ` ${unit}` : ""}`;
 
 /** The table shows the top three and the places around the operator; everyone on request. */
 export function visibleRows(standings: RacePlace[], all: boolean): (RacePlace | "gap")[] {
@@ -127,7 +127,7 @@ function RaceTopThree({ data }: { data: RaceOut }) {
   </Card>;
 }
 
-function OptionList({ items }: { items: RaceOption[] }) {
+export function OptionList({ items }: { items: RaceOption[] }) {
   return <ul className="race-options">
     {items.map((o) => <li key={o.code}>
       <span className="race-options__title">{o.title}</span>
@@ -137,7 +137,7 @@ function OptionList({ items }: { items: RaceOption[] }) {
   </ul>;
 }
 
-function PlanText({ plan, closed }: { plan: RacePlan; closed: boolean }) {
+export function PlanText({ plan, closed }: { plan: RacePlan; closed: boolean }) {
   if (plan.reachable) return <><p className="small">Одного показателя не хватит — подтяните вместе:</p><OptionList items={plan.steps} /></>;
   return <p className="small secondary">{closed ? "Этот разрыв за неделю было не закрыть" : "За эту неделю разрыв не закрыть"}: по загруженным показателям можно добрать только {pointsLabel(plan.gain)}. Держите темп — баллы недели идут в конкурс месяца.</p>;
 }
@@ -166,7 +166,7 @@ function RaceAdvice({ data }: { data: RaceOut }) {
   </Card>;
 }
 
-function MetricRow({ metric: m }: { metric: RaceMetric }) {
+export function MetricRow({ metric: m }: { metric: RaceMetric }) {
   return <li className="race-metric">
     <div className="race-metric__head">
       <strong>{m.title}</strong>

@@ -1,56 +1,4 @@
-.cabinet-page { width: 100%; }
-.cabinet-greeting { margin: calc(-1 * var(--sp-2)) 0 0; color: var(--text-secondary); }
-.cabinet-overview, .cabinet-activity { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(300px, 1fr); gap: var(--sp-5); align-items: stretch; }
-.cabinet-overview > *, .cabinet-activity > * { min-width: 0; }
-.cabinet-activity > :only-child { grid-column: 1 / -1; }
-.cabinet-text-link { font-size: var(--text-caption); color: var(--text-secondary); white-space: nowrap; }
-.cabinet-text-link:hover { color: var(--text-primary); }
-.cabinet-progress__content { display: grid; gap: var(--sp-3); }
-.cabinet-progress__heading { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4); margin-bottom: var(--sp-2); }
-.cabinet-progress__level { display: flex; align-items: center; gap: var(--sp-3); min-width: 0; }
-.cabinet-progress__level h3 { font-size: clamp(20px, 2vw, 28px); font-weight: 650; line-height: 1.2; overflow-wrap: anywhere; }
-.cabinet-progress__icon { display: grid; place-items: center; flex: none; width: 52px; height: 52px; border-radius: var(--radius-m); background: var(--coin-tint); color: var(--gold-text); }
-.cabinet-progress__earned { display: grid; gap: 2px; flex: none; text-align: right; font-variant-numeric: tabular-nums; }
-.cabinet-progress__earned strong { font-size: 24px; line-height: 1.2; }
-.cabinet-progress__earned span { color: var(--text-secondary); font-size: var(--text-caption); }
-.cabinet-progress__content .level__hint { margin: 0; }
-.cabinet-progress__stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-4); margin-top: var(--sp-5); padding-top: var(--sp-4); border-top: 1px solid var(--separator); }
-.cabinet-progress__stats > div { display: grid; align-content: start; gap: var(--sp-1); }
-.cabinet-progress__stats strong { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--sp-2); font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.cabinet-progress__race { color: var(--text-secondary); text-decoration: underline; text-underline-offset: 3px; width: fit-content; }
-.cabinet-progress__race:hover { color: var(--text-primary); }
-.cabinet-wallet { border-color: color-mix(in srgb, var(--coin-color) 30%, var(--separator)); background: linear-gradient(140deg, var(--coin-tint), transparent 75%), var(--surface-primary); scroll-margin-top: var(--sp-5); }
-.cabinet-wallet__title { display: inline-flex; align-items: center; gap: var(--sp-2); }
-.cabinet-wallet__title svg { color: var(--gold-text); }
-.cabinet-wallet__content { display: grid; gap: var(--sp-4); }
-.cabinet-wallet__amount { color: var(--gold-text); font-size: clamp(36px, 4vw, 48px); font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.035em; line-height: 1.1; overflow-wrap: anywhere; margin: 0 0 var(--sp-1); }
-.cabinet-wallet__reserve { font-size: var(--text-caption); color: var(--text-secondary); line-height: 1.5; }
-.cabinet-wallet__actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-2); }
-.cabinet-wallet__actions > a { text-align: center; white-space: normal; padding-inline: var(--sp-2); }
-.cabinet-transactions { list-style: none; padding: 0; margin: 0; }
-.cabinet-transaction { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-4) 0; }
-.cabinet-transaction:first-child { padding-top: 0; }
-.cabinet-transaction:last-child { padding-bottom: 0; }
-.cabinet-transaction + .cabinet-transaction { border-top: 1px solid var(--separator); }
-.cabinet-transaction__icon { width: 36px; height: 36px; flex: none; display: grid; place-items: center; border-radius: var(--radius-s); background: var(--surface-secondary); color: var(--text-secondary); }
-.cabinet-transaction__text { display: grid; gap: var(--sp-1); flex: 1; min-width: 0; }
-.cabinet-transaction__text strong { font-size: var(--text-secondary-size); font-weight: 550; overflow-wrap: anywhere; }
-.cabinet-transaction__text > span { color: var(--text-secondary); font-size: var(--text-caption); }
-.cabinet-transaction__amount { flex: none; display: grid; gap: 2px; text-align: right; font-size: 17px; font-weight: 650; font-variant-numeric: tabular-nums; }
-.cabinet-transaction__amount > span { color: var(--text-secondary); font-size: var(--text-caption); font-weight: 400; }
-.cabinet-transaction__icon.is-credit { color: var(--status-success-text); background: var(--status-success-tint); }
-.cabinet-transaction__amount.is-credit { color: var(--status-success-text); }
-@media (max-width: 1050px) {
-  .cabinet-overview, .cabinet-activity { grid-template-columns: minmax(0, 1fr); }
-}
-@media (max-width: 480px) {
-  .cabinet-progress__heading { align-items: flex-start; flex-direction: column; }
-  .cabinet-progress__earned { text-align: left; }
-  .cabinet-progress__stats { gap: var(--sp-3); }
-  .cabinet-wallet__actions { grid-template-columns: minmax(0, 1fr); }
-  .cabinet-transaction { gap: var(--sp-2); }
-  .cabinet-transaction__icon { width: 28px; height: 28px; }
-}
+/* Показатели недели (WeekMetricsCard, «Мой прогресс»): totals, groups of tiles and the calculation step by step. */
 .week-metrics-content { display: grid; gap: var(--sp-4); }
 .week-totals { display: grid; gap: var(--sp-3); }
 .week-totals__values { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-4); }
@@ -126,4 +74,3 @@
 .week-metric-tile__score.is-missing { color: var(--text-secondary); }
 .week-metric-tile__score.is-neutral { color: var(--text-secondary); }
 @media (max-width: 767px) { .week-metric-groups { grid-template-columns: minmax(0, 1fr); } }
-.badge-card__percent { flex: none; align-self: center; min-width: 44px; text-align: right; color: var(--text-secondary); font-size: var(--text-secondary-size); font-weight: 600; font-variant-numeric: tabular-nums; }

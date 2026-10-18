@@ -64,3 +64,5 @@
 `tests/test_rating_race.py` (места, разрывы, ничьи, идущая неделя, подсказки, незагруженные показатели,
 имена в гонке и в таблице месяца, доступ только операторам), `frontend/src/pages/race.test.mjs`,
 `frontend/src/navigation.test.mjs`.
+
+Главная оператора — та же неделя: [OPERATOR_HOME.md](OPERATOR_HOME.md).
