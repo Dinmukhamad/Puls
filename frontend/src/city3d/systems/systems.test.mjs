@@ -92,7 +92,7 @@ test('landmarks all face the default view at the world scale and share draw call
   const tall = d => merged.some(m => { const p = m.geometry.getAttribute('position'); for (let i = 0; i < p.count; i += 5) if (p.getY(i) > 3 && Math.hypot(p.getX(i) - d.x, p.getZ(i) - d.z) < 4) return true; return false; });
   for (const d of worlds.x4.districts) if (!city.isFutureDistrict(d.id) && d.id !== 'crm') assert.ok(tall(d), `${d.id} stands at full height`);
   const site = root.children.filter(m => m.isInstancedMesh);
-  assert.ok(site.length === 1 && site[0].count === 4, 'one instanced mesh, one instance per reserved island');
+  assert.ok(site.length === 1 && site[0].count === 3, 'one instanced mesh, one instance per reserved island');
   districts.dispose();
 });
 

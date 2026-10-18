@@ -116,6 +116,7 @@ function DistrictView({ data, label, district, missionKey, onBack, onMission, er
       {district.soon && <p className="skills-note">Район строится: здесь появятся новые учебные инструменты и миссии. Твой прогресс в других районах сохранится.</p>}
       {deferred && <p className="skills-note">При первом входе в Oktell обучение само проведёт по разделам, статусам и перезвону водителю. Достигнутый уровень здания сохраняется.</p>}
       {district.id === "scenarios" && <p className="skills-note">Учебные разговоры с водителем и практика в CRM и Диспетчерской.{rewards && " Коины — за первое успешное прохождение."}</p>}
+      {district.id === "voice" && <p className="skills-note">Водитель звонит голосом, ты отвечаешь своими словами. Засчитываются звонки, проведённые до конца.</p>}
       {progress.mastered && <div className="skills-mastered" role="status"><span aria-hidden="true">🏆</span><div><strong>Район освоен</strong><small>Все миссии пройдены{level === MAX_DISTRICT_LEVEL ? " — здание стало легендой" : ""}. Практиковаться можно сколько угодно.</small></div></div>}
       {missions.length > 0 && <ol className="skills-missions" aria-label={`Миссии района «${district.name}»`}>{missions.map((m, i) => {
         const isOpen = open?.key === m.key, parent = data.missions.find(item => item.key === m.prerequisite);

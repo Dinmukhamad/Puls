@@ -14,6 +14,7 @@ from app.models.driver_shift import DriverShift
 from app.models.enums import LEARNER_ROLES, Role, TxType
 from app.models.progress import Notification
 from app.models.user import CoinAccount, Group, User
+from app.models.voice_training import VoiceTrainingAttempt
 from app.services.coins import post_transaction
 from app.services.dispatch import mission_facts, solved_calls
 from app.services.dispatch_data import MISSION_CALLS
@@ -26,11 +27,13 @@ DISTRICTS = [
     {"id": "crm", "name": "CRM-центр", "subtitle": "На стороне водителя", "soon": False},
     {"id": "dispatch", "name": "Диспетчерская", "subtitle": "Кабинет таксопарка", "soon": False},
     {"id": "scenarios", "name": "Сценарии ТП", "subtitle": "Диалог и практика", "soon": False},
+    {"id": "voice", "name": "Разговор", "subtitle": "Голосовой тренажёр", "soon": False},
     {"id": "oktell", "name": "Oktell", "subtitle": "Телефония и сообщения", "soon": False},
 ]
 # Conditions and destinations are server-owned. Editors can tune the curriculum,
 # but cannot inject arbitrary URLs or client-side completion rules.
 DISPATCH = "/training/work-sites?site=dispatch"
+VOICE = "/training/voice"
 CRM_TASK_KEYS = ("crm_first", "crm_phone", "crm_closed")
 # Keep legacy award keys identifiable while the Oktell curriculum is deferred. They are
 # excluded from all effective settings, prerequisites and claims; persisted awards stay intact.
@@ -74,7 +77,13 @@ TEMPLATES = {
         "/training/scenarios/business_park",
         "Консультация по тарифу «Бизнес» через парк завершена",
     ),
+    # Voice missions count whole calls finished in the voice trainer (services/voice_training.py).
+    "voice_first": ("voice", "voice_calls", VOICE, "Завершённые учебные звонки"),
+    "voice_good": ("voice", "voice_good", VOICE, "Звонки с результатом от 80%"),
+    "voice_kazakh": ("voice", "voice_kazakh", VOICE, "Звонки на казахском"),
 }
+# A whole call scores at least this to count as a good one.
+VOICE_GOOD_SCORE = 80
 # A mission cannot ask for more server-owned cases than its engine has.
 TARGET_LIMITS = {
     **{key: len(MISSION_CALLS[key]) for key in MISSION_CALLS},
@@ -256,6 +265,39 @@ def default_missions():
             100,
             None,
         ),
+        (
+            "voice_first",
+            "Первый звонок",
+            "Проведи учебный звонок голосом от начала до конца: выслушай водителя, "
+            "проверь данные и помоги ему с решением.",
+            "Нажми «Начать разговор» и отвечай своими словами. Разбор появится сразу "
+            "после звонка.",
+            1,
+            100,
+            40,
+            "welcome",
+        ),
+        (
+            "voice_good",
+            "Спокойный ответ",
+            "Заверши звонок с результатом 80% и выше.",
+            "Перед ответом открой данные водителя в учебных системах: проверенные действия "
+            "тоже входят в оценку.",
+            1,
+            180,
+            80,
+            "voice_first",
+        ),
+        (
+            "voice_kazakh",
+            "Звонок на казахском",
+            "Проведи до конца звонок, в котором водитель говорит по-казахски.",
+            "Перед звонком выбери язык «Қазақша». Отвечать можно вперемешку с русскими словами.",
+            1,
+            200,
+            100,
+            "voice_good",
+        ),
     ]
     return {
         key: {
@@ -357,6 +399,9 @@ def empty_facts():
         "phone": 0,
         "closed": 0,
         "scenario_business_park": 0,
+        "voice_calls": 0,
+        "voice_good": 0,
+        "voice_kazakh": 0,
         **mission_facts(set()),
     }
 
@@ -442,6 +487,26 @@ async def evidence(session, user_ids):
             result[attempt.user_id][condition] = 1
         if attempt.task_key in ("crm_closed", "crm_rework_v2"):
             result[attempt.user_id]["tickets"] = 1
+    # Only whole calls count: a repeated moment starts from a saved beginning (retry_of).
+    calls = await session.execute(
+        select(
+            VoiceTrainingAttempt.user_id,
+            VoiceTrainingAttempt.state,
+            VoiceTrainingAttempt.result,
+            VoiceTrainingAttempt.snapshot,
+        ).where(
+            VoiceTrainingAttempt.user_id.in_(user_ids),
+            VoiceTrainingAttempt.retry_of.is_(None),
+        )
+    )
+    for uid, state, outcome, snapshot in calls:
+        facts = result[uid]
+        if state != "completed":
+            facts["voice_started"] = 1
+            continue
+        facts["voice_calls"] += 1
+        facts["voice_good"] += int((outcome or {}).get("score", 0) >= VOICE_GOOD_SCORE)
+        facts["voice_kazakh"] += int((snapshot or {}).get("language") == "kk")
     return result
 
 
@@ -458,6 +523,7 @@ def mission_rows(config, facts, awards):
             "orders": "active_orders",
             "profile": "profile_started",
             "closed": "tickets",
+            "voice_calls": "voice_started",
         }.get(condition, "")
         started = count or facts.get(activity_key, 0)
         state = (

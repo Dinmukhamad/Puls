@@ -9,6 +9,8 @@
  * - Oktell: a telephone exchange, the domed exchange, a call centre under a headset, a communications centre, a
  *   satellite centre.
  * - Scenarios: an open-air stage, a studio, a theatre, a film studio, a grand theatre.
+ * - Voice («Разговор»): a talking pavilion, a recording studio, a house of talk under a speech bubble, a studio tower
+ *   with a microphone, a palace of talk.
  * Drawn with assets/landmarkKit.ts on the 5.7 × 5.3 plinth, the front to +z; ground-level parts stay on the plinth.
  */
 import * as THREE from 'three';
@@ -20,7 +22,7 @@ type Part = THREE.Object3D;
 type Model = (k: Kit, p: Part, level: number) => void;
 
 /** The districts' own colours (as on the map's district shields): flags, awnings, stripes. */
-const ACCENT = { academy: '#5b8def', driver: '#f0a23a', crm: '#7b5cff', dispatch: '#35b6a6', oktell: '#e86aa6', scenarios: '#6fa8c7' };
+const ACCENT = { academy: '#5b8def', driver: '#f0a23a', crm: '#7b5cff', dispatch: '#35b6a6', oktell: '#e86aa6', scenarios: '#6fa8c7', voice: '#4fae7a' };
 const BULB = '#fff0c0';
 const up = new THREE.Vector3(0, 1, 0);
 
@@ -692,5 +694,100 @@ const scenarios: Model = (k, p, level) => {
   k.block(p, 1.8, .1, .5, C.gold, 0, Y + 1.25, .58); bulbs(k, p, -.85, .85, Y + 1.23, .84, 10);
 };
 
+/** A speech bubble w × h facing the front at (x, y, z): a rounded slab, its tail below to the left, three dots. */
+function bubble(k: Kit, p: Part, x: number, y: number, z: number, w: number, h: number, c: string, dots: string = C.ivory) {
+  k.box(p, w, h, .2, c, x, y, z, Math.min(.12, h / 3));
+  const tail = k.cone(p, h * .2, h * .42, c, x - w * .24, y - h / 2 - h * .36, z, 6); tail.rotation.z = Math.PI + .45;
+  for (const i of [-1, 0, 1]) k.ball(p, h * .1, dots, x + i * h * .3, y, z + .1, 8);
+}
+/** A studio microphone on y0, s its size: a foot, a stand, the ring of its shock mount, a capsule with grille rings. */
+function microphone(k: Kit, p: Part, x: number, y0: number, z: number, s: number, c: string) {
+  k.post(p, .3 * s, .08 * s, C.ink, x, y0, z, .32 * s, 16);
+  k.post(p, .05 * s, 1.1 * s, C.steel, x, y0 + .08 * s, z, .05 * s, 8);
+  const mid = y0 + 1.6 * s;
+  k.post(p, .2 * s, .08 * s, c, x, y0 + 1.16 * s, z, .2 * s, 16);
+  k.torus(p, .36 * s, .035 * s, C.ink, x, mid, z, 24);
+  k.ball(p, .26 * s, C.white, x, mid, z, 16).scale.set(1, 1.45, 1);
+  for (const [dy, r] of [[-.2, .235], [0, .265], [.2, .235]] as const) k.torus(p, r * s, .022 * s, C.ink, x, mid + dy * s, z, 24).rotation.x = Math.PI / 2;
+  k.ball(p, .06 * s, c, x, mid + .4 * s, z, 8);
+}
+
+const voice: Model = (k, p, level) => {
+  const green = ACCENT.voice;
+  if (level === 1) {
+    // A talking pavilion: a round kiosk under a green roof, a speech bubble on a pole, two benches facing each other.
+    k.post(p, .95, 1.15, C.stone, -.7, Y, -1.0, .95, 24); k.post(p, .97, .5, C.glass, -.7, Y + .35, -1.0, .97, 24);
+    k.post(p, 1.12, .12, green, -.7, Y + 1.15, -1.0, 1.12, 24); k.dome(p, .45, C.ivory, -.7, Y + 1.27, -1.0, .28);
+    k.block(p, .45, .85, .08, C.slate, -.7, Y, -.04);
+    k.sign(p, 'РАЗГОВОР', -.7, Y + 1.5, -.35, 1.1, green);
+    k.post(p, .04, 1.55, C.ink, 1.45, Y, -.9, .04, 8);
+    bubble(k, p, 1.6, Y + 1.95, -.9, 1.0, .62, green);
+    bench(k, p, .95, .75, Math.PI / 2); bench(k, p, 2.05, .75, -Math.PI / 2);
+    trees(k, p, [-2.2, 2.2], -1.95, .8);
+    return;
+  }
+  if (level === 2) {
+    // A recording studio: a white box with a round window and a red «ON AIR» lamp, a giant microphone on the roof.
+    k.block(p, 3.1, 1.6, 1.9, C.white, -.2, Y, -1.1, .04); k.block(p, 3.2, .1, 2.0, C.slate, -.2, Y + 1.6, -1.1);
+    k.block(p, 3.12, .12, 1.92, green, -.2, Y + 1.35, -1.1);
+    k.cyl(p, .45, .06, C.glass, -1.05, Y + .78, -.13, .45, 24).rotation.x = Math.PI / 2;
+    k.torus(p, .46, .06, green, -1.05, Y + .78, -.1, 28);
+    k.block(p, .7, 1.05, .06, C.ink, .55, Y, -.13); k.block(p, .9, .08, .5, green, .55, Y + 1.05, .05);
+    k.sign(p, 'ON AIR', .55, Y + 1.24, -.1, .75, C.red);
+    k.panes(p, 'front', -.12, Y + .45, [1.25], .35, .6);
+    microphone(k, p, -.6, Y + 1.7, -1.3, .85, green);
+    bubble(k, p, 1.95, Y + .95, .55, .8, .5, C.ivory, green);
+    trees(k, p, [-2.25, 2.25], -2.0, .8);
+    return;
+  }
+  if (level === 3) {
+    // A house of talk: two storeys of ribbon windows, a glass lobby under a green canopy, a speech bubble on the roof.
+    k.block(p, 3.6, 2.4, 1.9, C.stone, 0, Y, -1.2, .05);
+    for (const y of [Y + .3, Y + 1.3]) k.block(p, 3.64, .62, 1.94, C.glass, 0, y, -1.2);
+    k.block(p, 3.72, .1, 2.02, C.ivory, 0, Y + 2.4, -1.2);
+    k.block(p, 1.6, 1.25, .75, C.glass, 0, Y, .1); piers(k, p, 1.6, .75, 0, .1, Y, 1.25);
+    k.block(p, 1.8, .1, .95, green, 0, Y + 1.25, .15);
+    k.sign(p, 'РАЗГОВОР', 0, Y + 1.04, .49, 1.15, green);
+    k.sign(p, 'ON AIR', 1.25, Y + 2.15, -.24, .7, C.red);
+    k.block(p, .14, .7, .14, C.ink, -.2, Y + 2.5, -1.3);
+    bubble(k, p, -.2, Y + 3.55, -1.3, 2.0, 1.05, green);
+    for (const sx of [-1, 1]) bench(k, p, sx * 1.75, .65, Math.PI);
+    trees(k, p, [-2.3, 2.3], -2.1, .8);
+    return;
+  }
+  if (level === 4) {
+    // A studio tower: a podcast hall with two bubbles on its front, a round glass tower crowned by a microphone.
+    k.block(p, 2.7, 1.9, 1.9, C.stone, -1.05, Y, -.9, .05);
+    k.block(p, 2.74, .7, 1.94, C.glass, -1.05, Y + .5, -.9);
+    k.block(p, 2.82, .1, 2.02, C.ivory, -1.05, Y + 1.9, -.9);
+    k.block(p, .7, 1.0, .06, C.ink, -1.05, Y, .08); k.block(p, 1.0, .08, .5, green, -1.05, Y + 1.0, .25);
+    k.sign(p, 'РАЗГОВОР', -1.05, Y + 1.55, .07, 1.2, green);
+    bubble(k, p, -1.85, Y + 2.45, -.3, .8, .5, green); bubble(k, p, -.4, Y + 2.65, -.3, .8, .5, C.ivory, green);
+    const tx = 1.45, tz = -1.05, h = 3.6;
+    k.post(p, .8, h, C.ivory, tx, Y, tz, .72, 28);
+    for (let i = 0; i < 4; i++) k.post(p, .79 - i * .02, .45, C.glass, tx, Y + .45 + i * .78, tz, .79 - i * .02, 28);
+    k.post(p, .76, .12, green, tx, Y + h, tz, .76, 28);
+    k.sign(p, 'ON AIR', tx, Y + .3, tz + .82, .7, C.red);
+    microphone(k, p, tx, Y + h + .12, tz, 1.0, green);
+    trees(k, p, [.35, 2.45], .85, .75);
+    return;
+  }
+  // A palace of talk: a long glass hall, a tower of glass floors under a great microphone, two bubbles in dialogue.
+  k.block(p, 4.6, 1.3, 1.25, C.stone, 0, Y, .35, .05); k.block(p, 4.64, .62, 1.29, C.glass, 0, Y + .38, .35);
+  k.block(p, 4.72, .1, 1.37, C.ivory, 0, Y + 1.3, .35); k.block(p, 4.7, .08, 1.35, green, 0, Y + 1.22, .35);
+  k.sign(p, 'РАЗГОВОР', 0, Y + .22, 1.0, 1.3, green);
+  const top = glassFloors(k, p, 2.0, 1.8, 0, -1.35, Y, 5, .82, C.ivory, 5);
+  piers(k, p, 2.0, 1.8, 0, -1.35, Y, 5 * .82);
+  k.block(p, 2.1, .14, 1.9, green, 0, top, -1.35);
+  k.sign(p, 'ON AIR', 0, top - .5, -.43, .8, C.red);
+  microphone(k, p, 0, top + .14, -1.35, 1.25, green);
+  for (const sx of [-1, 1]) {
+    k.post(p, .045, 2.2, C.ink, sx * 2.15, Y + 1.4, .0, .045, 8);
+    bubble(k, p, sx * 1.95, Y + 3.95, .0, 1.05, .62, sx < 0 ? green : C.ivory, sx < 0 ? C.ivory : green);
+    k.flag(p, sx * 2.45, -1.9, 1.3, green);
+  }
+  for (const x of [-2.3, 2.3]) k.ball(p, .25, C.leaf, x, Y + .35, 1.35, 10);
+};
+
 /** Every district's five levels, drawn on a plinth by assets/landmarks.ts. */
-export const LANDMARK_MODELS: Record<DistrictId, Model> = { academy, driver, crm, dispatch, oktell, scenarios };
+export const LANDMARK_MODELS: Record<DistrictId, Model> = { academy, driver, crm, dispatch, oktell, scenarios, voice };

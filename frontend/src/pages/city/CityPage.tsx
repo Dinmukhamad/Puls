@@ -305,7 +305,7 @@ export function CityPage() {
     if (data.inspecting) return null;
     const look = primary ? "city-action" : "city-secondary";
     if (d.id === "driver") return <button type="button" className={look} onClick={() => setDriverLaunch(true)}>Открыть автопарк →</button>;
-    const site = d.id === "crm" ? ["/training/work-sites", "Открыть CRM · рабочие сайты →"] : d.id === "dispatch" ? ["/training/work-sites?site=dispatch", "Открыть Диспетчерскую →"] : d.id === "oktell" ? ["/training/work-sites?site=oktell", "Открыть Oktell →"] : null;
+    const site = d.id === "crm" ? ["/training/work-sites", "Открыть CRM · рабочие сайты →"] : d.id === "dispatch" ? ["/training/work-sites?site=dispatch", "Открыть Диспетчерскую →"] : d.id === "oktell" ? ["/training/work-sites?site=oktell", "Открыть Oktell →"] : d.id === "voice" ? ["/training/voice", "Открыть голосовой тренажёр →"] : null;
     return site && <Link className={look} to={site[0]}>{site[1]}</Link>;
   }
   const guideFor = (m: CityMission) => <div className="city-guide">
@@ -313,7 +313,7 @@ export function CityPage() {
     <p><b>{mascot.name}:</b> {guideText(m.pulsar, mascot.name)}</p>
     {!data.inspecting && !askGuide && !guideEditing && !showControls && <button type="button" className="city-guide-edit" onClick={() => setGuideEditing(true)} aria-label="Изменить фигуру и имя помощника" title="Изменить помощника">✎</button>}
   </div>;
-  const fineFor = (d: CityDistrict) => d.id === "scenarios" ? "Коины начисляются автоматически после первого успешного прохождения. Повторная тренировка — без повторной награды." : ["crm", "dispatch", "oktell"].includes(d.id) ? "Рабочие сайты открываются оператору через QR." : "Завершённые ранее действия тоже учитываются.";
+  const fineFor = (d: CityDistrict) => d.id === "scenarios" ? "Коины начисляются автоматически после первого успешного прохождения. Повторная тренировка — без повторной награды." : ["crm", "dispatch", "oktell"].includes(d.id) ? "Рабочие сайты открываются оператору через QR." : d.id === "voice" ? "Звонок засчитывается, когда ты завершишь его и увидишь разбор. Повтор отдельного момента не считается." : "Завершённые ранее действия тоже учитываются.";
   // Today's situations and the trainer's scenarios: the toolbar counts what is still to do.
   const quests = data.quests?.items ?? [];
   const assigned = data.inspecting ? [] : (assignments.data ?? []).filter(item => item.assigned);
