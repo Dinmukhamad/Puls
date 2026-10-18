@@ -51,6 +51,17 @@ interface SpeakingSession {
   resolve: (completed: boolean) => void;
   timer: number | null;
   removeVoiceListener: (() => void) | null;
+  audio?: HTMLAudioElement;
+  audioUrl?: string;
+  controller?: AbortController;
+}
+
+export interface VoiceAudioSource {
+  label: string;
+  /** Immutable provider/voice + saved driver turn (or fixed preview/persona). */
+  cacheKey?: string;
+  /** Load only a saved driver turn or the server's fixed preview. */
+  load: (signal: AbortSignal) => Promise<{ audio_base64: string; mime_type: "audio/mpeg" }>;
 }
 
 export type MicSignal = "unknown" | "detected" | "quiet";
@@ -83,6 +94,22 @@ function clearPlayback(session: SpeakingSession) {
     session.utterance.onerror = null;
     session.utterance = null;
   }
+}
+
+function clearCloudPlayback(session: SpeakingSession) {
+  session.controller?.abort();
+  session.controller = undefined;
+  if (session.audio) {
+    session.audio.onended = null;
+    session.audio.onerror = null;
+    session.audio.onplaying = null;
+    session.audio.pause();
+    session.audio.removeAttribute("src");
+    session.audio.load();
+    session.audio = undefined;
+  }
+  if (session.audioUrl) URL.revokeObjectURL(session.audioUrl);
+  session.audioUrl = undefined;
 }
 
 function microphoneError(error: unknown): string {
@@ -123,9 +150,10 @@ function releaseMic(check: MicCheck) {
 }
 
 /**
- * Turn-based ru-RU browser speech. Call checkMicrophone/startRecording only from
+ * Turn-based ru-RU browser recognition with browser or server-synthesized output. Call checkMicrophone/startRecording only from
  * explicit user controls. Microphone checks retain only a signal-level result;
- * this hook creates no audio files and uploads no audio. Browser recognition can
+ * operator audio is never uploaded by this hook. Cloud output loads only a
+ * server-owned driver line and retains at most four clips in page memory. Browser recognition can
  * use the browser vendor's remote service, so it is not guaranteed to be local.
  *
  * Failed retries preserve the previous draft. stopRecording waits for the
@@ -137,6 +165,8 @@ function releaseMic(check: MicCheck) {
 export function useVoiceSpeech({ onTranscript, voicePreferenceKey = "puls:voice-output" }: VoiceSpeechOptions = {}) {
   const [recording, setRecording] = useState(false);
   const [speaking, setSpeaking] = useState(false);
+  const [loadingAudio, setLoadingAudio] = useState(false);
+  const [playbackNotice, setPlaybackNotice] = useState<string | null>(null);
   const [checkingMic, setCheckingMic] = useState(false);
   const [micChecked, setMicChecked] = useState(false);
   const [micSignal, setMicSignal] = useState<MicSignal>("unknown");
@@ -157,6 +187,7 @@ export function useVoiceSpeech({ onTranscript, voicePreferenceKey = "puls:voice-
   const startingRef = useRef(false);
   const inputGeneration = useRef(0);
   const speakingRef = useRef<SpeakingSession | null>(null);
+  const audioCacheRef = useRef(new Map<string, Blob>());
 
   const speechWindow = browser();
   const support = {
@@ -200,10 +231,11 @@ export function useVoiceSpeech({ onTranscript, voicePreferenceKey = "puls:voice-
     speakingRef.current = null;
     if (session) {
       clearPlayback(session);
+      clearCloudPlayback(session);
       session.resolve(false);
       browser()?.speechSynthesis?.cancel();
     }
-    if (mounted.current) setSpeaking(false);
+    if (mounted.current) { setSpeaking(false); setLoadingAudio(false); }
   }, []);
 
   const checkMicrophone = useCallback(async (): Promise<boolean> => {
@@ -372,7 +404,7 @@ export function useVoiceSpeech({ onTranscript, voicePreferenceKey = "puls:voice-
     try { session.recognition.stop(); } catch { endRecording(session, true); }
   }, [endRecording]);
 
-  const speak = useCallback((text: string, persona: VoicePlaybackPersona = "calm"): Promise<boolean> => {
+  const speak = useCallback((text: string, persona: VoicePlaybackPersona = "calm", cloudSource?: VoiceAudioSource): Promise<boolean> => {
     stopSpeaking();
     inputGeneration.current += 1;
     startingRef.current = false;
@@ -380,73 +412,132 @@ export function useVoiceSpeech({ onTranscript, voicePreferenceKey = "puls:voice-
     const session = recordingRef.current;
     if (session) endRecording(session, true);
     const currentWindow = browser();
-    if (!mounted.current || !text.trim()) return Promise.resolve(false);
-    if (!currentWindow?.speechSynthesis || typeof SpeechSynthesisUtterance === "undefined") {
-      setError("Озвучивание недоступно в этом браузере. Прочитай реплику водителя в расшифровке.");
-      return Promise.resolve(false);
-    }
+    if (!mounted.current || !currentWindow || !text.trim()) return Promise.resolve(false);
     return new Promise<boolean>((resolve) => {
       const synthesis = currentWindow.speechSynthesis;
-      const plan = createVoicePlaybackPlan(text, persona);
       const output: SpeakingSession = { utterance: null, resolve, timer: null, removeVoiceListener: null };
       speakingRef.current = output;
+      const active = () => speakingRef.current === output && mounted.current;
       const finish = (completed: boolean, message?: string) => {
-        if (speakingRef.current !== output) return;
+        if (!active()) return;
         speakingRef.current = null;
+        const usedBrowser = Boolean(output.utterance || output.removeVoiceListener);
         clearPlayback(output);
-        if (!completed) synthesis.cancel();
-        if (mounted.current) {
-          setSpeaking(false);
-          if (message) setError(message);
-        }
+        clearCloudPlayback(output);
+        if (!completed && usedBrowser) synthesis?.cancel();
+        setSpeaking(false);
+        setLoadingAudio(false);
+        if (message) setError(message);
         resolve(completed);
       };
       const failureMessage = "Не удалось озвучить реплику. Прочитай её в расшифровке или нажми «Повторить реплику».";
-      const begin = () => {
-        if (speakingRef.current !== output) return;
+      const playBrowser = (fallback = false) => {
+        if (!active()) return;
         clearPlayback(output);
-        const voices = availableRussianVoices();
-        const voice = voices.find(candidate => candidate.voiceURI === selectedVoiceRef.current) ?? voices[0];
-        const play = (index: number) => {
-          if (speakingRef.current !== output) return;
+        clearCloudPlayback(output);
+        setLoadingAudio(false);
+        if (!synthesis || typeof SpeechSynthesisUtterance === "undefined") {
+          finish(false, "Озвучивание недоступно. Прочитай реплику водителя в расшифровке или нажми «Повторить реплику».");
+          return;
+        }
+        if (fallback) setPlaybackNotice(`Не удалось получить голос ${cloudSource?.label ?? "облачного сервиса"}. Используем голос браузера.`);
+        const plan = createVoicePlaybackPlan(text, persona);
+        const begin = () => {
+          if (!active()) return;
           clearPlayback(output);
-          const segment = plan[index];
-          if (!segment) { finish(true); return; }
-          const utterance = new SpeechSynthesisUtterance(segment.text);
-          utterance.lang = "ru-RU";
-          if (voice) utterance.voice = voice;
-          utterance.rate = segment.rate;
-          utterance.pitch = segment.pitch;
-          output.utterance = utterance;
-          const isCurrent = () => speakingRef.current === output && output.utterance === utterance;
-          utterance.onend = () => {
-            if (!isCurrent()) return;
+          const voices = availableRussianVoices();
+          const voice = voices.find(candidate => candidate.voiceURI === selectedVoiceRef.current) ?? voices[0];
+          const play = (index: number) => {
+            if (!active()) return;
             clearPlayback(output);
-            if (index + 1 === plan.length) finish(true);
-            else output.timer = window.setTimeout(() => play(index + 1), segment.pauseAfterMs);
+            const segment = plan[index];
+            if (!segment) { finish(true); return; }
+            const utterance = new SpeechSynthesisUtterance(segment.text);
+            utterance.lang = "ru-RU";
+            if (voice) utterance.voice = voice;
+            utterance.rate = segment.rate;
+            utterance.pitch = segment.pitch;
+            output.utterance = utterance;
+            const isCurrent = () => active() && output.utterance === utterance;
+            utterance.onend = () => {
+              if (!isCurrent()) return;
+              clearPlayback(output);
+              if (index + 1 === plan.length) finish(true);
+              else output.timer = window.setTimeout(() => play(index + 1), segment.pauseAfterMs);
+            };
+            utterance.onerror = () => { if (isCurrent()) finish(false, failureMessage); };
+            utterance.onstart = () => {
+              if (!isCurrent()) return;
+              if (output.timer !== null) window.clearTimeout(output.timer);
+              output.timer = window.setTimeout(() => finish(false, failureMessage), Math.min(120000, Math.max(20000, segment.text.length * 180)));
+            };
+            output.timer = window.setTimeout(() => finish(false, failureMessage), 10000);
+            try { synthesis.speak(utterance); } catch { finish(false, failureMessage); }
           };
-          utterance.onerror = () => { if (isCurrent()) finish(false, failureMessage); };
-          utterance.onstart = () => {
-            if (!isCurrent()) return;
-            if (output.timer !== null) window.clearTimeout(output.timer);
-            output.timer = window.setTimeout(() => finish(false, failureMessage), Math.min(120000, Math.max(20000, segment.text.length * 180)));
-          };
-          output.timer = window.setTimeout(() => finish(false, failureMessage), 10000);
-          try { synthesis.speak(utterance); } catch { finish(false, failureMessage); }
+          play(0);
         };
-        play(0);
+        if (availableRussianVoices().length) begin();
+        else {
+          const onVoicesChanged = () => { if (availableRussianVoices().length) begin(); };
+          synthesis.addEventListener?.("voiceschanged", onVoicesChanged);
+          output.removeVoiceListener = () => synthesis.removeEventListener?.("voiceschanged", onVoicesChanged);
+          output.timer = window.setTimeout(begin, 700);
+        }
       };
       setSpeaking(true);
+      setLoadingAudio(Boolean(cloudSource));
+      setPlaybackNotice(null);
       setError(null);
-      if (availableRussianVoices().length) begin();
-      else {
-        // Browser voices often arrive asynchronously. Keep the whole wait and
-        // phrase sequence cancellable, then fall back to the requested locale.
-        const onVoicesChanged = () => { if (availableRussianVoices().length) begin(); };
-        synthesis.addEventListener?.("voiceschanged", onVoicesChanged);
-        output.removeVoiceListener = () => synthesis.removeEventListener?.("voiceschanged", onVoicesChanged);
-        output.timer = window.setTimeout(begin, 700);
+      if (!cloudSource) { playBrowser(); return; }
+      const playBlob = (blob: Blob) => {
+        if (!active()) return;
+        const url = URL.createObjectURL(blob);
+        output.audioUrl = url;
+        const audio = new Audio();
+        output.audio = audio;
+        const isCurrent = () => active() && output.audio === audio;
+        const blocked = (error: unknown) => {
+          if (!isCurrent()) return;
+          if (error && typeof error === "object" && "name" in error && error.name === "NotAllowedError") {
+            finish(false, "Браузер заблокировал автоматическое воспроизведение. Нажми «Повторить реплику». Текст и этап разговора сохранены.");
+          } else playBrowser(true);
+        };
+        audio.onended = () => { if (isCurrent()) finish(true); };
+        audio.onerror = () => { if (isCurrent()) playBrowser(true); };
+        audio.onplaying = () => { if (isCurrent()) setLoadingAudio(false); };
+        audio.src = url;
+        if (output.timer !== null) window.clearTimeout(output.timer);
+        output.timer = window.setTimeout(() => { if (isCurrent()) playBrowser(true); }, 120000);
+        try {
+          void Promise.resolve(audio.play()).then(() => { if (isCurrent()) setLoadingAudio(false); }, blocked);
+        } catch (error) { blocked(error); }
+      };
+      const cached = cloudSource.cacheKey ? audioCacheRef.current.get(cloudSource.cacheKey) : undefined;
+      if (cached) {
+        // A blocked initial autoplay can be retried directly inside the repeat
+        // button's user gesture, without awaiting synthesis or a second fetch.
+        try { playBlob(cached); } catch { playBrowser(true); }
+        return;
       }
+      const controller = new AbortController();
+      output.controller = controller;
+      output.timer = window.setTimeout(() => playBrowser(true), 25000);
+      // Cancellation can race a late provider response. Never create audio for
+      // an inactive session. Cache only four small driver clips in page memory.
+      void Promise.resolve().then(() => active() ? cloudSource.load(controller.signal) : null).then(result => {
+        if (!active() || controller.signal.aborted || !result) return;
+        if (result.mime_type !== "audio/mpeg" || !result.audio_base64 || result.audio_base64.length > 1000000) throw new Error("Invalid speech audio");
+        const binary = atob(result.audio_base64);
+        const bytes = Uint8Array.from(binary, char => char.charCodeAt(0));
+        const blob = new Blob([bytes], { type: result.mime_type });
+        if (cloudSource.cacheKey) {
+          const cache = audioCacheRef.current;
+          cache.delete(cloudSource.cacheKey);
+          cache.set(cloudSource.cacheKey, blob);
+          if (cache.size > 4) cache.delete(cache.keys().next().value!);
+        }
+        playBlob(blob);
+      }).catch(() => { if (active() && !controller.signal.aborted) playBrowser(true); });
     });
   }, [cancelMicCheck, endRecording, stopSpeaking]);
 
@@ -491,6 +582,7 @@ export function useVoiceSpeech({ onTranscript, voicePreferenceKey = "puls:voice-
 
   useEffect(() => {
     const uri = storedVoice(voicePreferenceKey);
+    audioCacheRef.current.clear();
     selectedVoiceRef.current = uri;
     setSelectedVoiceURI(uri);
   }, [voicePreferenceKey]);
@@ -509,11 +601,12 @@ export function useVoiceSpeech({ onTranscript, voicePreferenceKey = "puls:voice-
     return () => {
       mounted.current = false;
       cancel();
+      audioCacheRef.current.clear();
     };
   }, [cancel]);
 
   return {
-    support, recording, speaking, checkingMic, micChecked, micSignal, muted,
+    support, recording, speaking, loadingAudio, playbackNotice, checkingMic, micChecked, micSignal, muted,
     transcript, interimTranscript, error, russianVoices, selectedVoiceURI, selectVoice,
     checkMicrophone, startRecording, stopRecording, speak, stopSpeaking,
     setMuted, clearError, resetTranscript, cancel,

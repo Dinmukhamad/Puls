@@ -36,3 +36,15 @@ class VoiceRetry(BaseModel):
 class VoiceReview(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     comment: str = Field(min_length=3, max_length=2000)
+
+
+class VoiceSpeechPreview(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    provider: Literal["google", "azure"]
+    persona: Literal["calm", "confused", "hurried", "irritated"] = "calm"
+
+
+class VoiceSpeechTurn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    provider: Literal["google", "azure"]
+    turn: int = Field(ge=0, le=100)

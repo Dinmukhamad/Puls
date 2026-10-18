@@ -1,6 +1,7 @@
 """Voice dialogue is server-owned; transcripts and verified actions remain per account."""
 
 import asyncio
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -130,6 +131,7 @@ async def test_start_catalog_private_before_qr_no_solution_and_all_operator_grou
     assert len(response.json()["scenarios"][0]["personas"]) == 4
     attempt = await start(client, headers)
     assert attempt["turn"] == 0 and attempt["stage"] == "opening"
+    assert attempt["revision"] == 2
     assert attempt["result"] is None and "requests" not in attempt and "snapshot" not in attempt
     assert attempt["driver"]["phone"] != attempt["incoming_phone"]
     assert attempt["driver"]["name"] == "Ким Виктор Андреевич"
@@ -150,8 +152,9 @@ async def test_idempotency_expected_turn_and_ownership(client, session, operator
     response = await answer(client, headers, attempt, EXPLAIN, request_id=request_id)
     assert response.status_code == 200, response.text
     next_attempt = response.json()
-    assert next_attempt["turn"] == 1 and next_attempt["stage"] == "lost_sim"
-    assert "SIM" in next_attempt["transcript"][-1]["text"]
+    assert next_attempt["turn"] == 1 and next_attempt["stage"] == "next_step"
+    assert "приложении" in next_attempt["transcript"][-1]["text"]
+    assert "SIM" not in next_attempt["transcript"][-1]["text"]
     duplicate = await answer(client, headers, attempt, EXPLAIN, request_id=request_id)
     assert duplicate.json() == next_attempt
     changed = await answer(client, headers, attempt, NEXT, request_id=request_id)
@@ -222,7 +225,7 @@ async def test_inspection_requires_qr_real_seed_both_reads_and_explicit_comparis
 
 
 @pytest.mark.parametrize("persona", ["calm", "confused", "hurried", "irritated"])
-async def test_lost_sim_always_revealed_persona_followups_and_channel_not_enough(
+async def test_lost_sim_relevant_to_registered_call_persona_followups_and_channel_not_enough(
     client, operator, persona
 ):
     headers = auth(await login(client, operator.login))
@@ -382,3 +385,257 @@ async def test_trainee_can_practise_voice_but_keeps_qr_and_mentor_boundaries(cli
     assert response.json()["practice"]["dispatch"] is True
     result = await finish(client, headers, attempt)
     assert result["state"] == "completed"
+
+
+def conversation_v2(*answers, persona="calm", snapshot=None):
+    transcript = [{"role": "driver", "text": voice_training.OPENING[persona], "turn": 0}]
+    stage = "opening"
+    for turn, text in enumerate(answers):
+        stage, reply = voice_training.next_reply_v2(
+            persona, stage, transcript, text, snapshot=snapshot
+        )
+        transcript.extend(
+            [
+                {"role": "operator", "text": text, "turn": turn},
+                {"role": "driver", "text": reply, "turn": turn + 1},
+            ]
+        )
+    return SimpleNamespace(
+        revision=2,
+        transcript=transcript,
+        stage=stage,
+        practice={"events": [{"system": key} for key in ("dispatch", "oktell", "compared")]},
+    )
+
+
+async def test_v2_same_turn_reacts_to_app_whatsapp_or_registered_call():
+    app = conversation_v2("Можно изменить номер в приложении Такси Про.")
+    whatsapp = conversation_v2("Обратитесь в WhatsApp.")
+    call = conversation_v2("Позвоните с номера регистрации.")
+    assert "Такси Про" in app.transcript[-1]["text"]
+    assert "WhatsApp" in whatsapp.transcript[-1]["text"]
+    assert len({attempt.transcript[-1]["text"] for attempt in (app, whatsapp, call)}) == 3
+    assert all("SIM" not in attempt.transcript[-1]["text"] for attempt in (app, whatsapp))
+    assert call.stage == "lost_sim" and call.transcript[-1]["text"] == voice_training.LOST_SIM
+
+
+async def test_v2_explaining_the_incoming_call_does_not_request_another_call():
+    explanation = "Вы звоните с номера, который не совпадает с номером регистрации."
+    attempt = conversation_v2(explanation)
+    assert not voice_training.advice_v2(explanation)["registered_call"]
+    assert attempt.stage == "next_step"
+    assert "SIM" not in attempt.transcript[-1]["text"]
+    request = "Вы звоните с другого номера. Перезвоните с номера регистрации."
+    assert conversation_v2(request).stage == "lost_sim"
+
+
+async def test_v2_app_aliases_and_natural_advice_need_no_scripted_repeat():
+    for product in ("Такси Про", "ТаксиПро", "TaxiPro", "Яндекс Про", "Яндекс.Про", "Yandex Pro"):
+        for instruction in (
+            f"Вы можете самостоятельно изменить номер в {product}.",
+            f"Номер поменяйте в {product}.",
+            f"Откройте {product} и измените номер.",
+        ):
+            attempt = conversation_v2(instruction)
+            assert attempt.stage == "resolved", instruction
+            assert "приложении" in attempt.transcript[-1]["text"]
+            assert "SIM" not in attempt.transcript[-1]["text"]
+
+
+async def test_v2_one_appropriate_channel_suffices_for_full_score():
+    explanation = "Вы звоните с номера, который не совпадает с номером регистрации."
+    for next_step in (
+        "Откройте Такси Про и измените номер в приложении.",
+        "Напишите в WhatsApp, что хотите изменить номер телефона.",
+    ):
+        attempt = conversation_v2(explanation, next_step)
+        result = voice_training.evaluate_v2(attempt)
+        assert result["score"] == 100, result
+        assert all(item["passed"] for item in result["criteria"])
+        assert result["rules_revision"] == 2
+        assert not any(entry["text"] == voice_training.LOST_SIM for entry in attempt.transcript)
+
+
+async def test_v2_short_followups_keep_the_chosen_channel_and_specific_question():
+    for offer, followup, expected in (
+        ("Можно изменить номер в Такси Про.", "Откройте его и измените там номер.", "приложении"),
+        ("Обратитесь в WhatsApp.", "Напишите туда, что хотите изменить номер.", "WhatsApp"),
+    ):
+        attempt = conversation_v2(offer, "Сейчас поясню.", followup)
+        assert expected in attempt.transcript[4]["text"]
+        assert attempt.stage == "resolved"
+        assert expected in attempt.transcript[-1]["text"]
+    unknown = conversation_v2("Напишите туда, что хотите изменить номер.")
+    assert unknown.stage != "resolved"  # There was no established destination.
+
+
+async def test_v2_corrections_replace_channels_and_never_reuse_an_old_step():
+    for correction in (
+        "Не меняйте номер в приложении. Напишите в WhatsApp о смене номера.",
+        "Вместо Такси Про напишите в WhatsApp о смене номера.",
+        "Лучше напишите в WhatsApp о смене номера.",
+        "Можно сменить номер в приложении или написать в WhatsApp. Напишите в WhatsApp о смене номера.",
+    ):
+        attempt = conversation_v2("Можно изменить номер в Такси Про.", correction)
+        assert attempt.stage == "resolved", correction
+        assert "WhatsApp" in attempt.transcript[-1]["text"], correction
+        state = voice_training.dialogue_state_v2(attempt.transcript)
+        assert state["channel"] == "whatsapp"
+        assert state["step"]["text"] == correction
+    retracted = conversation_v2("Обратитесь в WhatsApp.", "Не пишите туда о смене номера.")
+    assert retracted.stage != "resolved"
+    assert not voice_training.evaluate_v2(retracted)["criteria"][1]["passed"]
+
+
+async def test_v2_channel_mentions_questions_and_negations_do_not_earn_solution():
+    for text in (
+        "Есть WhatsApp.",
+        "Не пишите в WhatsApp о смене номера.",
+        "В WhatsApp обращаться не нужно.",
+        "В приложении смена номера недоступна.",
+        "Нельзя изменить номер в Такси Про.",
+        "Не меняйте номер в приложении.",
+        "Вы можете изменить номер в приложении?",
+        "У вас есть доступ к приложению Такси Про?",
+    ):
+        attempt = conversation_v2(text)
+        result = voice_training.evaluate_v2(attempt)
+        assert attempt.stage != "resolved", text
+        assert not result["criteria"][1]["passed"], text
+        assert not result["criteria"][3]["passed"], text
+    availability = conversation_v2("У вас есть доступ к приложению Такси Про?", "Тогда измените там номер.")
+    assert availability.stage == "resolved"
+
+
+async def test_v2_postposed_prohibitions_retract_the_chosen_channel():
+    for offer, prohibition in (
+        ("Можно изменить номер в приложении.", "Номер в приложении не изменяйте."),
+        ("Можно изменить номер в Такси Про.", "В Такси Про номер не меняйте."),
+        ("Обратитесь в WhatsApp.", "В WhatsApp не пишите о смене номера."),
+    ):
+        attempt = conversation_v2(offer, prohibition)
+        result = voice_training.evaluate_v2(attempt)
+        assert attempt.stage != "resolved", prohibition
+        assert voice_training.dialogue_state_v2(attempt.transcript)["channel"] is None
+        assert not result["criteria"][1]["passed"], prohibition
+        assert not result["criteria"][3]["passed"], prohibition
+
+
+async def test_v2_questions_about_a_possible_action_do_not_complete_it():
+    for question in (
+        "В WhatsApp можно обратиться, чтобы изменить номер?",
+        "Написать в WhatsApp о смене номера?",
+        "Откройте приложение и измените номер?",
+    ):
+        attempt = conversation_v2(question)
+        result = voice_training.evaluate_v2(attempt)
+        assert attempt.stage != "resolved", question
+        assert not result["criteria"][1]["passed"], question
+        assert not result["criteria"][3]["passed"], question
+
+
+async def test_v2_a_question_followed_by_advice_uses_the_actual_action():
+    for instruction, expected in (
+        ("У вас есть Такси Про? Откройте приложение и измените номер.", "Такси Про"),
+        ("У вас есть Такси Про? Тогда измените там номер.", "Такси Про"),
+        ("У вас есть WhatsApp? Напишите туда, что хотите изменить номер.", "WhatsApp"),
+        ("У вас есть Такси Про? Напишите в WhatsApp о смене номера.", "WhatsApp"),
+    ):
+        attempt = conversation_v2(instruction)
+        assert attempt.stage == "resolved", instruction
+        assert expected in attempt.transcript[-1]["text"], instruction
+        assert voice_training.evaluate_v2(attempt)["criteria"][3]["passed"]
+    partial = conversation_v2("У вас есть Такси Про? Обратитесь в WhatsApp.")
+    assert partial.stage != "resolved"
+    assert "WhatsApp" in partial.transcript[-1]["text"]
+
+
+async def test_v2_a_warning_about_account_deletion_is_not_an_unsafe_action():
+    for warning in (
+        "Не нажимайте кнопку «Стереть аккаунт». Откройте Такси Про и измените номер.",
+        "Не выбирайте пункт «Удалить аккаунт». Напишите в WhatsApp о смене номера.",
+        "Не удаляйте аккаунт. Откройте Такси Про и измените номер.",
+    ):
+        attempt = conversation_v2(warning)
+        result = voice_training.evaluate_v2(attempt)
+        assert attempt.stage == "resolved", warning
+        assert result["criteria"][1]["passed"], warning
+        assert not result["critical_errors"], warning
+    unsafe = conversation_v2(
+        "Не нажимайте кнопку «Стереть аккаунт», а удалите аккаунт. "
+        "Откройте Такси Про и измените номер."
+    )
+    assert unsafe.stage != "resolved"
+    assert voice_training.evaluate_v2(unsafe)["critical_errors"]
+
+
+async def test_v2_old_sim_is_only_relevant_when_asked_or_registered_call_offered():
+    attempt = conversation_v2(
+        "У вас осталась старая SIM-карта?",
+        "Позвоните с номера регистрации.",
+        "Тогда откройте Такси Про и измените номер.",
+    )
+    assert attempt.transcript[2]["text"] == voice_training.LOST_SIM
+    assert "Я же сказал" in attempt.transcript[4]["text"]
+    assert attempt.stage == "resolved"
+    assert voice_training.evaluate_v2(attempt)["criteria"][1]["passed"]
+    switch_to_call = conversation_v2("Можно изменить номер в приложении.", "Позвоните со старого номера.")
+    assert switch_to_call.stage == "lost_sim"
+
+
+async def test_v2_factual_questions_use_server_snapshot_and_preserve_context():
+    snapshot = {
+        "driver": {"name": "Ким Виктор Андреевич", "phone": "+77015550999"},
+        "incoming_phone": "+77015550123",
+    }
+    attempt = conversation_v2(
+        "Назовите, пожалуйста, ФИО.",
+        "С какого номера звоните?",
+        "Какой номер регистрации?",
+        "Можно изменить номер в Такси Про.",
+        "Как вас зовут?",
+        "Откройте его и измените там номер.",
+        snapshot=snapshot,
+    )
+    assert snapshot["driver"]["name"] in attempt.transcript[2]["text"]
+    assert snapshot["incoming_phone"] in attempt.transcript[4]["text"]
+    assert snapshot["driver"]["phone"] in attempt.transcript[6]["text"]
+    assert attempt.stage == "resolved"
+
+
+async def test_v2_unsafe_promises_and_account_deletion_never_finish_the_call():
+    for text in (
+        "Я сам поменяю номер сейчас. Откройте Такси Про и измените номер.",
+        "Нажмите кнопку «Стереть аккаунт» в Такси Про и измените номер.",
+    ):
+        attempt = conversation_v2(text)
+        result = voice_training.evaluate_v2(attempt)
+        assert attempt.stage != "resolved"
+        assert result["score"] <= 50
+        assert len(result["critical_errors"]) == 1
+        assert result["critical_errors"][0]["quote"] == text
+        assert not result["criteria"][1]["passed"]
+
+
+async def test_v1_saved_attempt_keeps_original_dialogue_evaluation_and_retry(client, session, operator):
+    headers = auth(await login(client, operator.login))
+    attempt = await start(client, headers)
+    saved = await session.get(VoiceTrainingAttempt, attempt["id"])
+    saved.revision = 1
+    saved.snapshot = {**saved.snapshot, "rules_source": "Учебные правила · голосовой сценарий v1"}
+    await session.commit()
+    attempt = (await answer(client, headers, attempt, EXPLAIN)).json()
+    assert attempt["revision"] == 1 and attempt["stage"] == "lost_sim"
+    assert attempt["transcript"][-1]["text"] == voice_training.LOST_SIM
+    attempt = (await answer(client, headers, attempt, NEXT)).json()
+    finished = await finish(client, headers, attempt)
+    assert finished["result"]["score"] == 75
+    assert finished["result"]["rules_revision"] == 1
+    response = await client.post(
+        BASE + f"/attempts/{attempt['id']}/retry", headers=headers, json={"turn": 1}
+    )
+    assert response.status_code == 200, response.text
+    retry = response.json()
+    assert retry["revision"] == 1 and retry["stage"] == "lost_sim"
+    retry = (await answer(client, headers, retry, NEXT)).json()
+    assert retry["stage"] == "resolved"

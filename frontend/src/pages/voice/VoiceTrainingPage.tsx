@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { voiceKeys, voiceTraining, voiceWorkSite, type VoiceAttempt, type VoiceAttemptSummary, type VoicePersona } from "../../api/voiceTraining";
+import { voiceKeys, voiceTraining, voiceWorkSite, type VoiceAttempt, type VoiceAttemptSummary, type VoicePersona, type VoiceProvider, type VoiceSpeechConfig, type VoiceSpeechProvider } from "../../api/voiceTraining";
 import { useAuth } from "../../auth/AuthContext";
 import { Select } from "../../components/Select";
 import { useVoiceSpeech } from "./useVoiceSpeech";
+import { resolveVoiceProvider } from "./voiceProvider";
 import { VoiceMentorReviews } from "./VoiceMentorReviews";
 import "./voice.css";
 
@@ -53,6 +54,19 @@ export function VoiceTrainingPage() {
   const catalog = useQuery({ queryKey: voiceKeys.catalog, queryFn: ({ signal }) => voiceTraining.catalog(signal), enabled: !attemptId, retry: false, staleTime: 0, refetchOnMount: "always" });
   const attempt = useQuery({ queryKey: voiceKeys.attempt(attemptId ?? ""), queryFn: ({ signal }) => voiceTraining.attempt(attemptId!, signal), enabled: !!attemptId, retry: false, refetchOnWindowFocus: true });
   const current = attempt.data;
+  const speechConfig = useQuery({ queryKey: voiceKeys.speechConfig(user?.id ?? "account"), queryFn: ({ signal }) => voiceTraining.speechConfig(signal), retry: false, staleTime: 60000 });
+  const providerPreferenceKey = `puls:voice-provider:${user?.id ?? "account"}`;
+  const readProvider = () => { try { return localStorage.getItem(providerPreferenceKey); } catch { return null; } };
+  const [preferredProvider, setPreferredProvider] = useState<string | null>(readProvider);
+  useEffect(() => { setPreferredProvider(readProvider()); }, [providerPreferenceKey]);
+  const provider = resolveVoiceProvider(preferredProvider, speechConfig.data);
+  const selectedCloud = speechConfig.data?.providers.find(item => item.id === provider) ?? null;
+  const providerRef = useRef<VoiceSpeechProvider | null>(selectedCloud);
+  providerRef.current = selectedCloud;
+  const selectProvider = (value: VoiceProvider) => {
+    setPreferredProvider(value);
+    try { localStorage.setItem(providerPreferenceKey, value); } catch { /* Optional device preference. */ }
+  };
   const draftKey = current ? `voice-draft:${user?.id ?? "account"}:${current.id}:${current.turn}` : "";
   const saveDraft = useCallback((text: string) => {
     setDraft(text);
@@ -62,6 +76,17 @@ export function VoiceTrainingPage() {
   const onTranscript = useCallback((text: string) => { if (inputKeyRef.current === draftKey) saveDraft(text); }, [draftKey, saveDraft]);
   const speech = useVoiceSpeech({ onTranscript, voicePreferenceKey: `puls:voice-output:${user?.id ?? "account"}` });
   const { speak, stopSpeaking, stopRecording, cancel } = speech;
+  const outputAvailable = speech.support.synthesis || Boolean(selectedCloud);
+  const playDriver = useCallback((text: string, driverPersona: VoicePersona, id: number, turn: number) => {
+    const selected = providerRef.current;
+    return speak(text, driverPersona, selected ? { label: selected.label, cacheKey: `${selected.id}:${selected.voice}:attempt:${id}:${turn}`, load: signal => voiceTraining.speech(id, selected.id, turn, signal) } : undefined);
+  }, [speak]);
+  const previewVoice = () => {
+    const selected = providerRef.current;
+    void speak("Здравствуйте. Мне нужно поменять номер телефона. Подскажите, как это сделать?", persona,
+      selected ? { label: selected.label, cacheKey: `${selected.id}:${selected.voice}:preview:${persona}`, load: signal => voiceTraining.speechPreview(selected.id, persona, signal) } : undefined);
+  };
+  const voiceSettingsProps = { speech, provider, config: speechConfig.data, configLoading: speechConfig.isPending, onProviderChange: selectProvider };
   useEffect(() => {
     let text = "";
     requestRef.current = null;
@@ -99,11 +124,11 @@ export function VoiceTrainingPage() {
     start.reset(); answer.reset(); finish.reset(); retry.reset(); review.reset();
   }, [attemptId, cancel]);
   useEffect(() => {
-    if (!current || current.state !== "in_progress" || !lastDriver || !speech.support.synthesis || spokenRef.current === spokenKey) return;
+    if (!current || current.state !== "in_progress" || !lastDriver || speechConfig.isPending || spokenRef.current === spokenKey) return;
     spokenRef.current = spokenKey;
-    void speak(lastDriver.text, current.persona);
+    void playDriver(lastDriver.text, current.persona, current.id, lastDriver.turn);
     return () => { spokenRef.current = ""; stopSpeaking(); };
-  }, [spokenKey, current?.state, current?.persona, speech.support.synthesis, speak, stopSpeaking]); // Saved inspections and voice selection do not replay the same driver line.
+  }, [spokenKey, current?.state, current?.persona, speechConfig.isPending, playDriver, stopSpeaking]); // Saved inspections and voice selection do not replay the same driver line.
 
   const beginRecording = async () => {
     if (pending || current?.can_finish || speech.speaking || speech.recording || speech.muted) return;
@@ -131,7 +156,7 @@ export function VoiceTrainingPage() {
   };
   const query = attemptId ? attempt : catalog;
   const selectedScenario = catalog.data?.scenarios.find(item => item.key === scenarioKey);
-  const status = answer.isPending || finish.isPending ? "Обрабатываем ответ" : speech.speaking ? "Водитель говорит" : speech.recording ? "Твой ответ · идёт запись" : reviewing && draft ? "Твой ответ · проверь текст" : "Твой ответ";
+  const status = answer.isPending || finish.isPending ? "Обрабатываем ответ" : speech.loadingAudio ? "Готовим голос водителя…" : speech.speaking ? "Водитель говорит" : speech.recording ? "Твой ответ · идёт запись" : reviewing && draft ? "Твой ответ · проверь текст" : "Твой ответ";
 
   return <main className="voice-page">
     <header className="voice-page-top"><Link className="voice-back" to={attemptId ? "/training/voice" : "/training/city?city=support&district=scenarios"}>← {attemptId ? "Все тренировки" : "Обучение"}</Link><span className="voice-pilot"><i /> Голосовой тренажёр · пилот</span></header>
@@ -146,9 +171,11 @@ export function VoiceTrainingPage() {
         <button className={`voice-button voice-mic-check ${speech.micChecked ? "is-checked" : ""}`} disabled={speech.checkingMic || !speech.support.microphone} onClick={() => void speech.checkMicrophone()}><VoiceIcon name={speech.micChecked ? "check" : "mic"} />{speech.checkingMic ? "Проверяем микрофон…" : speech.micChecked ? "Микрофон доступен" : "Проверить микрофон"}</button>
         {speech.micChecked && <p className="voice-caption" role="status">{speech.micSignal === "quiet" ? "Сигнал тихий. Проверь громкость или попробуй говорить ближе к микрофону." : speech.micSignal === "detected" ? "Слышим тебя. Можно начинать." : "Доступ получен. Если распознавание не сработает, введи ответ текстом."}</p>}
         {!speech.support.recognition && <p className="voice-caption">В этом браузере нет распознавания речи. Тренировку можно пройти с текстовыми ответами.</p>}
-        {speech.support.synthesis && <VoiceSettings speech={speech} disabled={pending || speech.checkingMic} onPreview={() => void speak("Здравствуйте. Мне нужно поменять номер телефона. Подскажите, как это сделать?", persona)} />}
+        <VoiceSettings {...voiceSettingsProps} disabled={pending || speech.checkingMic} onPreview={previewVoice} />
+        {speechConfig.isError && <p className="voice-caption" role="status">Не удалось проверить облачную озвучку. Сейчас доступен голос браузера. <button className="voice-text-toggle" onClick={() => void speechConfig.refetch()}>Проверить снова</button></p>}
+        {preferredProvider && preferredProvider !== "browser" && provider === "browser" && !speechConfig.isPending && <p className="voice-caption" role="status">Сохранённый облачный голос сейчас недоступен. Используем голос браузера.</p>}
         <button className="voice-button voice-button--primary voice-start" disabled={pending || !selectedScenario} onClick={() => { if (!actionLock.current) { actionLock.current = true; cancel(); start.mutate(); } }}><VoiceIcon name="play" />{start.isPending ? "Начинаем…" : "Начать разговор"}<VoiceIcon name="arrow" size={18} /></button>
-        <p className="voice-privacy">Распознавание выполняет браузер и его голосовой сервис. На сервер тренажёра отправляется проверенный текст ответа.</p>
+        <p className="voice-privacy">Распознавание выполняет браузер и его голосовой сервис. На сервер тренажёра отправляется проверенный текст ответа. При облачной озвучке сервис получает только учебные реплики водителя.</p>
       </aside></div>
       <VoiceHistory attempts={catalog.data.attempts} />
       {user && user.role !== "operator" && user.role !== "trainee" && <VoiceMentorReviews />}
@@ -156,36 +183,43 @@ export function VoiceTrainingPage() {
     </>}
     {attemptId && current && <>
       <div className="voice-attempt-heading"><div><span className="voice-eyebrow">УЧЕБНЫЙ ЗВОНОК</span><h1>{current.title}</h1></div><span className="voice-tag">{personaLabel(current.persona)} водитель</span></div>
+      {current.state === "in_progress" && current.revision < 2 && <section className="voice-panel voice-update-notice"><div><strong>Доступен обновлённый сценарий</strong><p>Начни новую тренировку, чтобы водитель учитывал выбранный способ решения. Эта попытка сохранится в истории.</p></div><Link className="voice-button" to="/training/voice">Начать новую тренировку</Link></section>}
       {current.state === "in_progress" ? <div className="voice-call-grid"><section className="voice-panel voice-conversation" aria-label="Разговор с водителем"><div className="voice-conversation-top"><span className="voice-live-dot" /> Учебная линия <span>Реплика {current.turn + 1}</span></div><div className="voice-speaker"><VoiceOrb active={speech.speaking || speech.recording} recording={speech.recording} /><span className="voice-eyebrow">{speech.recording ? "ОПЕРАТОР" : "ВОДИТЕЛЬ"}</span><h2>{speech.recording ? "Слушаем тебя" : current.driver.name.split(" ").slice(0, 2).join(" ")}</h2><p className={`voice-status ${speech.recording ? "is-recording" : ""}`} role="status" aria-live="polite">{status}</p></div>
         {current.can_finish && <div className="voice-resolved" role="status"><VoiceIcon name="check" /><p>Водителю понятен следующий шаг.<br /><small>Заверши тренировку, чтобы посмотреть разбор.</small></p></div>}
-        <div className="voice-call-controls"><button className={`voice-button voice-answer ${speech.recording ? "is-recording" : "voice-button--primary"}`} disabled={pending || speech.speaking || (!speech.recording && (current.can_finish || speech.muted || !speech.support.recognition))} onClick={() => speech.recording ? endRecording() : void beginRecording()}><VoiceIcon name={speech.recording ? "stop" : "mic"} />{speech.recording ? "Завершить запись" : draft ? "Перезаписать ответ" : "Ответить"}</button><div className="voice-secondary-controls"><button className="voice-icon-button" title={speech.speaking ? "Остановить озвучку" : "Повторить реплику"} aria-label={speech.speaking ? "Остановить озвучку" : "Повторить реплику"} disabled={pending || speech.recording || !lastDriver || !speech.support.synthesis} onClick={() => speech.speaking ? stopSpeaking() : lastDriver && void speak(lastDriver.text, current.persona)}><VoiceIcon name={speech.speaking ? "stop" : "repeat"} /></button><button className={`voice-icon-button ${speech.muted ? "is-muted" : ""}`} title={speech.muted ? "Включить микрофон" : "Выключить микрофон"} aria-label={speech.muted ? "Включить микрофон" : "Выключить микрофон"} aria-pressed={speech.muted} disabled={pending || !speech.support.recognition} onClick={() => { speech.setMuted(!speech.muted); if (speech.recording) setReviewing(true); }}><VoiceIcon name={speech.muted ? "muted" : "mic"} /></button></div></div>
+        <div className="voice-call-controls"><button className={`voice-button voice-answer ${speech.recording ? "is-recording" : "voice-button--primary"}`} disabled={pending || speech.speaking || (!speech.recording && (current.can_finish || speech.muted || !speech.support.recognition))} onClick={() => speech.recording ? endRecording() : void beginRecording()}><VoiceIcon name={speech.recording ? "stop" : "mic"} />{speech.recording ? "Завершить запись" : draft ? "Перезаписать ответ" : "Ответить"}</button><div className="voice-secondary-controls"><button className="voice-icon-button" title={speech.speaking ? "Остановить озвучку" : "Повторить реплику"} aria-label={speech.speaking ? "Остановить озвучку" : "Повторить реплику"} disabled={pending || speech.recording || !lastDriver || !outputAvailable || speechConfig.isPending} onClick={() => speech.speaking ? stopSpeaking() : lastDriver && void playDriver(lastDriver.text, current.persona, current.id, lastDriver.turn)}><VoiceIcon name={speech.speaking ? "stop" : "repeat"} /></button><button className={`voice-icon-button ${speech.muted ? "is-muted" : ""}`} title={speech.muted ? "Включить микрофон" : "Выключить микрофон"} aria-label={speech.muted ? "Включить микрофон" : "Выключить микрофон"} aria-pressed={speech.muted} disabled={pending || !speech.support.recognition} onClick={() => { speech.setMuted(!speech.muted); if (speech.recording) setReviewing(true); }}><VoiceIcon name={speech.muted ? "muted" : "mic"} /></button></div></div>
         {speech.recording && <p className="voice-record-hint" role="status">{speech.interimTranscript || "Говори, затем нажми «Завершить запись»."}</p>}
         {speech.muted && <p className="voice-caption voice-center">Микрофон выключен. Включи его или введи ответ текстом.</p>}
-        {!speech.support.synthesis && <p className="voice-caption voice-center">Озвучка недоступна. Реплика водителя есть в расшифровке ниже.</p>}
+        {!outputAvailable && !speechConfig.isPending && <p className="voice-caption voice-center">Озвучка недоступна. Реплика водителя есть в расшифровке ниже.</p>}
         {!current.can_finish && (draft || reviewing || textMode || !speech.support.recognition) && <form className="voice-answer-review" onSubmit={event => { event.preventDefault(); submitAnswer(); }}><div className="voice-review-heading"><label htmlFor="voice-answer-text">{speech.recording ? "Распознаём ответ" : "Проверь ответ перед отправкой"}</label><span>Водитель ещё не слышит этот текст</span></div><textarea id="voice-answer-text" value={draft} maxLength={4000} rows={4} disabled={pending || speech.recording} onChange={event => saveDraft(event.target.value)} placeholder="Напиши, что ты скажешь водителю…" /><div className="voice-review-actions"><span>{draft.length}/4000</span><button className="voice-button voice-button--primary" type="submit" disabled={pending || speech.recording || speech.speaking || !draft.trim()}>{answer.isPending ? "Обрабатываем…" : "Отправить ответ"}<VoiceIcon name="arrow" size={17} /></button></div></form>}
         {!current.can_finish && !speech.recording && !textMode && speech.support.recognition && !draft && <button className="voice-text-toggle" onClick={() => { setTextMode(true); setReviewing(true); }}>Ввести ответ текстом</button>}
-        {speech.support.synthesis && <details className="voice-call-settings"><summary>Настройка голоса</summary><VoiceSettings speech={speech} disabled={pending || speech.recording} previewLabel="Повторить реплику" onPreview={() => { if (lastDriver) void speak(lastDriver.text, current.persona); }} /></details>}
-        <VoiceTranscriptView attempt={current} forceOpen={!speech.support.synthesis} />
+        <details className="voice-call-settings"><summary>Настройка голоса</summary><VoiceSettings {...voiceSettingsProps} disabled={pending || speech.recording} previewLabel="Повторить реплику" onPreview={() => { if (lastDriver) void playDriver(lastDriver.text, current.persona, current.id, lastDriver.turn); }} /></details>
+        <VoiceTranscriptView attempt={current} forceOpen={!outputAvailable || Boolean(speech.error)} />
         <div className="voice-finish-row"><p>Прогресс и отправленные ответы сохраняются в аккаунте.{draft && <small>Неотправленный черновик не попадёт в разбор.</small>}</p><button className="voice-finish" disabled={pending || speech.recording} onClick={finishAttempt}>{finish.isPending ? "Сохраняем…" : "Завершить тренировку"}</button></div>
       </section><VoiceSituation attempt={current} /></div> : <VoiceResults attempt={current} pending={pending} onRetry={retryTurn} reviewOpen={reviewOpen} onReviewOpen={() => setReviewOpen(true)} reviewComment={reviewComment} onReviewComment={setReviewComment} reviewing={review.isPending} onReview={() => review.mutate()} onReviewCancel={() => setReviewOpen(false)} />}
       <p className="voice-assessment-note">Учебный пилот: содержание ответов оценивается по правилам сценария, действия — по сохранённым событиям. Интонация и темп речи не оцениваются.</p>
     </>}
-    {speech.error && <section className="voice-panel voice-speech-error" role="alert"><strong>Не удалось использовать голос</strong><p>{speech.error}</p><div className="voice-inline-actions"><button className="voice-button" disabled={pending || speech.recording || speech.checkingMic || !speech.support.microphone} onClick={() => void speech.checkMicrophone()}>Проверить микрофон снова</button>{attemptId && current?.state === "in_progress" && <button className="voice-button" onClick={() => { setTextMode(true); setReviewing(true); speech.clearError(); }}>Продолжить текстом</button>}<button className="voice-text-toggle" onClick={speech.clearError}>Закрыть</button></div><small>Текущий этап разговора сохранён.</small></section>}
+    {speech.playbackNotice && <p className="voice-playback-notice" role="status">{speech.playbackNotice}</p>}
+    {speech.error && <section className="voice-panel voice-speech-error" role="alert"><strong>Не удалось использовать голос</strong><p>{speech.error}</p><div className="voice-inline-actions">{outputAvailable && <button className="voice-button" disabled={pending || speech.recording || speech.speaking || speechConfig.isPending} onClick={() => { if (current && lastDriver) void playDriver(lastDriver.text, current.persona, current.id, lastDriver.turn); else previewVoice(); }}>{current && lastDriver ? "Повторить реплику" : "Прослушать голос"}</button>}<button className="voice-button" disabled={pending || speech.recording || speech.checkingMic || !speech.support.microphone} onClick={() => void speech.checkMicrophone()}>Проверить микрофон снова</button>{attemptId && current?.state === "in_progress" && <button className="voice-button" onClick={() => { setTextMode(true); setReviewing(true); speech.clearError(); }}>Продолжить текстом</button>}<button className="voice-text-toggle" onClick={speech.clearError}>Закрыть</button></div><small>Текущий этап разговора сохранён.</small></section>}
     {mutationError && <section className="voice-panel voice-error" role="alert"><strong>Действие не подтверждено</strong><p>{errorText(mutationError)}</p><p>Отправленный ответ мог сохраниться. Проверь прогресс перед повторной отправкой; черновик останется доступен.</p>{attemptId && <button className="voice-button" disabled={attempt.isFetching} onClick={() => void attempt.refetch()}>Проверить сохранённый прогресс</button>}</section>}
   </main>;
 }
 
-function VoiceSettings({ speech, disabled, onPreview, previewLabel = "Прослушать голос" }: {
+export function VoiceSettings({ speech, disabled, onPreview, previewLabel = "Прослушать голос", provider, config, configLoading, onProviderChange }: {
   speech: ReturnType<typeof useVoiceSpeech>; disabled: boolean; onPreview: () => void; previewLabel?: string;
+  provider: VoiceProvider; config?: VoiceSpeechConfig; configLoading: boolean; onProviderChange: (value: VoiceProvider) => void;
 }) {
   const savedVoiceMissing = speech.selectedVoiceURI && !speech.russianVoices.some(voice => voice.voiceURI === speech.selectedVoiceURI);
+  const cloud = config?.providers.find(item => item.id === provider);
   return <div className="voice-output-settings">
-    <label>Голос водителя<Select className="voice-select" aria-label="Голос водителя" value={speech.selectedVoiceURI} disabled={disabled || speech.speaking} onChange={value => speech.selectVoice(value)}
+    <label>Источник голоса<Select className="voice-select" aria-label="Источник голоса" value={provider} disabled={disabled || speech.speaking || configLoading} onChange={value => onProviderChange(value as VoiceProvider)}
+      options={[{ value: "browser", label: "Голос браузера" }, ...(config?.providers.map(item => ({ value: item.id, label: item.label })) ?? [])]} /></label>
+    {provider === "browser" && speech.support.synthesis && <label>Голос водителя<Select className="voice-select" aria-label="Голос водителя" value={speech.selectedVoiceURI} disabled={disabled || speech.speaking} onChange={value => speech.selectVoice(value)}
       options={[{ value: "", label: "Автоматически · рекомендуемый" },
         ...(savedVoiceMissing ? [{ value: speech.selectedVoiceURI, label: "Сохранённый голос недоступен" }] : []),
-        ...speech.russianVoices.map(voice => ({ value: voice.voiceURI, label: voice.name }))]} /></label>
-    <button className="voice-button" disabled={disabled} onClick={() => speech.speaking ? speech.stopSpeaking() : onPreview()}><VoiceIcon name={speech.speaking ? "stop" : "play"} size={17} />{speech.speaking ? "Остановить озвучку" : previewLabel}</button>
-    <p className="voice-caption">Темп и паузы зависят от характера водителя. Доступные голоса определяет браузер.</p>
+        ...speech.russianVoices.map(voice => ({ value: voice.voiceURI, label: voice.name }))]} /></label>}
+    <button className="voice-button" disabled={disabled || configLoading || (!cloud && !speech.support.synthesis)} onClick={() => speech.speaking ? speech.stopSpeaking() : onPreview()}><VoiceIcon name={speech.speaking ? "stop" : "play"} size={17} />{speech.speaking ? "Остановить озвучку" : configLoading ? "Проверяем голоса…" : previewLabel}</button>
+    <p className="voice-caption">{cloud ? `${cloud.label}. Озвучиваются только учебные реплики водителя.` : configLoading ? "Проверяем доступность облачных голосов." : "Темп и паузы зависят от характера водителя. Доступные голоса определяет браузер."}</p>
+    {!configLoading && config && !config.providers.length && <p className="voice-caption">Облачные голоса пока не подключены. Сейчас используется голос браузера.</p>}
   </div>;
 }
 
