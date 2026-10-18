@@ -1,7 +1,8 @@
 """Bounded cloud synthesis of server-owned driver utterances, never learner audio.
 
 Providers receive only the fixed preview or saved driver text. Credentials stay
-in server settings; upstream response bodies and headers never enter errors/logs.
+in server settings; upstream response bodies and headers never enter errors/logs
+(only the host, voice and HTTP status of a refused request are logged).
 The in-process cache is temporary and contains generated exercise audio only.
 """
 
@@ -9,6 +10,7 @@ import asyncio
 import base64
 import binascii
 import json
+import logging
 import re
 import time
 from collections import OrderedDict, deque
@@ -21,6 +23,8 @@ import httpx
 
 from app.core.config import settings
 from app.core.errors import DomainError
+
+logger = logging.getLogger(__name__)
 
 ProviderId = Literal["yandex", "google", "azure"]
 Persona = Literal["calm", "confused", "hurried", "irritated"]
@@ -201,6 +205,8 @@ async def _request_yandex(provider: Provider, text: str, persona: Persona) -> by
     home = yandex_home["url"]
     urls = [home] if home else list(YANDEX_URLS)
     for url in urls:
+        host = httpx.URL(url).host
+        status = 0
         # A voice that does not take the persona's role is asked again without it.
         for hints in _yandex_hints(provider, persona):
             payload = {
@@ -209,15 +215,31 @@ async def _request_yandex(provider: Provider, text: str, persona: Persona) -> by
                 "outputAudioSpec": {"containerAudio": {"containerAudioType": "MP3"}},
                 "loudnessNormalizationType": "LUFS",
             }
-            status, body = await _post(url, headers, MAX_RESPONSE_BYTES * 2, json=payload)
+            voice = hints[0]["voice"]
+            try:
+                status, body = await _post(url, headers, MAX_RESPONSE_BYTES * 2, json=payload)
+            except httpx.HTTPError as error:
+                # An unreachable installation is not an answer: the other one is tried.
+                logger.warning("Yandex SpeechKit %s unreachable: %s", host, type(error).__name__)
+                break
             if status == 200:
-                audio = _checked_mp3(_yandex_audio(body))
+                try:
+                    audio = _checked_mp3(_yandex_audio(body))
+                except (SpeechUnavailable, ValueError, KeyError, TypeError, binascii.Error):
+                    logger.warning(
+                        "Yandex SpeechKit %s voice %s: unexpected audio response", host, voice
+                    )
+                    raise SpeechUnavailable() from None
                 yandex_home["url"] = url
                 return audio
+            # Only the status code is logged: it tells a wrong key (401), missing role or
+            # unpaid account (403) and a refused voice (400) apart without any upstream text.
+            logger.warning("Yandex SpeechKit %s voice %s: HTTP %s", host, voice, status)
             if status != 400:
                 break
-        # Only a key the installation does not know is tried at the other one.
-        if status not in (401, 403):
+        # Only a key the installation does not know, or an unreachable installation,
+        # is tried at the other one.
+        if status not in (0, 401, 403):
             break
     raise SpeechUnavailable()
 
