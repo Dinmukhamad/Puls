@@ -95,3 +95,15 @@ test("the backdrop alone plays for the browser's own voice and stops cleanly", (
   stop();
   assert.ok(context.sources.every((source) => source.stopped !== null));
 });
+
+test("the page asks iOS for a media session the silent switch does not mute", () => {
+  const nav = { audioSession: { type: "auto" } };
+  loaded.exports.setAudioSession("playback", nav);
+  assert.equal(nav.audioSession.type, "playback");
+  loaded.exports.setAudioSession("auto", nav);
+  assert.equal(nav.audioSession.type, "auto");
+  // Browsers without the API, or that refuse the change, are left as they are.
+  loaded.exports.setAudioSession("playback", {});
+  const refusing = { audioSession: { get type() { return "auto"; }, set type(_) { throw new Error("refused"); } } };
+  assert.doesNotThrow(() => loaded.exports.setAudioSession("playback", refusing));
+});
