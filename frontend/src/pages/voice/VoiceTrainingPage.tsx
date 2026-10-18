@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { voiceKeys, voiceTraining, voiceWorkSite, type VoiceAttempt, type VoiceAttemptSummary, type VoicePersona, type VoiceProvider, type VoiceSpeechConfig, type VoiceSpeechProvider } from "../../api/voiceTraining";
 import { useAuth } from "../../auth/AuthContext";
+import { Select } from "../../components/Select";
 import { useVoiceSpeech } from "./useVoiceSpeech";
 import { resolveVoiceProvider } from "./voiceProvider";
 import { VoiceMentorReviews } from "./VoiceMentorReviews";
@@ -210,15 +211,12 @@ export function VoiceSettings({ speech, disabled, onPreview, previewLabel = "П�
   const savedVoiceMissing = speech.selectedVoiceURI && !speech.russianVoices.some(voice => voice.voiceURI === speech.selectedVoiceURI);
   const cloud = config?.providers.find(item => item.id === provider);
   return <div className="voice-output-settings">
-    <label>Источник голоса<select value={provider} disabled={disabled || speech.speaking || configLoading} onChange={event => onProviderChange(event.target.value as VoiceProvider)}>
-      <option value="browser">Голос браузера</option>
-      {config?.providers.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}
-    </select></label>
-    {provider === "browser" && speech.support.synthesis && <label>Голос водителя<select value={speech.selectedVoiceURI} disabled={disabled || speech.speaking} onChange={event => speech.selectVoice(event.target.value)}>
-      <option value="">Автоматически · рекомендуемый</option>
-      {savedVoiceMissing && <option value={speech.selectedVoiceURI}>Сохранённый голос недоступен</option>}
-      {speech.russianVoices.map(voice => <option key={voice.voiceURI} value={voice.voiceURI}>{voice.name}</option>)}
-    </select></label>}
+    <label>Источник голоса<Select className="voice-select" aria-label="Источник голоса" value={provider} disabled={disabled || speech.speaking || configLoading} onChange={value => onProviderChange(value as VoiceProvider)}
+      options={[{ value: "browser", label: "Голос браузера" }, ...(config?.providers.map(item => ({ value: item.id, label: item.label })) ?? [])]} /></label>
+    {provider === "browser" && speech.support.synthesis && <label>Голос водителя<Select className="voice-select" aria-label="Голос водителя" value={speech.selectedVoiceURI} disabled={disabled || speech.speaking} onChange={value => speech.selectVoice(value)}
+      options={[{ value: "", label: "Автоматически · рекомендуемый" },
+        ...(savedVoiceMissing ? [{ value: speech.selectedVoiceURI, label: "Сохранённый голос недоступен" }] : []),
+        ...speech.russianVoices.map(voice => ({ value: voice.voiceURI, label: voice.name }))]} /></label>}
     <button className="voice-button" disabled={disabled || configLoading || (!cloud && !speech.support.synthesis)} onClick={() => speech.speaking ? speech.stopSpeaking() : onPreview()}><VoiceIcon name={speech.speaking ? "stop" : "play"} size={17} />{speech.speaking ? "Остановить озвучку" : configLoading ? "Проверяем голоса…" : previewLabel}</button>
     <p className="voice-caption">{cloud ? `${cloud.label}. Озвучиваются только учебные реплики водителя.` : configLoading ? "Проверяем доступность облачных голосов." : "Темп и паузы зависят от характера водителя. Доступные голоса определяет браузер."}</p>
     {!configLoading && config && !config.providers.length && <p className="voice-caption">Облачные голоса пока не подключены. Сейчас используется голос браузера.</p>}
