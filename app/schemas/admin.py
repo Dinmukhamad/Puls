@@ -67,6 +67,9 @@ class OperatorRowOut(BaseModel):
         default=False, description="Есть рассчитанные показатели; иначе числовые нули — заглушки"
     )
     scored_weeks_count: int = 0
+    channel: Literal["line", "chat"] = Field(
+        default="line", description="Направление; место считается внутри него"
+    )
 
 
 class ManualCoinsIn(BaseModel):

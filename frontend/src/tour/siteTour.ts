@@ -7,6 +7,7 @@
  * The steps find the site's elements by `data-tour` markers (and the city's own panels by `data-city-panel`). On a phone
  * «Награды» and «Профиль» sit in the menu «Ещё»: a step opens it first, and is skipped where the menu is not needed.
  */
+import type { Channel } from "../api/types";
 import type { CoachStep } from "../pages/crm/coachTours";
 
 const tour = (id: string) => `[data-tour=${id}]`;
@@ -74,3 +75,11 @@ export const SITE_TOUR: CoachStep[] = [
   { target: PANEL("skills"), when: PANEL("skills"), advanceWhen: ".skills", action: "Нажми", slot: FINISH, title: "Экскурсия пройдена!", text: "Награда ждёт в «Навыках». Нажми на них." },
   { target: ".skills-next[data-reward] .city-action, .skills-foot .city-action", when: ".skills", action: "Нажми", waitClick: true, title: "Забери награду", text: "Опыт и коины придут сразу. Дальше — миссии других районов: автопарк, CRM и Диспетчерская. Удачи!" },
 ];
+
+/** A chat operator's week is the quality of chats and discipline, and their places are among chat operators (docs/CHANNELS.md). */
+const CHAT_TEXT: Record<string, string> = {
+  [tour("cabinet-week")]: "Твоя рабочая неделя: качество чатов и дисциплина. Когда руководитель закроет неделю, результат превратится в коины.",
+  [tour("rating-views")]: "Твоё место среди операторов чатов за месяц или неделю: места по неделям, команды и показатели против среднего. Нажми на любого в таблице — сравнишь себя с ним.",
+};
+export const siteTour = (channel?: Channel): CoachStep[] =>
+  channel === "chat" ? SITE_TOUR.map(step => CHAT_TEXT[step.target] ? { ...step, text: CHAT_TEXT[step.target] } : step) : SITE_TOUR;

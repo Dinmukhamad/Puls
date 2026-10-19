@@ -2,7 +2,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
-import { ROLE_LABELS } from "../utils/format";
+import { roleLabel } from "../utils/format";
 import { Avatar, Button } from "./ui";
 import { ChevronRightIcon, LockIcon, LogoutIcon, TelegramIcon, UserIcon } from "./icons";
 import "./account-menu.css";
@@ -77,10 +77,10 @@ export function AccountMenu() {
 
   return <>
     <button type="button" ref={trigger} className="sidebar__user account-trigger" aria-label={`Меню аккаунта: ${user.full_name}`} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? id : undefined} onClick={() => setOpen(value => !value)}>
-      <Avatar name={user.full_name} id={user.id} size={36} /><span className="sidebar__user-text"><span className="sidebar__user-name">{user.full_name}</span><span className="sidebar__user-role">{ROLE_LABELS[user.role]}{user.group ? ` · ${user.group.name}` : ""}</span></span><ChevronRightIcon size={14} className="account-trigger__chevron" />
+      <Avatar name={user.full_name} id={user.id} size={36} /><span className="sidebar__user-text"><span className="sidebar__user-name">{user.full_name}</span><span className="sidebar__user-role">{roleLabel(user)}{user.group ? ` · ${user.group.name}` : ""}</span></span><ChevronRightIcon size={14} className="account-trigger__chevron" />
     </button>
     {open && createPortal(<div ref={panel} id={id} className="account-menu" role="dialog" aria-label="Меню аккаунта">
-      <header className="account-menu__identity"><Avatar name={user.full_name} id={user.id} size={38} /><div><strong>{user.full_name}</strong><span>{ROLE_LABELS[user.role]} · {user.login}</span></div></header>
+      <header className="account-menu__identity"><Avatar name={user.full_name} id={user.id} size={38} /><div><strong>{user.full_name}</strong><span>{roleLabel(user)} · {user.login}</span></div></header>
       <nav aria-label="Настройки аккаунта">
         <Link to="/profile" onClick={() => setOpen(false)}><UserIcon size={18} /><span>Профиль и настройки</span><ChevronRightIcon size={14} /></Link>
         <Link to="/profile#login" onClick={() => setOpen(false)}><UserIcon size={18} /><span>Изменить логин</span></Link>

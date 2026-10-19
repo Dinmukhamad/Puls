@@ -7,13 +7,17 @@ import { calendarDate } from '../components/weekCalendar';
 import { Card, EmptyState } from '../components/ui';
 import { DeviationChart, GoalBar, MetricCards } from './AnalyticsDashboard';
 import { assess, finite, gapText, metricValue, periodCaption, shortNumber } from './analyticsInsights';
-import { categoryHealth, groupBreakdown, periodChange, weeklyColumns, weeklyCoverage, type AnalyticsCategory } from './analyticsWorkspace';
+import { categoryHealth, groupBreakdown, periodChange, weeklyColumns, weeklyCoverage, type AnalyticsCategory, type AnalyticsChannel } from './analyticsWorkspace';
 import './analytics-panels.css';
 
 const CATEGORY_COPY: Record<AnalyticsCategory, { title: string; subtitle: string }> = {
-  quality: { title: 'Качество работы', subtitle: 'Оценка качества и обратная связь от водителей.' },
+  quality: { title: 'Качество работы', subtitle: 'Качество звонков и обратная связь от водителей.' },
   productivity: { title: 'Продуктивность команды', subtitle: 'Рабочее время, нагрузка и выполнение целей.' },
   discipline: { title: 'Дисциплина команды', subtitle: 'Опоздания и другие нежелательные события.' },
+};
+/** Chats are scored by their quality alone; discipline is the same for both channels. */
+const CHAT_COPY: Partial<Record<AnalyticsCategory, { title: string; subtitle: string }>> = {
+  quality: { title: 'Качество работы', subtitle: 'Качество ответов в чатах.' },
 };
 
 function shortDate(value: string) {
@@ -111,9 +115,9 @@ function PanelStat({ label, value, note, tone = 'neutral' }: { label: string; va
   return <div className={`analytics-panel-stat analytics-panel-stat--${tone}`}><span>{label}</span><strong>{value}</strong><small>{note}</small></div>;
 }
 
-export function CategoryDashboard({ report, category, selected, onMetric, onOpen }: { report: AnalyticsOut; category: AnalyticsCategory; selected: string; onMetric: (code: string) => void; onOpen: (id: number) => void }) {
+export function CategoryDashboard({ report, category, channel = 'line', selected, onMetric, onOpen }: { report: AnalyticsOut; category: AnalyticsCategory; channel?: AnalyticsChannel; selected: string; onMetric: (code: string) => void; onOpen: (id: number) => void }) {
   const { metrics, people, met, attention, complete, total } = categoryHealth(report, category);
-  const copy = CATEGORY_COPY[category];
+  const copy = (channel === 'chat' && CHAT_COPY[category]) || CATEGORY_COPY[category];
   const metric = metrics.find(item => item.code === selected) ?? metrics[0];
   if (!metric) return <Card title={copy.title}><EmptyState title="Показатели этой категории не настроены" hint="Активные показатели появятся здесь после настройки." /></Card>;
   return <div className={`stack analytics-category analytics-category--${category}`}>
@@ -121,7 +125,7 @@ export function CategoryDashboard({ report, category, selected, onMetric, onOpen
     <div className="analytics-panel-stats">
       <PanelStat label="Все цели категории выполнены" value={met} note={`Из ${total} операторов · только с полными данными`} tone="met" />
       <PanelStat label="Требуют внимания" value={attention} note="Есть хотя бы одно отклонение в категории" tone="watch" />
-      <PanelStat label="Полные данные" value={complete} note={`Из ${total} операторов · по всем ${metrics.length} показателям категории`} />
+      <PanelStat label="Полные данные" value={complete} note={`Из ${total} операторов · ${metrics.length === 1 ? 'по показателю' : `по всем ${metrics.length} показателям`} категории`} />
     </div>
     <MetricCards report={{ ...report, metrics }} selected={metric.code} onSelect={onMetric} />
     <div className="analytics-category-details">

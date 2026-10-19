@@ -15,7 +15,7 @@ async function load(path) {
   new Function("require", "module", "exports", result.outputFiles[0].text)(require, module, module.exports);
   return module.exports;
 }
-const { SITE_TOUR, FINISH } = await load("./siteTour.ts");
+const { SITE_TOUR, FINISH, siteTour } = await load("./siteTour.ts");
 const { ROLE_NAVIGATION } = await load("../navigation.ts");
 const { Card } = await load("../components/ui.tsx");
 
@@ -102,4 +102,14 @@ test("operators start the tour from the Academy's mission; it lives across pages
   // A step that does not apply never shows on the way: it is passed by before it is drawn.
   assert.match(coach, /useLayoutEffect\(\(\) => \{\n    if \(!step \|\| last \|\| !\(\(step\.when && !shown\(step\.when\)\) \|\| \(step\.skipWhen && shown\(step\.skipWhen\)\)\)\) return;\n    if \(direction\.current < 0 && back\(\)\) return;\n    forward\(\);\n  \}, \[step, index\]\);/);
   assert.match(read("./siteTour.css"), /\.site-tour \.coach \{ z-index:90; \}/);
+});
+
+test("a chat operator hears about the quality of chats and places among chat operators", () => {
+  const chat = siteTour("chat"), text = (steps, id) => steps.find(step => step.target === `[data-tour=${id}]`).text;
+  assert.equal(chat.length, SITE_TOUR.length);
+  assert.match(text(chat, "cabinet-week"), /качество чатов и дисциплина/);
+  assert.doesNotMatch(text(chat, "cabinet-week"), /производительность/);
+  assert.match(text(chat, "rating-views"), /среди операторов чатов/);
+  assert.equal(siteTour("line"), SITE_TOUR);
+  assert.equal(siteTour(), SITE_TOUR);
 });

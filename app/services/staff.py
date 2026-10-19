@@ -21,7 +21,7 @@ from app.core.errors import ConflictError, DomainError, NotFoundError
 from app.db.base import utcnow
 from app.models.coin import CoinTransaction
 from app.models.contest import ContestWeek, OperatorWeekResult
-from app.models.enums import Role, ShopRequestStatus, TxType, WeekStatus
+from app.models.enums import Channel, Role, ShopRequestStatus, TxType, WeekStatus
 from app.models.progress import Notification
 from app.models.shop import ShopRequest
 from app.models.user import CoinAccount, Group, User
@@ -29,6 +29,9 @@ from app.services import coins as coins_service
 from app.services import economy
 from app.services.locking import lock_user
 from app.services.rules import get_rules, write_audit
+
+#: The channel as the CSV names it.
+CHANNEL_NAMES = {Channel.LINE: "Линия", Channel.CHAT: "Чаты"}
 
 
 @dataclass(slots=True)
@@ -40,6 +43,7 @@ class OperatorRow:
     login: str
     group_name: str | None
     points: float
+    #: Place within the operator's channel: the line and chats rank separately (docs/CHANNELS.md).
     rank: int | None
     coins_week: int
     balance: int
@@ -50,6 +54,7 @@ class OperatorRow:
     forbidden_sites: float
     metrics_available: bool = False
     scored_weeks_count: int = 0
+    channel: str = Channel.LINE
 
 
 @dataclass(slots=True)
@@ -122,6 +127,7 @@ def _period_scores(period: OperatorPeriod, visibility: ColumnElement[bool]) -> S
     totals = (
         select(
             OperatorWeekResult.user_id.label("user_id"),
+            User.channel.label("channel"),
             # Weekly scores use two decimal places. Normalize the sum before
             # ranking so floating-point artifacts cannot split an equal score.
             # PostgreSQL's round(value, precision) requires a numeric operand.
@@ -135,13 +141,16 @@ def _period_scores(period: OperatorPeriod, visibility: ColumnElement[bool]) -> S
         .join(ContestWeek, ContestWeek.id == OperatorWeekResult.week_id)
         .join(User, User.id == OperatorWeekResult.user_id)
         .where(*_period_weeks(period), User.role == Role.OPERATOR, visibility)
-        .group_by(OperatorWeekResult.user_id)
+        .group_by(OperatorWeekResult.user_id, User.channel)
         .subquery()
     )
     # Search and pagination are applied later, so an operator's rank stays stable.
+    # Places are within the channel, like the weeks and months themselves.
     return select(
         *totals.c,
-        func.rank().over(order_by=totals.c.points.desc()).label("rank"),
+        func.rank()
+        .over(partition_by=totals.c.channel, order_by=totals.c.points.desc())
+        .label("rank"),
     ).subquery()
 
 
@@ -292,6 +301,7 @@ async def operators_table(
     period: OperatorPeriod | None = None,
     group_id: int | None = None,
     search: str | None = None,
+    channel: str | None = None,
     offset: int = 0,
     limit: int = 50,
 ) -> tuple[list[OperatorRow], int]:
@@ -299,6 +309,10 @@ async def operators_table(
     conditions = [User.role == Role.OPERATOR, visibility]
     if group_id is not None:
         conditions.append(User.group_id == group_id)
+    if channel is not None:
+        conditions.append(User.channel == channel)
+    # The line first, then chats: each with its own places.
+    by_channel = User.channel != Channel.LINE
     if search:
         conditions.append(User.full_name.ilike(f"%{search.strip()}%"))
 
@@ -332,7 +346,9 @@ async def operators_table(
             .outerjoin(scores, scores.c.user_id == User.id)
             .outerjoin(coins, coins.c.user_id == User.id)
             .where(*conditions)
-            .order_by(scores.c.rank.is_(None), scores.c.rank, User.full_name, User.id)
+            .order_by(
+                by_channel, scores.c.rank.is_(None), scores.c.rank, User.full_name, User.id
+            )
             .offset(offset)
             .limit(limit)
         )
@@ -355,6 +371,7 @@ async def operators_table(
                     forbidden_sites=float(sites or 0),
                     metrics_available=bool(count),
                     scored_weeks_count=int(count or 0),
+                    channel=user.channel,
                 )
             )
         return table, total
@@ -372,6 +389,7 @@ async def operators_table(
         .outerjoin(OperatorWeekResult, result_join)
         .where(*conditions)
         .order_by(
+            by_channel,
             OperatorWeekResult.rank.is_(None),
             OperatorWeekResult.rank,
             User.full_name,
@@ -400,6 +418,7 @@ async def operators_table(
                 forbidden_sites=result.forbidden_sites_count if result else 0.0,
                 metrics_available=result is not None,
                 scored_weeks_count=1 if result else 0,
+                channel=user.channel,
             )
         )
     return table, total
@@ -508,6 +527,7 @@ def operators_csv(
             "ФИО",
             "Логин",
             "Группа",
+            "Направление",
             "Место",
             "Баллы",
             "Начислено коинов за период" if period else "Коины за неделю",
@@ -530,6 +550,7 @@ def operators_csv(
                 row.full_name,
                 row.login,
                 row.group_name or "",
+                CHANNEL_NAMES.get(row.channel, row.channel),
                 row.rank if row.rank is not None else "",
                 f"{row.points:g}" if has_metrics else "",
                 row.coins_week,

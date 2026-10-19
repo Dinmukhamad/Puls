@@ -51,7 +51,7 @@ test('default queries use four completed weeks and isolate the cache by authenti
 test('an old date-range link retains its average while the weekly comparison has an independent window', async () => {
   const { queries, result } = await load('from=2026-09-01&to=2026-10-08&group_id=4&metric=efficiency&operators=7,8');
   assert.equal(result.mode, 'range');
-  assert.deepEqual(result.filters, { grain: 'range', date_from: '2026-09-01', date_to: '2026-10-08', group_id: 4, metric_code: 'efficiency', operator_ids: '7,8' });
+  assert.deepEqual(result.filters, { grain: 'range', date_from: '2026-09-01', date_to: '2026-10-08', group_id: 4, metric_code: 'efficiency', operator_ids: '7,8', channel: 'line' });
   const weekly = queries.find(q => q.queryKey[0] === 'management-weeks');
   assert.equal(weekly.enabled, true);
   assert.deepEqual(weekly.queryKey[2], { ...result.filters, grain: 'week', date_from: '2026-09-14', date_to: '2026-10-11' });
@@ -82,7 +82,22 @@ test('role-specific headings and scope are determined by the authenticated profi
     const { ManagementAnalyticsPage } = await load('tab=groups', role);
     const html = renderToStaticMarkup(React.createElement(ManagementAnalyticsPage));
     assert.match(html, role === 'head' ? /Аналитика руководителя/ : /Аналитика супервайзера/);
-    assert.match(html, role === 'head' ? /Все операторы · все группы/ : /Только мои операторы/);
+    assert.match(html, role === 'head' ? /Линия · все группы/ : /Линия · только мои операторы/);
     assert.doesNotMatch(html, /Выбрать роль|Переключить роль/);
   }
+});
+
+test('chats are one channel at a time and switching drops the other channel\'s picks', async () => {
+  const { result, updates } = await load('channel=chat&tab=productivity&metric=quality&operators=7&status=late&page=3&group_id=4');
+  assert.equal(result.channel, 'chat');
+  assert.equal(result.filters.channel, 'chat');
+  result.setChannel('line');
+  assert.equal(updates[0].has('channel'), false);
+  for (const key of ['metric', 'operators', 'status', 'page']) assert.equal(updates[0].has(key), false, key);
+  assert.equal(updates[0].get('group_id'), '4');
+  const back = await load('tab=productivity&metric=efficiency');
+  back.result.setChannel('chat');
+  assert.equal(back.updates[0].get('channel'), 'chat');
+  // Chats have no productivity: that tab gives way to the overview.
+  assert.equal(back.updates[0].get('tab'), 'summary');
 });

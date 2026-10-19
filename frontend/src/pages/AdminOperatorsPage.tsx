@@ -6,7 +6,7 @@ import { useAuth } from "../auth/AuthContext";
 import { useAccess } from "../auth/AccessContext";
 import { ApiError, downloadFile } from "../api/client";
 import { admin } from "../api/endpoints";
-import type { OperatorRowOut } from "../api/types";
+import type { Channel, OperatorRowOut } from "../api/types";
 import { ManualCoinsSheet } from "../components/ManualCoinsSheet";
 import { useToast } from "../components/Toast";
 import { DownloadIcon, SearchIcon } from "../components/icons";
@@ -24,9 +24,10 @@ import {
   KPISkeleton,
   Pagination,
   RowsSkeleton,
+  SegmentedControl,
   StatusIcon,
 } from "../components/ui";
-import { coins, points } from "../utils/format";
+import { CHANNEL_LABELS, coins, points } from "../utils/format";
 import { operatorCount, personSearch, teamTitles } from "./teamSection";
 import "./operators.css";
 
@@ -39,6 +40,9 @@ export function AdminOperatorsPage() {
   const [period, setPeriod] = useState<DateRange>();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
+  // The line and chats rank separately: «Все» lists the line first, then chats (docs/CHANNELS.md).
+  const [channel, setChannel] = useState<Channel | "all">("all");
+  const only = channel === "all" ? undefined : channel;
   const [target, setTarget] = useState<OperatorRowOut | null>(null);
   const size = 25;
 
@@ -47,8 +51,8 @@ export function AdminOperatorsPage() {
     queryFn: () => admin.summary(undefined, period), enabled: canOverview,
   });
   const operators = useQuery({
-    queryKey: ["admin-operators", undefined, page, search, period],
-    queryFn: () => admin.operators({ page, size, search: search || undefined, ...period }),
+    queryKey: ["admin-operators", undefined, page, search, period, only],
+    queryFn: () => admin.operators({ page, size, search: search || undefined, ...period, channel: only }),
     enabled: !!period,
   });
   const defaultRange = summary.data?.date_from && summary.data.date_to
@@ -65,7 +69,7 @@ export function AdminOperatorsPage() {
   async function exportCsv() {
     try {
       const filename = period ? `operators_${period.date_from}_${period.date_to}.csv` : "operators_current.csv";
-      await downloadFile(admin.exportPath(undefined, { ...period, search: search || undefined }), filename);
+      await downloadFile(admin.exportPath(undefined, { ...period, search: search || undefined, channel: only }), filename);
       toast.success("Файл выгружен");
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : "Не удалось выгрузить файл");
@@ -104,10 +108,14 @@ export function AdminOperatorsPage() {
         </label>
         <DateRangePicker value={period} defaultRange={defaultRange} loading={!period && summary.isLoading}
           onChange={(value) => { setPeriod(value); setPage(1); }} />
+        <div className="operators-channel"><SegmentedControl label="Направление" value={channel}
+          options={[{ value: "all", label: "Все" }, { value: "line", label: "Линия" }, { value: "chat", label: "Чаты" }]}
+          onChange={(value) => { setChannel(value); setPage(1); }} /></div>
       </GlassSurface>
       {period && <p className="operators-period-note ui-note">
         Коины — за выбранные даты. Баллы, место и нарушения — по завершённым неделям,
-        которые целиком входят в период. Баланс кошелька — текущий.
+        которые целиком входят в период. Место — внутри направления: у линии и у чатов свои.
+        Баланс кошелька — текущий.
       </p>}
 
       {/* Сводная статистика - п. 4.4.1 бизнес-ТЗ */}
@@ -166,6 +174,7 @@ export function AdminOperatorsPage() {
                     <th className="num">Место</th>
                     <th>Оператор</th>
                     <th>Команда</th>
+                    {!only && <th>Направление</th>}
                     <th className="num">Баллы</th>
                     <th className="num">{period ? "Начислено" : "Коины"}</th>
                     <th className="num">Баланс</th>
@@ -189,6 +198,7 @@ export function AdminOperatorsPage() {
                         </Link>
                       </td>
                       <td className="muted" style={{ whiteSpace: "nowrap" }}>{row.group_name ?? "Без команды"}</td>
+                      {!only && <td className="muted">{CHANNEL_LABELS[row.channel ?? "line"]}</td>}
                       <td className="num">{!period || row.metrics_available ? points(row.points) : "—"}</td>
                       <td className="num">{coins(row.coins_week)}</td>
                       <td className="num">
@@ -220,7 +230,7 @@ export function AdminOperatorsPage() {
                         <span className="cell-person__text">
                           <span className="cell-person__name">{row.full_name}</span>
                           <span className="cell-person__meta">
-                            {row.group_name ?? "Без команды"}
+                            {row.group_name ?? "Без команды"}{row.channel === "chat" ? " · Чаты" : ""}
                           </span>
                         </span>
                       </Link>

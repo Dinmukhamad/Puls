@@ -70,7 +70,7 @@ DEFAULT_METRICS: tuple[dict, ...] = (
     },
     {
         "code": "quality",
-        "title": "Качество работы",
+        "title": "Качество звонков",
         "unit": "%",
         "target_value": 100.0,
         "max_points": 25.0,

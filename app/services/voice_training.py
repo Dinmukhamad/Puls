@@ -15,7 +15,7 @@ from sqlalchemy import select
 
 from app.core.errors import ConflictError, DomainError, NotFoundError, PermissionDeniedError
 from app.core.visibility import identity_filter
-from app.models.enums import Role
+from app.models.enums import Channel, Role
 from app.models.user import Group, User
 from app.models.voice_training import VoiceTrainingAttempt
 from app.schemas.voice_training import VoiceRetry, VoiceStart
@@ -53,13 +53,26 @@ HURRIED_CLARIFY = "Я тороплюсь. Назовите одно действ
 IRRITATED_CLARIFY = "Это мой аккаунт! Объясните, почему нельзя изменить номер по этому звонку."
 
 
+def chat_operator(user):
+    """Chat operators answer in chats and take no calls (docs/CHANNELS.md)."""
+    return user.role == Role.OPERATOR and user.channel == Channel.CHAT
+
+
 def can_call(user):
     """Drivers call operators and trainees; leaders look at their calls (voice_team), and the
-    administrator may take a call to check the trainer."""
-    return user.is_active and user.role in (Role.TRAINEE, Role.OPERATOR, Role.ADMIN)
+    administrator may take a call to check the trainer. Chat operators take no calls."""
+    return (
+        user.is_active
+        and user.role in (Role.TRAINEE, Role.OPERATOR, Role.ADMIN)
+        and not chat_operator(user)
+    )
 
 
 async def require_scope(session, user):
+    if chat_operator(user):
+        raise PermissionDeniedError(
+            "Голосовой тренажёр — для операторов линии: операторы чатов не принимают звонки."
+        )
     if not can_call(user):
         raise PermissionDeniedError("Голосовой тренажёр недоступен для этой учётной записи.")
 

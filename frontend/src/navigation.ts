@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { Role } from "./api/types";
+import type { Channel, Role } from "./api/types";
 import type { AccessMap, SectionCode } from "./api/access";
 import { CoinIcon, GiftIcon, HomeIcon, InboxIcon, QrIcon, SparkIcon, StoreIcon, TrophyIcon, UserIcon, UsersIcon } from "./components/icons";
 
@@ -119,9 +119,11 @@ export function routeSection(pathname: string, search = "", role: Role = "operat
   return routes.find(([, paths]) => paths.some(matches))?.[0];
 }
 
-export function canVisit(role: Role, to: string, allowed: AccessMap, isDeveloper = false): boolean {
+export function canVisit(role: Role, to: string, allowed: AccessMap, isDeveloper = false, channel?: Channel): boolean {
   if (to === "/") return true;
   const [path, search = ""] = to.split("#")[0].split("?");
+  // Chat operators take no calls: the voice trainer is the line's (docs/CHANNELS.md).
+  if (role === "operator" && channel === "chat" && (path === "/training/voice" || path.startsWith("/training/voice/"))) return false;
   if (path === "/trainee" && role !== "trainee") return false;
   if (role === "trainee" && !["/trainee", "/profile", "/notifications", "/training", "/simulator"].some(p => path === p || path.startsWith(p + "/"))) return false;
   if (role === "trainer" && !["/qr-access", "/profile", "/notifications", "/trainer", "/admin/learning-analytics", "/admin/learning", "/training", "/simulator", "/admin/users"].some(p => path === p || path.startsWith(p + "/"))) return false;
@@ -137,7 +139,7 @@ export function canVisit(role: Role, to: string, allowed: AccessMap, isDeveloper
   return !!permission && allowed[permission] === true;
 }
 
-export function visibleNavigation(role: Role, allowed: AccessMap = defaultAccess(role), isDeveloper = false): readonly NavItem[] {
+export function visibleNavigation(role: Role, allowed: AccessMap = defaultAccess(role), isDeveloper = false, channel?: Channel): readonly NavItem[] {
   if (role === "trainee") return ROLE_NAVIGATION.trainee.flatMap(item => {
     const tabs = item.tabs.filter(link => canVisit(role, link.to, allowed));
     return tabs.length ? [{ ...item, tabs, to: tabs[0].to }] : [];
@@ -172,7 +174,7 @@ export function visibleNavigation(role: Role, allowed: AccessMap = defaultAccess
     system.tabs = [tab("/admin/access", "Доступ к разделам"), ...system.tabs.filter((link) => link.to !== "/admin/access" && link.to !== "/admin/settings")];
   }
   const visible = items.flatMap((item) => {
-    const tabs = item.tabs.filter((link) => canVisit(role, link.to, allowed, isDeveloper));
+    const tabs = item.tabs.filter((link) => canVisit(role, link.to, allowed, isDeveloper, channel));
     if (!tabs.length) return [];
     let { id, label } = item;
     if ((id === "performance" && !allowed.performance) || (id === "motivation" && !allowed.motivation)) { id = "results"; label = "Результаты"; }
@@ -184,9 +186,9 @@ export function visibleNavigation(role: Role, allowed: AccessMap = defaultAccess
   return visible;
 }
 
-export function currentSection(role: Role, pathname: string, search = "", allowed: AccessMap = defaultAccess(role), isDeveloper = false): NavItem | undefined {
-  if (!canVisit(role, `${pathname}${search}`, allowed, isDeveloper)) return undefined;
-  const sections = visibleNavigation(role, allowed, isDeveloper);
+export function currentSection(role: Role, pathname: string, search = "", allowed: AccessMap = defaultAccess(role), isDeveloper = false, channel?: Channel): NavItem | undefined {
+  if (!canVisit(role, `${pathname}${search}`, allowed, isDeveloper, channel)) return undefined;
+  const sections = visibleNavigation(role, allowed, isDeveloper, channel);
   // Bookmarked personal history stays under the cabinet without another tab.
   if (pathname === "/wallet") return sections.find(item => item.tabs.some(link => link.to === "/cabinet"));
   if (pathname === "/training/work-sites" || pathname.startsWith("/training/scenarios/")) return sections.find(item => item.tabs.some(tab => tab.to === "/training/city"));
@@ -239,8 +241,16 @@ export function appEntryRedirect(pathname: string, home: string, canPath: (path:
   if (pathname === "/cabinet" && !canPath("/cabinet")) return home;
   // Учебных материалов больше нет: их страницы ведут в город, а студия у сотрудников — в аналитику симулятора.
   if (pathname === "/training" || pathname.startsWith("/training/attempts/")) return canPath("/training/city") ? "/training/city" : home;
+  // A chat operator's old link to the voice trainer leads to their city instead.
+  if (pathname.startsWith("/training/voice") && !canPath(pathname)) return canPath("/training/city") ? "/training/city" : home;
   if (pathname === "/admin/learning" && !canPath("/admin/learning")) return canPath("/admin/learning-analytics") ? "/admin/learning-analytics" : home;
   return null;
+}
+
+/** Chats have no productivity metrics, so their analytics has no such tab (docs/CHANNELS.md). */
+export function sectionTabs(item: NavItem, pathname: string, search: string): SectionTab[] {
+  const chats = pathname === "/analytics" && new URLSearchParams(search).get("channel") === "chat";
+  return chats ? item.tabs.filter((link) => link.to !== "/analytics?tab=productivity") : item.tabs;
 }
 
 export function subsectionDestination(link: SectionTab, pathname: string, search: string): string {
@@ -249,7 +259,7 @@ export function subsectionDestination(link: SectionTab, pathname: string, search
   const source = new URLSearchParams(search); const destination = new URLSearchParams(targetSearch ?? "");
   const shared: Record<string, string[]> = {
     "/rating": ["week", "count", "search"],
-    "/analytics": ["window", "view", "unassigned", "week_id", "grain", "from", "to", "group_id", "metric", "operators", "compare", "group_compare", "search", "status"],
+    "/analytics": ["window", "view", "unassigned", "week_id", "grain", "from", "to", "group_id", "metric", "operators", "compare", "group_compare", "search", "status", "channel"],
   };
   for (const key of shared[pathname] ?? []) if (source.has(key) && !destination.has(key)) destination.set(key, source.get(key)!);
   const query = destination.toString(); return `${targetPath}${query ? `?${query}` : ""}`;

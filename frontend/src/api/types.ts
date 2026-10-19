@@ -395,6 +395,8 @@ export interface OperatorRowOut {
   forbidden_sites: number;
   metrics_available?: boolean;
   scored_weeks_count?: number;
+  /** Линия или чаты: место считается внутри направления (docs/CHANNELS.md). */
+  channel?: Channel;
 }
 
 /** Тело ошибки, которое возвращает бэкенд для доменных исключений. */

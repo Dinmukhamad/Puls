@@ -11,7 +11,7 @@ import { useTheme, type ThemePreference } from "../theme/ThemeContext";
 import { Sheet } from "../components/Sheet";
 import { useToast } from "../components/Toast";
 import { PwaInstallCard } from "../pwa/PwaProvider";
-import { ROLE_LABELS, dateOnly } from "../utils/format";
+import { dateOnly, roleLabel } from "../utils/format";
 import "./profile.css";
 
 const TelegramCard = lazy(() => import("../components/TelegramCard").then((module) => ({ default: module.TelegramCard })));
@@ -41,7 +41,7 @@ export function ProfilePage() {
   const fields = [
     { label: "Имя", value: user.full_name },
     { label: "Логин", value: user.login },
-    { label: "Роль", value: ROLE_LABELS[user.role] },
+    { label: "Роль", value: roleLabel(user) },
     { label: "Телефон", value: user.phone || "Не указан" },
     ...(user.email ? [{ label: "Электронная почта", value: user.email }] : []),
     ...(user.group ? [{ label: "Группа", value: user.group.name }] : []),
@@ -51,7 +51,7 @@ export function ProfilePage() {
     <header className="profile-heading"><h1 className="page-title">Профиль</h1><p>Ваш аккаунт, связь и настройки</p></header>
     <section ref={node => { panelTriggers.current.details = node; }} className="profile-identity" aria-label="Ваш аккаунт" data-tour="profile">
       <button type="button" className="profile-identity__photo" aria-label="Изменить фото профиля" onClick={() => open("avatar")}><Avatar name={user.full_name} id={user.id} size={52} /><span className="profile-identity__camera" aria-hidden="true"><CameraIcon size={13} /></span></button>
-      <div className="profile-identity__text"><h2>{user.full_name}</h2><p>{isDeveloper ? "Разработчик Puls" : ROLE_LABELS[user.role]}{user.group ? ` · ${user.group.name}` : ""}</p><Badge tone={user.is_active ? "success" : "neutral"} dot>{user.is_active ? "Аккаунт активен" : "Аккаунт отключён"}</Badge></div>
+      <div className="profile-identity__text"><h2>{user.full_name}</h2><p>{isDeveloper ? "Разработчик Puls" : roleLabel(user)}{user.group ? ` · ${user.group.name}` : ""}</p><Badge tone={user.is_active ? "success" : "neutral"} dot>{user.is_active ? "Аккаунт активен" : "Аккаунт отключён"}</Badge></div>
       <Button size="s" onClick={() => open("details")}>Мои данные</Button>
     </section>
 

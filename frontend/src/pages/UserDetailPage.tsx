@@ -12,7 +12,7 @@ import { useToast } from "../components/Toast";
 import { Avatar, Badge, Button, EmptyState, ErrorState, Pagination, Progress, Skeleton } from "../components/ui";
 import { AvatarEditor } from "../components/AvatarEditor";
 import { ChevronRightIcon } from "../components/icons";
-import { CHANNEL_LABELS, ROLE_LABELS, REQUEST_STATUS_LABELS, coins, dateOnly, dateTime, plural, points } from "../utils/format";
+import { CHANNEL_LABELS, REQUEST_STATUS_LABELS, roleLabel, coins, dateOnly, dateTime, plural, points } from "../utils/format";
 import { UserArchive, UserEditor } from "./UsersPage";
 import { TraineeResults } from "./TraineeResults";
 import { teamOf, teamTitles } from "./teamSection";
@@ -86,7 +86,7 @@ export function EmployeeCard({ id, onClose }: { id: number; onClose?: () => void
         <Avatar name={data.full_name} id={id} size={64} />
         <div className="employee__identity">
           {!onClose && <h1 className="page-title">{data.full_name}</h1>}
-          <div className="employee__tags"><Badge tone="neutral">{ROLE_LABELS[data.role]}</Badge>{!data.is_active && <Badge tone="warning">В архиве</Badge>}</div>
+          <div className="employee__tags"><Badge tone="neutral">{roleLabel(data)}</Badge>{!data.is_active && <Badge tone="warning">В архиве</Badge>}</div>
           {!trainer && <p className="employee__team">{teamLabel}</p>}
         </div>
         {(editable || credentials || photo) && <div className="employee__actions">

@@ -1,5 +1,5 @@
 import { buildQuery, request } from "./client";
-import type { MetricKind, WeekOut } from "./types";
+import type { Channel, MetricKind, WeekOut } from "./types";
 
 export interface MetricSummary {
   code: string;
@@ -96,6 +96,8 @@ export interface AnalyticsFilters {
   group_id?: number;
   metric_code?: string;
   operator_ids?: string;
+  /** Line or chats: that channel's operators and metrics (docs/CHANNELS.md); none — everyone. */
+  channel?: Channel;
 }
 
 export const analytics = {

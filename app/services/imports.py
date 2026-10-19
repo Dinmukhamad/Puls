@@ -35,6 +35,8 @@ _ALIASES = {
     "дата": "date",
 }
 _IDENTITY_COLUMNS = {"user_id", "login", "date"}
+#: Titles a default metric had before; older files keep loading after a rename.
+_FORMER_TITLES = {"качество работы": "quality"}
 
 
 async def validate_values(session: AsyncSession, actor: User, values: list[MetricValueIn]) -> None:
@@ -230,6 +232,10 @@ async def preview_file(
         codes.add(code)
         if title.strip():
             titles.setdefault(title.strip().casefold(), set()).add(code)
+    # A current title wins: a former one only fills a name nobody uses now.
+    for former, code in _FORMER_TITLES.items():
+        if code in codes:
+            titles.setdefault(former, {code})
     data_columns = [column for column in headers if column not in _IDENTITY_COLUMNS]
     wide_codes: dict[str, str] = {}
     for column, raw_header in zip(headers, raw_headers, strict=True):

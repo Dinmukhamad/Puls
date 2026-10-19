@@ -164,3 +164,18 @@ async def test_title_and_code_for_same_metric_are_reported_as_duplicate(
     assert preview.can_apply is False
     assert preview.errors[0].code == "duplicate"
     assert await session.scalar(select(func.count(OperatorWeekMetric.id))) == 0
+
+
+async def test_the_former_title_of_quality_still_loads(session, operator, head):
+    """«Качество работы» became «Качество звонков»; files with the old column keep loading."""
+    quality = await session.scalar(
+        select(MetricDefinition).where(MetricDefinition.code == "quality")
+    )
+    assert quality.title == "Качество звонков"
+    week = await weekly.get_or_create_week(session, date(2026, 10, 5))
+    await session.commit()
+    for header in ("Качество работы", "Качество звонков"):
+        preview = await imports.preview_file(
+            session, head, week, "metrics.csv", _file([["Логин", header], [operator.login, 98]])
+        )
+        assert preview.can_apply is True, (header, preview.errors)

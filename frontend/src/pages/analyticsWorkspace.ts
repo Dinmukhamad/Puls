@@ -41,11 +41,20 @@ export function completedWeekWindow(today = todayDateKey()): DateRange {
   return weekWindow(dateKey(shiftDays(date, -((date.getUTCDay() + 6) % 7) - 1)));
 }
 
+/** Quality of calls and of chats, and the drivers' thanks; the rest of the work is productivity. */
+const QUALITY_CODES = new Set(['quality', 'driver_gratitudes', 'chat_quality']);
+
 export function metricCategory(metric: MetricSummary, latenessCode = 'lateness'): AnalyticsCategory {
   if (metric.kind === 'anti' || metric.code === latenessCode) return 'discipline';
-  if (metric.code === 'quality' || metric.code === 'driver_gratitudes') return 'quality';
-  return 'productivity';
+  return QUALITY_CODES.has(metric.code) ? 'quality' : 'productivity';
 }
+
+export type AnalyticsChannel = 'line' | 'chat';
+/** The line by default; chats only when the link asks for them. */
+export const analyticsChannel = (value: string | null): AnalyticsChannel => value === 'chat' ? 'chat' : 'line';
+/** Chats have only quality and discipline (docs/CHANNELS.md). */
+export const channelCategories = (channel: AnalyticsChannel): AnalyticsCategory[] =>
+  channel === 'chat' ? ['quality', 'discipline'] : ['quality', 'productivity', 'discipline'];
 
 export function categoryMetrics(report: AnalyticsOut, category: AnalyticsCategory) {
   return report.metrics.filter(metric => metricCategory(metric, report.lateness_metric_code) === category);

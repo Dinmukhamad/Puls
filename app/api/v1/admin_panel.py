@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from datetime import date, datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Query, Response
 from sqlalchemy import func, select
@@ -70,6 +70,9 @@ async def operators(
     date_to: date | None = None,
     group_id: int | None = None,
     search: Annotated[str | None, Query(description="Поиск по ФИО")] = None,
+    channel: Annotated[
+        Literal["line", "chat"] | None, Query(description="Линия или чаты; без него — все")
+    ] = None,
 ) -> Page[OperatorRowOut]:
     period = staff_service.operator_period(date_from, date_to, week_id=week_id)
     week = None if period else await weekly_service.resolve_week(
@@ -83,6 +86,7 @@ async def operators(
         period=period,
         group_id=group_id,
         search=search,
+        channel=channel,
         offset=pagination.offset,
         limit=pagination.size,
     )
@@ -103,6 +107,9 @@ async def export_operators(
     date_to: date | None = None,
     group_id: int | None = None,
     search: Annotated[str | None, Query(description="Поиск по ФИО")] = None,
+    channel: Annotated[
+        Literal["line", "chat"] | None, Query(description="Линия или чаты; без него — все")
+    ] = None,
 ) -> Response:
     """CSV с разделителем «;» и BOM - открывается в Excel без настройки импорта."""
     period = staff_service.operator_period(date_from, date_to, week_id=week_id)
@@ -117,6 +124,7 @@ async def export_operators(
         period=period,
         group_id=group_id,
         search=search,
+        channel=channel,
         offset=0,
         limit=100_000,
     )

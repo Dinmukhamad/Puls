@@ -4,7 +4,7 @@ import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
 
 const compiled = await build({ entryPoints: [fileURLToPath(new URL('./analyticsWorkspace.ts', import.meta.url))], bundle: true, platform: 'node', format: 'esm', write: false });
-const { selectedPeriodReport, weekWindow, completedWeekWindow, mean, periodChange, metricCategory, categoryMetrics, categoryHealth, metricTrend, weeklyColumns, weeklyCoverage, groupBreakdown } = await import(`data:text/javascript;base64,${Buffer.from(compiled.outputFiles[0].text).toString('base64')}`);
+const { selectedPeriodReport, weekWindow, completedWeekWindow, mean, periodChange, metricCategory, categoryMetrics, categoryHealth, metricTrend, weeklyColumns, weeklyCoverage, groupBreakdown, analyticsChannel, channelCategories } = await import(`data:text/javascript;base64,${Buffer.from(compiled.outputFiles[0].text).toString('base64')}`);
 
 const quality = { code: 'quality', title: 'Качество', target: 80, unit: '%', direction: 'higher_is_better', kind: 'positive' };
 const efficiency = { ...quality, code: 'efficiency', title: 'Эффективность' };
@@ -176,4 +176,16 @@ test('category health counts all category goals, never hides poor quality behind
   assert.equal(empty.met, 0);
   assert.equal(empty.complete, 0);
   assert.equal(empty.attention, 0);
+});
+
+test('chats keep their quality under «Качество» and have no productivity dashboard', () => {
+  const chatQuality = { ...quality, code: 'chat_quality', title: 'Качество чатов' };
+  assert.equal(metricCategory(chatQuality), 'quality');
+  const chats = report({ metrics: [chatQuality, lateness] });
+  assert.deepEqual(categoryMetrics(chats, 'quality').map(metric => metric.code), ['chat_quality']);
+  assert.deepEqual(categoryMetrics(chats, 'productivity'), []);
+  assert.deepEqual(channelCategories('chat'), ['quality', 'discipline']);
+  assert.deepEqual(channelCategories('line'), ['quality', 'productivity', 'discipline']);
+  // The line unless a link asks for chats; anything else is the line too.
+  assert.deepEqual([null, 'chat', 'line', 'junk'].map(analyticsChannel), ['line', 'chat', 'line', 'line']);
 });

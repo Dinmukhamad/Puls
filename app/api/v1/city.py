@@ -167,6 +167,8 @@ async def participants(
         missions = city.mission_rows(config, facts[operator.id], claimed)
         if operator.group_id not in scenario_groups:
             missions = [m for m in missions if m["district"] != "scenarios"]
+        if not city.takes_calls(operator):
+            missions = [m for m in missions if m["district"] not in city.CALL_DISTRICTS]
         xp = sum(a.xp for a in claimed.values())
         items.append(
             {

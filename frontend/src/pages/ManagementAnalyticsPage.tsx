@@ -14,18 +14,26 @@ import { Sheet } from '../components/Sheet';
 import { Button, Card, EmptyState, ErrorState, KPISkeleton, Pagination, SegmentedControl, Select } from '../components/ui';
 import { TeamDistribution, PriorityList, OperatorMatrix, OperatorDetails, GoalBar, Sparkline } from './AnalyticsDashboard';
 import { FourWeekTable, GroupDashboard, CategoryDashboard } from './AnalyticsPanels';
-import { categoryMetrics, completedWeekWindow, selectedPeriodReport, weekWindow, type AnalyticsCategory } from './analyticsWorkspace';
+import { analyticsChannel, categoryMetrics, channelCategories, completedWeekWindow, selectedPeriodReport, weekWindow, type AnalyticsCategory, type AnalyticsChannel } from './analyticsWorkspace';
 import { assess, gapText, metricValue, teamInsights, matchesFilter, periodCaption, STATE_LABEL, type OperatorInsight } from './analyticsInsights';
 import './analytics.css';
 import './management-analytics.css';
 
 const integer = (value: string | null) => value && /^\d+$/.test(value) && Number(value) > 0 ? Number(value) : undefined;
 const DASHBOARDS = ['summary', 'weeks', 'groups', 'quality', 'productivity', 'discipline', 'operators'];
-const SHORTCUTS = [
-  { tab: 'quality', title: 'Качество', hint: 'Качество работы и благодарности водителей', metric: 'quality' },
-  { tab: 'productivity', title: 'Производительность', hint: 'Эффективность, звонки в час и рабочее время', metric: 'efficiency' },
-  { tab: 'discipline', title: 'Дисциплина', hint: 'Опоздания и другие нежелательные события', metric: 'lateness' },
-];
+/** Each channel's own dashboards: chats have no productivity metrics (docs/CHANNELS.md). */
+const SHORTCUTS: Record<AnalyticsChannel, { tab: AnalyticsCategory; title: string; hint: string; metric: string }[]> = {
+  line: [
+    { tab: 'quality', title: 'Качество', hint: 'Качество звонков и благодарности водителей', metric: 'quality' },
+    { tab: 'productivity', title: 'Производительность', hint: 'Эффективность, звонки в час и рабочее время', metric: 'efficiency' },
+    { tab: 'discipline', title: 'Дисциплина', hint: 'Опоздания и другие нежелательные события', metric: 'lateness' },
+  ],
+  chat: [
+    { tab: 'quality', title: 'Качество', hint: 'Качество ответов в чатах', metric: 'chat_quality' },
+    { tab: 'discipline', title: 'Дисциплина', hint: 'Опоздания и другие нежелательные события', metric: 'lateness' },
+  ],
+};
+const CHANNEL_NAMES: Record<AnalyticsChannel, string> = { line: 'Линия', chat: 'Чаты' };
 
 /** Explicit four-week windows avoid mixing a partial week with completed weeks. */
 export function useManagementAnalytics() {
@@ -37,11 +45,13 @@ export function useManagementAnalytics() {
   // Old bookmarks and summary links keep their original whole-range meaning.
   const mode = chosen && params.get('window') !== 'weeks' ? 'range' : 'weeks';
   const range = chosen ? mode === 'weeks' ? weekWindow(chosen.date_to) : chosen : completedWeekWindow(todayDateKey());
+  const channel = analyticsChannel(params.get('channel'));
   const filters: AnalyticsFilters = {
     grain: mode === 'weeks' ? 'week' : 'range', ...range,
     group_id: integer(params.get('group_id')),
     metric_code: params.get('metric') || undefined,
     operator_ids: params.get('operators') || undefined,
+    channel,
   };
   const data = useQuery({ queryKey: ['management-analytics', user?.id, filters, user?.role], queryFn: ({ signal }) => analytics.summary(filters, signal), enabled: !!user });
   const groups = useQuery({ queryKey: ['management-groups', user?.id, user?.role], queryFn: lookups.groups, enabled: !!user });
@@ -55,17 +65,22 @@ export function useManagementAnalytics() {
     setParams(next);
   };
   const setRange = (next: typeof range, window: 'range' | 'weeks') => update({ from: next.date_from, to: next.date_to, window, page: undefined });
-  return { user, params, update, filters, mode, range, setRange, data, groups, weekly: mode === 'weeks' ? data : weekly, weeklyRange };
+  // Another channel has other operators and metrics: the picks of this one do not carry over.
+  const setChannel = (next: AnalyticsChannel) => update({ channel: next === 'chat' ? 'chat' : undefined, metric: undefined, operators: undefined, status: undefined, page: undefined,
+    ...(next === 'chat' && params.get('tab') === 'productivity' ? { tab: 'summary' } : {}) });
+  return { user, params, update, filters, mode, range, setRange, channel, setChannel, data, groups, weekly: mode === 'weeks' ? data : weekly, weeklyRange };
 }
 
 export function ManagementAnalyticsPage() {
   const report = useManagementAnalytics();
-  const { user, params, update, data } = report;
+  const { user, params, update, data, channel } = report;
   const head = user?.role === 'head' || user?.role === 'admin';
   const requested = params.get('tab') ?? 'summary';
-  const tab = DASHBOARDS.includes(requested) && (requested !== 'groups' || head) ? requested : 'summary';
+  const categories = channelCategories(channel);
+  const tab = DASHBOARDS.includes(requested) && (requested !== 'groups' || head) && (requested !== 'productivity' || categories.includes('productivity')) ? requested : 'summary';
   const value = data.isError || !data.data ? undefined : selectedPeriodReport(data.data);
-  const category = ['quality', 'productivity', 'discipline'].includes(tab) ? tab as AnalyticsCategory : undefined;
+  const category = (categories as string[]).includes(tab) ? tab as AnalyticsCategory : undefined;
+  const chats = channel === 'chat';
   const selectableMetrics = value ? category ? categoryMetrics(value, category) : value.metrics : [];
   const metric = selectableMetrics.find(item => item.code === value?.metric_code) ?? selectableMetrics[0] ?? value?.metrics[0];
   const weekly = report.weekly.isError ? undefined : report.weekly.data;
@@ -97,7 +112,7 @@ export function ManagementAnalyticsPage() {
   </>;
 
   return <div className="stack analytics-page analytics-lead management-analytics">
-    <header className="page-head ma-heading"><div><p className="analytics-eyebrow">ПУЛЬС КОМАНДЫ</p><h1 className="page-title">{head ? 'Аналитика руководителя' : 'Аналитика супервайзера'}</h1><p className="page-subtitle">{head ? 'Все команды, динамика результатов и точки внимания.' : 'Результаты вашей команды и операторы, которым нужна поддержка.'}</p></div><div className="ma-heading-actions"><span className="ma-scope">{head ? 'Все операторы · все группы' : 'Только мои операторы'}</span><Button size="s" disabled={data.isFetching || report.weekly.isFetching} onClick={() => { void data.refetch(); if (report.mode === 'range') void report.weekly.refetch(); void report.groups.refetch(); }}>{data.isFetching || report.weekly.isFetching ? 'Обновляем…' : 'Обновить'}</Button></div></header>
+    <header className="page-head ma-heading"><div><p className="analytics-eyebrow">ПУЛЬС КОМАНДЫ</p><h1 className="page-title">{head ? 'Аналитика руководителя' : 'Аналитика супервайзера'}</h1><p className="page-subtitle">{head ? 'Все команды, динамика результатов и точки внимания.' : 'Результаты вашей команды и операторы, которым нужна поддержка.'}</p></div><div className="ma-heading-actions"><span className="ma-scope">{`${CHANNEL_NAMES[channel]} · ${head ? 'все группы' : 'только мои операторы'}`}</span><Button size="s" disabled={data.isFetching || report.weekly.isFetching} onClick={() => { void data.refetch(); if (report.mode === 'range') void report.weekly.refetch(); void report.groups.refetch(); }}>{data.isFetching || report.weekly.isFetching ? 'Обновляем…' : 'Обновить'}</Button></div></header>
 
     <GlassSurface className={`ma-filters${hasGroupFilter ? '' : ' ma-filters--single-group'}`} variant="regular">
       <div className="field ma-period-control">
@@ -109,6 +124,7 @@ export function ManagementAnalyticsPage() {
       <div className="ma-period-buttons">
         <Button title="Четыре недели до конца выбранного периода" aria-pressed={report.mode === 'weeks'} variant={report.mode === 'weeks' ? 'primary' : 'secondary'} onClick={() => report.setRange(weekWindow(report.range.date_to), 'weeks')}>4 недели</Button>
         <Button onClick={() => report.setRange(completedWeekWindow(today), 'weeks')}>Последние 4 недели</Button>
+        <div className="ma-channel"><span className="field__label">Направление</span><SegmentedControl label="Направление" value={channel} options={[{ value: 'line', label: 'Линия' }, { value: 'chat', label: 'Чаты' }]} onChange={report.setChannel} /></div>
       </div>
     </GlassSurface>
     {report.groups.isError && <p className="analytics-muted" role="status">Не удалось загрузить группы. <button className="analytics-text-button" onClick={() => void report.groups.refetch()}>Повторить</button></p>}
@@ -119,13 +135,15 @@ export function ManagementAnalyticsPage() {
       <div className="ma-reading"><span><b>{report.mode === 'weeks' ? `Карточки: ${periodCaption(value)}` : `Период: ${periodCaption(value)}`}</b><small>{report.mode === 'weeks' ? 'Карточки — последняя неделя; изменение — к предыдущей. Таблица — все четыре недели.' : 'Карточки — среднее за выбранный период; изменение — к такому же периоду до него.'}</small></span><span className="ma-reading-scope">{report.filters.group_id ? report.groups.data?.find(g => g.id === report.filters.group_id)?.name ?? 'Выбранная группа' : head ? 'Охват всей организации' : 'Только закреплённые группы'}</span></div>
       {(value.week && value.week.status !== 'closed' || report.range.date_to >= today) && <p className="analytics-period-note">{report.range.date_to >= today ? 'Период ещё не завершён. ' : ''}{value.week && value.week.status !== 'closed' ? 'Последняя неделя не закрыта. ' : ''}Показатели могут измениться.</p>}
       <ScopePulse report={value} people={people} head={head} onFilter={filterPeople} />
-      {!value.operator_count && <EmptyState title={head ? 'Операторов в выбранном охвате пока нет' : 'В ваших группах пока нет операторов'} hint={head ? 'Выберите другую группу или добавьте операторов в команду.' : 'Здесь появятся показатели операторов закреплённых за вами групп.'} />}
+      {!value.operator_count && (chats
+        ? <EmptyState title={head ? 'Операторов чатов в выбранном охвате пока нет' : 'В ваших группах пока нет операторов чатов'} hint="Направление оператора меняют в «Команда → Изменить»." />
+        : <EmptyState title={head ? 'Операторов в выбранном охвате пока нет' : 'В ваших группах пока нет операторов'} hint={head ? 'Выберите другую группу или добавьте операторов в команду.' : 'Здесь появятся показатели операторов закреплённых за вами групп.'} />)}
       {value.operator_count > 0 && !value.operators_with_data && <div className="ma-empty-notice"><strong>За этот период показателей нет</strong><span>Выберите другие даты или загрузите показатели. Пропуски не считаются нулями.</span><AccessLink hideWhenDenied to="/admin/periods" className="analytics-text-button">Открыть периоды →</AccessLink></div>}
       {!metric && <EmptyState title="Показатели не настроены" hint="Добавьте рабочие показатели и цели в настройках системы." />}
 
       {metric && tab === 'summary' && <>
         {fourWeeks}
-        <div className="ma-shortcuts">{SHORTCUTS.map(item => {
+        <div className={`ma-shortcuts ma-shortcuts--${SHORTCUTS[channel].length}`}>{SHORTCUTS[channel].map(item => {
           const m = value.metrics.find(m => m.code === (item.tab === 'discipline' ? value.lateness_metric_code : item.metric));
           return <button className="ma-shortcut" key={item.tab} onClick={() => update({ tab: item.tab, metric: m?.code })}><span><strong>{item.title}</strong><ArrowUpRightIcon size={16} /></span><small>{item.hint}</small><div className="ma-shortcut-value">{m ? metricValue(m.value, m) : 'Нет показателей'}</div><Sparkline values={m?.trend ?? []} /><span className="ma-shortcut-footer">Открыть дашборд →</span></button>;
         })}</div>
@@ -140,7 +158,7 @@ export function ManagementAnalyticsPage() {
         {weekly && <Card title={`Динамика · ${metric.title}`} subtitle="Среднее по загруженным значениям операторов"><Chart title={metric.title} labels={labels(weekly)} series={[{ id: 'team', name: head ? 'Выбранные команды' : 'Моя команда', values: weekly.metrics.find(m => m.code === metric.code)?.trend ?? [] }]} target={weekly.metrics.find(m => m.code === metric.code)?.target} unit={metric.unit} /></Card>}
       </>}
       {metric && tab === 'groups' && head && <GroupDashboard report={value} metric={metric} onGroup={onGroup} />}
-      {metric && (tab === 'quality' || tab === 'productivity' || tab === 'discipline') && <CategoryDashboard report={value} category={tab} selected={metric.code} onMetric={onMetric} onOpen={openPerson} />}
+      {metric && category && <CategoryDashboard report={value} category={category} channel={channel} selected={metric.code} onMetric={onMetric} onOpen={openPerson} />}
 
       {metric && tab === 'operators' && <>
         <div className="analytics-section-heading"><div><h2>{head ? 'Операторы' : 'Операторы моей команды'}</h2><p>{filtered.length} из {people.length} · сначала наиболее сильные отклонения</p></div><SegmentedControl label="Представление операторов" value={matrix ? 'matrix' : 'list'} options={[{ value: 'list', label: 'Причины внимания' }, { value: 'matrix', label: 'Матрица целей' }]} onChange={view => update({ view })} /></div>
@@ -148,7 +166,7 @@ export function ManagementAnalyticsPage() {
         {!filtered.length ? <EmptyState title="Нет операторов по этим условиям" hint="Измените поиск, группу или состояние." /> : <Card padded={false}>{matrix ? <OperatorMatrix people={filtered.slice((page - 1) * pageSize, page * pageSize)} metrics={value.metrics} onOpen={openPerson} /> : <OperatorList people={filtered.slice((page - 1) * pageSize, page * pageSize)} metric={metric} onOpen={openPerson} />}<Pagination page={page} size={pageSize} total={filtered.length} onChange={next => update({ page: String(next) })} /></Card>}
         <Card title="Сравнение операторов" subtitle="До пяти сотрудников. Выбранный показатель и период общие для всех."><div className="stack"><label className="field"><span className="field__label">Добавить оператора</span><Select aria-label="Добавить оператора в сравнение" value="" disabled={selectedOperators.length >= 5} options={[{ value: '', label: 'Выберите сотрудника' }, ...value.operators.filter(p => !selectedOperators.includes(p.user_id)).map(p => ({ value: p.user_id, label: p.full_name }))]} onChange={id => { if (id) update({ operators: [...selectedOperators, Number(id)].join(',') }); }} /></label><div className="analytics-picks">{selectedOperators.map(id => <Button size="s" key={id} aria-label={`Убрать ${value.operators.find(p => p.user_id === id)?.full_name ?? 'оператора'} из сравнения`} onClick={() => update({ operators: selectedOperators.filter(n => n !== id).join(',') })}>{value.operators.find(p => p.user_id === id)?.full_name ?? 'Оператор'} ×</Button>)}</div>{value.comparisons.length ? <Chart title={`Сравнение · ${metric.title}`} labels={labels(value)} series={value.comparisons.map(p => ({ id: String(p.id), name: p.name, values: p.values }))} target={metric.target} unit={metric.unit} /> : <p className="analytics-muted">Добавьте операторов, чтобы сопоставить их динамику.</p>}</div></Card>
       </>}
-      <details className="analytics-method-card"><summary>Как считаются показатели и сравнения</summary><div className="analytics-method-content"><p>В режиме «4 недели» карточки относятся к последней неделе и сравниваются с предыдущей. В недельной таблице изменение — последняя неделя к первой. Произвольный период показывает средние значения и сравнение с равным периодом до него.</p><p>Пропуски остаются пропусками. Разница процентных показателей указана в процентных пунктах. Направление улучшения и цели берутся из настроек. Полнота — доля заполненных значений среди всех ожидаемых показателей операторов.</p><p>«Выполняют все цели» — все активные показатели загружены, цели достигнуты и нарушений нет. Сильное отставание — отклонение от цели на 20% и более. Карточки внимания и ухудшения могут включать одних и тех же операторов.</p><p>{value.methodology}</p></div></details>
+      <details className="analytics-method-card"><summary>Как считаются показатели и сравнения</summary><div className="analytics-method-content"><p>В режиме «4 недели» карточки относятся к последней неделе и сравниваются с предыдущей. В недельной таблице изменение — последняя неделя к первой. Произвольный период показывает средние значения и сравнение с равным периодом до него.</p><p>Пропуски остаются пропусками. Разница процентных показателей указана в процентных пунктах. Направление улучшения и цели берутся из настроек. Полнота — доля заполненных значений среди всех ожидаемых показателей операторов.</p><p>«Выполняют все цели» — все активные показатели загружены, цели достигнуты и нарушений нет. Сильное отставание — отклонение от цели на 20% и более. Карточки внимания и ухудшения могут включать одних и тех же операторов.</p><p>Линия и чаты смотрятся отдельно: у каждого направления свои операторы и рабочие показатели, дисциплина общая. Полнота данных и «все цели» считаются по показателям своего направления.</p><p>{value.methodology}</p></div></details>
     </>}
     {person && value && metric && <Sheet title={person.row.full_name} onClose={() => setPersonId(null)}><div className="analytics-lead management-analytics"><OperatorDetails person={person} report={value} metric={value.metrics.find(m => m.code === detailMetric) ?? metric} onMetric={setDetailMetric} /></div></Sheet>}
   </div>;

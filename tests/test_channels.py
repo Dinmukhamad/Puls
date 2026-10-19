@@ -206,3 +206,77 @@ async def test_staff_set_the_channel_and_the_thresholds(client, session, operato
         },
     )
     assert wrong.status_code == 400
+
+
+async def test_analytics_shows_one_channel_at_a_time(client, session, operator, head):
+    _, week, _ = await _calculated(session, operator)
+    headers = auth(await login(client, "head1"))
+
+    async def report(**params):
+        response = await client.get(
+            "/api/v1/analytics/summary", params={"week_id": week.id, **params}, headers=headers
+        )
+        assert response.status_code == 200, response.text
+        return response.json()
+
+    chats = await report(channel="chat")
+    assert chats["operator_count"] == 3 and chats["metric_code"] == "chat_quality"
+    assert {m["code"] for m in chats["metrics"]} == {"chat_quality", "lateness", "forbidden_sites"}
+    # Completeness counts the channel's own metrics: every chat operator has all of them.
+    assert all(m["reported"] == 3 for m in chats["metrics"])
+    # A line metric in an old link falls back to the chats' own quality.
+    assert (await report(channel="chat", metric_code="quality"))["metric_code"] == "chat_quality"
+    line = await report(channel="line")
+    assert line["operator_count"] == 2 and line["metric_code"] == "quality"
+    assert "chat_quality" not in {m["code"] for m in line["metrics"]}
+    everyone = await report()
+    assert everyone["operator_count"] == 5 and "chat_quality" in {
+        m["code"] for m in everyone["metrics"]
+    }
+
+
+async def test_the_operators_table_places_each_channel_apart(client, session, operator, head):
+    _, week, _ = await _calculated(session, operator)
+    await weekly_service.close_week(session, week)
+    await session.commit()
+    headers = auth(await login(client, "head1"))
+    for params in ({"week_id": week.id}, {"date_from": "2026-06-01", "date_to": "2026-06-07"}):
+        rows = (await client.get("/api/v1/admin/operators", params=params, headers=headers)).json()
+        # The line first, then chats, each with its own first place.
+        assert [(r["channel"], r["rank"]) for r in rows["items"]] == [
+            ("line", 1),
+            ("line", 2),
+            ("chat", 1),
+            ("chat", 2),
+            ("chat", 3),
+        ], params
+    table = "/api/v1/admin/operators"
+    chats = (
+        await client.get(table, params={"week_id": week.id, "channel": "chat"}, headers=headers)
+    ).json()
+    assert chats["total"] == 3 and {r["channel"] for r in chats["items"]} == {"chat"}
+    csv = (await client.get(f"{table}/export", params={"week_id": week.id}, headers=headers)).text
+    assert "Направление" in csv.splitlines()[0] and ";Чаты;" in csv
+
+
+async def test_chat_operators_take_no_calls(client, session, operator):
+    from app.core.errors import PermissionDeniedError
+    from app.services import city, voice_training
+
+    chat = await make_user(session, login="c9", full_name="Чат Девятый Оператор")
+    chat.channel = Channel.CHAT
+    await session.commit()
+    mine = await city.dashboard(session, chat)
+    assert not {"voice", "oktell"} & {d["id"] for d in mine["districts"]}
+    assert not {"voice", "oktell"} & {m["district"] for m in mine["missions"]}
+    line = await city.dashboard(session, operator)
+    assert {"voice", "oktell"} <= {d["id"] for d in line["districts"]}
+    try:
+        await city.claim(session, chat, "voice_first", None)
+    except PermissionDeniedError:
+        pass
+    else:
+        raise AssertionError("a chat operator claimed a call mission")
+    assert not voice_training.can_call(chat) and voice_training.can_call(operator)
+    response = await client.get("/api/v1/learning/voice", headers=auth(await login(client, "c9")))
+    assert response.status_code == 403 and "чатов" in response.json()["detail"]

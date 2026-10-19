@@ -9,6 +9,9 @@
 .ma-filters .field__label { margin: 0; min-height: 18px; line-height: 18px; }
 .ma-filters :is(.date-range-picker__trigger, .puls-select__trigger, .btn) { height: 44px; min-height: 44px; }
 .ma-period-buttons { grid-column: 1 / -1; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+/* Line or chats: the last control of the row, at its right end. */
+.ma-channel { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.ma-channel .field__label { min-height: 0; }
 .ma-reading { display: flex; gap: 16px; align-items: center; justify-content: space-between; }
 .ma-reading > span:first-child { display: grid; gap: 6px; }
 .ma-reading b { font-size: 14px; }
@@ -22,6 +25,7 @@
 .ma-pulse-card > small { color: var(--text-secondary); font-size: 11px; line-height: 1.6; margin-top: auto; }
 .ma-pulse-card:hover { border-color: var(--border-strong); background: var(--surface-highlight); }
 .ma-shortcuts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+.ma-shortcuts--2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .ma-shortcut { font: inherit; text-align: left; min-width: 0; border: 1px solid var(--glass-border); background: var(--surface-primary); color: var(--text-primary); border-radius: 22px; padding: 24px; display: flex; flex-direction: column; gap: 12px; cursor: pointer; box-shadow: var(--shadow-card); }
 .ma-shortcut > span:first-child { display: flex; justify-content: space-between; gap: 12px; }
 .ma-shortcut > span:first-child b { color: var(--text-secondary); }
@@ -39,4 +43,5 @@
 .management-analytics .analytics-section-heading p { margin-bottom: 0; }
 .management-analytics :is(.analytics-person-name, .analytics-week-metric, .analytics-group-summary button) > svg { vertical-align: middle; margin-left: 5px; }
 @media (max-width: 1100px) { .ma-heading-actions { justify-content: flex-start; } .ma-heading { flex-wrap: wrap; } .ma-pulse { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ma-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ma-filters:not(.ma-filters--single-group) > .ma-period-control { grid-column: 1 / -1; } }
+@media (max-width: 767px) { .ma-channel { margin-left: 0; width: 100%; justify-content: space-between; } }
 @media (max-width: 767px) { .management-analytics { gap: 18px; } .ma-filters { padding: 16px; gap: 14px; grid-template-columns: minmax(0, 1fr); } .ma-filters :is(.date-range-picker__trigger, .puls-select__trigger, .btn) { height: 50px; min-height: 50px; } .ma-reading { flex-direction: column; align-items: flex-start; gap: 10px; } .ma-shortcuts, .ma-overview-bottom { grid-template-columns: 1fr; } .ma-pulse { gap: 10px; } .ma-pulse-card { padding: 16px; gap: 14px; border-radius: 16px; } .ma-pulse-card > strong { font-size: 32px; } .ma-pulse-card > span { align-items: flex-start; } .ma-pulse-card > span i { display: none; } .ma-heading .page-title { font-size: 27px; } .ma-heading-actions { width: 100%; justify-content: space-between; } }

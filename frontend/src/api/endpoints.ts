@@ -1,6 +1,7 @@
 import { buildQuery, request } from "./client";
 import type {
   BadgeOut,
+  Channel,
   DashboardOut,
   OperatorRowOut,
   Page,
@@ -102,9 +103,9 @@ interface OperatorDateFilter {
 export const admin = {
   summary: (weekId?: number, dates?: OperatorDateFilter) =>
     request<SummaryOut>(`${V1}/admin/summary${buildQuery({ week_id: weekId, ...dates })}`),
-  operators: (params: { week_id?: number; page?: number; size?: number; search?: string; date_from?: string; date_to?: string }) =>
+  operators: (params: { week_id?: number; page?: number; size?: number; search?: string; date_from?: string; date_to?: string; channel?: Channel }) =>
     request<Page<OperatorRowOut>>(`${V1}/admin/operators${buildQuery({ ...params })}`),
-  exportPath: (weekId?: number, params?: Partial<OperatorDateFilter> & { search?: string }) =>
+  exportPath: (weekId?: number, params?: Partial<OperatorDateFilter> & { search?: string; channel?: Channel }) =>
     `${V1}/admin/operators/export${buildQuery({ week_id: weekId, ...params })}`,
 
   manualCoins: (userId: number, amount: number, reason: string, requestId?: string, correctEarnings = false) =>

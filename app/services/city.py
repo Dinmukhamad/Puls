@@ -11,7 +11,7 @@ from app.models.city import CityAward, CityBuild, CitySettings
 from app.models.crm_training import CrmTrainingAttempt
 from app.models.driver import DriverOrder, DriverProfile
 from app.models.driver_shift import DriverShift
-from app.models.enums import LEARNER_ROLES, Role, TxType
+from app.models.enums import LEARNER_ROLES, Channel, Role, TxType
 from app.models.progress import Notification
 from app.models.user import CoinAccount, Group, User
 from app.models.voice_training import VoiceTrainingAttempt
@@ -41,6 +41,14 @@ CRM_TASK_KEYS = ("crm_first", "crm_phone", "crm_closed")
 DEFERRED_OKTELL_MISSIONS = frozenset(
     ("oktell_ready", "oktell_call", "oktell_message", "oktell_shift")
 )
+# Chat operators take no calls: the voice talks and Oktell are not on their way (docs/CHANNELS.md).
+CALL_DISTRICTS = frozenset(("voice", "oktell"))
+
+
+def takes_calls(user) -> bool:
+    return not (user.role == Role.OPERATOR and user.channel == Channel.CHAT)
+
+
 TEMPLATES = {
     "welcome": ("academy", "welcome", "/training/city", "Знакомство с городом"),
     # Pulsar's tour of the real site; the operator starts it from the mission («Начать экскурсию»).
@@ -602,6 +610,9 @@ async def dashboard(session, user, *, inspecting=False):
     )
     if not scenarios_visible:
         rows = [row for row in rows if row["district"] != "scenarios"]
+    calls_visible = takes_calls(user)
+    if not calls_visible:
+        rows = [row for row in rows if row["district"] not in CALL_DISTRICTS]
     xp = sum(a.xp for a in awards.values())
     account = (
         await session.scalar(select(CoinAccount).where(CoinAccount.user_id == user.id))
@@ -648,7 +659,8 @@ async def dashboard(session, user, *, inspecting=False):
                 ),
             }
             for district in DISTRICTS
-            if scenarios_visible or district["id"] != "scenarios"
+            if (scenarios_visible or district["id"] != "scenarios")
+            and (calls_visible or district["id"] not in CALL_DISTRICTS)
         ],
         "missions": [{**m, "coins": 0, "xp": 0} for m in rows] if trainee else rows,
         "xp": xp,
@@ -786,6 +798,8 @@ async def claim(session, user, key, revision):
 
         if not await support_allowed(session, user):
             raise PermissionDeniedError("Сценарий доступен только операторам города ТП")
+    if TEMPLATES[key][0] in CALL_DISTRICTS and not takes_calls(user):
+        raise PermissionDeniedError("Звонки — обучение операторов линии, не чатов")
     await lock_learner(session, user.id)
     existing = await session.get(CityAward, (user.id, key), populate_existing=True)
     if existing:

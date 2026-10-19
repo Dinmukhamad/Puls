@@ -28,6 +28,8 @@ async def summary(
     group_id: Annotated[int | None, Query(gt=0)] = None,
     metric_code: Annotated[str | None, Query(max_length=64)] = None,
     operator_ids: Annotated[str | None, Query(max_length=100)] = None,
+    #: Line or chats: that channel's operators and metrics; none — everyone, every metric.
+    channel: Literal["line", "chat"] | None = None,
 ) -> AnalyticsOut:
     try:
         ids = [int(value) for value in operator_ids.split(",")] if operator_ids else []
@@ -47,6 +49,7 @@ async def summary(
         group_id=group_id,
         metric_code=metric_code,
         operator_ids=ids,
+        channel=channel,
     )
 
 

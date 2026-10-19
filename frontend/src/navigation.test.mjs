@@ -340,3 +340,28 @@ test("learning keeps the city and the simulator analytics, and only the trainer 
   assert.equal(nav.canVisit("operator", "/admin/learning/voice-scenarios", nav.defaultAccess("operator")), false);
   assert.equal(nav.appEntryRedirect("/admin/learning", "/trainer", trainerCan), null, "the trainer keeps the scenarios");
 });
+
+test("chat operators take no calls: no voice trainer, an old link leads to their city", () => {
+  const allowed = nav.defaultAccess("operator");
+  for (const path of ["/training/voice", "/training/voice/attempts/42"]) {
+    assert.equal(nav.canVisit("operator", path, allowed, false, "chat"), false, path);
+    assert.equal(nav.canVisit("operator", path, allowed, false, "line"), true, path);
+    const can = (to) => nav.canVisit("operator", to, allowed, false, "chat");
+    assert.equal(nav.appEntryRedirect(path, "/cabinet", can), "/training/city", path);
+    assert.equal(nav.appEntryRedirect(path, "/cabinet", (to) => nav.canVisit("operator", to, allowed)), null, path);
+  }
+  const tabs = (channel) => nav.visibleNavigation("operator", allowed, false, channel).flatMap((item) => item.tabs.map((tab) => tab.to));
+  assert.ok(tabs("line").includes("/training/voice"));
+  assert.ok(!tabs("chat").includes("/training/voice") && tabs("chat").includes("/training/city"));
+  // Leaders keep the trainer whatever their channel field says.
+  assert.equal(nav.canVisit("head", "/training/voice", nav.defaultAccess("head"), false, "chat"), true);
+});
+
+test("chats' analytics drops the productivity tab and keeps the channel between tabs", () => {
+  const analytics = nav.visibleNavigation("head").find((item) => item.id === "analytics");
+  const labels = (search) => nav.sectionTabs(analytics, "/analytics", search).map((tab) => tab.label);
+  assert.ok(labels("").includes("Производительность"));
+  assert.ok(!labels("?channel=chat").includes("Производительность") && labels("?channel=chat").includes("Качество"));
+  const quality = analytics.tabs.find((tab) => tab.to === "/analytics?tab=quality");
+  assert.equal(nav.subsectionDestination(quality, "/analytics", "?tab=summary&channel=chat"), "/analytics?tab=quality&channel=chat");
+});

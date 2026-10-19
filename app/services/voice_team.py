@@ -13,7 +13,7 @@ from sqlalchemy import select
 
 from app.core.errors import DomainError, NotFoundError, PermissionDeniedError
 from app.core.visibility import identity_filter
-from app.models.enums import LEARNER_ROLES, Role
+from app.models.enums import LEARNER_ROLES, Channel, Role
 from app.models.user import Group, User
 from app.models.voice_training import VoiceTrainingAttempt
 from app.services import voice_ai, voice_scenarios, voice_training
@@ -33,9 +33,12 @@ def require_leader(user):
 
 
 def members_query(user):
-    """The operators and trainees a leader looks after."""
+    """The operators and trainees a leader looks after; chat operators take no calls."""
     query = select(User).where(
-        User.is_active.is_(True), User.role.in_(LEARNER_ROLES), identity_filter(user, User)
+        User.is_active.is_(True),
+        User.role.in_(LEARNER_ROLES),
+        identity_filter(user, User),
+        User.channel != Channel.CHAT,
     )
     if user.role == Role.SUPERVISOR:
         query = query.where(

@@ -50,7 +50,7 @@ export function SettingsPage() {
   const selected = params.get("tab");
   const tab = selected && ["metrics", "nominations", "badges"].includes(selected) ? selected as DefinitionKind : "rules";
   const views = [["rules", "Правила расчёта"], ["metrics", "Рабочие показатели"], ["nominations", "Номинации"], ["badges", "Достижения"]].filter(([key]) => can(key === "badges" ? "motivation" : "performance"));
-  const destinations = user ? visibleNavigation(user.role, allowed, isDeveloper).flatMap((item) => item.tabs.map((link) => link.to)) : [];
+  const destinations = user ? visibleNavigation(user.role, allowed, isDeveloper, user.channel).flatMap((item) => item.tabs.map((link) => link.to)) : [];
   const hasOuterNavigation = views.every(([key]) => destinations.includes(`/admin/settings?tab=${key}`));
   const navigation = !hasOuterNavigation && <nav className="configuration-nav" aria-label="Разделы показателей и наград">{views.map(([key, label]) => <Button key={key} variant={tab === key ? "primary" : "secondary"} aria-current={tab === key ? "page" : undefined} onClick={() => setParams({ tab: key })}>{label}</Button>)}</nav>;
   return <div className={`stack configuration-page${tab !== "rules" ? " configuration-definitions-page" : ""}`}>

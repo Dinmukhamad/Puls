@@ -21,7 +21,14 @@ from app.models.contest import (
     OperatorWeekMetric,
     OperatorWeekResult,
 )
-from app.models.enums import MetricDirection, MetricKind, Role, ShopRequestStatus, WeekStatus
+from app.models.enums import (
+    Channel,
+    MetricDirection,
+    MetricKind,
+    Role,
+    ShopRequestStatus,
+    WeekStatus,
+)
 from app.models.shop import ShopRequest
 from app.models.user import Group, User
 from app.schemas.analytics import (
@@ -33,6 +40,7 @@ from app.schemas.analytics import (
 )
 from app.schemas.rating import WeekOut
 from app.services.rules import get_rules
+from app.services.scoring import channel_definitions
 from app.services.weekly import get_week
 
 MONTHS = ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"]
@@ -142,7 +150,10 @@ async def report(
     metric_code: str | None = None,
     operator_ids: list[int] | None = None,
     own: bool = False,
+    channel: str | None = None,
 ) -> AnalyticsOut:
+    if own:
+        channel = actor.channel
     if group_id is not None:
         group = await session.get(Group, group_id)
         allowed = actor.has_role_at_least(Role.HEAD) or group_id in await supervised_group_ids(
@@ -156,6 +167,9 @@ async def report(
     conditions = [visibility, User.role == Role.OPERATOR, User.is_active.is_(True)]
     if group_id is not None:
         conditions.append(User.group_id == group_id)
+    # One channel at a time, like a group: its operators and its metrics (docs/CHANNELS.md).
+    if channel is not None:
+        conditions.append(User.channel == channel)
     users = list(
         await session.scalars(
             select(User)
@@ -178,11 +192,17 @@ async def report(
             .order_by(MetricDefinition.sort_order, MetricDefinition.id)
         )
     )
-    definitions_by_code = {metric.code: metric for metric in definitions}
-    if metric_code is not None and metric_code not in definitions_by_code:
+    if metric_code is not None and metric_code not in {metric.code for metric in definitions}:
         raise DomainError("Показатель не найден или отключён", code="unknown_metric")
-    chosen = definitions_by_code.get(metric_code or "quality") or (
-        definitions[0] if definitions else None
+    if channel is not None:
+        definitions = channel_definitions(definitions, channel)
+    definitions_by_code = {metric.code: metric for metric in definitions}
+    # The other channel's metric (an old link) falls back to this channel's main one.
+    default = "chat_quality" if channel == Channel.CHAT else "quality"
+    chosen = (
+        definitions_by_code.get(metric_code or default)
+        or definitions_by_code.get(default)
+        or (definitions[0] if definitions else None)
     )
     if date_from and date_to and date_from > date_to:
         raise DomainError("Начало периода позже конца", code="invalid_period")
@@ -495,6 +515,11 @@ async def report(
         coins_awarded=awarded,
         lateness_metric_code=rules.lateness_metric_code,
     )
+    if channel is not None:
+        name = "чатов" if channel == Channel.CHAT else "линии"
+        result.methodology += (
+            f" Только операторы {name} и показатели этого направления; дисциплина — общая."
+        )
     if grain == "month":
         result.methodology += (
             " Месячные значения — среднее загруженных недель, начинающихся в месяце; "
