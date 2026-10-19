@@ -15,9 +15,10 @@ const CATEGORY_COPY: Record<AnalyticsCategory, { title: string; subtitle: string
   productivity: { title: 'Продуктивность команды', subtitle: 'Рабочее время, нагрузка и выполнение целей.' },
   discipline: { title: 'Дисциплина команды', subtitle: 'Опоздания и другие нежелательные события.' },
 };
-/** Chats are scored by their quality alone; discipline is the same for both channels. */
+/** Chats answer in chats, not calls; discipline is the same for both channels. */
 const CHAT_COPY: Partial<Record<AnalyticsCategory, { title: string; subtitle: string }>> = {
   quality: { title: 'Качество работы', subtitle: 'Качество ответов в чатах.' },
+  productivity: { title: 'Продуктивность команды', subtitle: 'Норма часов, переработки и время ответа в чатах.' },
 };
 
 function shortDate(value: string) {

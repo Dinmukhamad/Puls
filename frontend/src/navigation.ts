@@ -247,10 +247,24 @@ export function appEntryRedirect(pathname: string, home: string, canPath: (path:
   return null;
 }
 
-/** Chats have no productivity metrics, so their analytics has no such tab (docs/CHANNELS.md). */
-export function sectionTabs(item: NavItem, pathname: string, search: string): SectionTab[] {
-  const chats = pathname === "/analytics" && new URLSearchParams(search).get("channel") === "chat";
-  return chats ? item.tabs.filter((link) => link.to !== "/analytics?tab=productivity") : item.tabs;
+/**
+ * Analytics dashboards with nothing to show for the open channel: chats have productivity only once
+ * their hours or response time are loaded (docs/CHANNELS.md). The page tells, the menu leaves them out.
+ */
+let hidden: readonly string[] = [];
+const hiddenListeners = new Set<() => void>();
+export const hiddenDashboards = {
+  get: () => hidden,
+  subscribe: (listener: () => void) => { hiddenListeners.add(listener); return () => { hiddenListeners.delete(listener); }; },
+  set: (next: readonly string[]) => {
+    if (next.join() === hidden.join()) return;
+    hidden = next; hiddenListeners.forEach((listener) => listener());
+  },
+};
+
+export function sectionTabs(item: NavItem, pathname: string, empty: readonly string[] = []): SectionTab[] {
+  if (pathname !== "/analytics" || !empty.length) return item.tabs;
+  return item.tabs.filter((link) => !empty.some((name) => link.to === `/analytics?tab=${name}`));
 }
 
 export function subsectionDestination(link: SectionTab, pathname: string, search: string): string {

@@ -52,9 +52,9 @@ export function metricCategory(metric: MetricSummary, latenessCode = 'lateness')
 export type AnalyticsChannel = 'line' | 'chat';
 /** The line by default; chats only when the link asks for them. */
 export const analyticsChannel = (value: string | null): AnalyticsChannel => value === 'chat' ? 'chat' : 'line';
-/** Chats have only quality and discipline (docs/CHANNELS.md). */
-export const channelCategories = (channel: AnalyticsChannel): AnalyticsCategory[] =>
-  channel === 'chat' ? ['quality', 'discipline'] : ['quality', 'productivity', 'discipline'];
+/** Chats have productivity only once their hours or response time are loaded (docs/CHANNELS.md). */
+export const channelCategories = (channel: AnalyticsChannel, productivity = false): AnalyticsCategory[] =>
+  channel === 'chat' && !productivity ? ['quality', 'discipline'] : ['quality', 'productivity', 'discipline'];
 
 export function categoryMetrics(report: AnalyticsOut, category: AnalyticsCategory) {
   return report.metrics.filter(metric => metricCategory(metric, report.lateness_metric_code) === category);

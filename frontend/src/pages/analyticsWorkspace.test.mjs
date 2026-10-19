@@ -178,13 +178,17 @@ test('category health counts all category goals, never hides poor quality behind
   assert.equal(empty.attention, 0);
 });
 
-test('chats keep their quality under «Качество» and have no productivity dashboard', () => {
+test('chats keep their quality under «Качество» and have productivity only with its metrics', () => {
   const chatQuality = { ...quality, code: 'chat_quality', title: 'Качество чатов' };
   assert.equal(metricCategory(chatQuality), 'quality');
   const chats = report({ metrics: [chatQuality, lateness] });
   assert.deepEqual(categoryMetrics(chats, 'quality').map(metric => metric.code), ['chat_quality']);
   assert.deepEqual(categoryMetrics(chats, 'productivity'), []);
   assert.deepEqual(channelCategories('chat'), ['quality', 'discipline']);
+  // Their hours against the norm, overtime and response time make a productivity dashboard.
+  assert.deepEqual(channelCategories('chat', true), ['quality', 'productivity', 'discipline']);
+  const loaded = report({ metrics: [chatQuality, { ...quality, code: 'chat_response_time', direction: 'lower_is_better' }, lateness] });
+  assert.deepEqual(categoryMetrics(loaded, 'productivity').map(metric => metric.code), ['chat_response_time']);
   assert.deepEqual(channelCategories('line'), ['quality', 'productivity', 'discipline']);
   // The line unless a link asks for chats; anything else is the line too.
   assert.deepEqual([null, 'chat', 'line', 'junk'].map(analyticsChannel), ['line', 'chat', 'line', 'line']);

@@ -98,6 +98,6 @@ test('chats are one channel at a time and switching drops the other channel\'s p
   const back = await load('tab=productivity&metric=efficiency');
   back.result.setChannel('chat');
   assert.equal(back.updates[0].get('channel'), 'chat');
-  // Chats have no productivity: that tab gives way to the overview.
-  assert.equal(back.updates[0].get('tab'), 'summary');
+  // The tab stays: chats show productivity once their hours or response time are loaded.
+  assert.equal(back.updates[0].get('tab'), 'productivity');
 });

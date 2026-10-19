@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { analytics, type AnalyticsFilters, type AnalyticsOut, type MetricSummary } from '../api/analytics';
 import { lookups } from '../api/access';
 import { useAuth } from '../auth/AuthContext';
+import { hiddenDashboards } from '../navigation';
 import { AccessLink } from '../components/AccessLink';
 import { Chart } from '../components/Chart';
 import { ArrowUpRightIcon } from '../components/icons';
@@ -21,7 +22,7 @@ import './management-analytics.css';
 
 const integer = (value: string | null) => value && /^\d+$/.test(value) && Number(value) > 0 ? Number(value) : undefined;
 const DASHBOARDS = ['summary', 'weeks', 'groups', 'quality', 'productivity', 'discipline', 'operators'];
-/** Each channel's own dashboards: chats have no productivity metrics (docs/CHANNELS.md). */
+/** Each channel's own dashboards: chats' productivity shows once their hours or response time are loaded (docs/CHANNELS.md). */
 const SHORTCUTS: Record<AnalyticsChannel, { tab: AnalyticsCategory; title: string; hint: string; metric: string }[]> = {
   line: [
     { tab: 'quality', title: 'Качество', hint: 'Качество звонков и благодарности водителей', metric: 'quality' },
@@ -30,6 +31,7 @@ const SHORTCUTS: Record<AnalyticsChannel, { tab: AnalyticsCategory; title: strin
   ],
   chat: [
     { tab: 'quality', title: 'Качество', hint: 'Качество ответов в чатах', metric: 'chat_quality' },
+    { tab: 'productivity', title: 'Производительность', hint: 'Норма часов, переработки и время ответа', metric: 'chat_hours_norm' },
     { tab: 'discipline', title: 'Дисциплина', hint: 'Опоздания и другие нежелательные события', metric: 'lateness' },
   ],
 };
@@ -66,8 +68,7 @@ export function useManagementAnalytics() {
   };
   const setRange = (next: typeof range, window: 'range' | 'weeks') => update({ from: next.date_from, to: next.date_to, window, page: undefined });
   // Another channel has other operators and metrics: the picks of this one do not carry over.
-  const setChannel = (next: AnalyticsChannel) => update({ channel: next === 'chat' ? 'chat' : undefined, metric: undefined, operators: undefined, status: undefined, page: undefined,
-    ...(next === 'chat' && params.get('tab') === 'productivity' ? { tab: 'summary' } : {}) });
+  const setChannel = (next: AnalyticsChannel) => update({ channel: next === 'chat' ? 'chat' : undefined, metric: undefined, operators: undefined, status: undefined, page: undefined });
   return { user, params, update, filters, mode, range, setRange, channel, setChannel, data, groups, weekly: mode === 'weeks' ? data : weekly, weeklyRange };
 }
 
@@ -76,11 +77,16 @@ export function ManagementAnalyticsPage() {
   const { user, params, update, data, channel } = report;
   const head = user?.role === 'head' || user?.role === 'admin';
   const requested = params.get('tab') ?? 'summary';
-  const categories = channelCategories(channel);
-  const tab = DASHBOARDS.includes(requested) && (requested !== 'groups' || head) && (requested !== 'productivity' || categories.includes('productivity')) ? requested : 'summary';
   const value = data.isError || !data.data ? undefined : selectedPeriodReport(data.data);
+  const categories = channelCategories(channel, !!value && categoryMetrics(value, 'productivity').length > 0);
+  const tab = DASHBOARDS.includes(requested) && (requested !== 'groups' || head) && (requested !== 'productivity' || categories.includes('productivity')) ? requested : 'summary';
+  const noProductivity = !categories.includes('productivity');
+  // The section menu leaves out a dashboard the open channel has nothing for.
+  useEffect(() => { hiddenDashboards.set(noProductivity ? ['productivity'] : []); }, [noProductivity]);
+  useEffect(() => () => hiddenDashboards.set([]), []);
   const category = (categories as string[]).includes(tab) ? tab as AnalyticsCategory : undefined;
   const chats = channel === 'chat';
+  const shortcuts = SHORTCUTS[channel].filter(item => categories.includes(item.tab));
   const selectableMetrics = value ? category ? categoryMetrics(value, category) : value.metrics : [];
   const metric = selectableMetrics.find(item => item.code === value?.metric_code) ?? selectableMetrics[0] ?? value?.metrics[0];
   const weekly = report.weekly.isError ? undefined : report.weekly.data;
@@ -143,8 +149,8 @@ export function ManagementAnalyticsPage() {
 
       {metric && tab === 'summary' && <>
         {fourWeeks}
-        <div className={`ma-shortcuts ma-shortcuts--${SHORTCUTS[channel].length}`}>{SHORTCUTS[channel].map(item => {
-          const m = value.metrics.find(m => m.code === (item.tab === 'discipline' ? value.lateness_metric_code : item.metric));
+        <div className={`ma-shortcuts ma-shortcuts--${shortcuts.length}`}>{shortcuts.map(item => {
+          const m = value.metrics.find(m => m.code === (item.tab === 'discipline' ? value.lateness_metric_code : item.metric)) ?? categoryMetrics(value, item.tab)[0];
           return <button className="ma-shortcut" key={item.tab} onClick={() => update({ tab: item.tab, metric: m?.code })}><span><strong>{item.title}</strong><ArrowUpRightIcon size={16} /></span><small>{item.hint}</small><div className="ma-shortcut-value">{m ? metricValue(m.value, m) : 'Нет показателей'}</div><Sparkline values={m?.trend ?? []} /><span className="ma-shortcut-footer">Открыть дашборд →</span></button>;
         })}</div>
         {head ? <GroupDashboard report={value} metric={metric} onGroup={onGroup} compact onAll={() => update({ tab: 'groups' })} /> : <PriorityList people={people} onOpen={openPerson} onAll={() => filterPeople('attention')} />}
