@@ -527,7 +527,6 @@ def operators_csv(
             "ФИО",
             "Логин",
             "Группа",
-            "Направление",
             "Место",
             "Баллы",
             "Начислено коинов за период" if period else "Коины за неделю",
@@ -537,6 +536,8 @@ def operators_csv(
             "Всего потрачено",
             "Опоздания",
             "Посторонние сайты",
+            # Last, so the columns before it keep their places in older spreadsheets.
+            "Направление",
         ]
     )
     period_label = (
@@ -550,7 +551,6 @@ def operators_csv(
                 row.full_name,
                 row.login,
                 row.group_name or "",
-                CHANNEL_NAMES.get(row.channel, row.channel),
                 row.rank if row.rank is not None else "",
                 f"{row.points:g}" if has_metrics else "",
                 row.coins_week,
@@ -560,6 +560,7 @@ def operators_csv(
                 row.total_spent,
                 f"{row.lateness:g}" if has_metrics else "",
                 f"{row.forbidden_sites:g}" if has_metrics else "",
+                CHANNEL_NAMES.get(row.channel, row.channel),
             ]
         )
     return buffer.getvalue()

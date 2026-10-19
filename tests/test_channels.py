@@ -256,7 +256,7 @@ async def test_the_operators_table_places_each_channel_apart(client, session, op
     ).json()
     assert chats["total"] == 3 and {r["channel"] for r in chats["items"]} == {"chat"}
     csv = (await client.get(f"{table}/export", params={"week_id": week.id}, headers=headers)).text
-    assert "Направление" in csv.splitlines()[0] and ";Чаты;" in csv
+    assert csv.splitlines()[0].endswith(";Направление") and csv.splitlines()[-1].endswith(";Чаты")
 
 
 async def test_chat_operators_take_no_calls(client, session, operator):
