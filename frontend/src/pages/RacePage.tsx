@@ -1,10 +1,9 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import { rating } from "../api/endpoints";
 import type { RaceMetric, RaceOption, RaceOut, RacePlace, RacePlan } from "../api/types";
-import { GlassSurface } from "../components/GlassSurface";
 import { MedalIcon } from "../components/icons";
 import { Badge, Card, Delta, EmptyState, ErrorState, Progress, Skeleton } from "../components/ui";
 import { WeekPicker } from "../components/WeekPicker";
@@ -45,26 +44,26 @@ export function RacePage() {
   const weekId = Number.isInteger(selected) && selected > 0 ? selected : undefined;
   const weeks = useQuery({ queryKey: ["weeks"], queryFn: () => rating.weeks(104) });
   const race = useQuery({ queryKey: ["race", weekId], queryFn: () => rating.race(weekId), placeholderData: keepPreviousData });
-  const heading = <header className="page-head"><div><h1 className="page-title">Гонка недели</h1>
-    <p className="page-subtitle">Ваше место среди всех операторов: кого догнать и что подтянуть</p></div></header>;
+  // The week and how final its places are sit beside the title as one small row, as on «Рейтинг».
+  const heading = (filters?: ReactNode) => <header className="page-head page-head--filters"><div><h1 className="page-title">Гонка недели</h1>
+    <p className="page-subtitle">Ваше место среди всех операторов: кого догнать и что подтянуть</p></div>{filters}</header>;
 
-  if (race.isLoading) return <div className="stack">{heading}<div className="page-skeleton">
+  if (race.isLoading) return <div className="stack">{heading()}<div className="page-skeleton">
     <Skeleton height={60} radius="var(--radius-l)" /><Skeleton height={190} radius="var(--radius-xl)" /><Skeleton height={320} radius="var(--radius-xl)" />
   </div></div>;
-  if (race.isError) return <div className="stack">{heading}<ErrorState error={race.error} onRetry={() => race.refetch()} /></div>;
+  if (race.isError) return <div className="stack">{heading()}<ErrorState error={race.error} onRetry={() => race.refetch()} /></div>;
   const data = race.data!;
-  if (!data.week) return <div className="stack">{heading}<Card><EmptyState title="Гонка ещё не началась" hint="Места появятся, когда загрузят показатели недели" /></Card></div>;
+  if (!data.week) return <div className="stack">{heading()}<Card><EmptyState title="Гонка ещё не началась" hint="Места появятся, когда загрузят показатели недели" /></Card></div>;
 
   const status = data.live ? "Неделя идёт · по загруженным данным" : data.week.status === "closed" ? "Итог опубликован" : "Предварительный расчёт";
   return (
     <div className="stack race-page">
-      {heading}
-      <GlassSurface variant="regular" className="filterbar rating-filters">
+      {heading(<div className="head-filters">
         <WeekPicker label="Неделя" weeks={weeks.data ?? []} value={weekId} resolvedWeekId={data.week.id}
           latestLabel="Текущая неделя" latestPreference="latest" loading={weeks.isLoading}
           onChange={(value) => { const next = new URLSearchParams(params); if (value === undefined) next.delete("week"); else next.set("week", String(value)); setParams(next); }} />
-        <div className="rating-filter-status"><span className="field__label">Места</span><div><Badge tone={data.week.status === "closed" ? "success" : data.live ? "info" : "warning"}>{status}</Badge></div></div>
-      </GlassSurface>
+        <Badge tone={data.week.status === "closed" ? "success" : data.live ? "info" : "warning"}>{status}</Badge>
+      </div>)}
       <RaceHero data={data} />
       {data.standings.length > 0 && <RaceTopThree data={data} />}
       {data.me && data.advice && <RaceAdvice data={data} />}

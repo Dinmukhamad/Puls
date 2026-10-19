@@ -20,3 +20,26 @@
 .rating-filter-status > div { display:flex; align-items:center; gap:8px; }
 @media(max-width:600px) { .rating-filters { grid-template-columns:minmax(0, 1fr); }.rating-filter-status { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }.rating-filter-status .field__label { height:auto; }.rating-filter-status > div { min-height:24px; } }
 .rating-personal__race a { color: var(--text-secondary); text-decoration: underline; text-underline-offset: 3px; }
+
+/* Filters as one small row in the page's head, beside the title (on a phone, under it): «Рейтинг» and «Гонка недели». */
+.page-head--filters { align-items: flex-end; }
+.head-filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.head-filters .segmented { height: 36px; box-sizing: border-box; padding: 2px; }
+.head-filters .segmented__item { min-height: 0; padding: 0 14px; }
+.head-step, .head-filters .week-picker__control { display: inline-flex; align-items: center; height: 36px; min-height: 36px; box-sizing: border-box; border: 1px solid var(--control-border); border-radius: var(--radius-s); background: var(--surface-secondary); }
+.head-step__arrow, .head-filters .week-picker__arrow { flex: 0 0 32px; width: 32px; height: 34px; min-height: 34px; display: grid; place-items: center; padding: 0; border: 0; border-radius: var(--radius-s); background: transparent; color: var(--text-primary); cursor: pointer; }
+.head-step__arrow:hover:not(:disabled) { background: var(--surface-hover); }
+.head-step__arrow:disabled { opacity: .32; cursor: default; }
+.head-step__arrow:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+.head-step__label { min-width: 116px; padding: 0 4px; text-align: center; font-size: 13px; font-weight: 600; white-space: nowrap; }
+.head-filters .week-picker { width: 232px; gap: 0; }
+.head-filters .week-picker__control { display: flex; width: 100%; }
+.head-filters .week-picker > .field__label, .head-filters .week-picker__trigger small { position: absolute; width: 1px; height: 1px; margin: -1px; clip-path: inset(50%); overflow: hidden; white-space: nowrap; }
+.head-filters .week-picker__trigger { gap: 8px; padding: 0 2px; }
+.head-filters .badge { white-space: nowrap; }
+@media (max-width: 760px) {
+  .head-filters { width: 100%; }
+  .head-filters .segmented, .head-step, .head-filters .week-picker { flex: 1 1 100%; width: auto; }
+  .head-filters .segmented__item { flex: 1; }
+  .head-step { justify-content: space-between; }
+}

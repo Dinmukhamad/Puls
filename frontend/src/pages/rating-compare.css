@@ -1,22 +1,5 @@
 /* The operator's «Рейтинг» (docs/RATING_COMPARE.md): the site's cards, tables and race tiles, compared. */
 
-/* The filters: one small row in the page's head, beside the title (on a phone, under it). */
-.rating-compare__head { align-items: flex-end; }
-.compare-filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
-.compare-filters .segmented { height: 36px; box-sizing: border-box; padding: 2px; }
-.compare-filters .segmented__item { min-height: 0; padding: 0 14px; }
-.compare-step, .compare-filters .week-picker__control { display: inline-flex; align-items: center; height: 36px; min-height: 36px; box-sizing: border-box; border: 1px solid var(--control-border); border-radius: var(--radius-s); background: var(--surface-secondary); }
-.compare-step__arrow, .compare-filters .week-picker__arrow { flex: 0 0 32px; width: 32px; height: 34px; min-height: 34px; display: grid; place-items: center; padding: 0; border: 0; border-radius: var(--radius-s); background: transparent; color: var(--text-primary); cursor: pointer; }
-.compare-step__arrow:hover:not(:disabled) { background: var(--surface-hover); }
-.compare-step__arrow:disabled { opacity: .32; cursor: default; }
-.compare-step__arrow:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
-.compare-step__label { min-width: 116px; padding: 0 4px; text-align: center; font-size: 13px; font-weight: 600; white-space: nowrap; }
-.compare-filters .week-picker { width: 232px; gap: 0; }
-.compare-filters .week-picker__control { display: flex; width: 100%; }
-.compare-filters .week-picker > .field__label, .compare-filters .week-picker__trigger small { position: absolute; width: 1px; height: 1px; margin: -1px; clip-path: inset(50%); overflow: hidden; white-space: nowrap; }
-.compare-filters .week-picker__trigger { gap: 8px; padding: 0 2px; }
-.compare-filters .badge { white-space: nowrap; }
-
 .compare-grid { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(300px, 1fr); gap: var(--sp-5); align-items: stretch; min-width: 0; }
 .compare-grid > .card { margin: 0; }
 
@@ -110,13 +93,6 @@
 
 @media (max-width: 1100px) {
   .compare-grid { grid-template-columns: minmax(0, 1fr); }
-}
-
-@media (max-width: 760px) {
-  .compare-filters { width: 100%; }
-  .compare-filters .segmented, .compare-step, .compare-filters .week-picker { flex: 1 1 100%; width: auto; }
-  .compare-filters .segmented__item { flex: 1; }
-  .compare-step { justify-content: space-between; }
 }
 
 @media (max-width: 600px) {

@@ -83,7 +83,7 @@ export function scale(metric: Pick<CompareMetric, "me" | "average" | "best" | "t
 }
 
 export function RatingHead({ children }: { children?: ReactNode }) {
-  return <header className="page-head rating-compare__head"><div><h1 className="page-title">Рейтинг</h1>
+  return <header className="page-head page-head--filters"><div><h1 className="page-title">Рейтинг</h1>
     <p className="page-subtitle">Ваше место среди всех операторов</p></div>{children}</header>;
 }
 
@@ -110,16 +110,16 @@ export function CompareFilters({ state }: { state: CompareState }) {
   const status = !data ? "" : period === "week"
     ? data.live ? "Неделя идёт" : data.status === "closed" ? "Итог опубликован" : "Предварительный расчёт"
     : data.status === "closed" ? "Итоги опубликованы" : `Закрыто недель: ${closed} из ${data.month?.weeks_planned ?? closed}`;
-  return <div className="compare-filters" data-tour="rating-views">
+  return <div className="head-filters" data-tour="rating-views">
     <SegmentedControl label="Период рейтинга" value={period} options={[{ value: "month", label: "Месяц" }, { value: "week", label: "Неделя" }]}
       onChange={(value) => set({ period: value === "week" ? "week" : undefined, view: undefined, week: undefined, month: undefined, with: undefined })} />
     {period === "week"
       ? <WeekPicker label="Неделя" weeks={weeks.data ?? []} value={weekId} resolvedWeekId={data?.week?.id} latestLabel="Текущая неделя" latestPreference="latest" loading={weeks.isLoading}
         onChange={(value) => set({ week: value === undefined ? undefined : String(value), with: undefined })} />
-      : <div className="compare-step" role="group" aria-label="Месяц рейтинга">
-        <button type="button" className="compare-step__arrow" aria-label="Предыдущий месяц" disabled={index <= 0} onClick={() => step(choices[index - 1])}><ChevronLeftIcon size={16} /></button>
-        <span className="compare-step__label" aria-live="polite">{shown ? monthTitle(shown.name) : "…"}</span>
-        <button type="button" className="compare-step__arrow" aria-label="Следующий месяц" disabled={index < 0 || index >= choices.length - 1} onClick={() => step(choices[index + 1])}><ChevronRightIcon size={16} /></button>
+      : <div className="head-step" role="group" aria-label="Месяц рейтинга">
+        <button type="button" className="head-step__arrow" aria-label="Предыдущий месяц" disabled={index <= 0} onClick={() => step(choices[index - 1])}><ChevronLeftIcon size={16} /></button>
+        <span className="head-step__label" aria-live="polite">{shown ? monthTitle(shown.name) : "…"}</span>
+        <button type="button" className="head-step__arrow" aria-label="Следующий месяц" disabled={index < 0 || index >= choices.length - 1} onClick={() => step(choices[index + 1])}><ChevronRightIcon size={16} /></button>
       </div>}
     {status && <Badge tone={data?.status === "closed" ? "success" : data?.live ? "info" : "warning"}>{status}</Badge>}
   </div>;
