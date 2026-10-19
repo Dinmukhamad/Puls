@@ -29,7 +29,7 @@ const load = (file) => {
   return module.exports;
 };
 const { OperatorRating } = load(built.outputFiles.find((file) => file.path.endsWith("OperatorRating.js")));
-const { chosenColleague, leadLine, weeksAhead, scale, HeadToHead, signedPoints } = load(built.outputFiles.find((file) => file.path.endsWith("RatingCompare.js")));
+const { chosenColleague, leadLine, weeksAhead, scale, HeadToHead, signedPoints, ChannelsCard } = load(built.outputFiles.find((file) => file.path.endsWith("RatingCompare.js")));
 
 const week = (id, startsOn, endsOn, status, live = false) => ({ id, label: `2026-W${id}`, starts_on: startsOn, ends_on: endsOn, status, live });
 const row = (userId, name, rank, points, trail, extra = {}) => ({
@@ -127,4 +127,23 @@ test("without a place of your own the page still shows the table, with no gaps t
   assert.match(html, /Вас пока нет в таблице месяца/);
   assert.match(html, /Данияр А\./);
   assert.doesNotMatch(html, /От вас/);
+});
+
+test("the channels compare by the average week once both have results (docs/CHANNELS.md)", () => {
+  const channel = (name, patch) => ({ channel: name, participants: 0, average: null, best: null, is_mine: false, metrics: [], ...patch });
+  const both = { ...month(), channels: [
+    channel("line", { participants: 8, average: 84.2, best: { name: "Данияр А.", points: 98.4, is_me: false }, metrics: [{ title: "Качество работы", max_points: 25 }] }),
+    channel("chat", { participants: 4, average: 80, best: { name: "Вы", points: 100, is_me: true }, is_mine: true, metrics: [{ title: "Качество чатов", max_points: 100 }] }),
+  ] };
+  const html = renderToStaticMarkup(React.createElement(ChannelsCard, { data: both }));
+  assert.match(html, /Направления/);
+  assert.match(html, /Линия/);
+  assert.match(html, /Чаты<span class="tag-me">ваше<\/span>/);
+  assert.match(html, /84,2/);
+  assert.match(html, /лучший — вы, 100/);
+  assert.match(html, /Качество чатов — 100/);
+  assert.match(html, /средняя неделя оператора за месяц/);
+  // Until the other channel has results there is nothing to compare.
+  const alone = { ...both, channels: [both.channels[0], channel("chat", {})] };
+  assert.equal(renderToStaticMarkup(React.createElement(ChannelsCard, { data: alone })), "");
 });

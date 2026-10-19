@@ -1,4 +1,4 @@
-import type { Definition, DefinitionKind, FieldValue } from "../api/configuration";
+import type { Definition, DefinitionKind, DefinitionValue, MetricBand } from "../api/configuration";
 import { coinsWithUnit, points, plural } from "../utils/format";
 
 export interface DefinitionFact { label: string; value: string }
@@ -7,13 +7,13 @@ export interface DefinitionPresentation { description: string; facts: Definition
 const preciseNumber = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 20 });
 const defaultPenaltyDescription = "Штраф снижает итоговый балл до перевода в коины.";
 
-function numeric(value: FieldValue | undefined, fallback = 0): number {
+function numeric(value: DefinitionValue | undefined, fallback = 0): number {
   if (typeof value !== "number" && typeof value !== "string") return fallback;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-function text(value: FieldValue | undefined): string {
+function text(value: DefinitionValue | undefined): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
@@ -44,7 +44,7 @@ function weeks(value: number): string {
 }
 
 function badgeCondition(row: Definition, metrics: readonly Definition[]): { condition: string; hint: string } {
-  const params = typeof row.rule_params === "object" && row.rule_params ? row.rule_params : {};
+  const params = typeof row.rule_params === "object" && row.rule_params && !Array.isArray(row.rule_params) ? row.rule_params : {};
   const rule = text(row.rule_type);
   if (rule === "top_rank") return {
     condition: `Войти в топ-${quantity(numeric(params.max_rank, 3))} рейтинга`,
@@ -84,6 +84,19 @@ function badgeCondition(row: Definition, metrics: readonly Definition[]): { cond
   return { condition: "Настроенное условие достижения", hint: "Достижение открывается после выполнения настроенного условия." };
 }
 
+/** «Линия», «Чаты», «Общий»: whose points a metric gives (docs/CHANNELS.md). */
+export const METRIC_CHANNELS: Record<string, string> = { line: "Линия", chat: "Чаты", all: "Общий для линии и чатов" };
+
+/** A metric's thresholds, lowest first; none for a metric scored by its target. */
+export function bandsOf(row: Definition): MetricBand[] {
+  return Array.isArray(row.bands) ? [...row.bands].sort((a, b) => a.from - b.from) : [];
+}
+
+/** «от 80 % — 20 · от 86 % — 40»: the thresholds in words. */
+export function bandsText(row: Definition): string {
+  return bandsOf(row).map((band) => `от ${measured(band.from, text(row.unit))} — ${quantity(band.points)}`).join(" · ");
+}
+
 /** Business wording only: internal codes are used to resolve names and never rendered. */
 export function definitionPresentation(kind: DefinitionKind, row: Definition, metrics: readonly Definition[] = []): DefinitionPresentation {
   const description = text(row.description);
@@ -97,12 +110,22 @@ export function definitionPresentation(kind: DefinitionKind, row: Definition, me
         { label: "Применение", value: "До перевода баллов в коины" },
       ],
     };
+    const channel = { label: "Направление", value: METRIC_CHANNELS[text(row.channel) || "line"] ?? "Линия" };
+    if (bandsOf(row).length) return {
+      description: description || "Баллы по ступеням: значение от порога и выше даёт баллы этой ступени.",
+      facts: [
+        { label: "Ступени", value: bandsText(row) },
+        { label: "Максимум", value: score(numeric(row.max_points)) },
+        channel,
+      ],
+    };
     return {
       description: description || "Баллы начисляются по степени выполнения цели показателя.",
       facts: [
         { label: "Цель", value: measured(numeric(row.target_value), text(row.unit)) },
         { label: "Баллы за цель", value: score(numeric(row.max_points)) },
         { label: "Расчёт", value: `${row.direction === "lower_is_better" ? "Меньше — лучше" : "Больше — лучше"}${row.allow_overachievement ? " · перевыполнение разрешено" : ""}` },
+        channel,
       ],
     };
   }
@@ -156,6 +179,12 @@ export function definitionRow(kind: DefinitionKind, row: Definition, metrics: re
         coin: false,
       };
     }
+    if (bandsOf(row).length) return {
+      meta: `Ступени: ${bandsText(row)}`,
+      value: `До ${score(numeric(row.max_points))}`,
+      hint: "по ступеням",
+      coin: false,
+    };
     return {
       meta: [row.direction === "lower_is_better" ? "Меньше — лучше" : "Больше — лучше", row.allow_overachievement ? "перевыполнение разрешено" : "", description].filter(Boolean).join(" · "),
       value: `Цель ${measured(numeric(row.target_value), text(row.unit))}`,
@@ -181,7 +210,7 @@ export function definitionRow(kind: DefinitionKind, row: Definition, metrics: re
 
 /** The seeded achievements name their icon in a word; an emoji written by an admin is shown as it is. */
 const BADGE_ICONS: Record<string, string> = { star: "⭐", medal: "🏅", clock: "⏰", heart: "❤️", crown: "👑", trophy: "🏆", fire: "🔥", target: "🎯", book: "📚", rocket: "🚀", gift: "🎁", spark: "✨" };
-export function badgeIcon(icon: FieldValue | undefined): string {
+export function badgeIcon(icon: DefinitionValue | undefined): string {
   const value = text(icon);
   if (!value) return "★";
   return BADGE_ICONS[value.toLowerCase()] ?? (/^[\x20-\x7e]+$/.test(value) ? "★" : value);

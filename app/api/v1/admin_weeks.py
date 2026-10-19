@@ -18,7 +18,7 @@ from app.core.deps import (
 )
 from app.core.errors import ConflictError
 from app.models.contest import TEST_SOURCE, ContestWeek, OperatorWeekMetric, OperatorWeekResult
-from app.models.enums import WeekStatus
+from app.models.enums import Channel, WeekStatus
 from app.models.user import User
 from app.schemas.admin import (
     MetricsBulkIn,
@@ -33,6 +33,7 @@ from app.schemas.rating import WeekOut
 from app.services import imports as import_service
 from app.services import weekly as weekly_service
 from app.services.rules import write_audit
+from app.services.scoring import channel_definitions
 
 router = APIRouter(prefix="/admin/weeks", tags=["Недели конкурса"])
 
@@ -268,12 +269,18 @@ async def close_previous(session: SessionDep, actor: HeadUser) -> WeekCloseRepor
 async def _preview(
     session: SessionDep, week: ContestWeek, results: list[OperatorWeekResult], actor: User
 ) -> WeekPreviewOut:
-    name_rows = await session.execute(
-        select(User.id, User.full_name).where(User.id.in_([r.user_id for r in results] or [-1]))
-    )
-    names = dict(name_rows.all())
+    people = (await session.execute(
+        select(User.id, User.full_name, User.channel)
+        .where(User.id.in_([r.user_id for r in results] or [-1]))
+    )).all()
+    names = {user_id: name for user_id, name, _ in people}
+    channels = {user_id: channel or Channel.LINE for user_id, _, channel in people}
     definitions = await weekly_service.active_metric_definitions(session)
-    codes = {definition.code for definition in definitions}
+    # Each operator owes the metrics of their channel and the common ones (docs/CHANNELS.md).
+    codes = {
+        channel: {d.code for d in channel_definitions(definitions, channel)}
+        for channel in set(channels.values()) or {Channel.LINE}
+    }
     metric_rows = await session.execute(
         select(OperatorWeekMetric.user_id, OperatorWeekMetric.metric_code)
         .join(User, User.id == OperatorWeekMetric.user_id)
@@ -299,11 +306,14 @@ async def _preview(
                 coins_rank_bonus=r.coins_rank_bonus,
                 coins_discipline_bonus=r.coins_discipline_bonus,
                 coins_nomination_bonus=r.coins_nomination_bonus,
-                missing_metrics=sorted(codes - reported.get(r.user_id, set())),
+                missing_metrics=sorted(
+                    codes[channels.get(r.user_id, Channel.LINE)] - reported.get(r.user_id, set())
+                ),
+                channel=channels.get(r.user_id, Channel.LINE),
             )
             for r in results
         ),
-        key=lambda row: (row.rank is None, row.rank or 0),
+        key=lambda row: (row.channel != Channel.LINE, row.rank is None, row.rank or 0),
     )
     return WeekPreviewOut(
         week_id=week.id,
@@ -311,6 +321,6 @@ async def _preview(
         status=str(week.status),
         participants=len(rows),
         coins_total=sum(row.coins_total for row in rows),
-        missing_metrics=sorted(codes - all_reported),
+        missing_metrics=sorted(set().union(*codes.values()) - all_reported),
         rows=rows,
     )

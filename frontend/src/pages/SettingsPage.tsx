@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
-import { configuration, configurationError, type Definition, type DefinitionInput, type DefinitionKind, type FieldValue, type Rules } from "../api/configuration";
+import { configuration, configurationError, type Definition, type DefinitionInput, type DefinitionKind, type DefinitionValue, type FieldValue, type MetricBand, type Rules } from "../api/configuration";
 import { useAccess } from "../auth/AccessContext";
 import { useAuth } from "../auth/AuthContext";
 import { GlassSurface } from "../components/GlassSurface";
@@ -10,7 +10,7 @@ import { Sheet } from "../components/Sheet";
 import { useToast } from "../components/Toast";
 import { Badge, Button, Card, EmptyState, ErrorState, RowsSkeleton, Select } from "../components/ui";
 import { visibleNavigation } from "../navigation";
-import { coins, plural } from "../utils/format";
+import { coins, plural, points } from "../utils/format";
 import { createInternalCode } from "../utils/internalCode";
 import { badgeIcon, definitionPresentation, definitionRow } from "./definitionPresentation";
 import "./configuration.css";
@@ -182,13 +182,23 @@ function DefinitionSection({ kind, navigation }: { kind: DefinitionKind; navigat
   </div>;
 }
 
-/** Metrics fall in two lists — results that earn points and penalties that take them — the rest is one list. */
+/**
+ * Metrics fall in lists by channel — the line's results, the chats' results, and the penalties common to both — the rest
+ * is one list. Each channel's results add up to 100 points, so a perfect week pays the same coins (docs/CHANNELS.md).
+ */
 function groups(kind: DefinitionKind, items: Definition[]): { title: string; subtitle: string; items: Definition[] }[] {
   const count = (list: Definition[], one: string, few: string, many: string) => `${list.length} ${plural(list.length, one, few, many)}`;
   if (kind === "metrics") {
-    const results = items.filter(row => row.kind !== "anti"), penalties = items.filter(row => row.kind === "anti");
+    const channelOf = (row: Definition) => String(row.channel || "line");
+    const results = (channel: string) => items.filter(row => row.kind !== "anti" && channelOf(row) === channel);
+    const total = (channel: string) => items.filter(row => row.kind !== "anti" && row.is_active && [channel, "all"].includes(channelOf(row)))
+      .reduce((sum, row) => sum + Number(row.max_points || 0), 0);
+    const sum = (channel: string) => { const value = total(channel); return Math.abs(value - 100) < 1e-6 ? "в сумме 100 баллов" : `в сумме ${points(value)} — должно быть 100, чтобы неделя линии и чатов стоила одинаково`; };
+    const penalties = items.filter(row => row.kind === "anti");
     return [
-      { title: "Рабочие результаты", subtitle: `${count(results, "показатель", "показателя", "показателей")} · баллы начисляются по степени выполнения цели`, items: results },
+      { title: "Линия · рабочие результаты", subtitle: `${count(results("line"), "показатель", "показателя", "показателей")} · ${sum("line")}`, items: results("line") },
+      { title: "Чаты · рабочие результаты", subtitle: `${count(results("chat"), "показатель", "показателя", "показателей")} · ${sum("chat")}`, items: results("chat") },
+      { title: "Общие рабочие результаты", subtitle: `${count(results("all"), "показатель", "показателя", "показателей")} · входят в баллы линии и чатов`, items: results("all") },
       { title: "Штрафные показатели", subtitle: `${count(penalties, "показатель", "показателя", "показателей")} · снижают итоговый балл до перевода в коины`, items: penalties },
     ].filter(group => group.items.length);
   }
@@ -204,7 +214,7 @@ function DefinitionDetails({ kind, row, metrics, onClose, onEdit }: { kind: Defi
 
 function defaultDefinition(kind: DefinitionKind): DefinitionInput {
   const common = { code: createInternalCode(kind), title: "", description: "", is_active: true, sort_order: 100 };
-  if (kind === "metrics") return { ...common, unit: "", kind: "positive", direction: "higher_is_better", target_value: 1, max_points: 20, penalty_per_unit: 0, allow_overachievement: false };
+  if (kind === "metrics") return { ...common, unit: "", kind: "positive", direction: "higher_is_better", target_value: 1, max_points: 20, penalty_per_unit: 0, allow_overachievement: false, channel: "line", bands: null };
   if (kind === "nominations") return { ...common, metric_code: "", direction: "higher_is_better", require_zero: false, min_value: null, coins_reward: 5 };
   return { ...common, icon: "", rule_type: "top_rank", rule_params: { max_rank: 3 }, coins_reward: 0, is_repeatable: false };
 }
@@ -215,12 +225,14 @@ function DefinitionEditor({ kind, target, onClose }: { kind: DefinitionKind; tar
   const client = useQueryClient(); const toast = useToast();
   const options = metrics.data?.map((m) => ({ value: m.code, label: `${m.title}${m.is_active ? "" : " · неактивен"}` })) ?? [];
   const fields: FieldSpec[] = [...commonFields];
+  const stepped = kind === "metrics" && Array.isArray(values.bands);
   if (kind === "metrics") fields.push(
+    { key: "channel", label: "Направление", type: "select", options: [{ value: "line", label: "Линия" }, { value: "chat", label: "Чаты" }, { value: "all", label: "Общий для линии и чатов" }], hint: "Линия и чаты соревнуются отдельно, у каждого свои показатели на 100 баллов. Общий — например, дисциплина." },
     { key: "unit", label: "Единица измерения", maxLength: 32, hint: "Например %, мин или шт." },
     { key: "kind", label: "Тип показателя", type: "select", options: [{ value: "positive", label: "Рабочий результат" }, { value: "anti", label: "Штрафной показатель" }] },
     { key: "direction", label: "Какой результат лучше", type: "select", options: directions },
     { key: "target_value", label: "Целевое значение", type: "number", required: true, min: values.kind === "positive" ? .000001 : 0, step: "any" },
-    { key: "max_points", label: "Баллы за выполнение цели", type: "number", required: true, min: 0, step: "any" },
+    ...(stepped ? [] : [{ key: "max_points", label: "Баллы за выполнение цели", type: "number", required: true, min: 0, step: "any" } as FieldSpec]),
     { key: "penalty_per_unit", label: "Штраф в баллах за единицу нарушения", type: "number", required: true, min: 0, step: "any" },
     { key: "allow_overachievement", label: "Разрешить перевыполнение цели", type: "boolean", hint: "В текущем расчёте баллы ограничены наградой за выполнение цели." },
   );
@@ -239,7 +251,7 @@ function DefinitionEditor({ kind, target, onClose }: { kind: DefinitionKind; tar
   if (kind === "badges" && !["top_rank", "total_earned", "nomination_count"].includes(String(values.rule_type))) fields.push({ key: "coins_reward", label: "Коины за первое получение", type: "number", min: 0, required: true, hint: "Бонус входит в заработок для повышения уровня." });
   fields.push(...finalFields);
   const rawParams = values.rule_params;
-  const ruleParams = typeof rawParams === "object" && rawParams ? rawParams : {};
+  const ruleParams = typeof rawParams === "object" && rawParams && !Array.isArray(rawParams) ? rawParams : {};
   const rule = String(values.rule_type ?? "");
   const badgeFields: FieldSpec[] = [];
   if (kind === "badges") {
@@ -255,6 +267,12 @@ function DefinitionEditor({ kind, target, onClose }: { kind: DefinitionKind; tar
       if (field.type === "number") data[field.key] = data[field.key] === "" || data[field.key] == null ? null : Number(data[field.key]);
       if (["description", "unit", "icon"].includes(field.key) && !data[field.key]) data[field.key] = null;
     });
+    if (kind === "metrics") {
+      // Steps only for a result where more is better; the server takes the top step's points as the maximum.
+      data.bands = stepped && values.kind === "positive" && values.direction === "higher_is_better"
+        ? (values.bands as MetricBand[]).map((band) => ({ from: Number(band.from), points: Number(band.points) })).sort((a, b) => a.from - b.from)
+        : null;
+    }
     if (kind === "badges") {
       if (["top_rank", "total_earned", "nomination_count"].includes(String(data.rule_type))) data.coins_reward = 0;
       const params: Record<string, string | number> = {};
@@ -270,7 +288,7 @@ function DefinitionEditor({ kind, target, onClose }: { kind: DefinitionKind; tar
     void client.invalidateQueries({ queryKey: ["metrics"] });
     toast.success("Настройки сохранены"); onClose();
   } });
-  function change(key: string, value: FieldValue) {
+  function change(key: string, value: DefinitionValue) {
     setValues((current) => {
       if (key === "rule_type") return { ...current, rule_type: value, rule_params: {} };
       return { ...current, [key]: value };
@@ -283,9 +301,30 @@ function DefinitionEditor({ kind, target, onClose }: { kind: DefinitionKind; tar
       {save.isError && <p role="alert" className="configuration-error">{configurationError(save.error)}</p>}
       {metrics.isError && <ErrorState error={new Error(configurationError(metrics.error))} onRetry={() => metrics.refetch()} />}
       {fields.map((spec) => <ConfigurationField key={spec.key} spec={spec} value={values[spec.key]} disabled={save.isPending} onChange={(v) => change(spec.key, v)} />)}
+      {kind === "metrics" && values.kind === "positive" && values.direction === "higher_is_better" && <BandsEditor unit={String(values.unit ?? "")} bands={stepped ? values.bands as MetricBand[] : null} disabled={save.isPending} onChange={(bands) => change("bands", bands)} />}
       {kind === "badges" && <fieldset className="configuration-condition"><legend>Условия достижения</legend><div className="configuration-form-grid">{badgeFields.map((spec) => <ConfigurationField key={`${rule}-${spec.key}`} spec={spec} value={ruleParams[spec.key] ?? badgeDefault(spec.key, rule)} disabled={save.isPending} onChange={(v) => setValues((current) => ({ ...current, rule_params: { ...ruleParams, [spec.key]: typeof v === "number" ? v : String(v ?? "") } }))} />)}</div></fieldset>}
     </form>
   </Sheet>;
+}
+
+/**
+ * Points by steps instead of a share of the target (docs/CHANNELS.md): from each threshold up the metric gives its points,
+ * the top step is the most it gives. As in the chats' KPI: «80–85 % — 5, 86–89 % — 10 …».
+ */
+function BandsEditor({ unit, bands, disabled, onChange }: { unit: string; bands: MetricBand[] | null; disabled?: boolean; onChange: (bands: MetricBand[] | null) => void }) {
+  const set = (index: number, key: keyof MetricBand, value: string) => onChange((bands ?? []).map((band, i) => i === index ? { ...band, [key]: value === "" ? 0 : Number(value) } : band));
+  return <fieldset className="configuration-condition configuration-bands"><legend>Баллы по ступеням</legend>
+    <label className="configuration-toggle"><input type="checkbox" checked={!!bands} disabled={disabled} onChange={(event) => onChange(event.target.checked ? [{ from: 80, points: 20 }, { from: 90, points: 60 }, { from: 97, points: 100 }] : null)} />
+      <span><strong>Начислять баллы по порогам</strong><span>Значение от порога и выше даёт баллы этой ступени, ниже первого порога — 0. Максимум — баллы верхней ступени.</span></span></label>
+    {bands && <>
+      <ol className="configuration-bands__list">{bands.map((band, index) => <li key={index}>
+        <label className="field"><span className="field__label">От{unit ? `, ${unit}` : ""}</span><input className="input" type="number" inputMode="decimal" step="any" min={0} required value={String(band.from)} disabled={disabled} onChange={(event) => set(index, "from", event.target.value)} /></label>
+        <label className="field"><span className="field__label">Баллов</span><input className="input" type="number" inputMode="decimal" step="any" min={0} required value={String(band.points)} disabled={disabled} onChange={(event) => set(index, "points", event.target.value)} /></label>
+        <Button size="s" variant="plain" disabled={disabled || bands.length < 2} aria-label={`Убрать ступень от ${band.from}`} onClick={() => onChange(bands.filter((_, i) => i !== index))}>Убрать</Button>
+      </li>)}</ol>
+      <Button size="s" disabled={disabled} onClick={() => { const last = bands[bands.length - 1]; onChange([...bands, { from: (last?.from ?? 0) + 1, points: last?.points ?? 0 }]); }}>Добавить ступень</Button>
+    </>}
+  </fieldset>;
 }
 
 function badgeDefault(key: string, rule: string): string | number {
@@ -295,7 +334,7 @@ function badgeDefault(key: string, rule: string): string | number {
   return rule === "total_earned" ? 100 : 1;
 }
 
-function ConfigurationField({ spec, value, disabled, onChange }: { spec: FieldSpec; value: FieldValue | undefined; disabled?: boolean; onChange: (value: FieldValue) => void }) {
+function ConfigurationField({ spec, value, disabled, onChange }: { spec: FieldSpec; value: DefinitionValue | undefined; disabled?: boolean; onChange: (value: FieldValue) => void }) {
   if (spec.type === "boolean") return <label className="configuration-toggle"><input type="checkbox" checked={!!value} disabled={disabled} onChange={(e) => onChange(e.target.checked)} /><span><strong>{spec.label}</strong>{spec.hint && <span>{spec.hint}</span>}</span></label>;
   return <label className="field"><span className="field__label">{spec.label}</span>
     {spec.type === "select" ? <Select aria-label={spec.label} value={String(value ?? "")} disabled={disabled} required={spec.required} options={spec.options ?? []} onChange={onChange} />

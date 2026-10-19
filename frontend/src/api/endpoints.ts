@@ -71,7 +71,7 @@ export const cabinet = {
 export const rating = {
   progress: (weekId?: number, count = 8) => request<{ points: { week_id: number | null; label: string; starts_on: string; status: string | null; rank: number | null; points: number | null; coins: number | null }[] }>(`${V1}/rating/me/progress${buildQuery({ week_id: weekId, count })}`),
   weeks: (limit = 20) => request<WeekOut[]>(`${V1}/rating/weeks${buildQuery({ limit })}`),
-  leaderboard: (params: { week_id?: number; page?: number; size?: number; search?: string }) =>
+  leaderboard: (params: { week_id?: number; page?: number; size?: number; search?: string; channel?: "line" | "chat" }) =>
     request<RatingOut>(`${V1}/rating${buildQuery({ ...params })}`),
   /** «Гонка недели»: the operator's place, the gaps and what to improve. */
   race: (weekId?: number) => request<RaceOut>(`${V1}/rating/race${buildQuery({ week_id: weekId })}`),

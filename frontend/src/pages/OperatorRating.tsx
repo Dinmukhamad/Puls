@@ -1,4 +1,5 @@
 import {
+  ChannelsCard,
   CompareError,
   CompareFilters,
   CompareLoading,
@@ -27,6 +28,7 @@ export function OperatorRating() {
           <CompareSummary data={data} />
           <TeamsCard data={data} />
         </div>
+        <ChannelsCard data={data} />
         <CompareTable data={data} colleague={colleague} onPick={(row) => set({ with: String(row.user_id) }, true)} />
         <MetricsCompare data={data} />
         {colleague && <CompareSheet data={data} colleague={colleague} onClose={() => set({ with: undefined }, true)} />}

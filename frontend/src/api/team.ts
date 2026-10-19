@@ -1,5 +1,5 @@
 import { ApiError, buildQuery, request } from "./client";
-import type { Gender, DashboardOut, Page, Role, ShopRequestOut, UserBrief, UserOut } from "./types";
+import type { Channel, Gender, DashboardOut, Page, Role, ShopRequestOut, UserBrief, UserOut } from "./types";
 import type { TelegramInvitation, TelegramStatus } from "./telegram";
 
 export interface TeamGroup {
@@ -34,6 +34,7 @@ export interface TeamUserInput {
   group_id?: number | null;
   supervisor_id?: number | null;
   hired_on: string | null;
+  channel?: Channel;
   gender?: Gender | null;
   telegram_username?: string | null;
 }

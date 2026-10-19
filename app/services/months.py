@@ -28,7 +28,7 @@ from app.models.contest import (
     OperatorMonthResult,
     OperatorWeekResult,
 )
-from app.models.enums import MetricDirection, Role, TxType, WeekStatus
+from app.models.enums import Channel, MetricDirection, Role, TxType, WeekStatus
 from app.models.progress import Notification
 from app.models.user import User
 from app.services import coins as coins_service
@@ -99,7 +99,15 @@ async def _points(session: AsyncSession, weeks: list[ContestWeek]) -> dict[int, 
     return out
 
 
-def _rank(results: list[OperatorMonthResult]) -> None:
+def _rank(results: list[OperatorMonthResult], channels: dict[int, str] | None = None) -> None:
+    """Places by the month's points, within each channel (docs/CHANNELS.md): 1, 2, 2, 4."""
+    if channels:
+        groups: dict[str, list[OperatorMonthResult]] = {}
+        for result in results:
+            groups.setdefault(channels.get(result.user_id, Channel.LINE), []).append(result)
+        for group in groups.values():
+            _rank(group)
+        return
     ordered = sorted(results, key=lambda r: (-r.points, r.user_id))
     previous, place = None, 0
     for index, result in enumerate(ordered, start=1):
@@ -166,7 +174,11 @@ async def calculate(session: AsyncSession, item: ContestMonth) -> list[OperatorM
                 "weeks_total": len(weeks),
             },
         ))
-    _rank(results)
+    # The month's places, and their prizes, are played for within each channel.
+    channels = dict((await session.execute(
+        select(User.id, User.channel).where(User.id.in_(list(by_user) or [0]))
+    )).all())
+    _rank(results, {user_id: channel or Channel.LINE for user_id, channel in channels.items()})
     for result in results:
         result.coins_rank_bonus = rules.rank_bonus(result.rank)
         session.add(result)
@@ -350,6 +362,8 @@ async def view(session: AsyncSession, item: ContestMonth, *, viewer: User | None
                 "coins_rank_bonus": r.coins_rank_bonus,
                 "coins_nomination_bonus": r.coins_nomination_bonus,
                 "mine": viewer is not None and viewer.id == r.user_id,
+                # Places are within the channel (docs/CHANNELS.md).
+                "channel": (users[r.user_id].channel if r.user_id in users else None) or "line",
             }
             for r in results
         ],

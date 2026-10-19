@@ -26,7 +26,7 @@ new Function("require", "module", "exports", built.outputFiles[0].text)((name) =
         ends_on: "2026-10-11", status: "calculated", calculated_at: null, closed_at: null }] }),
   },
 })[name] ?? require(name), module, module.exports);
-const { RacePage, visibleRows, pointsLabel } = module.exports;
+const { RacePage, visibleRows, pointsLabel, nextBand } = module.exports;
 
 const place = (rank, name, points, gap, extra = {}) => ({ rank, name, points, gap, rank_delta: null, is_me: false, ...extra });
 const option = (code, title, unit, value, need, gain) => ({ code, title, unit, value, need, gain });
@@ -147,4 +147,11 @@ test("points read naturally in Russian", () => {
   assert.equal(pointsLabel(3), "3 балла");
   assert.equal(pointsLabel(8), "8 баллов");
   assert.equal(pointsLabel(21), "21 балл");
+});
+
+test("a metric with thresholds names its next step instead of a price per unit (docs/CHANNELS.md)", () => {
+  const bands = [{ from: 80, points: 20 }, { from: 90, points: 60 }, { from: 94, points: 80 }, { from: 97, points: 100 }];
+  assert.equal(nextBand({ bands, points: 60, unit: "%" }), "следующая ступень — от 94 %: 80 баллов");
+  assert.equal(nextBand({ bands, points: 100, unit: "%" }), "");
+  assert.equal(nextBand({ bands: null, points: 10, unit: "%" }), "");
 });

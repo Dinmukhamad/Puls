@@ -27,9 +27,9 @@
 .user-editor .field__note { font-size: 12px; line-height: 1.5; }
 .user-editor .field__error { margin: 0; }
 .user-editor .team-form-grid { align-items: start; }
-.user-editor .team-gender legend { margin-bottom: 8px; }
-.user-editor .team-gender .segmented { display: flex; width: 100%; }
-.user-editor .team-gender .segmented__item { display: flex; justify-content: center; align-items: center; min-height: 38px; }
+.user-editor .team-gender legend, .user-editor .team-channel legend { margin-bottom: 8px; }
+.user-editor .team-gender .segmented, .user-editor .team-channel .segmented { display: flex; width: 100%; }
+.user-editor .team-gender .segmented__item, .user-editor .team-channel .segmented__item { display: flex; justify-content: center; align-items: center; min-height: 38px; }
 .user-editor .team-password .btn { align-self: stretch; }
 .user-editor__profile { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
 .user-editor__profile > h3, .user-editor__profile > label.field:first-of-type { grid-column: 1 / -1; }

@@ -5,7 +5,7 @@ import { useAuth } from "../auth/AuthContext";
 import { MedalIcon, SparkIcon } from "../components/icons";
 import { Sheet } from "../components/Sheet";
 import { useToast } from "../components/Toast";
-import { Badge, Button, Card, EmptyState, ErrorState, RowsSkeleton, Select } from "../components/ui";
+import { Badge, Button, Card, EmptyState, ErrorState, RowsSkeleton, SegmentedControl, Select } from "../components/ui";
 import { coins, points } from "../utils/format";
 
 const MEDALS = ["gold", "silver", "bronze"] as const;
@@ -21,6 +21,8 @@ export function MonthContest() {
   const options = useQuery({ queryKey: ["contest-months"], queryFn: economy.months });
   const query = useQuery({ queryKey: ["contest-month", picked?.year, picked?.month], queryFn: () => economy.month(picked?.year, picked?.month) });
   const [confirm, setConfirm] = useState(false);
+  // Places are within a channel (docs/CHANNELS.md): one channel's table at a time.
+  const [channel, setChannel] = useState<"line" | "chat">("line");
   const client = useQueryClient(); const toast = useToast();
   const refresh = (data: ContestMonth) => { client.setQueryData(["contest-month", picked?.year, picked?.month], data); void client.invalidateQueries({ queryKey: ["contest-months"] }); };
   const calculate = useMutation({ mutationFn: () => economy.calculate(query.data!.year, query.data!.month), onSuccess: (data) => { refresh(data); toast.success("Места месяца пересчитаны"); } });
@@ -34,7 +36,8 @@ export function MonthContest() {
   if (query.isError) return <ErrorState error={query.error} onRetry={() => query.refetch()} />;
   const data = query.data!;
   const closedWeeks = data.weeks.filter((w) => w.status === "closed").length;
-  const top = data.standings.filter((row) => row.rank !== null && row.rank <= 3);
+  const standings = data.standings.filter((row) => (row.channel ?? "line") === channel);
+  const top = standings.filter((row) => row.rank !== null && row.rank <= 3);
   const mine = data.standings.find((row) => row.mine);
   const choices = [...(options.data ?? [])];
   if (!choices.some((m) => m.year === data.year && m.month === data.month)) choices.unshift({ year: data.year, month: data.month, label: data.label, name: data.name, status: data.status });
@@ -47,6 +50,7 @@ export function MonthContest() {
           <Select aria-label="Месяц конкурса" value={`${data.year}-${data.month}`} onChange={(value) => { const [y, m] = value.split("-").map(Number); setPicked({ year: y, month: m }); }}
             options={choices.map((m) => ({ value: `${m.year}-${m.month}`, label: `${m.name}${m.status === "closed" ? " · итоги" : ""}` }))} /></label>
         <p className="secondary small">Закрыто недель: {closedWeeks} из {data.weeks_planned}. Неделя относится к месяцу своего четверга.</p>
+        <SegmentedControl label="Направление" value={channel} options={[{ value: "line", label: "Линия" }, { value: "chat", label: "Чаты" }]} onChange={setChannel} />
         {atLeast("supervisor") && data.status !== "closed" && <div className="row">
           <Button size="s" disabled={calculate.isPending} onClick={() => calculate.mutate()}>{calculate.isPending ? "Считаем…" : "Пересчитать"}</Button>
           {atLeast("head") && <Button size="s" variant="primary" disabled={closedWeeks < data.weeks.length || !data.weeks.length} onClick={() => setConfirm(true)}>Закрыть месяц</Button>}
@@ -57,7 +61,7 @@ export function MonthContest() {
 
     {mine && <Card title="Ваш результат месяца"><p><strong>{mine.rank} место</strong> · {points(mine.points)} баллов за {mine.weeks} {mine.weeks === 1 ? "неделю" : mine.weeks < 5 ? "недели" : "недель"}{mine.coins_rank_bonus + mine.coins_nomination_bonus > 0 ? <> · приз {coins(mine.coins_rank_bonus + mine.coins_nomination_bonus)} коинов{data.status === "closed" ? "" : " после закрытия месяца"}</> : null}</p></Card>}
 
-    {!data.standings.length ? <Card><EmptyState title="Итогов месяца пока нет" hint="Места появятся после первой закрытой недели месяца." /></Card> : <>
+    {!standings.length ? <Card><EmptyState title={data.standings.length ? `Операторов направления «${channel === "chat" ? "Чаты" : "Линия"}» в итогах нет` : "Итогов месяца пока нет"} hint={data.standings.length ? "Места разыгрываются внутри направления." : "Места появятся после первой закрытой недели месяца."} /></Card> : <>
       {top.length > 0 && <Card title="Топ-3 месяца"><ol className="podium">{top.map((row) => <li key={row.user_id} className={`podium__place podium__place--${MEDALS[(row.rank ?? 1) - 1]}`}>
         <span className="podium__rank" aria-hidden="true">{row.rank}</span>
         <span className="podium__medal"><MedalIcon size={14} />{row.rank} место</span>
@@ -71,7 +75,7 @@ export function MonthContest() {
       </li>)}</ul></Card>}
       <Card title="Таблица месяца" padded={false}><div className="table-wrap table-wrap--responsive"><table className="table">
         <thead><tr><th className="num">Место</th><th>Оператор</th><th className="num">Баллы</th><th className="num">Недель</th><th className="num">Приз</th></tr></thead>
-        <tbody>{data.standings.map((row) => <tr key={row.user_id} className={row.mine ? "is-me" : undefined}>
+        <tbody>{standings.map((row) => <tr key={row.user_id} className={row.mine ? "is-me" : undefined}>
           <td className="num">{row.rank}</td><td>{row.name ?? "Оператор"}{row.mine && <span className="tag-me">это вы</span>}</td>
           <td className="num">{points(row.points)}</td><td className="num">{row.weeks}</td>
           <td className="num">{row.coins_rank_bonus + row.coins_nomination_bonus ? `+${coins(row.coins_rank_bonus + row.coins_nomination_bonus)}` : "—"}</td>

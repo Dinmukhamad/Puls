@@ -60,12 +60,14 @@ function Leaderboard({ toggle }: { toggle?: ReactNode }) {
   const page = Math.max(1, Math.floor(Number(params.get("page")) || 1));
   const update = (values: Record<string, string | undefined>) => { const next = new URLSearchParams(params); for (const [key, value] of Object.entries(values)) { if (value) next.set(key, value); else next.delete(key); } setParams(next, { replace: "search" in values }); };
   const setPage = (value: number) => update({ page: String(value) });
+  // Places are within a channel (docs/CHANNELS.md): one channel's table at a time.
+  const channel = params.get("channel") === "chat" ? "chat" : "line";
   const size = 25;
 
   const weeks = useQuery({ queryKey: ["weeks"], queryFn: () => rating.weeks(104) });
   const board = useQuery({
-    queryKey: ["rating", weekId, page],
-    queryFn: () => rating.leaderboard({ week_id: weekId, page, size }),
+    queryKey: ["rating", weekId, page, channel],
+    queryFn: () => rating.leaderboard({ week_id: weekId, page, size, channel }),
     placeholderData: keepPreviousData,
   });
 
@@ -112,6 +114,7 @@ function Leaderboard({ toggle }: { toggle?: ReactNode }) {
         <WeekPicker label="Период" weeks={weeks.data ?? []} value={weekId}
           resolvedWeekId={header.week_id} loading={weeks.isLoading}
           onChange={(value) => update({ week: value === undefined ? undefined : String(value), page: undefined })} />
+        <div className="rating-filter-status"><span className="field__label">Направление</span><div><SegmentedControl label="Направление" value={channel} options={[{ value: "line", label: "Линия" }, { value: "chat", label: "Чаты" }]} onChange={(value) => update({ channel: value === "chat" ? "chat" : undefined, page: undefined })} /></div></div>
         <div className="rating-filter-status"><span className="field__label">Статус итогов</span><div><Badge tone={header.status === "closed" ? "success" : "warning"}>{header.status === "closed" ? "Опубликованы" : header.status === "calculated" ? "Предварительный расчёт" : "Период ещё идёт"}</Badge></div></div>
       </GlassSurface>
       {weeks.isError && <p className="muted micro" role="status">Не удалось загрузить календарь недель. <button type="button" className="btn btn--plain btn--s" onClick={() => void weeks.refetch()}>Повторить</button></p>}

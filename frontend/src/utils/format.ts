@@ -99,6 +99,14 @@ export const WEEK_STATUS_LABELS: Record<string, string> = {
   closed: "Закрыта",
 };
 
+/** The operator's channel (docs/CHANNELS.md): own metrics on 100 points and own places. */
+export const CHANNEL_LABELS: Record<string, string> = { line: "Линия", chat: "Чаты" };
+
+/** «Оператор», «Оператор чатов»: a chat operator's role says so wherever the role is shown. */
+export function roleLabel(person: { role: string; channel?: string | null }): string {
+  return person.role === "operator" && person.channel === "chat" ? "Оператор чатов" : ROLE_LABELS[person.role] ?? person.role;
+}
+
 export const ROLE_LABELS: Record<string, string> = {
   trainee: "Стажёр",
   operator: "Оператор",

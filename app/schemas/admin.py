@@ -225,6 +225,7 @@ class WeekPreviewRow(BaseModel):
     coins_discipline_bonus: int
     coins_nomination_bonus: int
     missing_metrics: list[str] = Field(default_factory=list)
+    channel: str = "line"
 
 
 class WeekPreviewOut(BaseModel):
@@ -294,6 +295,12 @@ class RulesUpdate(BaseModel):
     shop_monthly_budget_tenge: int | None = Field(default=None, ge=0, le=100000000)
 
 
+#: Whose points a metric gives: the line's, the chats' or everyone's (discipline), docs/CHANNELS.md.
+MetricChannel = Literal["line", "chat", "all"]
+#: A threshold and its points: {"from": 90, "points": 60} — from 90 and up (docs/CHANNELS.md).
+MetricBands = list[dict[str, FiniteFloat]]
+
+
 class MetricOut(ORMModel):
     id: int
     code: str
@@ -308,6 +315,8 @@ class MetricOut(ORMModel):
     is_active: bool
     sort_order: int
     description: str | None = None
+    channel: str = "line"
+    bands: MetricBands | None = None
 
 
 class MetricCreate(BaseModel):
@@ -323,6 +332,8 @@ class MetricCreate(BaseModel):
     is_active: bool = True
     sort_order: int = 100
     description: str | None = None
+    channel: MetricChannel = "line"
+    bands: MetricBands | None = None
 
 
 class MetricUpdate(BaseModel):
@@ -337,6 +348,8 @@ class MetricUpdate(BaseModel):
     is_active: bool | None = None
     sort_order: int | None = None
     description: str | None = None
+    channel: MetricChannel | None = None
+    bands: MetricBands | None = None
 
 
 class NominationOut(ORMModel):

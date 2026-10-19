@@ -93,6 +93,17 @@ class WeekStatus(StrEnum):
     CLOSED = "closed"  # неделя закрыта, коины начислены
 
 
+class Channel(StrEnum):
+    """Направление оператора: линия (звонки) или чаты (docs/CHANNELS.md)."""
+
+    LINE = "line"
+    CHAT = "chat"
+
+
+#: Направление показателя, общего для всех операторов: дисциплина, штрафы.
+ALL_CHANNELS = "all"
+
+
 class MetricKind(StrEnum):
     POSITIVE = "positive"  # показатель, повышающий балл
     ANTI = "anti"  # антипоказатель (п. 8 ТЗ)

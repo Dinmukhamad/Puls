@@ -12,7 +12,9 @@ export interface PeriodPreview {
   missing_metrics: string[];
   rows: { user_id: number; full_name: string; rank: number | null; final_points: number;
     coins_total: number; coins_from_points: number; coins_rank_bonus: number;
-    coins_discipline_bonus: number; coins_nomination_bonus: number; missing_metrics: string[] }[];
+    coins_discipline_bonus: number; coins_nomination_bonus: number; missing_metrics: string[];
+    /** Places are within the channel (docs/CHANNELS.md): the line's and the chats' each start at 1. */
+    channel?: "line" | "chat" }[];
 }
 export interface CloseReport {
   week_id: number; week_label: string; participants: number; coins_awarded: number;

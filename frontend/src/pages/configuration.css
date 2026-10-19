@@ -113,3 +113,10 @@
 .rules-save.is-dirty > span { color: var(--text-primary); font-size: var(--text-secondary-size); }
 @media (max-width: 1100px) { .rules-grid { column-count: 1; } }
 @media (max-width: 767px) { .rules-save.is-dirty { bottom: calc(var(--tabbar-height) + 10px + var(--safe-bottom) + var(--sp-3)); } .rules-save.is-dirty > .btn { flex: 1; } }
+
+/* Points by steps (docs/CHANNELS.md): a threshold and its points per row. */
+.configuration-bands { display: grid; gap: 12px; }
+.configuration-bands__list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.configuration-bands__list li { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 10px; align-items: end; }
+.configuration-bands__list .field { margin: 0; }
+.configuration-bands > .btn { justify-self: start; }

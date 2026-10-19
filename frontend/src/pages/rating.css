@@ -10,7 +10,7 @@
 .rating-personal__gap { display: grid; gap: 6px; }
 
 /* The period and its status share the same label and control baselines. */
-.rating-filters { position:static; display:grid; grid-template-columns:minmax(0, 1fr) minmax(180px, .45fr); align-items:start; gap:16px; padding:16px; }
+.rating-filters { position:static; display:grid; grid-template-columns:minmax(0, 1fr) auto minmax(180px, .45fr); align-items:start; gap:16px; padding:16px; }
 .rating-filters .week-picker, .rating-filter-status { display:grid; grid-template-rows:18px 44px; gap:8px; width:100%; min-width:0; }
 .rating-filters .field__label { height:18px; line-height:18px; margin:0; }
 .rating-filters .week-picker__control { height:44px; min-height:44px; }

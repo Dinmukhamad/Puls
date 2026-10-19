@@ -46,6 +46,9 @@ export interface GroupBrief {
   name: string;
 }
 
+/** Направление оператора: линия (звонки) или чаты — свои показатели и своё соревнование. */
+export type Channel = "line" | "chat";
+
 export interface UserOut {
   created_at?: string;
   can_manage_credentials?: boolean;
@@ -58,6 +61,8 @@ export interface UserOut {
   is_active: boolean;
   is_developer: boolean;
   hired_on: string | null;
+  /** Линия или чаты (docs/CHANNELS.md); у остальных ролей — линия. */
+  channel?: Channel;
   group: GroupBrief | null;
   /** Фигура оператора в центре учебного города. */
   gender?: Gender | null;
@@ -262,6 +267,8 @@ export interface RaceMetric {
   reported: boolean;
   /** Points one unit more brings, for "more is better" metrics up to the target. */
   per_unit: number | null;
+  /** Thresholds instead of a share of the target (docs/CHANNELS.md): from each value up, its points. */
+  bands?: { from: number; points: number }[] | null;
 }
 
 /** Raising one metric: the value to show and the points it really adds. */
@@ -417,8 +424,15 @@ export interface CompareMetric {
   me: number | null; average: number; best: number; reported: number; place: number | null;
   points: number | null; max_points: number;
 }
+/** Направление рядом с другим (docs/CHANNELS.md): средняя неделя оператора из 100 баллов. */
+export interface CompareChannel {
+  channel: Channel; participants: number; average: number | null;
+  best: { name: string; points: number; is_me: boolean } | null; is_mine: boolean;
+  metrics: { title: string; max_points: number }[];
+}
 export interface CompareOut {
   period: "week" | "month"; title: string; status: string; live: boolean;
+  channel?: Channel; channels?: CompareChannel[];
   week: CompareWeek | null; month: { year: number; month: number; name: string; weeks_planned: number } | null;
   participants: number; weeks: CompareWeek[]; operators: CompareRow[]; teams: CompareTeam[]; metrics: CompareMetric[];
 }

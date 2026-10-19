@@ -28,7 +28,7 @@ from app.services import badges as badges_service
 from app.services import coins as coins_service
 from app.services import weekly as weekly_service
 from app.services.rules import get_rules
-from app.services.scoring import points_to_coins, score_week
+from app.services.scoring import channel_definitions, points_to_coins, score_week
 
 
 def _week_datetime_bounds(week: ContestWeek) -> tuple[datetime, datetime]:
@@ -117,7 +117,9 @@ async def week_block(
         )
     )
     values = {code: float(value) for code, value in rows}
-    score = score_week(definitions, values)
+    # The operator's own channel: line or chats, with the common discipline (docs/CHANNELS.md).
+    channel = await session.scalar(select(User.channel).where(User.id == user_id))
+    score = score_week(channel_definitions(definitions, channel), values)
     rules = await get_rules(session)
 
     block.base_points = score.base_points

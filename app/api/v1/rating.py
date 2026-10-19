@@ -11,7 +11,7 @@ from sqlalchemy import select
 from app.core.deps import CurrentUser, PaginationDep, SessionDep
 from app.core.errors import NotFoundError
 from app.models.contest import ContestWeek, OperatorWeekResult
-from app.models.enums import Role, WeekStatus
+from app.models.enums import Channel, Role, WeekStatus
 from app.schemas.rating import (
     CompareOut,
     NominationOut,
@@ -139,6 +139,10 @@ async def leaderboard(
     week_id: Annotated[int | None, Query(description="По умолчанию - последняя неделя")] = None,
     group_id: int | None = None,
     search: Annotated[str | None, Query(description="Поиск по ФИО")] = None,
+    channel: Annotated[
+        Literal["line", "chat"] | None,
+        Query(description="Направление: места внутри него. По умолчанию — своё или линия"),
+    ] = None,
 ) -> RatingOut:
     """
     Шапка конкурса, пьедестал, номинации и общая таблица одним ответом.
@@ -155,6 +159,7 @@ async def leaderboard(
     show_balance = user.role != Role.OPERATOR or rules.rating_show_balance_to_operators
 
     personal = user.role == Role.OPERATOR
+    channel = user.channel if personal else (channel or Channel.LINE)
     rows, total = await rating_service.leaderboard(
         session,
         week=week,
@@ -164,8 +169,11 @@ async def leaderboard(
         search=None if personal else search,
         offset=0 if personal else pagination.offset,
         limit=1 if personal else pagination.size,
+        channel=channel,
     )
-    top = await rating_service.podium(session, week=week, viewer=user, show_balance=show_balance)
+    top = await rating_service.podium(
+        session, week=week, viewer=user, show_balance=show_balance, channel=channel
+    )
 
     my_result = await rating_service.my_row(session, week=week, user_id=user.id)
     my_podium = await rating_service.personal_podium(session, week=week, result=my_result)
@@ -190,7 +198,7 @@ async def leaderboard(
         period_start=week.starts_on,
         period_end=week.ends_on,
         status=week.status,
-        participants=await rating_service.participants_count(session, week.id),
+        participants=await rating_service.participants_count(session, week.id, channel),
         updated_at=week.closed_at or week.calculated_at,
     )
 

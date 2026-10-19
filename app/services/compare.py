@@ -21,10 +21,11 @@ from app.models.contest import (
     MetricDefinition,
     OperatorMonthResult,
 )
-from app.models.enums import MetricDirection, MetricKind
+from app.models.enums import Channel, MetricDirection, MetricKind
 from app.models.user import Group, User
 from app.services import months, race, weekly
 from app.services.economy import week_month
+from app.services.scoring import channel_definitions
 
 #: Weeks of history beside a week: the week itself and the five before it.
 TRAIL = 6
@@ -135,13 +136,13 @@ async def _groups(session: AsyncSession) -> dict[int, str]:
 
 
 async def _trail(
-    session: AsyncSession, weeks: list[ContestWeek]
+    session: AsyncSession, weeks: list[ContestWeek], channel: str
 ) -> tuple[list[dict], dict[int, list[dict | None]]]:
-    """Places and points of every operator in each week; weeks nobody has data for are dropped."""
+    """Places and points of the channel's operators in each week; weeks without data are dropped."""
     shown: list[dict] = []
     marks: dict[int, dict[int, dict]] = {}
     for week in weeks:
-        runners, live = await race.standings(session, week)
+        runners, live = await race.standings(session, week, channel)
         if not runners:
             continue
         shown.append(_week(week, live))
@@ -161,17 +162,50 @@ def _row(user: User, viewer: User, groups: dict[int, str], **fields) -> dict:
     }
 
 
+def _channels(
+    points: dict[int, float], users: dict[int, User], viewer: User,
+    definitions: list[MetricDefinition],
+) -> list[dict]:
+    """
+    The channels side by side (docs/CHANNELS.md): each scores its own metrics on 100 points, so the
+    average week of an operator compares fairly. ``points`` are each operator's points of a week.
+    """
+    out = []
+    for channel in Channel:
+        mine = {
+            uid: p for uid, p in points.items() if (users[uid].channel or Channel.LINE) == channel
+        }
+        best = max(mine, key=lambda uid: mine[uid], default=None)
+        out.append({
+            "channel": str(channel), "participants": len(mine),
+            "average": round(sum(mine.values()) / len(mine), 2) if mine else None,
+            "best": None if best is None else {
+                "name": ranking_name(viewer, users[best]) or "Оператор",
+                "points": round(mine[best], 2), "is_me": best == viewer.id},
+            "is_mine": channel == (viewer.channel or Channel.LINE),
+            "metrics": [
+                {"title": d.title, "max_points": d.max_points}
+                for d in channel_definitions(definitions, channel)
+                if d.kind == MetricKind.POSITIVE and d.max_points
+            ],
+        })
+    return out
+
+
 async def week_view(session: AsyncSession, viewer: User, week_id: int | None) -> dict:
     week = await weekly.get_week(session, week_id) if week_id else await race.default_week(session)
     if week is None:
         return _empty("week")
-    runners, live = await race.standings(session, week)
+    channel = viewer.channel or Channel.LINE
+    # Operators compete within their channel; the channels are compared by their average week.
+    runners, live = await race.standings(session, week, channel)
+    everyone, _ = await race.standings(session, week)
     groups = await _groups(session)
     history = list(reversed(list(await session.scalars(
         select(ContestWeek).where(ContestWeek.starts_on <= week.starts_on)
         .order_by(ContestWeek.starts_on.desc()).limit(TRAIL)
     ))))
-    weeks, trail = await _trail(session, history)
+    weeks, trail = await _trail(session, history, channel)
     rows = [
         _row(r.user, viewer, groups, rank=r.rank, points=round(r.points, 2),
              rank_delta=r.rank_delta, weeks=None, prize=None,
@@ -183,10 +217,13 @@ async def week_view(session: AsyncSession, viewer: User, week_id: int | None) ->
     year, month = week_month(week.starts_on)
     return {
         "period": "week", "title": week.label, "status": str(week.status), "live": live,
-        "week": _week(week, live), "month": _month(year, month),
+        "week": _week(week, live), "month": _month(year, month), "channel": channel,
         "participants": len(rows), "weeks": weeks, "operators": rows,
         "teams": _teams(rows, weeks, viewer, groups),
-        "metrics": metric_table(values, definitions, viewer.id, points.get(viewer.id)),
+        "metrics": metric_table(
+            values, channel_definitions(definitions, channel), viewer.id, points.get(viewer.id)),
+        "channels": _channels({r.user.id: r.points for r in everyone},
+                              {r.user.id: r.user for r in everyone}, viewer, definitions),
     }
 
 
@@ -197,15 +234,18 @@ async def month_view(
         week = await race.default_week(session)
         today = date.today()
         year, month = week_month(week.starts_on) if week else (today.year, today.month)
+    channel = viewer.channel or Channel.LINE
     item = await session.scalar(
         select(ContestMonth).where(ContestMonth.year == year, ContestMonth.month == month))
-    weeks, trail = await _trail(session, await months.month_weeks(session, year, month))
+    weeks, trail = await _trail(session, await months.month_weeks(session, year, month), channel)
     groups = await _groups(session)
-    results = list(await session.scalars(
+    everyone = list(await session.scalars(
         select(OperatorMonthResult).where(OperatorMonthResult.month_id == item.id)
     )) if item else []
     users = {u.id: u for u in await session.scalars(
-        select(User).where(User.id.in_([r.user_id for r in results] or [0])))}
+        select(User).where(User.id.in_([r.user_id for r in everyone] or [0])))}
+    results = [r for r in everyone if r.user_id in users
+               and (users[r.user_id].channel or Channel.LINE) == channel]
     rows = [
         _row(users[r.user_id], viewer, groups, rank=r.rank, points=round(r.points, 2),
              rank_delta=None, weeks=r.weeks,
@@ -216,13 +256,16 @@ async def month_view(
     rows.sort(key=lambda r: (r["rank"] or 10**6, r["name"]))
     averages = {r.user_id: dict((r.breakdown or {}).get("averages") or {}) for r in results}
     definitions = await weekly.active_metric_definitions(session)
+    # A month's points depend on how many weeks counted: the channels compare by the average week.
+    per_week = {r.user_id: r.points / r.weeks for r in everyone if r.user_id in users and r.weeks}
     return {
         "period": "month", "title": months.month_name(year, month),
         "status": str(item.status) if item else "open", "live": False,
-        "week": None, "month": _month(year, month),
+        "week": None, "month": _month(year, month), "channel": channel,
         "participants": len(rows), "weeks": weeks, "operators": rows,
         "teams": _teams(rows, weeks, viewer, groups),
-        "metrics": metric_table(averages, definitions, viewer.id),
+        "metrics": metric_table(averages, channel_definitions(definitions, channel), viewer.id),
+        "channels": _channels(per_week, users, viewer, definitions),
     }
 
 
@@ -233,5 +276,5 @@ def _month(year: int, month: int) -> dict:
 
 def _empty(period: str) -> dict:
     return {"period": period, "title": "", "status": "open", "live": False, "week": None,
-            "month": None, "participants": 0, "weeks": [], "operators": [], "teams": [],
-            "metrics": []}
+            "month": None, "channel": Channel.LINE, "participants": 0, "weeks": [],
+            "operators": [], "teams": [], "metrics": [], "channels": []}

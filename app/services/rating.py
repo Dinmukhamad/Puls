@@ -14,7 +14,7 @@ from app.models.contest import (
     NominationWinner,
     OperatorWeekResult,
 )
-from app.models.enums import WeekStatus
+from app.models.enums import Channel, WeekStatus
 from app.models.user import CoinAccount, Group, User
 
 
@@ -71,10 +71,15 @@ async def personal_podium(
         return PersonalPodium("not_participating", None)
     if result.rank <= 3:
         return PersonalPodium("on_podium", 0.0)
+    # Places are within the channel (docs/CHANNELS.md): the podium of the operator's own channel.
+    channel = await session.scalar(select(User.channel).where(User.id == result.user_id))
     threshold = await session.scalar(
-        select(func.min(OperatorWeekResult.final_points)).where(
+        select(func.min(OperatorWeekResult.final_points))
+        .join(User, User.id == OperatorWeekResult.user_id)
+        .where(
             OperatorWeekResult.week_id == week.id,
             OperatorWeekResult.rank <= 3,
+            User.channel == (channel or Channel.LINE),
         )
     )
     if threshold is None:
@@ -107,6 +112,7 @@ async def leaderboard(
     search: str | None = None,
     offset: int = 0,
     limit: int = 50,
+    channel: str | None = None,
 ) -> tuple[list[RatingRow], int]:
     """
     Страница общей таблицы и общее число участников недели.
@@ -126,6 +132,10 @@ async def leaderboard(
     if group_id is not None:
         stmt = stmt.where(User.group_id == group_id)
         count_stmt = count_stmt.where(User.group_id == group_id)
+    if channel is not None:
+        # Places are within a channel (docs/CHANNELS.md): one channel's table at a time.
+        stmt = stmt.where(User.channel == channel)
+        count_stmt = count_stmt.where(User.channel == channel)
     if search:
         pattern = f"%{search.strip()}%"
         stmt = stmt.where(User.full_name.ilike(pattern))
@@ -166,11 +176,12 @@ async def leaderboard(
 
 
 async def podium(
-    session: AsyncSession, *, week: ContestWeek, viewer: User, show_balance: bool
+    session: AsyncSession, *, week: ContestWeek, viewer: User, show_balance: bool,
+    channel: str | None = None,
 ) -> list[RatingRow]:
-    """Пьедестал: топ-3 недели (п. 4.2.2)."""
+    """Пьедестал: топ-3 недели (п. 4.2.2) — направления ``channel``."""
     rows, _ = await leaderboard(
-        session, week=week, viewer=viewer, show_balance=show_balance, limit=3
+        session, week=week, viewer=viewer, show_balance=show_balance, limit=3, channel=channel
     )
     return [row for row in rows if row.rank is not None and row.rank <= 3]
 
@@ -246,10 +257,12 @@ async def nominations(
     return rows
 
 
-async def participants_count(session: AsyncSession, week_id: int) -> int:
-    return int(
-        await session.scalar(
-            select(func.count(OperatorWeekResult.id)).where(OperatorWeekResult.week_id == week_id)
+async def participants_count(
+    session: AsyncSession, week_id: int, channel: str | None = None
+) -> int:
+    stmt = select(func.count(OperatorWeekResult.id)).where(OperatorWeekResult.week_id == week_id)
+    if channel is not None:
+        stmt = stmt.join(User, User.id == OperatorWeekResult.user_id).where(
+            User.channel == channel
         )
-        or 0
-    )
+    return int(await session.scalar(stmt) or 0)

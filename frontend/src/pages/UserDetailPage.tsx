@@ -12,7 +12,7 @@ import { useToast } from "../components/Toast";
 import { Avatar, Badge, Button, EmptyState, ErrorState, Pagination, Progress, Skeleton } from "../components/ui";
 import { AvatarEditor } from "../components/AvatarEditor";
 import { ChevronRightIcon } from "../components/icons";
-import { ROLE_LABELS, REQUEST_STATUS_LABELS, coins, dateOnly, dateTime, plural, points } from "../utils/format";
+import { CHANNEL_LABELS, ROLE_LABELS, REQUEST_STATUS_LABELS, coins, dateOnly, dateTime, plural, points } from "../utils/format";
 import { UserArchive, UserEditor } from "./UsersPage";
 import { TraineeResults } from "./TraineeResults";
 import { teamOf, teamTitles } from "./teamSection";
@@ -107,7 +107,8 @@ export function EmployeeCard({ id, onClose }: { id: number; onClose?: () => void
         <dl className="employee-data">
           <div><dt>Логин</dt><dd>{data.login}</dd></div>
           {!trainer && <><div><dt>Телефон</dt><dd>{data.phone ?? "—"}</dd></div><div><dt>Email</dt><dd>{data.email ?? "—"}</dd></div>
-            <div><dt>Дата приёма</dt><dd>{data.hired_on ? dateOnly(data.hired_on) : "—"}</dd></div></>}
+            <div><dt>Дата приёма</dt><dd>{data.hired_on ? dateOnly(data.hired_on) : "—"}</dd></div>
+            {data.role === "operator" && <div><dt>Направление</dt><dd>{CHANNEL_LABELS[data.channel ?? "line"]}</dd></div>}</>}
           <div><dt>В Puls с</dt><dd>{data.created_at ? dateOnly(data.created_at) : "—"}</dd></div>
         </dl>
       </section>

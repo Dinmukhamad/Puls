@@ -33,11 +33,11 @@
 @media (max-width: 767px) { .team-search { flex-basis: 100%; } }
 
 /* Пол сотрудника: два варианта одной строкой, радиокнопки скрыты за сегментами. */
-.team-gender { border: 0; padding: 0; margin: 0; min-width: 0; }
-.team-gender .segmented { display: inline-flex; }
-.team-gender .segmented__item { position: relative; cursor: pointer; }
-.team-gender input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
-.team-gender .segmented__item:has(input:focus-visible) { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+.team-gender, .team-channel { border: 0; padding: 0; margin: 0; min-width: 0; }
+.team-gender .segmented, .team-channel .segmented { display: inline-flex; }
+.team-gender .segmented__item, .team-channel .segmented__item { position: relative; cursor: pointer; }
+.team-gender input, .team-channel input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.team-gender .segmented__item:has(input:focus-visible), .team-channel .segmented__item:has(input:focus-visible) { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
 
 /*
  * A person in the section's lists (docs/TEAM_SECTION.md): one row on a computer, two lines on a phone. The name is the

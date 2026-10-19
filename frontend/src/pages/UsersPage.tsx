@@ -4,7 +4,7 @@ import { Link, useLocation, useSearchParams } from "react-router-dom";
 
 import { team, teamError, type TeamGroup, type TeamUserSaved, type TeamUserInput } from "../api/team";
 import type { TelegramInvitation } from "../api/telegram";
-import type { Gender, Role, UserOut } from "../api/types";
+import type { Channel, Gender, Role, UserOut } from "../api/types";
 import { useAuth } from "../auth/AuthContext";
 import { DatePicker } from "../components/DateRangePicker";
 import { GlassSurface } from "../components/GlassSurface";
@@ -12,7 +12,7 @@ import { Sheet } from "../components/Sheet";
 import { useToast } from "../components/Toast";
 import { ChevronRightIcon } from "../components/icons";
 import { Avatar, Badge, Button, Card, EmptyState, ErrorState, Pagination, RowsSkeleton, Select } from "../components/ui";
-import { dateOnly, dateTime, ROLE_LABELS } from "../utils/format";
+import { CHANNEL_LABELS, dateOnly, dateTime, roleLabel, ROLE_LABELS } from "../utils/format";
 import { loadTelegramDraft, normalizeTelegramUsername, telegramUpdate, type TeamTelegramDraft } from "./teamTelegram";
 import { activeTeamGroups, destinationGroupId } from "./supervisorTeams";
 import { personSearch, staffCount, teamOf, teamTitles } from "./teamSection";
@@ -119,9 +119,9 @@ export function TeamPersonRow({ person, role = true, team, actions }: { person: 
         <span className="team-row__meta">{person.login}{person.hired_on && ` · дата приёма ${dateOnly(person.hired_on)}`}</span>
       </span>
     </Link>
-    <span className="team-row__role">{role && ROLE_LABELS[person.role]}</span>
+    <span className="team-row__role">{role && roleLabel(person)}</span>
     <span className="team-row__team">{team}</span>
-    <span className="team-row__summary">{[role && ROLE_LABELS[person.role], team].filter(Boolean).join(" · ")}</span>
+    <span className="team-row__summary">{[role && roleLabel(person), team].filter(Boolean).join(" · ")}</span>
     {actions && <span className="team-row__actions">{actions}</span>}
     <span className="team-row__go" aria-hidden="true"><ChevronRightIcon size={16} /></span>
   </li>;
@@ -164,6 +164,7 @@ export function UserEditor({ target, groups, groupsReady, initialRole = "operato
     setGroupId(destination == null ? "" : String(destination));
   }
   const [hiredOn, setHiredOn] = useState(target?.hired_on ?? "");
+  const [channel, setChannel] = useState<Channel>(target?.channel ?? "line");
   const [gender, setGender] = useState<Gender | "">(target?.gender ?? "");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -184,7 +185,7 @@ export function UserEditor({ target, groups, groupsReady, initialRole = "operato
   const save = useMutation({
     mutationFn: (): Promise<TeamUserSaved> => {
       const groupChanged = !target || role !== target.role || teamSelectionTouched || (role !== "operator" && role !== "supervisor" && groupId !== String(target.group?.id ?? ""));
-      const data: TeamUserInput = { full_name: fullName.trim(), email: email.trim() || null, phone: phone.trim() || null, role, ...(groupChanged ? { group_id: trainer || role === "supervisor" ? null : role === "operator" ? selectedGroupId : groupId ? Number(groupId) : null } : {}), ...(!trainer && role === "operator" && !keepCurrentTeam && supervisorId !== "legacy" ? { supervisor_id: Number(supervisorId) || null } : {}), hired_on: role === "trainee" ? null : hiredOn || null, ...(gender ? { gender } : {}) };
+      const data: TeamUserInput = { full_name: fullName.trim(), email: email.trim() || null, phone: phone.trim() || null, role, ...(groupChanged ? { group_id: trainer || role === "supervisor" ? null : role === "operator" ? selectedGroupId : groupId ? Number(groupId) : null } : {}), ...(!trainer && role === "operator" && !keepCurrentTeam && supervisorId !== "legacy" ? { supervisor_id: Number(supervisorId) || null } : {}), hired_on: role === "trainee" ? null : hiredOn || null, ...(role === "operator" ? { channel } : {}), ...(gender ? { gender } : {}) };
       return target ? team.updateUser(target.id, { ...data, ...telegramUpdate(telegramDraft, ownAccount) }) : team.createUser({ ...data, login: login.trim(), password, telegram_username: normalizedTelegram || null });
     },
     onSuccess: (data) => {
@@ -263,6 +264,7 @@ export function UserEditor({ target, groups, groupsReady, initialRole = "operato
       <section className="user-editor__section" aria-labelledby="user-editor-access">
       <h3 id="user-editor-access" className="user-editor__section-title">Доступ и команда</h3>
       <label className="field"><span className="field__label">Логин для входа</span><input className="input" autoComplete="off" value={target ? target.login : login} readOnly={Boolean(target)} onChange={target ? undefined : (e) => setLogin(e.target.value)} required minLength={3} maxLength={150} />{target && <span className="field__note">{ownAccount ? <>Свой логин меняйте <Link to="/profile">в профиле</Link>.</> : "Для смены логина откройте карточку сотрудника."}</span>}</label>
+      {role === "operator" && <fieldset className="field team-channel"><legend className="field__label">Направление</legend><div className="segmented" role="radiogroup">{(["line", "chat"] as const).map((value) => <label key={value} className={channel === value ? "segmented__item is-active" : "segmented__item"}><input type="radio" name="team-channel" value={value} checked={channel === value} onChange={() => setChannel(value)} />{CHANNEL_LABELS[value]}</label>)}</div><span className="field__note">Свои показатели и своё соревнование: линия считается по звонкам, чаты — по качеству чатов.</span></fieldset>}
       <div className="team-form-grid"><label className="field"><span className="field__label">Роль</span><Select aria-label="Роль сотрудника" value={role} disabled={target?.id === actor?.id} onChange={(value) => { setRole(value as Role); if (value === "operator" && target?.role !== "operator") chooseSupervisor(""); }} options={visibleRoles(actor?.role).map(r => ({ value: r, label: ROLE_LABELS[r] }))} /></label>
         {!trainer && role === "operator" && <label className="field"><span className="field__label">Супервайзер · необязательно</span><Select aria-label="Супервайзер сотрудника" value={supervisorId} disabled={!supervisorTeams.isSuccess} onChange={chooseSupervisor} options={[
           { value: "", label: "Пока без команды" },

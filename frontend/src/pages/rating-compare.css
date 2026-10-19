@@ -99,3 +99,15 @@
   .compare-h2h__table th, .compare-h2h__table td { padding: 8px 6px; }
   .compare-h2h__table td { font-size: 15px; }
 }
+
+/* The line and the chats side by side (docs/CHANNELS.md). */
+.compare-channels { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.compare-channel { display: grid; gap: 8px; padding: 14px 16px; border-radius: var(--radius-m, 16px); background: var(--surface-secondary); min-width: 0; }
+.compare-channel.is-mine { background: var(--accent-tint); box-shadow: inset 3px 0 0 var(--accent-primary); }
+.compare-channel__name { font-weight: 650; }
+.compare-channel__average { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.compare-channel__average strong { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+.compare-channel__average small, .compare-channel__meta { font-size: 13px; color: var(--text-secondary); }
+.compare-channel__bar { display: block; height: 6px; border-radius: 3px; background: var(--progress-tint); overflow: hidden; }
+.compare-channel__bar > span { display: block; height: 100%; border-radius: 3px; background: var(--accent-primary); }
+.compare-channel__scale { font-size: 12px; color: var(--text-tertiary); overflow-wrap: anywhere; }

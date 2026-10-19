@@ -12,7 +12,7 @@ import math
 from dataclasses import dataclass, field
 
 from app.models.contest import MetricDefinition
-from app.models.enums import MetricDirection, MetricKind
+from app.models.enums import ALL_CHANNELS, Channel, MetricDirection, MetricKind
 
 
 @dataclass(slots=True)
@@ -74,6 +74,28 @@ def _completion(definition: MetricDefinition, value: float) -> float:
     return max(0.0, min(ratio, 1.0))
 
 
+def band_points(bands: list[dict], value: float) -> float:
+    """Points of the highest threshold the value reaches (from it and up); below the lowest — 0."""
+    reached = [float(band["points"]) for band in bands if value >= float(band["from"])]
+    return max(reached, default=0.0)
+
+
+def channel_definitions(
+    definitions: list[MetricDefinition], channel: str | None
+) -> list[MetricDefinition]:
+    """The metrics an operator of ``channel`` is scored on: their channel's and the common ones."""
+    own = channel or Channel.LINE
+    return [d for d in definitions if (d.channel or Channel.LINE) in (own, ALL_CHANNELS)]
+
+
+def channel_max_points(definitions: list[MetricDefinition], channel: str | None) -> float:
+    """The most points a week of ``channel`` gives: its metrics that add points (100 by design)."""
+    return sum(
+        d.max_points for d in channel_definitions(definitions, channel)
+        if d.kind == MetricKind.POSITIVE
+    )
+
+
 def score_metric(definition: MetricDefinition, value: float | None) -> MetricScore:
     """Считает баллы (или штраф) по одному показателю."""
     if value is None:
@@ -106,8 +128,13 @@ def score_metric(definition: MetricDefinition, value: float | None) -> MetricSco
             penalty=round(penalty, 2),
         )
 
-    completion = _completion(definition, value)
-    points = completion * definition.max_points
+    if definition.bands:
+        # Steps instead of a share of the target: the highest threshold reached gives its points.
+        points = band_points(definition.bands, value)
+        completion = points / definition.max_points if definition.max_points else 0.0
+    else:
+        completion = _completion(definition, value)
+        points = completion * definition.max_points
     return MetricScore(
         code=definition.code,
         title=definition.title,

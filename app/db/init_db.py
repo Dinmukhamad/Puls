@@ -25,11 +25,31 @@ from app.models import (
     ShopItem,
     User,
 )
-from app.models.enums import BadgeRule, MetricDirection, MetricKind, Role
+from app.models.enums import ALL_CHANNELS, BadgeRule, Channel, MetricDirection, MetricKind, Role
 from app.services.progress import seed_progress_levels
 from app.services.rules import get_rules
 
 logger = logging.getLogger(__name__)
+
+#: The chat operators' quality (docs/CHANNELS.md): the chat KPI's thresholds (80–85 % — 5,
+#: 86–89 % — 10, 90–93 % — 15, 94–96 % — 20, 97–100 % — 25 points) on the line's scale of 100:
+#: ×4.
+CHAT_QUALITY: dict = {
+    "code": "chat_quality",
+    "title": "Качество чатов",
+    "unit": "%",
+    "target_value": 97.0,
+    "max_points": 100.0,
+    "allow_overachievement": False,
+    "sort_order": 15,
+    "channel": Channel.CHAT,
+    "bands": [
+        {"from": 80, "points": 20}, {"from": 86, "points": 40}, {"from": 90, "points": 60},
+        {"from": 94, "points": 80}, {"from": 97, "points": 100},
+    ],
+    "description": "Пороги из KPI чатов (80–85 % — 5, 86–89 % — 10, 90–93 % — 15, 94–96 % — 20, "
+    "97–100 % — 25 баллов), приведены к шкале 100, как у линии: ×4.",
+}
 
 DEFAULT_METRICS: tuple[dict, ...] = (
     {
@@ -92,6 +112,7 @@ DEFAULT_METRICS: tuple[dict, ...] = (
         "max_points": 0.0,
         "sort_order": 90,
         "description": "Антипоказатель: каждое опоздание - прямой штраф в коинах",
+        "channel": ALL_CHANNELS,
     },
     {
         "code": "forbidden_sites",
@@ -103,7 +124,9 @@ DEFAULT_METRICS: tuple[dict, ...] = (
         "max_points": 0.0,
         "sort_order": 91,
         "description": "Антипоказатель: каждый сайт - прямой штраф в коинах (правила начисления)",
+        "channel": ALL_CHANNELS,
     },
+    CHAT_QUALITY,
 )
 
 

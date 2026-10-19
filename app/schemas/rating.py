@@ -167,6 +167,9 @@ class RaceMetric(BaseModel):
     per_unit: float | None = Field(
         default=None, description="Баллов за единицу показателя «больше - лучше» до цели"
     )
+    bands: list[dict[str, float]] | None = Field(
+        default=None, description="Ступени: от порога и выше — его баллы (docs/CHANNELS.md)"
+    )
 
 
 class RaceOption(BaseModel):
@@ -286,6 +289,17 @@ class CompareMetric(BaseModel):
     max_points: float
 
 
+class CompareChannel(BaseModel):
+    """A channel side by side with the other (docs/CHANNELS.md): its operators' average week."""
+
+    channel: str
+    participants: int
+    average: float | None = Field(default=None, description="Средние баллы оператора за неделю")
+    best: CompareBest | None = None
+    is_mine: bool = False
+    metrics: list[dict] = Field(description="Показатели направления с максимумом баллов")
+
+
 class CompareOut(BaseModel):
     """«Рейтинг» оператора: таблица, места по неделям, команды и показатели против всех."""
 
@@ -300,3 +314,5 @@ class CompareOut(BaseModel):
     operators: list[CompareRow]
     teams: list[CompareTeam]
     metrics: list[CompareMetric]
+    channel: str = "line"
+    channels: list[CompareChannel] = Field(default_factory=list)

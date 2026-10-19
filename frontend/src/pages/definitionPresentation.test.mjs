@@ -4,16 +4,23 @@ import { build } from "esbuild";
 import { fileURLToPath } from "node:url";
 
 const built = await build({ entryPoints: [fileURLToPath(new URL("./definitionPresentation.ts", import.meta.url))], bundle: true, platform: "node", format: "esm", write: false });
-const { definitionPresentation } = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString("base64")}`);
+const { definitionPresentation, definitionRow } = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString("base64")}`);
 const row = (extra = {}) => ({ id: 1274, code: "hidden_internal_code", title: "Название", description: null, is_active: true, sort_order: 100, ...extra });
 const metrics = [row({ code: "quality", title: "Качество работы", unit: "%" }), row({ code: "lateness", title: "Опоздания", unit: "шт" }), row({ code: "driver_gratitudes", title: "Благодарности от водителей", unit: "шт" })];
 const values = (data) => Object.fromEntries(data.facts.map((fact) => [fact.label, fact.value]));
 
 test("positive indicators retain goals, points, direction and the configured overachievement option", () => {
   const card = definitionPresentation("metrics", row({ kind: "positive", unit: "%", target_value: 95, max_points: 25, direction: "lower_is_better", allow_overachievement: true }));
-  assert.deepEqual(values(card), { "Цель": "95 %", "Баллы за цель": "25 баллов", "Расчёт": "Меньше — лучше · перевыполнение разрешено" });
-  assert.equal(card.facts.length, 3);
+  assert.deepEqual(values(card), { "Цель": "95 %", "Баллы за цель": "25 баллов", "Расчёт": "Меньше — лучше · перевыполнение разрешено", "Направление": "Линия" });
+  assert.equal(card.facts.length, 4);
   assert.doesNotMatch(JSON.stringify(card), /hidden_internal_code|1274|lower_is_better/);
+});
+
+test("a metric with thresholds lists its steps, its maximum and its channel (docs/CHANNELS.md)", () => {
+  const chat = row({ kind: "positive", unit: "%", target_value: 97, max_points: 100, channel: "chat", bands: [{ from: 90, points: 60 }, { from: 80, points: 20 }, { from: 97, points: 100 }] });
+  assert.deepEqual(values(definitionPresentation("metrics", chat)), { "Ступени": "от 80 % — 20 · от 90 % — 60 · от 97 % — 100", "Максимум": "100 баллов", "Направление": "Чаты" });
+  assert.deepEqual(definitionRow("metrics", chat), { meta: "Ступени: от 80 % — 20 · от 90 % — 60 · от 97 % — 100", value: "До 100 баллов", hint: "по ступеням", coin: false });
+  assert.equal(values(definitionPresentation("metrics", row({ kind: "anti", channel: "all", unit: "шт" })))["Применение"], "До перевода баллов в коины");
 });
 
 test("penalties are described as points deducted before coin conversion, not coins debited", () => {

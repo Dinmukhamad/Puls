@@ -14,7 +14,7 @@ from app.core.deps import HeadUser, SessionDep, StaffUser
 from app.core.errors import ConflictError, DomainError, NotFoundError
 from app.models.badge import BadgeDefinition
 from app.models.contest import MetricDefinition, NominationDefinition
-from app.models.enums import BadgeRule, MetricKind
+from app.models.enums import BadgeRule, MetricDirection, MetricKind
 from app.models.shop import ShopItem
 from app.models.user import User
 from app.schemas.admin import (
@@ -112,6 +112,26 @@ def _validate_metric(data: dict[str, Any]) -> None:
         raise DomainError("У положительного показателя цель должна быть больше нуля")
     if data.get("unit") is not None and len(data["unit"]) > 32:
         raise DomainError("Единица измерения не должна превышать 32 символа")
+    if data.get("channel") is None:
+        raise DomainError("Укажите направление показателя: линия, чаты или общий")
+    bands = data.get("bands")
+    if bands:
+        higher = data["direction"] == MetricDirection.HIGHER_IS_BETTER
+        if data["kind"] != MetricKind.POSITIVE or not higher:
+            raise DomainError("Пороги задаются только у показателя, где больше — лучше")
+        if any(set(band) != {"from", "points"} for band in bands):
+            raise DomainError("У каждого порога нужны значение «от» и баллы")
+        starts = [band["from"] for band in bands]
+        points = [band["points"] for band in bands]
+        if starts != sorted(set(starts)) or points != sorted(points) or min(points) < 0:
+            raise DomainError("Пороги идут по возрастанию, баллы за них не уменьшаются")
+
+
+def _with_bands(data: dict[str, Any]) -> dict[str, Any]:
+    """A metric with thresholds gives at most its top threshold's points."""
+    if data.get("bands"):
+        data["max_points"] = data["bands"][-1]["points"]
+    return data
 
 
 async def _validate_badge(session: SessionDep, data: dict[str, Any]) -> None:
@@ -234,7 +254,7 @@ async def list_metrics(
 async def create_metric(
     session: SessionDep, actor: HeadUser, payload: MetricCreate
 ) -> MetricDefinition:
-    data = _clean_changes(payload.model_dump(), ("unit", "description"))
+    data = _with_bands(_clean_changes(payload.model_dump(), ("unit", "description", "bands")))
     _validate_metric(data)
     metric = MetricDefinition(**data)
     session.add(metric)
@@ -249,7 +269,9 @@ async def update_metric(
     metric = await session.get(MetricDefinition, metric_id)
     if metric is None:
         raise NotFoundError(f"Показатель id={metric_id} не найден")
-    changes = _clean_changes(payload.model_dump(exclude_unset=True), ("unit", "description"))
+    changes = _with_bands(
+        _clean_changes(payload.model_dump(exclude_unset=True), ("unit", "description", "bands"))
+    )
     _validate_metric({**MetricOut.model_validate(metric).model_dump(), **changes})
     before = {field: getattr(metric, field) for field in changes}
     for field, value in changes.items():

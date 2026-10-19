@@ -20,7 +20,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin
 from app.models.coin import JSONType
-from app.models.enums import MetricDirection, MetricKind, WeekStatus
+from app.models.enums import Channel, MetricDirection, MetricKind, WeekStatus
 
 if TYPE_CHECKING:
     from app.models.user import User
@@ -99,6 +99,12 @@ class MetricDefinition(Base, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=100)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: Чьи это баллы: «line», «chat» или «all» — общий для обоих направлений (docs/CHANNELS.md).
+    channel: Mapped[str] = mapped_column(
+        String(16), default=Channel.LINE, server_default=Channel.LINE, index=True
+    )
+    #: Ступени вместо плавного расчёта: [{"from": 80, "points": 20}, …] — от порога и выше.
+    bands: Mapped[list | None] = mapped_column(JSONType, nullable=True)
 
 
 class OperatorWeekMetric(Base, TimestampMixin):

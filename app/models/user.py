@@ -10,7 +10,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.developer import is_developer
 from app.db.base import Base, TimestampMixin
-from app.models.enums import ROLE_LEVEL, Role
+from app.models.enums import ROLE_LEVEL, Channel, Role
 
 if TYPE_CHECKING:
     from app.models.badge import UserBadge
@@ -56,6 +56,10 @@ class User(Base, TimestampMixin):
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
     hired_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # Направление оператора: линия или чаты — свои показатели и соревнование (docs/CHANNELS.md).
+    channel: Mapped[str] = mapped_column(
+        String(16), default=Channel.LINE, server_default=Channel.LINE, nullable=False, index=True
+    )
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Пол задаётся при создании и выбирает фигуру оператора в центре учебного города.
     gender: Mapped[str | None] = mapped_column(String(8), nullable=True)

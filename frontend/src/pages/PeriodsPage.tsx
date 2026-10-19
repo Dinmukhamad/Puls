@@ -158,7 +158,7 @@ function PeriodWorkspace() {
                 const parts = [[row.coins_from_points, "за баллы"], [row.coins_rank_bonus, "за место"], [row.coins_discipline_bonus, "дисциплина"], [row.coins_nomination_bonus, "номинации"]].filter(([value]) => Number(value) !== 0).map(([value, label]) => `${label} ${coins(Number(value))}`);
                 return <li key={row.user_id} className="period-result">
                   <span className={`period-result__rank${row.rank != null && row.rank <= 3 ? " is-top" : ""}`}>{row.rank ?? "—"}</span>
-                  <span className="period-result__person"><Avatar name={row.full_name} id={row.user_id} size={32} /><span><strong>{row.full_name}</strong>{own.length > 0 && <small className="period-result__missing">Нет данных: {missingMetricsLabel(own)}</small>}</span></span>
+                  <span className="period-result__person"><Avatar name={row.full_name} id={row.user_id} size={32} /><span><strong>{row.full_name}</strong>{row.channel === "chat" && <Badge tone="info">Чаты · место среди чатов</Badge>}{own.length > 0 && <small className="period-result__missing">Нет данных: {missingMetricsLabel(own)}</small>}</span></span>
                   <span className="period-result__points">{points(row.final_points)}</span>
                   <span className="period-result__coins"><strong>{coins(row.coins_total)}</strong>{parts.length > 1 && <small>{parts.join(" · ")}</small>}</span>
                 </li>;

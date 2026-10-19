@@ -2,9 +2,13 @@ import { ApiError, request } from "./client";
 import type { ShopItemOut } from "./types";
 
 export type DefinitionKind = "metrics" | "nominations" | "badges";
+/** A metric's threshold: from this value up the metric gives these points (docs/CHANNELS.md). */
+export interface MetricBand { from: number; points: number }
 export type FieldValue = string | number | boolean | null | Record<string, string | number>;
+/** A value of a definition: a field, or a metric's thresholds. */
+export type DefinitionValue = FieldValue | MetricBand[];
 export interface Definition {
-  [key: string]: FieldValue;
+  [key: string]: DefinitionValue;
   id: number;
   code: string;
   title: string;
@@ -12,7 +16,7 @@ export interface Definition {
   is_active: boolean;
   sort_order: number;
 }
-export type DefinitionInput = Record<string, FieldValue>;
+export type DefinitionInput = Record<string, DefinitionValue>;
 export interface Rules {
   points_per_coin: number;
   rank1_bonus: number;

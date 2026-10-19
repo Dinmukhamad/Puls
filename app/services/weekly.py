@@ -29,6 +29,7 @@ from app.models.contest import (
     OperatorWeekResult,
 )
 from app.models.enums import (
+    Channel,
     MetricDirection,
     MetricKind,
     Role,
@@ -41,7 +42,7 @@ from app.services import badges as badges_service
 from app.services import coins as coins_service
 from app.services import economy
 from app.services.rules import get_rules
-from app.services.scoring import points_to_coins, score_week
+from app.services.scoring import channel_definitions, points_to_coins, score_week
 
 #: Служебный код номинации «Лучший прогресс недели»: сравнивает итоговые баллы
 #: с предыдущей неделей вместо обычного показателя.
@@ -187,13 +188,22 @@ async def active_metric_definitions(session: AsyncSession) -> list[MetricDefinit
     return list(rows)
 
 
-def _assign_ranks(results: list[OperatorWeekResult]) -> None:
+def _assign_ranks(
+    results: list[OperatorWeekResult], channels: dict[int, str] | None = None
+) -> None:
     """
-    Расставляет места по убыванию итогового балла.
+    Расставляет места по убыванию итогового балла — внутри каждого направления (docs/CHANNELS.md).
 
     Используется стандартное спортивное ранжирование: при равенстве баллов
     операторы делят место, следующее место пропускается (1, 2, 2, 4).
     """
+    if channels:
+        groups: dict[str, list[OperatorWeekResult]] = {}
+        for result in results:
+            groups.setdefault(channels.get(result.user_id, Channel.LINE), []).append(result)
+        for group in groups.values():
+            _assign_ranks(group)
+        return
     ordered = sorted(
         results,
         key=lambda r: (-r.final_points, r.penalty_points, r.user_id),
@@ -271,7 +281,8 @@ async def calculate_week(
     results: list[OperatorWeekResult] = []
     for user in participants:
         raw = values_by_user.get(user.id, {})
-        score = score_week(definitions, raw)
+        # Each channel is scored on its own metrics and the common discipline (docs/CHANNELS.md).
+        score = score_week(channel_definitions(definitions, user.channel), raw)
         result = OperatorWeekResult(
             week_id=week.id,
             user_id=user.id,
@@ -285,11 +296,13 @@ async def calculate_week(
                 "metrics": [m.as_dict() for m in score.metrics],
                 "reported_codes": sorted(raw.keys()),
                 "previous_final_points": previous_points_map.get(user.id),
+                "channel": user.channel or Channel.LINE,
             },
         )
         results.append(result)
 
-    _assign_ranks(results)
+    # Operators compete within their channel: places, and the weekly prizes for them, are its own.
+    _assign_ranks(results, {user.id: user.channel or Channel.LINE for user in participants})
 
     for result in results:
         if result.previous_rank is not None and result.rank is not None:

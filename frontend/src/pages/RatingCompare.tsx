@@ -11,7 +11,7 @@ import { Sheet } from "../components/Sheet";
 import { Badge, Card, Delta, EmptyState, ErrorState, SegmentedControl, Skeleton } from "../components/ui";
 import { WeekPicker } from "../components/WeekPicker";
 import { weekRange } from "../components/weekCalendar";
-import { coins, plural, points } from "../utils/format";
+import { CHANNEL_LABELS, coins, plural, points } from "../utils/format";
 import { pointsLabel } from "./RacePage";
 import "./rating.css";
 import "./race.css";
@@ -301,6 +301,25 @@ function MetricLine({ metric }: { metric: CompareMetric }) {
       {diff != null && Math.abs(diff) >= 0.01 && <span className={good ? "is-good" : "is-bad"}>{signedPoints(diff)} к среднему</span>}
     </p>
   </li>;
+}
+
+/**
+ * The line and the chats side by side (docs/CHANNELS.md). Each channel races on its own, scores its own metrics on 100
+ * points and is paid at one rate, so the average week of an operator compares fairly. Shown once both have results.
+ */
+export function ChannelsCard({ data }: { data: CompareOut }) {
+  const channels = data.channels ?? [];
+  if (channels.filter((item) => item.participants > 0).length < 2) return null;
+  return <Card title="Направления" className="compare-channels-card"
+    subtitle="Линия и чаты соревнуются отдельно. У каждого свои показатели на 100 баллов и один курс коинов, поэтому средняя неделя сравнима">
+    <ul className="compare-channels">{channels.map((item) => <li key={item.channel} className={`compare-channel${item.is_mine ? " is-mine" : ""}`}>
+      <span className="compare-channel__name">{CHANNEL_LABELS[item.channel]}{item.is_mine && <span className="tag-me">ваше</span>}</span>
+      <span className="compare-channel__average"><strong>{item.average == null ? "—" : points(item.average)}</strong><small>средняя неделя оператора{data.period === "month" ? " за месяц" : ""}</small></span>
+      <span className="compare-channel__bar" aria-hidden="true"><span style={{ width: `${Math.min(100, Math.max(0, item.average ?? 0))}%` }} /></span>
+      <span className="compare-channel__meta">{item.participants} {plural(item.participants, "оператор", "оператора", "операторов")}{item.best ? ` · лучший — ${item.best.is_me ? "вы" : item.best.name}, ${points(item.best.points)}` : ""}</span>
+      <span className="compare-channel__scale">{item.metrics.map((metric) => `${metric.title} — ${points(metric.max_points)}`).join(" · ")}</span>
+    </li>)}</ul>
+  </Card>;
 }
 
 /** Teams by the average points of their operators, with their best operator. */

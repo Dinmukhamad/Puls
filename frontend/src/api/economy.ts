@@ -1,7 +1,7 @@
 import { request } from "./client";
 
 /** The monthly contest (app/services/months.py): places and nominations among all operators. */
-export interface MonthStanding { user_id: number; name: string | null; rank: number | null; points: number; weeks: number; coins_rank_bonus: number; coins_nomination_bonus: number; mine: boolean }
+export interface MonthStanding { user_id: number; name: string | null; rank: number | null; points: number; weeks: number; coins_rank_bonus: number; coins_nomination_bonus: number; mine: boolean; channel?: "line" | "chat" }
 export interface MonthNomination { nomination_id: number; title: string; user_id: number; name: string | null; value: number; coins: number }
 export interface ContestMonth {
   id: number | null; year: number; month: number; label: string; name: string;

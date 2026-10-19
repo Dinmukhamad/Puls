@@ -39,7 +39,9 @@ test("metrics, nominations and achievements are lists of rows: a row opens the e
   const page = read("./SettingsPage.tsx");
   assert.doesNotMatch(page, /definition-card|>Подробнее</);
   assert.match(page, /<button type="button" className=\{`definition-row\$\{row\.is_active \? "" : " is-inactive"\}`\} onClick=\{\(\) => atLeast\("head"\) \? setEditor\(row\) : setDetails\(row\)\}/);
-  assert.match(page, /\{ title: "Рабочие результаты", subtitle: `\$\{count\(results/);
+  // The results by channel, each adding up to 100 points (docs/CHANNELS.md); the penalties are common.
+  assert.match(page, /\{ title: "Линия · рабочие результаты", subtitle: `\$\{count\(results\("line"\)/);
+  assert.match(page, /\{ title: "Чаты · рабочие результаты", subtitle: `\$\{count\(results\("chat"\)/);
   assert.match(page, /\{ title: "Штрафные показатели", subtitle: `\$\{count\(penalties/);
   assert.match(page, /\{kind === "badges" && <span className="definition-row__icon" aria-hidden="true">\{badgeIcon\(row\.icon\)\}<\/span>\}/);
 });

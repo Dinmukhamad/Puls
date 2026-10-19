@@ -25,11 +25,11 @@ from app.models.contest import (
     OperatorWeekMetric,
     OperatorWeekResult,
 )
-from app.models.enums import MetricDirection, MetricKind, Role, WeekStatus
+from app.models.enums import Channel, MetricDirection, MetricKind, Role, WeekStatus
 from app.models.user import User
 from app.services import weekly
 from app.services.rules import get_rules
-from app.services.scoring import score_week
+from app.services.scoring import band_points, channel_definitions, channel_max_points, score_week
 
 PODIUM = 3
 #: Points are kept to hundredths: passing someone takes one hundredth more than they have.
@@ -84,15 +84,22 @@ def _rank(runners: list[Runner]) -> None:
         previous = runner.points
 
 
-async def standings(session: AsyncSession, week: ContestWeek) -> tuple[list[Runner], bool]:
-    """All operators of the week, best first, and whether they were scored live (not calculated)."""
-    rows = (
-        await session.execute(
-            select(OperatorWeekResult, User)
-            .join(User, User.id == OperatorWeekResult.user_id)
-            .where(OperatorWeekResult.week_id == week.id, User.role == Role.OPERATOR)
-        )
-    ).all()
+async def standings(
+    session: AsyncSession, week: ContestWeek, channel: str | None = None
+) -> tuple[list[Runner], bool]:
+    """
+    The operators of the week, best first, and whether they were scored live (not calculated).
+    With ``channel``, only that channel's operators: each channel races on its own
+    (docs/CHANNELS.md).
+    """
+    query = (
+        select(OperatorWeekResult, User)
+        .join(User, User.id == OperatorWeekResult.user_id)
+        .where(OperatorWeekResult.week_id == week.id, User.role == Role.OPERATOR)
+    )
+    if channel is not None:
+        query = query.where(User.channel == channel)
+    rows = (await session.execute(query)).all()
     if rows:
         runners = [
             Runner(
@@ -110,13 +117,13 @@ async def standings(session: AsyncSession, week: ContestWeek) -> tuple[list[Runn
     if not values:
         return [], True
     definitions = await weekly.active_metric_definitions(session)
-    users = await session.scalars(
-        select(User).where(User.id.in_(values.keys()), User.role == Role.OPERATOR)
-    )
+    query = select(User).where(User.id.in_(values.keys()), User.role == Role.OPERATOR)
+    if channel is not None:
+        query = query.where(User.channel == channel)
     runners = []
-    for user in users:
+    for user in await session.scalars(query):
         mine = values.get(user.id, {})
-        score = score_week(definitions, mine)
+        score = score_week(channel_definitions(definitions, user.channel), mine)
         runners.append(Runner(
             user=user, points=score.final_points, penalty=score.penalty_points,
             breakdown={"metrics": [m.as_dict() for m in score.metrics],
@@ -161,6 +168,10 @@ def value_for(metric: dict, wanted: float) -> float | None:
     target, top, step = metric["target"], metric["max_points"], _step(metric["unit"])
     if wanted > top + EPS or wanted <= 0:
         return None
+    if metric.get("bands"):
+        # Thresholds: the lowest one that gives at least the points wanted.
+        reach = [float(b["from"]) for b in metric["bands"] if float(b["points"]) + EPS >= wanted]
+        return min(reach) if reach else None
     if target <= 0:
         return step
     if metric["direction"] == MetricDirection.LOWER_IS_BETTER:
@@ -173,14 +184,17 @@ def _option(metric: dict, gain: float) -> dict | None:
     need = value_for(metric, metric["points"] + gain)
     if need is None:
         return None
-    got = points_for(metric["direction"], metric["target"], metric["max_points"], need)
+    got = band_points(metric["bands"], need) if metric.get("bands") else points_for(
+        metric["direction"], metric["target"], metric["max_points"], need)
     return {
         "code": metric["code"], "title": metric["title"], "unit": metric["unit"],
         "value": metric["value"], "need": need, "gain": round(got - metric["points"], 2),
     }
 
 
-def metrics_of(breakdown: dict | None, directions: dict[str, str]) -> list[dict]:
+def metrics_of(
+    breakdown: dict | None, directions: dict[str, str], bands: dict[str, list] | None = None
+) -> list[dict]:
     """The operator's positive metrics with the points they still lack, the biggest loss first."""
     if not breakdown:
         return []
@@ -193,14 +207,17 @@ def metrics_of(breakdown: dict | None, directions: dict[str, str]) -> list[dict]
         value = item.get("value") if shown else None
         direction = directions.get(item["code"], str(MetricDirection.HIGHER_IS_BETTER))
         target, top = float(item.get("target") or 0), float(item["max_points"])
+        steps = (bands or {}).get(item["code"])
         out.append({
             "code": item["code"], "title": item["title"], "unit": item.get("unit"),
             "direction": direction, "value": value, "target": target,
             "points": round(float(item.get("points") or 0), 2), "max_points": top,
             "lost": round(top - float(item.get("points") or 0), 2), "reported": value is not None,
-            # A unit more of a "more is better" metric is worth max/target points up to the target.
+            # A unit more of a "more is better" metric is worth max/target points up to the target;
+            # a metric with thresholds moves by steps instead.
             "per_unit": round(top / target, 2)
-            if target > 0 and direction == MetricDirection.HIGHER_IS_BETTER else None,
+            if target > 0 and direction == MetricDirection.HIGHER_IS_BETTER and not steps else None,
+            "bands": steps,
         })
     out.sort(key=lambda m: (not m["reported"], -m["lost"]))
     return out
@@ -277,18 +294,18 @@ async def race(session: AsyncSession, viewer: User, week_id: int | None) -> dict
     if week is None:
         return empty
 
-    runners, live = await standings(session, week)
-    directions = {
-        d.code: str(d.direction) for d in await session.scalars(select(MetricDefinition))
-    }
+    channel = viewer.channel or Channel.LINE
+    runners, live = await standings(session, week, channel)
+    every = list(await session.scalars(select(MetricDefinition)))
+    directions = {d.code: str(d.direction) for d in every}
+    bands = {d.code: d.bands for d in every if d.bands}
     me = next((r for r in runners if r.user.id == viewer.id), None)
     mine = me.points if me else None
     others = [r for r in runners if r.user.id != viewer.id]
 
-    metrics = metrics_of(me.breakdown if me else None, directions)
+    metrics = metrics_of(me.breakdown if me else None, directions, bands)
     if not metrics:
-        defs = await weekly.active_metric_definitions(session)
-        top = sum(d.max_points for d in defs if d.kind == MetricKind.POSITIVE)
+        top = channel_max_points(await weekly.active_metric_definitions(session), channel)
     else:
         top = sum(m["max_points"] for m in metrics)
 

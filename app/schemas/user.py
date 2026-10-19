@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, mo
 
 from app.core.config import settings
 from app.core.phone import normalize_phone
-from app.models.enums import Role
+from app.models.enums import Channel, Role
 from app.schemas.common import ORMModel
 
 Gender = Literal["male", "female"]
@@ -52,6 +52,7 @@ class UserOut(ORMModel):
     is_active: bool
     is_developer: bool = False
     hired_on: date | None = None
+    channel: Channel = Channel.LINE
     group: GroupBrief | None = None
     created_at: datetime | None = None
     can_manage_credentials: bool | None = None
@@ -134,6 +135,7 @@ class UserCreate(PasswordMixin, PhoneMixin, TelegramUsernameMixin):
     group_id: int | None = Field(default=None, gt=0)
     supervisor_id: int | None = Field(default=None, gt=0)
     hired_on: date | None = None
+    channel: Channel = Channel.LINE
     gender: Gender | None = None
 
     @field_validator("login", "full_name", mode="before")
@@ -152,13 +154,14 @@ class UserUpdate(PhoneMixin, TelegramUsernameMixin):
     supervisor_id: int | None = Field(default=None, gt=0)
     is_active: bool | None = None
     hired_on: date | None = None
+    channel: Channel | None = None
     gender: Gender | None = None
 
     @model_validator(mode="after")
     def _required_fields_not_null(self) -> UserUpdate:
-        for name in ("full_name", "role", "is_active"):
+        for name in ("full_name", "role", "is_active", "channel"):
             if name in self.model_fields_set and getattr(self, name) is None:
-                raise ValueError("ФИО, роль и статус не могут быть пустыми")
+                raise ValueError("ФИО, роль, статус и направление не могут быть пустыми")
         return self
 
 

@@ -165,6 +165,12 @@ function RaceAdvice({ data }: { data: RaceOut }) {
   </Card>;
 }
 
+/** «следующая ступень — от 94 %: 80 баллов»: what a metric with thresholds gives one step up. */
+export function nextBand(metric: Pick<RaceMetric, "bands" | "points" | "unit">): string {
+  const next = (metric.bands ?? []).filter((band) => band.points > metric.points).sort((a, b) => a.from - b.from)[0];
+  return next ? `следующая ступень — от ${withUnit(next.from, metric.unit)}: ${pointsLabel(next.points)}` : "";
+}
+
 function MetricRow({ metric: m }: { metric: RaceMetric }) {
   return <li className="race-metric">
     <div className="race-metric__head">
@@ -174,7 +180,9 @@ function MetricRow({ metric: m }: { metric: RaceMetric }) {
       </span>
     </div>
     <p className="small secondary">{m.reported
-      ? <>{withUnit(m.value, m.unit)} · цель {withUnit(m.target, m.unit)} · {points(m.points)} из {points(m.max_points)}{m.per_unit && m.lost > 0 ? ` · +1${m.unit ? ` ${m.unit}` : ""} = +${pointsLabel(m.per_unit)}` : ""}</>
+      ? m.bands?.length
+        ? <>{withUnit(m.value, m.unit)} · {points(m.points)} из {points(m.max_points)}{m.lost > 0 ? ` · ${nextBand(m)}` : ""}</>
+        : <>{withUnit(m.value, m.unit)} · цель {withUnit(m.target, m.unit)} · {points(m.points)} из {points(m.max_points)}{m.per_unit && m.lost > 0 ? ` · +1${m.unit ? ` ${m.unit}` : ""} = +${pointsLabel(m.per_unit)}` : ""}</>
       : "Показатель ещё не загружен — после загрузки места пересчитаются"}</p>
     <Progress value={m.reported && m.max_points ? m.points / m.max_points : 0} tone={!m.reported || m.lost > 0 ? "warning" : "success"} label={m.title} size="s" />
   </li>;

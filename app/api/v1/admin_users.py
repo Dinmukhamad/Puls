@@ -357,6 +357,7 @@ async def create_user(
         role=payload.role,
         group_id=group_id,
         hired_on=payload.hired_on,
+        channel=payload.channel,
         gender=payload.gender,
         hashed_password=hash_password(payload.password),
     )
