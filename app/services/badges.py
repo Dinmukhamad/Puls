@@ -345,11 +345,7 @@ def badge_output(progress, award):
         coins_reward=badge.coins_reward or 0,
         coins_awarded=progress.coins_awarded,
         category="level" if milestone else "work",
-        action_url="/training"
-        if badge.rule_type == BadgeRule.LEARNING_COUNT
-        else "/progress"
-        if badge.rule_type == BadgeRule.TOTAL_EARNED
-        else "/cabinet",
+        action_url="/training" if badge.rule_type == BadgeRule.LEARNING_COUNT else "/cabinet",
     )
 
 

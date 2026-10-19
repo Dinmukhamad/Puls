@@ -36,7 +36,7 @@ const MEDAL_LABEL: Record<string, string> = {
 export function RatingPage() {
   const [params, setParams] = useSearchParams();
   const { user } = useAuth();
-  if (params.get("tab") === "progress") return <Navigate to="/progress" replace />;
+  if (params.get("tab") === "progress") return <Navigate to="/cabinet" replace />;
   // Operators compare themselves with everyone (docs/RATING_COMPARE.md); staff keep the contest tables.
   if (user?.role === "operator") return <OperatorRating />;
   // The contest is monthly (docs/COIN_ECONOMY.md); the weeks stay one tap away.

@@ -28,7 +28,6 @@ import { AuditPage } from "./pages/AuditPage";
 import { AccessPage } from "./pages/AccessPage";
 import { AnalyticsPage } from "./pages/AnalyticsPage";
 import { SummaryPage } from "./pages/SummaryPage";
-import { ProgressPage } from "./pages/ProgressPage";
 import { TrainerHome } from "./pages/TrainingTools";
 import { DriverAnalyticsPage } from "./pages/DriverAnalyticsPage";
 import { LevelsAdminPage } from "./pages/LevelsAdminPage";
@@ -107,7 +106,8 @@ export function App() {
         <Route path="/shop" element={<ShopPage />} />
         <Route path="/profile" element={<Suspense fallback={<Skeleton height={300} />}><ProfilePage /></Suspense>} />
         <Route path="/sessions" element={<Navigate to="/admin/sessions" replace />} />
-        <Route path="/progress" element={<ProgressPage />} />
+        {/* «Мой прогресс» is gone: the level and the nearest achievements are in the cabinet. */}
+        <Route path="/progress" element={<Navigate to="/cabinet" replace />} />
         <Route path="/wallet" element={<WalletPage />} />
         <Route path="/admin/wallet" element={<WalletPage administrative />} />
         <Route path="/games" element={<GamesPage />} />

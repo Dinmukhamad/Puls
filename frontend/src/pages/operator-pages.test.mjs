@@ -131,7 +131,7 @@ test("operator cabinet keeps weekly metrics beside the wallet without removed su
   assert.deepEqual(queries.sort(), ["badges", "coin-progress", "dashboard", "wallet"]);
 });
 
-test("old rating progress links lead to coin progress and levels", async () => {
+test("old progress links lead to the cabinet, where the level and achievements are", async () => {
   const { RatingPage } = await component("./RatingPage.tsx", {
     "test:auth": { useAuth: () => ({ user: { role: "operator" } }) },
     "react-router-dom": {
@@ -139,7 +139,7 @@ test("old rating progress links lead to coin progress and levels", async () => {
       Navigate: ({ to }) => React.createElement("a", { href: to }, "redirect"),
     },
   });
-  assert.match(renderToStaticMarkup(React.createElement(RatingPage)), /href="\/progress"/);
+  assert.match(renderToStaticMarkup(React.createElement(RatingPage)), /href="\/cabinet"/);
 });
 
 test("personal history ignores obsolete URL filters, shows own ledger and leaves the team wallet unchanged", async () => {

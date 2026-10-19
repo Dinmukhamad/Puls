@@ -135,13 +135,11 @@ test("coin history is a single staff destination and follows motivation access",
   }
 });
 
-test("operator home contains only the cabinet while progress stays in results", () => {
+test("operator home contains only the cabinet and results the rating and the race", () => {
   const sections = nav.visibleNavigation("operator");
   assert.deepEqual(sections.find((item) => item.id === "home").tabs.map((item) => item.to), ["/cabinet"]);
-  assert.deepEqual(sections.find((item) => item.id === "results").tabs.map((item) => item.to), ["/rating?tab=board", "/race", "/progress"]);
+  assert.deepEqual(sections.find((item) => item.id === "results").tabs.map((item) => item.to), ["/rating?tab=board", "/race"]);
   assert.equal(nav.currentSection("operator", "/race")?.id, "results");
-  assert.equal(sections.flatMap((item) => item.tabs).filter((item) => item.label === "Мой прогресс").length, 1);
-  assert.equal(nav.currentSection("operator", "/progress")?.id, "results");
   assert.ok(sections.every((item) => item.tabs.every((item) => item.to !== "/rating?tab=progress")));
 });
 
@@ -158,17 +156,20 @@ test("personal coin history keeps its guarded legacy route without a navigation 
     assert.equal(nav.canVisit(role, "/wallet", { ...allowed, personal: false }), false);
     assert.equal(nav.currentSection(role, "/wallet", "", { ...allowed, personal: false }), undefined);
     assert.equal(nav.canVisit(role, "/cabinet#wallet", { ...allowed, personal: false }), false);
-    if (role !== "operator") assert.deepEqual(sections.find(item => item.id === "home").tabs.map(link => link.to), ["/admin/summary", "/cabinet", "/progress"]);
+    if (role !== "operator") assert.deepEqual(sections.find(item => item.id === "home").tabs.map(link => link.to), ["/admin/summary", "/cabinet"]);
   }
 });
 
-test("operator progress follows results access independently of cabinet access", () => {
-  const allowed = { ...nav.defaultAccess("operator"), personal: false };
-  assert.equal(nav.currentSection("operator", "/progress", "", allowed)?.id, "results");
-  assert.deepEqual(nav.visibleNavigation("operator", allowed).find((item) => item.id === "results").tabs.map((item) => item.to), ["/rating?tab=board", "/race", "/progress"]);
-  const denied = { ...nav.defaultAccess("operator"), results: false };
-  assert.equal(nav.canVisit("operator", "/progress", denied), false);
-  assert.ok(nav.visibleNavigation("operator", denied).every((item) => item.tabs.every((item) => item.to !== "/progress")));
+test("«Мой прогресс» is in no menu: the level and the nearest achievements are in the cabinet", () => {
+  for (const role of ["operator", "supervisor", "head", "admin", "trainer", "trainee"]) {
+    const all = Object.fromEntries(Object.keys(nav.defaultAccess("admin")).map(key => [key, true]));
+    const tabs = nav.visibleNavigation(role, all).flatMap((item) => item.tabs);
+    assert.ok(tabs.every((item) => item.to !== "/progress" && item.label !== "Мой прогресс"), role);
+  }
+  // Old links lead to the cabinet: whoever may open the cabinet passes the guard on the way there.
+  assert.equal(nav.routeSection("/progress"), "personal");
+  assert.equal(nav.canVisit("operator", "/progress", nav.defaultAccess("operator")), true);
+  assert.equal(nav.canVisit("operator", "/progress", { ...nav.defaultAccess("operator"), personal: false }), false);
 });
 
 test("sessions have one developer-only entry and never appear in the profile", () => {

@@ -64,7 +64,7 @@ test("the tour walks every section of the operator's menu, then building, and en
   // The shell lists the sections there are: it stays in view while the menu «Ещё» closes and the next page loads.
   for (const step of SITE_TOUR.filter(step => /^\[data-tour=nav-(?!more)/.test(step.target) && step.action)) assert.equal(step.when, `.shell[data-sections~=${step.target.match(/nav-([\w-]+)/)[1]}]`);
   assert.match(read("../components/AppLayout.tsx"), /\$\{immersive \? " shell--immersive" : ""\}`\} data-sections=\{items\.map\(\(item\) => item\.id\)\.join\(" "\)\}>/);
-  const pages = { "[data-tour=cabinet-progress]": 4, "[data-tour=rating-views]": 2, "[data-tour=progress-earn]": 1, "[data-tour=chest]": 1, "[data-tour=shop-wallet]": 2, "[data-tour=profile]": 1 };
+  const pages = { "[data-tour=cabinet-progress]": 4, "[data-tour=rating-views]": 1, "[data-tour=chest]": 1, "[data-tour=shop-wallet]": 2, "[data-tour=profile]": 1 };
   for (const [opened, count] of Object.entries(pages)) assert.equal(SITE_TOUR.filter(step => step.when === opened && !step.target.includes("nav-")).length, count, opened);
   // Building: what, where (the map is open to taps, a taken place or one's own building is explained), buy without buying.
   const where = SITE_TOUR.find(step => step.target === ".city-frame");

@@ -1,15 +1,14 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { economy } from "../api/economy";
 import { rating } from "../api/endpoints";
 import type { CompareMetric, CompareOut, CompareRow, CompareTeam } from "../api/types";
 import { Chart } from "../components/Chart";
-import { GlassSurface } from "../components/GlassSurface";
-import { MedalIcon } from "../components/icons";
+import { ChevronLeftIcon, ChevronRightIcon, MedalIcon } from "../components/icons";
 import { Sheet } from "../components/Sheet";
-import { Badge, Card, Delta, EmptyState, ErrorState, SegmentedControl, Select, Skeleton } from "../components/ui";
+import { Badge, Card, Delta, EmptyState, ErrorState, SegmentedControl, Skeleton } from "../components/ui";
 import { WeekPicker } from "../components/WeekPicker";
 import { weekRange } from "../components/weekCalendar";
 import { coins, plural, points } from "../utils/format";
@@ -83,40 +82,47 @@ export function scale(metric: Pick<CompareMetric, "me" | "average" | "best" | "t
   return (value: number) => Math.max(0, Math.min(100, ((lower ? to - value : value - from) / (to - from)) * 100));
 }
 
-export function RatingHead() {
-  return <header className="page-head"><div><h1 className="page-title">Рейтинг</h1>
-    <p className="page-subtitle">Ваше место среди всех операторов: по неделям, по показателям и рядом с коллегами</p></div></header>;
+export function RatingHead({ children }: { children?: ReactNode }) {
+  return <header className="page-head rating-compare__head"><div><h1 className="page-title">Рейтинг</h1>
+    <p className="page-subtitle">Ваше место среди всех операторов</p></div>{children}</header>;
 }
 
 export function CompareLoading() {
   return <div className="page-skeleton"><Skeleton height={220} radius="var(--radius-xl)" /><Skeleton height={420} radius="var(--radius-xl)" /></div>;
 }
 
-/** Month or week, which one, and how final its places are. */
+/** «Октябрь 2026» for the month's stepper. */
+const monthTitle = (name: string) => name.charAt(0).toLocaleUpperCase("ru-RU") + name.slice(1);
+
+/** One small row in the page's head: month or week, which one (arrows step through them), and how final its places are. */
 export function CompareFilters({ state }: { state: CompareState }) {
   const { data, period, set, weekId } = state;
   const weeks = useQuery({ queryKey: ["weeks"], queryFn: () => rating.weeks(104), enabled: period === "week" });
   const months = useQuery({ queryKey: ["contest-months"], queryFn: economy.months, enabled: period === "month" });
+  const shown = data?.month;
+  const order = (m: { year: number; month: number }) => m.year * 12 + m.month;
   const choices = [...(months.data ?? [])];
-  if (data?.month && !choices.some((m) => m.year === data.month!.year && m.month === data.month!.month)) choices.unshift({ year: data.month.year, month: data.month.month, label: "", name: data.month.name, status: data.status });
+  if (shown && !choices.some((m) => order(m) === order(shown))) choices.push({ year: shown.year, month: shown.month, label: "", name: shown.name, status: data.status });
+  choices.sort((a, b) => order(a) - order(b));
+  const index = shown ? choices.findIndex((m) => order(m) === order(shown)) : -1;
+  const step = (m: { year: number; month: number } | undefined) => m && set({ month: `${m.year}-${m.month}`, with: undefined });
   const closed = data?.weeks.filter((week) => week.status === "closed").length ?? 0;
   const status = !data ? "" : period === "week"
-    ? data.live ? "Неделя идёт · по загруженным данным" : data.status === "closed" ? "Итог опубликован" : "Предварительный расчёт"
+    ? data.live ? "Неделя идёт" : data.status === "closed" ? "Итог опубликован" : "Предварительный расчёт"
     : data.status === "closed" ? "Итоги опубликованы" : `Закрыто недель: ${closed} из ${data.month?.weeks_planned ?? closed}`;
-  return <GlassSurface variant="regular" className="filterbar compare-filters" data-tour="rating-views">
-    <div className="compare-filters__field"><span className="field__label">Период</span>
-      <SegmentedControl label="Период рейтинга" value={period} options={[{ value: "month", label: "Месяц" }, { value: "week", label: "Неделя" }]}
-        onChange={(value) => set({ period: value === "week" ? "week" : undefined, view: undefined, week: undefined, month: undefined, with: undefined })} /></div>
+  return <div className="compare-filters" data-tour="rating-views">
+    <SegmentedControl label="Период рейтинга" value={period} options={[{ value: "month", label: "Месяц" }, { value: "week", label: "Неделя" }]}
+      onChange={(value) => set({ period: value === "week" ? "week" : undefined, view: undefined, week: undefined, month: undefined, with: undefined })} />
     {period === "week"
       ? <WeekPicker label="Неделя" weeks={weeks.data ?? []} value={weekId} resolvedWeekId={data?.week?.id} latestLabel="Текущая неделя" latestPreference="latest" loading={weeks.isLoading}
-        onChange={(value) => set({ week: value === undefined ? undefined : String(value) })} />
-      : <label className="field compare-filters__field"><span className="field__label">Месяц</span>
-        <Select aria-label="Месяц рейтинга" value={data?.month ? `${data.month.year}-${data.month.month}` : ""} placeholder="Месяц"
-          onChange={(value) => set({ month: value })}
-          options={choices.map((m) => ({ value: `${m.year}-${m.month}`, label: m.name }))} /></label>}
-    {status && <div className="compare-filters__field compare-filters__status"><span className="field__label">Итоги</span>
-      <div><Badge tone={data?.status === "closed" ? "success" : data?.live ? "info" : "warning"}>{status}</Badge></div></div>}
-  </GlassSurface>;
+        onChange={(value) => set({ week: value === undefined ? undefined : String(value), with: undefined })} />
+      : <div className="compare-step" role="group" aria-label="Месяц рейтинга">
+        <button type="button" className="compare-step__arrow" aria-label="Предыдущий месяц" disabled={index <= 0} onClick={() => step(choices[index - 1])}><ChevronLeftIcon size={16} /></button>
+        <span className="compare-step__label" aria-live="polite">{shown ? monthTitle(shown.name) : "…"}</span>
+        <button type="button" className="compare-step__arrow" aria-label="Следующий месяц" disabled={index < 0 || index >= choices.length - 1} onClick={() => step(choices[index + 1])}><ChevronRightIcon size={16} /></button>
+      </div>}
+    {status && <Badge tone={data?.status === "closed" ? "success" : data?.live ? "info" : "warning"}>{status}</Badge>}
+  </div>;
 }
 
 /** Places week by week as small chips: the top three in gold, a week without results yet outlined. */

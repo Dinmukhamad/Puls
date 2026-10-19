@@ -23,7 +23,7 @@ export const ACCOUNT_SECTION = section("profile", "Профиль", UserIcon, [
   tab("/profile", "Мои данные и настройки"), tab("/notifications", "Уведомления"),
 ]);
 const QR_ACCESS_SECTION = section("qr_access", "QR-доступ", QrIcon, [tab("/qr-access", "Сканер QR")]);
-const personal = [tab("/cabinet", "Мой кабинет"), tab("/progress", "Мой прогресс")];
+const personal = [tab("/cabinet", "Мой кабинет")];
 const learningTabs = [tab("/training/city", "Мой город · миссии"), tab("/training/voice", "Голосовой тренажёр")];
 const staffLearning = section("training", "Обучение", SparkIcon, [
   tab("/admin/learning/city", "Миссии города"), tab("/training/city", "Город оператора"),
@@ -73,8 +73,8 @@ export const ROLE_NAVIGATION: Record<Role, readonly NavItem[]> = {
     ACCOUNT_SECTION,
   ],
   operator: [
-    section("home", "Главная", HomeIcon, personal.filter((item) => item.to !== "/progress")),
-    section("results", "Результаты", TrophyIcon, [tab("/rating?tab=board", "Рейтинг"), tab("/race", "Гонка недели"), tab("/progress", "Мой прогресс")]),
+    section("home", "Главная", HomeIcon, personal),
+    section("results", "Результаты", TrophyIcon, [tab("/rating?tab=board", "Рейтинг"), tab("/race", "Гонка недели")]),
     section("training", "Обучение", SparkIcon, learningTabs),
     // Лента удачи вынесена отдельным пунктом «Удача»: это ежедневное действие
     // на минуту, и третьей вкладкой внутри «Наград» его каждый раз приходилось искать.
@@ -103,13 +103,13 @@ export function routeSection(pathname: string, search = "", role: Role = "operat
   if (pathname === "/training/work-sites" || pathname === "/training/city" || pathname === "/training/voice" || pathname.startsWith("/training/voice/") || pathname.startsWith("/training/scenarios/")) return role === "operator" || role === "trainee" ? "training" : "learning_admin";
   const matches = (path: string) => pathname === path || pathname.startsWith(`${path}/`);
   if (pathname === "/trainer" || pathname === "/admin/learning-analytics") return "learning_admin";
-  if (matches("/progress")) return role === "operator" ? "results" : "personal";
   if (["/sessions", "/admin/sessions"].some(matches)) return "developer";
   if (["/profile", "/notifications"].some(matches)) return "account";
   if (matches("/admin/access")) return "access";
   if (matches("/admin/settings")) return new URLSearchParams(search).get("tab") === "badges" ? "motivation" : "performance";
   const routes: [SectionCode, string[]][] = [
-    ["personal", ["/cabinet", "/wallet"]], ["results", ["/rating", "/race"]],
+    // /progress is the old «Мой прогресс»: it leads to the cabinet, so it is checked like the cabinet.
+    ["personal", ["/cabinet", "/wallet", "/progress"]], ["results", ["/rating", "/race"]],
     ["training", ["/training", "/simulator"]], ["rewards", ["/shop", "/games"]],
     ["overview", ["/admin/summary"]], ["team", ["/admin/users", "/admin/groups", "/admin/operators"]],
     ["analytics", ["/analytics"]], ["performance", ["/admin/periods"]], ["learning_admin", ["/admin/learning"]],

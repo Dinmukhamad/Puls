@@ -19,8 +19,7 @@ export function OperatorRating() {
   const state = useCompare();
   const { data, colleague, set } = state;
   return <div className="stack rating-compare">
-    <RatingHead />
-    <CompareFilters state={state} />
+    <RatingHead><CompareFilters state={state} /></RatingHead>
     {state.query.isLoading ? <CompareLoading />
       : state.query.isError || !data ? <CompareError state={state} />
       : <>
