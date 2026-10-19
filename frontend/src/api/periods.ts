@@ -39,7 +39,10 @@ export const periods = {
 export interface ReportsResult {
   month: string; matched: number; matched_names: string[]; unmatched: string[];
   without_data: number; day_values: number; detail: string | null;
-  files: { filename: string; kind: "team" | "quality" | "unknown"; people: number }[];
+  /** line / chat — a team's report, quality — reviewers' scores. */
+  files: { filename: string; kind: "line" | "chat" | "quality" | "unknown"; people: number }[];
+  /** What the reports could not place, and whose it is. */
+  notes?: { code: string; title: string; names: string[] }[];
   weeks: { label: string; starts_on: string; ends_on: string; status: string; operators: number }[];
 }
 const reportsForm = (files: File[], month: string) => {

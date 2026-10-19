@@ -29,9 +29,18 @@ class ImportPreviewOut(BaseModel):
 
 class ReportFileOut(BaseModel):
     filename: str
-    #: team (hours, calls, efficiency), quality (reviewers' scores) or unknown.
-    kind: Literal["team", "quality", "unknown"]
+    #: line or chat (a team's hours, calls or chats, fines), quality (reviewers' scores) or
+    #: unknown.
+    kind: Literal["line", "chat", "quality", "unknown"]
     people: int
+
+
+class ReportNoteOut(BaseModel):
+    """Data the reports could not place, and whose it is."""
+
+    code: str
+    title: str
+    names: list[str] = Field(default_factory=list)
 
 
 class ReportWeekOut(BaseModel):
@@ -50,5 +59,6 @@ class ReportPreviewOut(BaseModel):
     unmatched: list[str] = Field(default_factory=list)
     without_data: int = 0
     day_values: int = 0
+    notes: list[ReportNoteOut] = Field(default_factory=list)
     weeks: list[ReportWeekOut] = Field(default_factory=list)
     detail: str | None = None

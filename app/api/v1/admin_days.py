@@ -124,6 +124,7 @@ async def _report_out(session, parsed, plan, weeks=None, detail=None) -> ReportP
         unmatched=plan["unmatched"],
         without_data=len(plan["without_data"]),
         day_values=len(plan["daily"]),
+        notes=plan["notes"],
         weeks=[
             ReportWeekOut(
                 **week,
@@ -174,7 +175,7 @@ async def upload_reports(
         raise DomainError(
             "В отчётах нет операторов, которых вы ведёте на сайте", code="no_operators"
         )
-    await szov_reports.ensure_metrics(session)
+    await szov_reports.ensure_metrics(session, parsed)
     for start in (item["days"][0] for item in plan["weeks"]):
         await weekly_service.get_or_create_week(session, start)
     result = await szov_reports.save(

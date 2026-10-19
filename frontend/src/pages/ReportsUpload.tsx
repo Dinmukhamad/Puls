@@ -8,8 +8,8 @@ import { useToast } from "../components/Toast";
 import { Badge, Button, Card, ErrorState, KPI, Select } from "../components/ui";
 import { coins, periodLabel, WEEK_STATUS_LABELS } from "../utils/format";
 
-const KIND_LABELS = { team: "Отчёт команды", quality: "Оценки проверяющих", unknown: "Не распознан" } as const;
-const KIND_TONES = { team: "accent", quality: "accent", unknown: "danger" } as const;
+const KIND_LABELS = { line: "Линия · отчёт команды", chat: "Чаты · отчёт команды", quality: "Оценки проверяющих", unknown: "Не распознан" } as const;
+const KIND_TONES = { line: "accent", chat: "accent", quality: "accent", unknown: "danger" } as const;
 
 /** Monthly SZoV reports as exported: every day for analytics, full weeks for the contest. */
 export function ReportsUpload({ onSaved }: { onSaved?: () => void }) {
@@ -50,7 +50,7 @@ export function ReportsUpload({ onSaved }: { onSaved?: () => void }) {
   const clear = () => choose([]);
 
   return <Card title="Месячные отчёты СЗоВ"
-    subtitle="Загрузите отчёты команд (report_…) и оценки проверяющих (monthly_report_dates_…) — всё остальное сайт посчитает сам">
+    subtitle="Загрузите отчёты команд линии и чатов (report_…) и оценки проверяющих (monthly_report_dates_…) — всё остальное сайт посчитает сам">
     <div className="reports-upload">
       <FileDrop accept=".xlsx" multiple disabled={busy} files={files} onFiles={list => choose(list)}
         title={files.length ? `Выбрано файлов: ${files.length}` : "Перетащите сюда все файлы за месяц"} busy={inspect.isPending && "Читаем отчёты…"}
@@ -69,10 +69,13 @@ export function ReportsUpload({ onSaved }: { onSaved?: () => void }) {
       {!!result.unmatched.length && <details className="workflow-note ui-note"><summary>Кого нет на сайте ({result.unmatched.length})</summary>
         <p>Их данные пропущены. Проверьте ФИО в карточке сотрудника: оно должно совпадать с отчётом.</p>
         <p>{result.unmatched.join(", ")}</p></details>}
+      {result.notes?.map((note) => <details key={note.code} className="workflow-note ui-note"><summary>{note.title} ({note.names.length})</summary>
+        <p>{note.names.join(", ")}</p></details>)}
       <div><h3 className="group-title">Недели месяца</h3>
         <ul className="workflow-issues">{result.weeks.map((week) => <li key={week.label}>
           {periodLabel(week.starts_on, week.ends_on)} · {coins(week.operators)} операторов · {week.status === "closed" ? "закрыта, не изменится" : week.status === "new" ? "будет открыта" : WEEK_STATUS_LABELS[week.status] ?? week.status}
         </li>)}</ul>
+        <p className="workflow-note">Линия: норма часов (с тренингами, тех. сбоями и офлайн-активностью, против нормы из отчёта), переработки, эффективность, звонки в час. Чаты: норма часов, переработки, среднее время ответа. Качество — из оценок проверяющих, опоздания — из «Штрафов».</p>
         <p className="workflow-note">Каждый день месяца попадёт в аналитику по дням и месяцам. Неполные недели на краях месяца идут только в дни. Коины не начисляются — итоги недели публикуются как обычно.
           {!atLeast("head") && " Рейтинг пересчитает руководитель."}</p>
       </div>
