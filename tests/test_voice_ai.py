@@ -361,15 +361,16 @@ async def test_a_past_call_graded_by_the_rules_can_be_sent_to_claude(
     assert result["ai_review"]["rules_score"] == rules["score"]
     again = await client.post(url, headers=headers)
     assert again.json()["result"]["ai_review"] == result["ai_review"] and len(fake.calls) == 2
+    # A leader sends an operator's call from the team's page (voice_team), not this one.
     other = auth(await login(client, supervisor.login))
-    assert (await client.post(url, headers=other)).status_code == 404
+    assert (await client.post(url, headers=other)).status_code == 403
     in_progress = await start(client, headers)
     assert (
         await client.post(f"{VOICE}/attempts/{in_progress['id']}/ai-review", headers=headers)
     ).status_code == 409
     silent = await finish(client, headers, in_progress)
     response = await client.post(f"{VOICE}/attempts/{silent['id']}/ai-review", headers=headers)
-    assert response.status_code == 409 and "нет ваших ответов" in response.json()["detail"]
+    assert response.status_code == 409 and "нет ответов оператора" in response.json()["detail"]
     assert len(fake.calls) == 2
 
 

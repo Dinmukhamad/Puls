@@ -54,8 +54,50 @@ export interface VoiceAttempt {
   ai_driver?: boolean;
   created_at: string; finished_at: string | null;
 }
+/** A finished call in brief: the best or the hardest one. */
+export interface VoiceCallBrief { id: number; title: string; persona: VoicePersona; score: number; created_at: string }
+/** A criterion missed in recent calls: how often it was met and how it could have been said. */
+export interface VoiceSkill { label: string; passed: number; total: number; example: string | null; attempt_id: number | null }
+/** The operator's own picture over his graded calls. */
+export interface VoiceProgress {
+  calls: number; calls_30d: number; average: number | null; average_30d: number | null;
+  best: VoiceCallBrief | null; worst: VoiceCallBrief | null; weak: VoiceSkill[];
+}
 /** `ai_active`: Claude takes part in calls right now (connected, within the month's budget). */
-export interface VoiceCatalog { scenarios: VoiceScenario[]; attempts: VoiceAttemptSummary[]; ai_active?: boolean }
+export interface VoiceCatalog { scenarios: VoiceScenario[]; attempts: VoiceAttemptSummary[]; ai_active?: boolean; progress?: VoiceProgress }
+
+/** Who gave a call its score; «awaiting» while a mentor has not graded a call from the editor. */
+export type VoiceGrader = "ai" | "rules" | "mentor" | "awaiting";
+export type VoicePeriod = 7 | 30 | 90;
+/** One call of the team in a leader's list. */
+export interface VoiceTeamCall {
+  id: number; user_id: number; user_name: string; group_name: string | null; title: string; custom: boolean;
+  persona: VoicePersona; language: VoiceLanguage; state: "in_progress" | "completed";
+  score: number | null; grader: VoiceGrader | null; review_status: VoiceAttemptSummary["review_status"];
+  critical: boolean; ai_driver: boolean; ai_review: number | null; created_at: string; finished_at: string | null;
+  /** In the queue: the operator's words of the dispute and when he asked. */
+  comment?: string; requested_at?: string;
+}
+export interface VoiceTeamOperator {
+  id: number; name: string; role: "operator" | "trainee"; group_id: number | null; group_name: string | null;
+  calls: number; average: number | null; change: number | null; best: number | null;
+  last: { id: number; score: number | null; at: string } | null; ai_calls: number; waiting: number; weak: string[];
+}
+export interface VoiceTeam {
+  period: { days: VoicePeriod; since: string; until: string };
+  groups: { id: number; name: string }[]; group_id: number | null;
+  summary: {
+    calls: number; calls_before: number; average: number | null; average_before: number | null;
+    operators: number; practiced: number; ai_graded: number; awaiting_grade: number; disputes: number; low: number;
+  };
+  operators: VoiceTeamOperator[]; skills: VoiceSkill[]; calls: VoiceTeamCall[]; queue: VoiceTeamCall[];
+  ai: VoiceAIStatus; scenarios: number;
+}
+/** An operator's call as a leader opens it: the review, the operator, and whether it waits for him. */
+export type VoiceTeamCallDetail = VoiceAttempt & {
+  learner: { id: number; name: string; group_id: number | null; group_name: string | null };
+  review: { comment: string; created_at: string; kind?: string } | null; needs_answer: boolean;
+};
 export interface VoiceInspection { system: "dispatch" | "oktell" | "compare"; driver_id?: string; park_id?: string; incoming_phone?: string; registration_phone?: string }
 
 const BASE = "/api/v1/learning/voice";
@@ -65,6 +107,8 @@ export const voiceKeys = {
   speechConfig: (userId: string | number) => ["learning-voice-speech", String(userId)] as const,
   ai: (userId: string | number) => ["learning-voice-ai", String(userId)] as const,
   attempt: (id: string | number) => ["learning-voice-attempt", String(id)] as const,
+  team: (userId: string | number, days: number, group: number | null) => ["learning-voice-team", String(userId), days, group ?? "all"] as const,
+  teamCall: (id: string | number) => ["learning-voice-team-call", String(id)] as const,
 };
 export const voiceTraining = {
   speechConfig: (signal?: AbortSignal) => request<VoiceSpeechConfig>(`${BASE}/speech/config`, { signal, timeoutMs: 20000 }),
@@ -81,6 +125,12 @@ export const voiceTraining = {
   review: (id: string | number, comment: string) => request<VoiceAttempt>(`${path(id)}/review`, { method: "POST", json: { comment }, timeoutMs: 20000 }),
   /** «Оценить с ИИ»: Claude grades a finished call the rules graded; both grades stay. */
   aiReview: (id: string | number) => request<VoiceAttempt>(`${path(id)}/ai-review`, { method: "POST", json: {}, timeoutMs: 45000 }),
+  /** Leaders: their operators over a period, optionally one group. */
+  team: (days: VoicePeriod, groupId: number | null, signal?: AbortSignal) => request<VoiceTeam>(`${BASE}/team?days=${days}${groupId === null ? "" : `&group_id=${groupId}`}`, { signal, timeoutMs: 20000 }),
+  teamCall: (id: string | number, signal?: AbortSignal) => request<VoiceTeamCallDetail>(`${BASE}/team/calls/${encodeURIComponent(id)}`, { signal, timeoutMs: 15000 }),
+  teamAiReview: (id: string | number) => request<VoiceTeamCallDetail>(`${BASE}/team/calls/${encodeURIComponent(id)}/ai-review`, { method: "POST", json: {}, timeoutMs: 45000 }),
+  /** A mentor's answer to a dispute, or the score of a call from the editor. */
+  resolve: (id: string | number, comment: string, score: number | null) => request<VoiceTeamCallDetail>(`${BASE}/reviews/${encodeURIComponent(id)}/resolve`, { method: "POST", json: score === null ? { comment } : { comment, score }, timeoutMs: 20000 }),
 };
 
 export const OKTELL_CALLS = "/training/work-sites?site=oktell";

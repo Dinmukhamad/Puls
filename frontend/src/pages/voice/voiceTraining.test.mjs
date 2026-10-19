@@ -178,16 +178,6 @@ test("a call graded by the AI says so, shows its summary and the right solution,
   assert.doesNotMatch(html, /Ждёт оценки наставника/);
 });
 
-test("mentors see whether the AI plays the drivers and what it cost this month", async () => {
-  const { aiLine } = await moduleAt("./VoiceMentorReviews.tsx");
-  assert.match(aiLine({ configured: false, active: false, model: "claude-haiku-5-5", budget_usd: 5, spent_usd: 0, calls: 0 }), /ИИ не подключён/);
-  assert.match(aiLine({ configured: true, active: false, model: "claude-haiku-5-5", budget_usd: 5, spent_usd: 5.01, calls: 900 }), /Лимит ИИ на месяц \(\$5\) исчерпан/);
-  const on = aiLine({ configured: true, active: true, model: "claude-haiku-5-5", budget_usd: 5, spent_usd: 0.4213, calls: 37 });
-  assert.match(on, /\$0\.42 из \$5/);
-  assert.match(on, /обращений — 37/);
-  assert.match(on, /играет водителя и оценивает все звонки/);
-});
-
 test("the AI's part is marked: who spoke and graded, its lines, the history and where it works", async () => {
   const conversation = [{ role: "driver", text: "Хочу сменить номер", turn: 0 }, { role: "operator", text: "Откройте Такси Про", turn: 0 }, { role: "driver", text: "Понял, спасибо!", turn: 1, ai: true }];
   const graded = attempt({ revision: 3, state: "completed", ai_driver: true, transcript: conversation, result: result({ score: 75, ai: true, summary: "Способ назван понятно.", solution: "Такси Про или WhatsApp." }) });

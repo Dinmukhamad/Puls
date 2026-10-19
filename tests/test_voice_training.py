@@ -350,7 +350,8 @@ async def test_concurrent_duplicate_answer_is_applied_once(client, operator):
 
 
 async def test_staff_review_visibility_hides_leadership_transcripts(client, session):
-    head = await make_user(session, login="voice-head", role=Role.HEAD)
+    # Drivers call learners and the administrator (who checks the trainer), not leaders.
+    head = await make_user(session, login="voice-admin", role=Role.ADMIN)
     trainer = await make_user(session, login="voice-trainer", role=Role.TRAINER)
     headers = auth(await login(client, head.login))
     attempt = await finish(client, headers, await start(client, headers))

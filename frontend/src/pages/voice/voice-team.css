@@ -1,0 +1,102 @@
+/* The leaders' voice trainer: the site's page head, KPI grid, cards, tables and badges from styles/app.css;
+   this file lays them out and draws the attention list, the skills, the queue and the mentor's answer. */
+.voice-team-filters { align-items: center; }
+.voice-team-filters .puls-select { width: auto; min-width: 200px; }
+.voice-team-tabs { min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.voice-team-tabs::-webkit-scrollbar { display: none; }
+.voice-team-grid { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(300px, 1fr); gap: var(--sp-6); align-items: start; }
+.voice-team-grid--even { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.voice-team-side { display: grid; gap: var(--sp-6); min-width: 0; }
+.voice-team-muted { color: var(--text-tertiary); }
+.voice-team-nowrap { white-space: nowrap; }
+
+/* People and calls in tables and cards. */
+.voice-team-person { display: grid; gap: 2px; min-width: 0; }
+.voice-team-person strong { display: inline-flex; align-items: center; flex-wrap: wrap; font-weight: 600; color: var(--text-primary); }
+.voice-team-operators td:first-child { min-width: 240px; }
+.voice-team-person small { color: var(--text-tertiary); font-size: var(--text-caption); }
+.voice-team-score { display: inline-flex; align-items: center; justify-content: flex-end; gap: var(--sp-2); }
+.voice-team-score .delta { font-size: var(--text-caption); }
+.voice-team-link { color: var(--text-primary); font-weight: 550; text-decoration: underline; text-decoration-color: var(--separator); text-underline-offset: 3px; white-space: nowrap; }
+.voice-team-link:hover { text-decoration-color: currentColor; }
+.voice-team-operators td .badge { margin-left: var(--sp-2); }
+.voice-team-grader { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 2px; color: var(--text-secondary); font-size: var(--text-caption); }
+.voice-team-grader .voice-ai-mark { margin-left: var(--sp-1); }
+.voice-team-calls td .badge + .badge, .voice-team-grader + .badge { margin-left: var(--sp-2); }
+.voice-team-cards { margin: 0; padding: var(--sp-4); list-style: none; }
+.voice-team-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-3); }
+.voice-team-card-line { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); color: var(--text-secondary); font-size: var(--text-caption); line-height: 1.5; }
+.voice-team-call-card { display: grid; gap: var(--sp-2); color: inherit; text-decoration: none; }
+
+/* What needs the leader: four counters, the ones with work open their list. */
+.voice-team-attention ul { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--sp-3); margin: 0; padding: 0; list-style: none; }
+.voice-team-attention li > :is(button, div) { height: 100%; align-items: flex-start; }
+.voice-team-attention li > :is(button, div) { display: flex; align-items: center; gap: var(--sp-3); width: 100%; padding: var(--sp-3); border: 1px solid var(--separator); border-radius: var(--radius-m); background: var(--surface-secondary); color: var(--text-primary); font: inherit; text-align: left; }
+.voice-team-attention li > button { cursor: pointer; }
+@media (hover: hover) { .voice-team-attention li > button:hover { background: var(--surface-hover); } }
+.voice-team-attention strong { display: grid; place-items: center; flex: none; min-width: 40px; height: 40px; padding: 0 var(--sp-2); border-radius: var(--radius-s); background: var(--surface-tertiary); color: var(--text-tertiary); font-size: var(--text-body); font-weight: 650; font-variant-numeric: tabular-nums; }
+.voice-team-attention strong.is-on { background: var(--status-warning-tint); color: var(--status-warning-text); }
+.voice-team-attention span { display: grid; gap: 2px; flex: 1; min-width: 0; }
+.voice-team-attention b { font-size: var(--text-secondary-size); font-weight: 600; }
+.voice-team-attention small { color: var(--text-tertiary); font-size: var(--text-caption); line-height: 1.45; overflow-wrap: anywhere; }
+.voice-team-attention li > button > svg { flex: none; color: var(--text-quaternary); }
+
+/* What to train the team in. */
+.voice-team-skills ul { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-5) var(--sp-6); margin: 0; padding: 0; list-style: none; }
+.voice-team-skills li { align-content: start; }
+.voice-team-skills li { display: grid; gap: var(--sp-2); }
+.voice-team-skill-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--sp-3); }
+.voice-team-skill-head strong { font-size: var(--text-secondary-size); font-weight: 600; }
+.voice-team-skill-head span { flex: none; color: var(--text-tertiary); font-size: var(--text-caption); }
+.voice-team-skill-example { padding: var(--sp-2) var(--sp-3); border-radius: var(--radius-m); background: var(--surface-secondary); color: var(--text-secondary); font-size: var(--text-caption); line-height: 1.55; }
+.voice-team-skill-example span { display: block; color: var(--text-tertiary); font-size: var(--text-micro); font-weight: 650; letter-spacing: .06em; text-transform: uppercase; }
+
+/* All calls: search, which calls, the operator chosen in «Обзор». */
+.voice-team-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); padding: 0 var(--sp-6) var(--sp-4); }
+.voice-team-toolbar .input { flex: 1 1 200px; max-width: 280px; min-width: 0; }
+.voice-team-chip { display: inline-flex; align-items: center; gap: var(--sp-2); min-height: 32px; padding: 0 var(--sp-3); border: 1px solid var(--control-border); border-radius: 999px; background: var(--surface-secondary); color: var(--text-primary); font: inherit; font-size: var(--text-caption); font-weight: 600; cursor: pointer; }
+.voice-team-chip > span[aria-hidden] { color: var(--text-tertiary); font-size: 1.1em; }
+
+/* The queue of calls waiting for the mentor. */
+.voice-team-queue ul { display: grid; gap: var(--sp-3); margin: 0; padding: 0; list-style: none; }
+.voice-team-queue li { display: grid; gap: var(--sp-3); padding: var(--sp-4); border: 1px solid var(--separator); border-radius: var(--radius-m); }
+.voice-team-queue-head, .voice-team-queue-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-3); }
+.voice-team-queue-foot > span { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); color: var(--text-secondary); font-size: var(--text-caption); }
+
+/* Claude and the scenarios. */
+.voice-team-ai .card__body { display: grid; gap: var(--sp-4); }
+.voice-team-budget { display: grid; gap: var(--sp-2); }
+.voice-team-budget > div { display: flex; align-items: baseline; gap: var(--sp-2); }
+.voice-team-budget strong { font-size: 2rem; font-weight: 650; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+.voice-team-budget span, .voice-team-budget small { color: var(--text-tertiary); font-size: var(--text-caption); }
+.voice-team-places { grid-template-columns: 1fr; }
+.voice-team-scenarios { display: grid; gap: var(--sp-3); margin: 0; padding: 0; list-style: none; }
+.voice-team-scenarios li { display: grid; gap: 2px; padding: var(--sp-3) var(--sp-4); border-radius: var(--radius-m); background: var(--surface-secondary); }
+.voice-team-scenarios strong { font-size: var(--text-secondary-size); font-weight: 600; }
+.voice-team-scenarios span { color: var(--text-tertiary); font-size: var(--text-caption); }
+
+/* The mentor's answer above an operator's call. */
+.voice-team-answer { display: grid; gap: var(--sp-4); padding: var(--sp-6); border-color: color-mix(in srgb, var(--status-warning) 50%, var(--separator)); }
+.voice-team-answer__head { display: grid; justify-items: start; gap: var(--sp-2); }
+.voice-team-answer form { display: grid; gap: var(--sp-3); }
+.voice-team-answer label { display: grid; gap: var(--sp-1); }
+.voice-team-answer__score { max-width: 160px; }
+.voice-team .voice-mentor-card blockquote { margin-bottom: var(--sp-2); }
+
+@media (max-width: 1100px) {
+  .voice-team-grid { grid-template-columns: minmax(0, 1fr); }
+  .voice-team-attention ul { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* Next to the sidebar the wide tables would scroll sideways: cards read better. */
+  :is(.voice-team-operators, .voice-team-calls) .table-wrap--responsive { display: none; }
+  :is(.voice-team-operators, .voice-team-calls) .card-list { display: flex; }
+}
+@media (max-width: 767px) {
+  .voice-team-toolbar { padding-inline: var(--sp-4); }
+  .voice-team-toolbar .input { max-width: none; }
+  .voice-team-filters { width: 100%; }
+  .voice-team-filters .puls-select { flex: 1; }
+  .voice-team-operators .card__action, .voice-team-operators .segmented { width: 100%; }
+  .voice-team-grid--even { grid-template-columns: minmax(0, 1fr); }
+  .voice-team-attention ul, .voice-team-skills ul { grid-template-columns: minmax(0, 1fr); }
+  .voice-team-answer { padding: var(--sp-4); }
+}

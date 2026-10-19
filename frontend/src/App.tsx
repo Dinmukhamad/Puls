@@ -50,6 +50,8 @@ const QrAccessPage = lazy(() => import("./pages/qr/QrAccessPage").then(module =>
 const CityAdminPage = lazy(() => import("./pages/city/CityAdminPage").then(module => ({ default: module.CityAdminPage })));
 const ScenarioPage = lazy(() => import("./pages/scenarios/ScenarioPage").then(module => ({ default: module.ScenarioPage })));
 const VoiceTrainingPage = lazy(() => import("./pages/voice/VoiceTrainingPage").then(module => ({ default: module.VoiceTrainingPage })));
+const VoiceHome = lazy(() => import("./pages/voice/VoiceTeamPage").then(module => ({ default: module.VoiceHome })));
+const VoiceTeamCallPage = lazy(() => import("./pages/voice/VoiceTeamPage").then(module => ({ default: module.VoiceTeamCallPage })));
 const VoiceScenariosPage = lazy(() => import("./pages/voice/VoiceScenariosPage").then(module => ({ default: module.VoiceScenariosPage })));
 
 export function App() {
@@ -89,7 +91,8 @@ export function App() {
       <Route element={<AppLayout />}>
         <Route path="/trainee" element={<Suspense fallback={<Skeleton height={400} />}><TraineePage /></Suspense>} />
         <Route path="/training/city" element={user.role === "trainee" ? <Suspense fallback={<div className="city-immersive city-immersive--empty" />}><TraineeCity /></Suspense> : <CityRoute />} />
-        <Route path="/training/voice" element={<Suspense fallback={<Skeleton height={400} />}><VoiceTrainingPage /></Suspense>} />
+        <Route path="/training/voice" element={<Suspense fallback={<Skeleton height={400} />}><VoiceHome /></Suspense>} />
+        <Route path="/training/voice/calls/:attemptId" element={<Suspense fallback={<Skeleton height={400} />}><VoiceTeamCallPage /></Suspense>} />
         <Route path="/training/voice/attempts/:attemptId" element={<Suspense fallback={<Skeleton height={400} />}><VoiceTrainingPage /></Suspense>} />
         <Route path="/training/scenarios/:key" element={<Suspense fallback={<Skeleton height={400} />}><ScenarioPage /></Suspense>} />
         <Route path="/training/scenarios/attempts/:attemptId" element={<Suspense fallback={<Skeleton height={400} />}><ScenarioPage /></Suspense>} />

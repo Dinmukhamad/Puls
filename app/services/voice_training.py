@@ -9,7 +9,7 @@ import random
 import re
 from collections import namedtuple
 from copy import deepcopy
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 
@@ -54,14 +54,9 @@ IRRITATED_CLARIFY = "Это мой аккаунт! Объясните, поче�
 
 
 def can_call(user):
-    return user.is_active and user.role in (
-        Role.TRAINEE,
-        Role.OPERATOR,
-        Role.TRAINER,
-        Role.SUPERVISOR,
-        Role.HEAD,
-        Role.ADMIN,
-    )
+    """Drivers call operators and trainees; leaders look at their calls (voice_team), and the
+    administrator may take a call to check the trainer."""
+    return user.is_active and user.role in (Role.TRAINEE, Role.OPERATOR, Role.ADMIN)
 
 
 async def require_scope(session, user):
@@ -1142,6 +1137,65 @@ async def catalog(session, user):
         ],
         # Whether Claude takes part in calls right now (connected and within the month's budget).
         "ai_active": await voice_ai.available(session),
+        "progress": progress(attempts),
+    }
+
+
+def graded(attempts):
+    """Finished calls that have a score, newest first (a call from the editor waits for one)."""
+    return [
+        a for a in attempts
+        if a.state == "completed" and a.result and a.result.get("score") is not None
+    ]
+
+
+def brief(attempt):
+    return {
+        "id": attempt.id,
+        "title": attempt.snapshot["title"],
+        "persona": attempt.persona,
+        "score": attempt.result["score"],
+        "created_at": utc(attempt.created_at),
+    }
+
+
+def skills(attempts, limit=3):
+    """The weakest criteria across these graded calls: how often each was met, and how it could
+    have been said the last time it was not."""
+    counts = {}
+    for attempt in attempts:
+        for item in attempt.result["criteria"]:
+            entry = counts.setdefault(item["label"], {
+                "label": item["label"], "passed": 0, "total": 0,
+                "example": None, "attempt_id": None,
+            })
+            entry["total"] += 1
+            entry["passed"] += bool(item["passed"])
+            if not item["passed"] and entry["example"] is None and item.get("example"):
+                entry["example"], entry["attempt_id"] = item["example"], attempt.id
+    weak = [entry for entry in counts.values() if entry["passed"] < entry["total"]]
+    weak.sort(key=lambda entry: (entry["passed"] / entry["total"], -entry["total"]))
+    return weak[:limit]
+
+
+def progress(attempts):
+    """The operator's own picture: how many calls, the scores, the best and the worst call and the
+    skills to train next (from the last ten graded calls)."""
+    done = graded(attempts)
+    month = datetime.now(UTC) - timedelta(days=30)
+    recent = [a for a in done if utc(a.created_at) >= month]
+    scores = [a.result["score"] for a in done]
+    ranked = sorted(done, key=lambda a: (a.result["score"], a.id))
+    return {
+        "calls": len(done),
+        "calls_30d": len(recent),
+        "average": round(sum(scores) / len(scores)) if scores else None,
+        "average_30d": (
+            round(sum(a.result["score"] for a in recent) / len(recent)) if recent else None
+        ),
+        "best": brief(ranked[-1]) if done else None,
+        "worst": brief(ranked[0]) if len(done) > 1 else None,
+        "weak": skills(done[:10]),
     }
 
 
@@ -1831,9 +1885,13 @@ def phone_solution(attempt):
 
 
 async def ai_review(session, user, attempt_id):
-    """«Оценить с ИИ»: Claude grades a finished call the rules graded; both grades stay.
-    Returns the attempt and, when Claude could not answer, why (the spend is still kept)."""
-    attempt = await own_attempt(session, user, attempt_id, lock=True)
+    """«Оценить с ИИ» for the operator's own call; leaders send their operators' (voice_team)."""
+    return await send_to_ai(session, await own_attempt(session, user, attempt_id, lock=True))
+
+
+async def send_to_ai(session, attempt):
+    """Claude grades a finished call the rules graded; both grades stay. Returns the attempt and,
+    when Claude could not answer, why (the spend is still kept)."""
     if attempt.state != "completed":
         raise ConflictError("Оценить с ИИ можно завершённый звонок.")
     if attempt.snapshot.get("custom") or attempt.revision != REVISION:
@@ -1843,7 +1901,7 @@ async def ai_review(session, user, attempt_id):
     if attempt.result.get("ai_review"):
         return attempt, None
     if not operator_entries(attempt.transcript):
-        raise ConflictError("В звонке нет ваших ответов: ИИ нечего оценивать.")
+        raise ConflictError("В звонке нет ответов оператора: ИИ нечего оценивать.")
     if not voice_ai.configured():
         raise ConflictError("ИИ не подключён: оценить звонок с ИИ пока нельзя.")
     if not await voice_ai.available(session):

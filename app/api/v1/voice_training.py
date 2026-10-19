@@ -19,7 +19,7 @@ from app.schemas.voice_training import (
     VoiceSpeechTurn,
     VoiceStart,
 )
-from app.services import voice_training, voice_tts
+from app.services import voice_team, voice_training, voice_tts
 
 router = APIRouter(prefix="/learning/voice", tags=["Голосовой тренажёр"])
 
@@ -156,6 +156,30 @@ async def ai_review(attempt_id: int, session: SessionDep, user: CurrentUser):
     if problem:
         raise ConflictError(problem)
     return voice_training.attempt_data(attempt)
+
+
+@router.get("/team")
+async def team(
+    session: SessionDep, user: CurrentUser, response: Response,
+    days: int = 30, group_id: int | None = None,
+):
+    response.headers["Cache-Control"] = "private, no-store"
+    return await voice_team.overview(session, user, days, group_id)
+
+
+@router.get("/team/calls/{attempt_id}")
+async def team_call(attempt_id: int, session: SessionDep, user: CurrentUser, response: Response):
+    response.headers["Cache-Control"] = "private, no-store"
+    return await voice_team.call(session, user, attempt_id)
+
+
+@router.post("/team/calls/{attempt_id}/ai-review")
+async def team_ai_review(attempt_id: int, session: SessionDep, user: CurrentUser):
+    data, problem = await voice_team.ai_review(session, user, attempt_id)
+    await session.commit()
+    if problem:
+        raise ConflictError(problem)
+    return data
 
 
 @router.get("/ai")
