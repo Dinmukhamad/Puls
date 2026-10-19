@@ -133,6 +133,7 @@ test("operator cabinet keeps weekly metrics beside the wallet without removed su
 
 test("old rating progress links lead to coin progress and levels", async () => {
   const { RatingPage } = await component("./RatingPage.tsx", {
+    "test:auth": { useAuth: () => ({ user: { role: "operator" } }) },
     "react-router-dom": {
       useSearchParams: () => [new URLSearchParams("tab=progress&week=42"), () => {}],
       Navigate: ({ to }) => React.createElement("a", { href: to }, "redirect"),

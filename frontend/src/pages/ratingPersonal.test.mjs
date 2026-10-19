@@ -8,11 +8,13 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 const require = createRequire(import.meta.url);
 let board;
+let role = "supervisor";
 const queries = [];
 const built = await build({
   entryPoints: [fileURLToPath(new URL("./RatingPage.tsx", import.meta.url))],
   bundle: true, platform: "node", format: "cjs", packages: "external", jsx: "automatic",
   loader: { ".css": "empty" }, define: { "import.meta.env": "{}" }, write: false,
+  plugins: [{ name: "test-auth", setup(plugin) { plugin.onResolve({ filter: /\/AuthContext$/ }, () => ({ path: "test:auth", external: true })); } }],
 });
 const module = { exports: {} };
 new Function("require", "module", "exports", built.outputFiles[0].text)((name) => ({
@@ -21,9 +23,12 @@ new Function("require", "module", "exports", built.outputFiles[0].text)((name) =
     Navigate: () => null,
     Link: ({ to, children }) => React.createElement("a", { href: to }, children),
   },
+  "test:auth": { useAuth: () => ({ user: { role } }) },
   "@tanstack/react-query": {
+    keepPreviousData: undefined,
     useQuery: (options) => {
       queries.push(options.queryKey);
+      if (options.queryKey[0] === "rating-compare") return { data: undefined, isLoading: true };
       return { data: options.queryKey[0] === "rating" ? board : [{ id: 17, label: "2026-W41", status: "closed" }] };
     },
   },
@@ -42,6 +47,15 @@ const fixture = (patch = {}) => ({
   ...patch,
 });
 const render = (data) => { board = data; return renderToStaticMarkup(React.createElement(RatingPage)); };
+
+// The weekly board below is the staff's page; its personal mode is what the API answers when it limits a viewer to
+// their own row. Operators get «Рейтинг» with everyone (docs/RATING_COMPARE.md, ratingCompare.test.mjs).
+test("operators get the comparison with everyone instead of the weekly board", () => {
+  role = "operator"; queries.length = 0;
+  try { render(fixture()); } finally { role = "supervisor"; }
+  assert.ok(queries.some((key) => key[0] === "rating-compare"));
+  assert.ok(!queries.some((key) => key[0] === "rating"));
+});
 
 test("personal rating explains actual place, participant count and period without a fake table or pagination", () => {
   const html = render(fixture({ rows: [own, foreign], podium: [{ ...foreign, medal: "bronze" }] }));

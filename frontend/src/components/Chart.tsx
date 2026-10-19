@@ -53,7 +53,7 @@ export function Chart({ title, labels, series, target, unit, compact = false, lo
         <svg viewBox={`0 0 ${width} ${height}`} role="group" aria-labelledby={titleId} aria-describedby={descriptionId}>
           <title id={titleId}>{title}</title>
           <desc id={descriptionId}>Значения по периодам. Пропуски разрывают линию. Ниже доступна таблица данных.</desc>
-          {[low, (low + high) / 2, high].map((value) => integerAxis ? Math.round(value) : value).filter((value, index, values) => values.indexOf(value) === index).map((value) => (
+          {(integerAxis && high - low <= 8 ? Array.from({ length: Math.round(high - low) + 1 }, (_, index) => Math.round(low) + index) : [low, (low + high) / 2, high]).map((value) => integerAxis ? Math.round(value) : value).filter((value, index, values) => values.indexOf(value) === index).map((value) => (
             <g key={value} className="analytics-chart__grid" aria-hidden="true">
               <line x1={left} x2={width - right} y1={y(value)} y2={y(value)} />
               <text x={left - 10} y={y(value) + 4} textAnchor="end">{points(value)}</text>

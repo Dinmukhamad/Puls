@@ -5,6 +5,7 @@ import type {
   OperatorRowOut,
   Page,
   RaceOut,
+  CompareOut,
   RatingOut,
   ShopCatalogOut,
   ShopRequestOut,
@@ -74,6 +75,8 @@ export const rating = {
     request<RatingOut>(`${V1}/rating${buildQuery({ ...params })}`),
   /** «Гонка недели»: the operator's place, the gaps and what to improve. */
   race: (weekId?: number) => request<RaceOut>(`${V1}/rating/race${buildQuery({ week_id: weekId })}`),
+  compare: (params: { period: "week" | "month"; week_id?: number; year?: number; month?: number }) =>
+    request<CompareOut>(`${V1}/rating/compare${buildQuery({ ...params })}`),
 };
 
 /* --- магазин --- */

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Query
 from sqlalchemy import select
@@ -13,6 +13,7 @@ from app.core.errors import NotFoundError
 from app.models.contest import ContestWeek, OperatorWeekResult
 from app.models.enums import Role, WeekStatus
 from app.schemas.rating import (
+    CompareOut,
     NominationOut,
     PodiumEntry,
     RaceOut,
@@ -23,6 +24,7 @@ from app.schemas.rating import (
     RatingRowOut,
     WeekOut,
 )
+from app.services import compare as compare_service
 from app.services import race as race_service
 from app.services import rating as rating_service
 from app.services import weekly as weekly_service
@@ -95,6 +97,24 @@ async def race(session: SessionDep, user: CurrentUser, week_id: int | None = Non
     podium, the lead over the one behind, and which metrics close the gaps. Operators only.
     """
     return await race_service.race(session, user, week_id)
+
+
+@router.get("/compare", response_model=CompareOut, summary="Рейтинг: сравнение с другими")
+async def compare(
+    session: SessionDep,
+    user: CurrentUser,
+    period: Annotated[Literal["week", "month"], Query()] = "month",
+    week_id: int | None = None,
+    year: int | None = None,
+    month: Annotated[int | None, Query(ge=1, le=12)] = None,
+) -> dict:
+    """
+    The table of a week or a month with every operator's place and points week by week, the teams,
+    and each metric against the average and the best of all operators (never another one's value).
+    """
+    if period == "week":
+        return await compare_service.week_view(session, user, week_id)
+    return await compare_service.month_view(session, user, year, month)
 
 
 def _to_row(row: rating_service.RatingRow) -> RatingRowOut:

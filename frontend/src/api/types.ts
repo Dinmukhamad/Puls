@@ -398,3 +398,27 @@ export interface ApiErrorBody {
   available?: number;
   missing?: number;
 }
+
+/** «Рейтинг» оператора (GET /rating/compare): таблица, места по неделям, команды и показатели против всех. */
+export interface CompareWeek { id: number; label: string; starts_on: string; ends_on: string; status: string; live: boolean }
+export interface CompareMark { rank: number | null; points: number }
+export interface CompareRow {
+  user_id: number; name: string; group_id: number | null; group: string | null;
+  rank: number | null; points: number; rank_delta: number | null;
+  weeks: number | null; prize: number | null; is_me: boolean;
+  trail: (CompareMark | null)[];
+}
+export interface CompareTeam {
+  group_id: number; name: string; rank: number; members: number; points: number; total: number;
+  best: { name: string; points: number; is_me: boolean }; is_mine: boolean; trail: (number | null)[];
+}
+export interface CompareMetric {
+  code: string; title: string; unit: string | null; direction: string; target: number;
+  me: number | null; average: number; best: number; reported: number; place: number | null;
+  points: number | null; max_points: number;
+}
+export interface CompareOut {
+  period: "week" | "month"; title: string; status: string; live: boolean;
+  week: CompareWeek | null; month: { year: number; month: number; name: string; weeks_planned: number } | null;
+  participants: number; weeks: CompareWeek[]; operators: CompareRow[]; teams: CompareTeam[]; metrics: CompareMetric[];
+}

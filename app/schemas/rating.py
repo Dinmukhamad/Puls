@@ -221,3 +221,82 @@ class RaceOut(BaseModel):
     standings: list[RacePlace]
     metrics: list[RaceMetric]
     advice: RaceAdvice | None = None
+
+
+class CompareWeek(RaceWeek):
+    live: bool = False
+
+
+class CompareMonth(BaseModel):
+    year: int
+    month: int
+    name: str
+    weeks_planned: int
+
+
+class CompareMark(BaseModel):
+    rank: int | None
+    points: float
+
+
+class CompareRow(BaseModel):
+    user_id: int
+    name: str
+    group_id: int | None = None
+    group: str | None = None
+    rank: int | None
+    points: float
+    rank_delta: int | None = None
+    weeks: int | None = Field(default=None, description="Недель в зачёте месяца")
+    prize: int | None = Field(default=None, description="Приз месяца за место и номинации")
+    is_me: bool = False
+    trail: list[CompareMark | None] = Field(description="Место и баллы в каждой неделе из weeks")
+
+
+class CompareBest(BaseModel):
+    name: str
+    points: float
+    is_me: bool = False
+
+
+class CompareTeam(BaseModel):
+    group_id: int
+    name: str
+    rank: int
+    members: int
+    points: float = Field(description="Средние баллы оператора команды")
+    total: float
+    best: CompareBest
+    is_mine: bool = False
+    trail: list[float | None]
+
+
+class CompareMetric(BaseModel):
+    code: str
+    title: str
+    unit: str | None = None
+    direction: str
+    target: float
+    me: float | None = None
+    average: float
+    best: float
+    reported: int = Field(description="Сколько операторов показали этот показатель")
+    place: int | None = Field(default=None, description="Место оператора по этому показателю")
+    points: float | None = None
+    max_points: float
+
+
+class CompareOut(BaseModel):
+    """«Рейтинг» оператора: таблица, места по неделям, команды и показатели против всех."""
+
+    period: Literal["week", "month"]
+    title: str
+    status: str
+    live: bool = False
+    week: CompareWeek | None = None
+    month: CompareMonth | None = None
+    participants: int
+    weeks: list[CompareWeek]
+    operators: list[CompareRow]
+    teams: list[CompareTeam]
+    metrics: list[CompareMetric]
