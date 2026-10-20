@@ -594,14 +594,14 @@ def _pick_nomination_winner(
 
 async def has_work_data(session: AsyncSession, week: ContestWeek) -> bool:
     """Whether the week has values from the work itself (reports, files, entered by hand). The
-    supervisors' violation records alone, or the test week's values, are nothing to publish yet:
-    the SZoV reports come once a month, after the week."""
+    supervisors' violation records alone, or the test week's and the demo's values, are nothing to
+    publish yet: the SZoV reports come once a month, after the week."""
     return (
         await session.scalar(
             select(OperatorWeekMetric.id)
             .where(
                 OperatorWeekMetric.week_id == week.id,
-                OperatorWeekMetric.source.not_in((TEST_SOURCE, VIOLATION_SOURCE)),
+                OperatorWeekMetric.source.not_in((TEST_SOURCE, VIOLATION_SOURCE, DEMO_SOURCE)),
             )
             .limit(1)
         )

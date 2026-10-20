@@ -95,6 +95,8 @@ async def test_demo_season_fills_places_without_coins_and_removes_cleanly(
     current = await session.scalar(
         select(ContestWeek).where(ContestWeek.starts_on == date(2026, 10, 19))
     )
+    # The Monday auto-close leaves a demo-only week open instead of failing on it.
+    assert not await weekly_service.has_work_data(session, current)
     with pytest.raises(ConflictError):
         await weekly_service.close_week(session, current)
     await session.rollback()
@@ -117,6 +119,7 @@ async def test_demo_season_fills_places_without_coins_and_removes_cleanly(
     )
     assert await _count(session, OperatorDayMetric.id, OperatorDayMetric.source == DEMO_SOURCE) == 0
     assert await _count(session, OperatorDayMetric.id) == 1
+    assert await _count(session, OperatorWeekMetric.id) == 0
     assert await _count(session, OperatorWeekResult.id) == 0
     assert await _count(session, OperatorMonthResult.id) == 0
     week = await session.get(ContestWeek, closed.id)

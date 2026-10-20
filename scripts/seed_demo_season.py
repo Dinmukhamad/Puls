@@ -49,6 +49,8 @@ from app.models.user import User
 from app.services import months as months_service
 from app.services import weekly as weekly_service
 from app.services.analytics import summed
+from app.services.rules import get_rules
+from app.services.weekly import VIOLATION_SOURCE
 from scripts.seed_test_week import operator_week
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-8s %(message)s")
@@ -150,6 +152,9 @@ async def fill(session: AsyncSession, today: date) -> None:
             .order_by(User.id)
         )
     )
+    # Посторонние сайты отмечают руководители (services/violations.py): демо их не придумывает.
+    sites = (await get_rules(session)).forbidden_sites_metric_code
+    metrics = [m for m in metrics if m.code != sites]
     created_days = created_weeks = 0
     for monday in mondays:
         existed = await session.scalar(select(ContestWeek).where(ContestWeek.starts_on == monday))
@@ -294,6 +299,15 @@ async def remove(session: AsyncSession) -> None:
     )
     values = await session.execute(
         delete(OperatorWeekMetric).where(OperatorWeekMetric.source == DEMO_SOURCE)
+    )
+    # Расчёт демо-недель дописал нули «без посторонних сайтов»; записи руководителей (больше нуля)
+    # остаются, а нули настоящая неделя допишет сама при своём расчёте.
+    await session.execute(
+        delete(OperatorWeekMetric).where(
+            OperatorWeekMetric.week_id.in_(list(before) or [0]),
+            OperatorWeekMetric.source == VIOLATION_SOURCE,
+            OperatorWeekMetric.value == 0,
+        )
     )
     await session.flush()
     for week in weeks:
