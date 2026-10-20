@@ -1,0 +1,11 @@
+/* «Посторонние сайты» (docs/CHANNELS.md): the record form and the operator's latest records. */
+.violation-form__row { display: grid; grid-template-columns: minmax(0, 9rem) minmax(0, 1fr); gap: var(--sp-3); }
+.violation-form__effect { margin: 0; padding: var(--sp-3) var(--sp-4); border-radius: var(--radius-s); background: var(--surface-secondary); color: var(--text-secondary); font-size: var(--text-caption); }
+.violation-form__effect strong { color: var(--text-primary); }
+.violation-history { margin-top: var(--sp-5); }
+.violation-history__list { list-style: none; margin: var(--sp-2) 0 0; padding: 0; display: grid; gap: var(--sp-2); }
+.violation-history__item { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-3); padding: var(--sp-3); border: 1px solid var(--border-subtle); border-radius: var(--radius-s); }
+.violation-history__item.is-cancelled { opacity: .6; }
+.violation-history__item.is-cancelled strong { text-decoration: line-through; }
+.violation-history__main { display: grid; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 480px) { .violation-form__row { grid-template-columns: 1fr; } }

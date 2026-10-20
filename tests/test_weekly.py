@@ -16,23 +16,23 @@ from app.services import weekly as weekly_service
 from app.services.rules import get_rules
 from tests.conftest import make_user
 
+#: 100 points and the overtime bonus of 10.
 METRICS_STRONG = {
-    "hours_worked": 40,
+    "hours_norm": 100,
     "overtime": 8,
     "quality": 100,
     "efficiency": 100,
     "calls_per_hour": 12,
-    "driver_gratitudes": 5,
     "lateness": 0,
     "forbidden_sites": 0,
 }
+#: 53 points: half the norm (no overtime bonus), 60 % quality, half the efficiency and calls.
 METRICS_WEAK = {
-    "hours_worked": 20,
+    "hours_norm": 50,
     "overtime": 0,
     "quality": 60,
     "efficiency": 50,
     "calls_per_hour": 6,
-    "driver_gratitudes": 0,
     "lateness": 2,
     "forbidden_sites": 1,
 }

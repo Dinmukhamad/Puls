@@ -40,6 +40,9 @@ class MetricProgress(BaseModel):
     points: float
     max_points: float
     penalty: float = Field(default=0.0, description="Штрафные баллы антипоказателя")
+    #: A bonus over the 100 points (overtime): the metric to meet first and whether it is met.
+    bonus_for: str | None = None
+    unlocked: bool | None = None
 
 
 class WeekMetricsBlock(BaseModel):

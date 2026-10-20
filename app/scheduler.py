@@ -8,7 +8,6 @@
 from __future__ import annotations
 
 import logging
-from datetime import date, timedelta
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -16,7 +15,6 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 from app.core.config import settings
 from app.db.session import SessionLocal
-from app.models.enums import WeekStatus
 from app.services import city_seasons
 from app.services import telemetry as telemetry_service
 from app.services import weekly as weekly_service
@@ -34,19 +32,18 @@ async def close_previous_week() -> weekly_service.WeekCloseReport | None:
     """
     Закрывает неделю, завершившуюся накануне запуска задачи.
 
-    Если недели нет в базе (показатели не выгружались), она заводится
-    автоматически и закрывается пустой - так рейтинг не «залипает» на прошлой.
+    Неделя без показателей работы остаётся открытой: отчёты СЗоВ приходят раз в
+    месяц, а закрытая пустой неделя их уже не примет. Её опубликуют вручную.
     """
-    target_day = date.today() - timedelta(days=3)
     async with SessionLocal() as session:
-        week = await weekly_service.get_or_create_week(session, target_day)
-        if week.status == WeekStatus.CLOSED:
-            logger.info("Неделя %s уже закрыта, пропускаем", week.label)
-            await session.commit()
-            return None
-
-        report = await weekly_service.close_week(session, week)
+        week, report = await weekly_service.close_previous(session)
         await session.commit()
+        if report.already_closed:
+            logger.info("Неделя %s уже закрыта, пропускаем", week.label)
+            return None
+        if report.skipped:
+            logger.info("Неделя %s без показателей работы, оставлена открытой", week.label)
+            return None
         logger.info(
             "Неделя %s закрыта: участников %s, начислено коинов %s",
             report.week_label,

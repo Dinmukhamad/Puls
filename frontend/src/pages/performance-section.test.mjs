@@ -14,6 +14,7 @@ async function load(path) {
 }
 const { definitionRow, badgeIcon } = await load("./definitionPresentation.ts");
 const { periodNext } = await load("./PeriodsPage.tsx");
+const { reportedTo } = await load("./ReportsUpload.tsx");
 const read = path => readFileSync(fileURLToPath(new URL(path, import.meta.url)), "utf8");
 
 const metric = (extra = {}) => ({ id: 1, code: "quality", title: "Качество работы", description: null, is_active: true, kind: "positive", direction: "higher_is_better", target_value: 100, unit: "%", max_points: 25, penalty_per_unit: 0, allow_overachievement: false, ...extra });
@@ -48,7 +49,10 @@ test("metrics, nominations and achievements are lists of rows: a row opens the e
 
 test("the rules show every number with its unit, the course under the rate, and the save bar only after a change", () => {
   const page = read("./SettingsPage.tsx"), css = read("./configuration.css");
-  for (const unit of ['unit: "баллов"', 'unit: C', 'unit: "шт"', 'unit: "чел."', 'unit: "симв."', 'unit: "₸"']) assert.ok(page.includes(unit), unit);
+  for (const unit of ['unit: "баллов"', 'unit: C', 'unit: "чел."', 'unit: "симв."', 'unit: "₸"']) assert.ok(page.includes(unit), unit);
+  // Driver gratitude is paused (docs/CHANNELS.md): its bonus and monthly limit are not offered.
+  assert.doesNotMatch(page, /driver_gratitude_bonus|gratitude_monthly_limit/);
+  assert.match(page, /key: "prize_min_points", label: "Минимум для приза за место"/);
   assert.match(page, /: spec\.unit \? <span className="input-unit"><input className="input" type="number" inputMode="decimal"/);
   assert.match(page, /\{index === 0 && <div className="configuration-example" aria-label="Проверка курса">/);
   assert.doesNotMatch(page, /<Card title="Проверка курса"/);
@@ -63,6 +67,15 @@ test("periods are a history of weeks; a week opens with its status and actions a
   assert.equal(periodNext({ status: "open", calculated_at: null, closed_at: null }), "Идёт · загрузите показатели и рассчитайте");
   assert.equal(periodNext({ status: "calculated", calculated_at: "2026-10-17T08:00:00Z", closed_at: null }), "Рассчитана 17.10.2026 · проверьте итоги и опубликуйте");
   assert.equal(periodNext({ status: "closed", calculated_at: null, closed_at: "2026-10-17T09:00:00Z" }), "Итоги опубликованы 17.10.2026");
+  // How far the monthly team reports go (docs/SZOV_REPORTS.md).
+  assert.equal(reportedTo({ month: "2026-09", reported_to: { line: "2026-09-30", chat: "2026-09-30" } }), "весь месяц");
+  assert.equal(reportedTo({ month: "2026-10", reported_to: { line: "2026-10-16", chat: "2026-10-16" } }), "по 16.10");
+  assert.equal(reportedTo({ month: "2026-10", reported_to: { line: "2026-10-31", chat: "2026-10-15" } }), "линия весь месяц · чаты по 15.10");
+  assert.equal(reportedTo({ month: "2026-10", reported_to: {} }), "нет отчёта команды");
+  // A week is published once it is over.
+  const week = { calculated_at: null, closed_at: null, ends_on: "2026-10-25" };
+  assert.equal(periodNext({ ...week, status: "open" }, "2026-10-26"), "Завершилась · загрузите показатели и рассчитайте");
+  assert.equal(periodNext({ ...week, status: "calculated" }, "2026-10-25"), "Рассчитана · предварительно, неделя ещё идёт");
   const page = read("./PeriodsPage.tsx");
   assert.doesNotMatch(page, /<Select|Отчётный период|workflow-result"/);
   assert.match(page, /<button type="button" className="period-row" onClick=\{\(\) => selectWeek\(item\.id\)\}>/);

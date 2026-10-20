@@ -21,11 +21,16 @@ const steps = ["Загрузка", "Проверка", "Расчёт", "Публ
 const STATUS_TONES = { open: "accent", calculated: "warning", closed: "success" } as const;
 
 /** What a period's status means for the one who opens it, and what to do next. */
-export function periodNext(week: Pick<WeekOut, "status" | "calculated_at" | "closed_at">): string {
+export function periodNext(week: Pick<WeekOut, "status" | "calculated_at" | "closed_at"> & Partial<Pick<WeekOut, "ends_on">>, today = todayDateKey()): string {
   if (week.status === "closed") return week.closed_at ? `Итоги опубликованы ${dateOnly(week.closed_at)}` : "Итоги опубликованы";
-  if (week.status === "calculated") return `Рассчитана${week.calculated_at ? ` ${dateOnly(week.calculated_at)}` : ""} · проверьте итоги и опубликуйте`;
-  return "Идёт · загрузите показатели и рассчитайте";
+  // A week is published once it is over: the reports of its last days come after it (docs/SZOV_REPORTS.md).
+  const running = week.ends_on ? week.ends_on >= today : null;
+  if (week.status === "calculated") return `Рассчитана${week.calculated_at ? ` ${dateOnly(week.calculated_at)}` : ""} · ${running ? "предварительно, неделя ещё идёт" : "проверьте итоги и опубликуйте"}`;
+  return `${running === false ? "Завершилась" : "Идёт"} · загрузите показатели и рассчитайте`;
 }
+
+/** The week is not over yet: its results cannot be published (the server refuses too). */
+export const weekRunning = (week: Pick<WeekOut, "ends_on">, today = todayDateKey()) => week.ends_on >= today;
 
 export function PeriodsPage() {
   const [params] = useSearchParams();
@@ -121,7 +126,8 @@ function PeriodWorkspace() {
         </div>
         {!closed && week && (canPublish ? <div className="period-head__actions">
           <Button disabled={busy || (!!inspected && !applied)} onClick={() => calculate.mutate()}>{calculate.isPending ? "Рассчитываем…" : week.status === "calculated" ? "Пересчитать" : "Рассчитать"}</Button>
-          <Button variant="primary" disabled={busy || week.status !== "calculated" || !preview.data?.rows.length || (!!inspected && !applied)} onClick={() => setConfirmPublish(true)}>Опубликовать итоги</Button>
+          <Button variant="primary" disabled={busy || week.status !== "calculated" || !preview.data?.rows.length || (!!inspected && !applied) || weekRunning(week)} title={weekRunning(week) ? `Неделя ещё идёт: опубликовать можно после ${weekRange(week)}` : undefined} onClick={() => setConfirmPublish(true)}>Опубликовать итоги</Button>
+          {weekRunning(week) && <p className="period-head__note">Неделя ещё идёт — итоги можно опубликовать, когда она закончится.</p>}
         </div> : <p className="period-head__note">После загрузки передайте период руководителю: он рассчитает и опубликует итоги.</p>)}
       </Card>
       <ol className="workflow-steps" aria-label="Этапы расчёта">{steps.map((label, index) => <li key={label} className={`workflow-step${index < step ? " is-done" : ""}`} aria-current={index === step ? "step" : undefined}><span>{index < step ? "✓" : index + 1}</span>{label}</li>)}</ol>

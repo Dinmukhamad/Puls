@@ -16,10 +16,11 @@ from app.services.rules import get_rules
 from tests.conftest import auth, login, make_user
 
 STRONG = {
-    "hours_worked": 40, "overtime": 8, "quality": 100, "efficiency": 100,
-    "calls_per_hour": 12, "driver_gratitudes": 5, "lateness": 0, "forbidden_sites": 0,
+    "hours_norm": 100, "overtime": 8, "quality": 100, "efficiency": 100,
+    "calls_per_hour": 12, "lateness": 0, "forbidden_sites": 0,
 }
-#: The field of the week: points 100, 99, 93.75, 91.25 (op1), 85.
+#: The field of the week: 100 points and the overtime bonus of 10 — 110, 108.8, 102.33, 99 (op1),
+#: 91.5.
 RIVALS = [
     ("r-a", "Айгерим Сериковна Абдиева", {}),
     ("r-c", "Жанна Ерлановна Бекова", {"quality": 96}),
@@ -82,18 +83,20 @@ async def test_place_gaps_and_names(client, session, operator, calculate):
 
     assert body["live"] is (not calculate)
     assert body["participants"] == 5
-    assert body["me"]["rank"] == 4 and body["me"]["points"] == 91.25
+    assert body["me"]["rank"] == 4 and body["me"]["points"] == 99
     names = [row["name"] for row in body["standings"]]
     assert names == ["Айгерим А.", "Жанна Б.", "Данияр А.", "Оператор Первый", "Тимур Д."]
     assert [row["rank"] for row in body["standings"]] == [1, 2, 3, 4, 5]
     assert [row["is_me"] for row in body["standings"]] == [False, False, False, True, False]
-    assert [row["gap"] for row in body["standings"]] == [8.75, 7.75, 2.5, 0, -6.25]
+    assert [row["gap"] for row in body["standings"]] == [11, 9.8, 3.33, 0, -7.5]
+    # The week's 100 points, the overtime bonus apart.
+    assert body["max_points"] == 100 and body["bonus_max"] == 10
 
     nxt = body["next"]
-    assert (nxt["name"], nxt["rank"], nxt["gap"]) == ("Данияр А.", 3, 2.5)
-    assert (body["behind"]["name"], body["behind"]["lead"]) == ("Тимур Д.", 6.25)
+    assert (nxt["name"], nxt["rank"], nxt["gap"]) == ("Данияр А.", 3, 3.33)
+    assert (body["behind"]["name"], body["behind"]["lead"]) == ("Тимур Д.", 7.5)
     assert [(p["place"], p["name"], p["gap"], p["reached"]) for p in body["podium"]] == [
-        (1, "Айгерим А.", 8.75, False), (2, "Жанна Б.", 7.75, False), (3, "Данияр А.", 2.5, False),
+        (1, "Айгерим А.", 11, False), (2, "Жанна Б.", 9.8, False), (3, "Данияр А.", 3.33, False),
     ]
 
 
@@ -102,20 +105,20 @@ async def test_advice_names_the_values_that_pass_the_next_one(client, session, o
     body = (await _race(client, week.id)).json()
 
     lost = {m["code"]: m["lost"] for m in body["metrics"]}
-    assert lost["quality"] == 5 and lost["calls_per_hour"] == 3.75 and lost["overtime"] == 0
+    assert lost["quality"] == 6 and lost["calls_per_hour"] == 5 and lost["overtime"] == 0
     assert [m["code"] for m in body["metrics"]][:2] == ["quality", "calls_per_hour"]
-    assert body["advice"]["room"] == 8.75
+    assert body["advice"]["room"] == 11
 
     nxt = body["advice"]["next"]
-    assert (nxt["name"], nxt["gap"]) == ("Данияр А.", 2.5)
+    assert (nxt["name"], nxt["gap"]) == ("Данияр А.", 3.33)
     options = {o["code"]: o for o in nxt["options"]}
-    # The smallest move first: 80 → 90.1 % of quality, then 9 → 11.1 calls an hour.
+    # The smallest move first: 80 → 91.2 % of quality, then 9 → 11.1 calls an hour.
     assert [o["code"] for o in nxt["options"]] == ["quality", "calls_per_hour"]
-    assert options["quality"]["need"] == 90.1 and options["calls_per_hour"]["need"] == 11.1
-    assert all(o["gain"] >= 2.51 for o in nxt["options"])
+    assert options["quality"]["need"] == 91.2 and options["calls_per_hour"]["need"] == 11.1
+    assert all(o["gain"] >= 3.34 for o in nxt["options"])
 
     podium = body["advice"]["podium"]
-    assert (podium["place"], podium["name"], podium["gap"]) == (3, "Данияр А.", 2.5)
+    assert (podium["place"], podium["name"], podium["gap"]) == (3, "Данияр А.", 3.33)
     assert podium["plan"]["reachable"] and podium["plan"]["steps"][0]["code"] == "quality"
 
 
@@ -137,7 +140,7 @@ async def test_equal_points_share_the_place_and_the_next_one_is_above_them(
     week = await _field(session, operator, mine={"quality": 80, "calls_per_hour": 11})
     body = (await _race(client, week.id)).json()
     assert body["me"]["rank"] == 3 and body["me"]["shared_with"] == ["Данияр А."]
-    assert (body["next"]["name"], body["next"]["gap"]) == ("Жанна Б.", 5.25)
+    assert (body["next"]["name"], body["next"]["gap"]) == ("Жанна Б.", 6.47)
     assert body["podium"][2]["reached"] and body["advice"]["podium"] is None
 
 
@@ -145,14 +148,14 @@ async def test_unreported_metrics_are_not_advice(client, session, operator):
     week = await weekly_service.get_or_create_week(session, date(2026, 6, 1))
     await _field(session, operator, mine=False, calculate=False)
     await _metrics(session, week.id, operator.id,
-                   {k: v for k, v in {**STRONG, **MINE}.items() if k != "driver_gratitudes"})
+                   {k: v for k, v in {**STRONG, **MINE}.items() if k != "efficiency"})
     await session.commit()
     body = (await _race(client, week.id)).json()
-    gratitude = next(m for m in body["metrics"] if m["code"] == "driver_gratitudes")
-    assert gratitude["reported"] is False and gratitude["value"] is None and gratitude["lost"] == 5
-    assert body["metrics"][-1]["code"] == "driver_gratitudes"
+    efficiency = next(m for m in body["metrics"] if m["code"] == "efficiency")
+    assert efficiency["reported"] is False and efficiency["value"] is None
+    assert efficiency["lost"] == 25 and body["metrics"][-1]["code"] == "efficiency"
     advised = [o["code"] for o in body["advice"]["next"]["options"]]
-    assert "driver_gratitudes" not in advised
+    assert "efficiency" not in advised
 
 
 async def test_an_operator_without_metrics_sees_the_field(client, session, operator):

@@ -111,6 +111,9 @@ export interface MetricProgress {
   points: number;
   max_points: number;
   penalty: number;
+  /** A bonus over the 100 points (overtime): the metric it builds on, and whether that one is met. */
+  bonus_for?: string | null;
+  unlocked?: boolean | null;
 }
 
 export interface WeekMetricsBlock {
@@ -271,6 +274,9 @@ export interface RaceMetric {
   per_unit: number | null;
   /** Thresholds instead of a share of the target (docs/CHANNELS.md): from each value up, its points. */
   bands?: { from: number; points: number }[] | null;
+  /** A bonus over the 100 points (overtime); locked until the metric it builds on is met. */
+  bonus?: boolean;
+  locked?: boolean;
 }
 
 /** Raising one metric: the value to show and the points it really adds. */
@@ -297,7 +303,9 @@ export interface RaceOut {
   period: string;
   prizes: number[];
   participants: number;
+  /** The week's 100 points; bonuses (overtime) come on top, up to `bonus_max`. */
   max_points: number;
+  bonus_max?: number;
   me: { rank: number; points: number; rank_delta: number | null; shared_with: string[] } | null;
   next: RacePlace | null;
   behind: (RacePlace & { lead: number }) | null;
@@ -427,12 +435,14 @@ export interface CompareMetric {
   code: string; title: string; unit: string | null; direction: string; target: number;
   me: number | null; average: number; best: number; reported: number; place: number | null;
   points: number | null; max_points: number;
+  /** A bonus over the 100 points (overtime). */
+  bonus?: boolean;
 }
 /** Направление рядом с другим (docs/CHANNELS.md): средняя неделя оператора из 100 баллов. */
 export interface CompareChannel {
   channel: Channel; participants: number; average: number | null;
   best: { name: string; points: number; is_me: boolean } | null; is_mine: boolean;
-  metrics: { title: string; max_points: number }[];
+  metrics: { title: string; max_points: number; bonus?: boolean }[];
 }
 export interface CompareOut {
   period: "week" | "month"; title: string; status: string; live: boolean;

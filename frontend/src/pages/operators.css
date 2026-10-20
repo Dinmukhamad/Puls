@@ -25,3 +25,6 @@
 /* An operator's name opens their card, as in the section's other lists. */
 .operators-person { color: var(--text-primary); text-decoration: none; }
 .operators-person:hover .cell-person__name { color: var(--accent-primary); }
+
+/* A card's actions on a phone: recording foreign sites and crediting coins side by side. */
+.operators-card-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); gap: var(--sp-2); }

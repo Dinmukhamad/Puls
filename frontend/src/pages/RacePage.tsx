@@ -91,7 +91,7 @@ function RaceHero({ data }: { data: RaceOut }) {
         {me.rank_delta != null && <Delta value={me.rank_delta} label="к прошлой неделе" />}
       </div>
       <div className="race-hero__points">
-        <p><strong>{points(me.points)}</strong> из {points(top)} баллов</p>
+        <p><strong>{points(me.points)}</strong> из {points(top)} баллов{data.bonus_max ? <span className="secondary"> · бонус сверх — до {points(data.bonus_max)}</span> : null}</p>
         <Progress value={Math.min(1, me.points / top)} label="Баллы недели" tone="accent" />
         {me.shared_with.length > 0 && <p className="small secondary">Место поровну с: {me.shared_with.join(", ")}</p>}
       </div>
@@ -158,7 +158,7 @@ function RaceAdvice({ data }: { data: RaceOut }) {
       {!next && <p className="race-advice__lead">Вы на первом месте. Чтобы удержать его, не теряйте баллы там, где они уходят.</p>}
       <section>
         <h3>Где вы теряете баллы</h3>
-        <ul className="race-metrics">{data.metrics.map((m) => <MetricRow key={m.code} metric={m} />)}</ul>
+        <ul className="race-metrics">{[...data.metrics].sort((a, b) => Number(!!a.bonus) - Number(!!b.bonus)).map((m) => <MetricRow key={m.code} metric={m} />)}</ul>
         {advice.room > 0 && <p className="small secondary">Всего можно добрать ещё {pointsLabel(advice.room)}.</p>}
       </section>
     </div>
@@ -172,6 +172,19 @@ export function nextBand(metric: Pick<RaceMetric, "bands" | "points" | "unit">):
 }
 
 function MetricRow({ metric: m }: { metric: RaceMetric }) {
+  if (m.bonus) return <li className="race-metric">
+    <div className="race-metric__head">
+      <strong>{m.title} <Badge tone="accent">бонус</Badge></strong>
+      {/* Not a loss: what the bonus can still add over the 100 points. */}
+      <span className={`race-metric__lost${m.locked || !m.reported || m.lost > 0 ? " is-missing" : " is-full"}`}>
+        {m.locked ? "закрыт" : !m.reported ? "нет данных" : m.lost > 0 ? `ещё +${pointsLabel(m.lost)}` : "максимум"}
+      </span>
+    </div>
+    <p className="small secondary">{m.locked
+      ? `Сверх 100 баллов до +${pointsLabel(m.max_points)}: откроется, когда норма выполнена на 100 %`
+      : <>{withUnit(m.value, m.unit)} · {points(m.points)} из {points(m.max_points)} сверх 100 · полностью с {withUnit(m.target, m.unit)}</>}</p>
+    <Progress value={!m.locked && m.max_points ? m.points / m.max_points : 0} tone={m.locked || m.lost > 0 ? "warning" : "success"} label={m.title} size="s" />
+  </li>;
   return <li className="race-metric">
     <div className="race-metric__head">
       <strong>{m.title}</strong>

@@ -14,6 +14,8 @@ import "../pages/wallet.css";
 import "./manualCoins.css";
 
 type Direction = "credit" | "debit" | "gratitude";
+/** Driver gratitude is paused for now: the option is hidden, the history stays. */
+const GRATITUDE = false;
 type RecipientMode = "operators" | "groups" | "all";
 interface ManualCoinsProps { operator?: CoinOperatorIdentity; onClose: () => void }
 
@@ -63,7 +65,8 @@ function AuthorizedManualCoinsSheet({ operator, onClose }: ManualCoinsProps) {
     staleTime: 0,
   });
   const summary = preview.data;
-  const canGratitude = Boolean(target);
+  // Driver gratitude is paused: not counted in the contest for now (docs/CHANNELS.md).
+  const canGratitude = GRATITUDE && Boolean(target);
   const save = useMutation({
     mutationFn: () => {
       const sent = command.current!.command;

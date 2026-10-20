@@ -211,6 +211,9 @@ def request_sections(path: str, method: str, role: Role | None = None) -> tuple[
         return ("team",)
     if path.startswith(("/admin/weeks", "/admin/day-metrics")):
         return ("performance",)
+    # A supervisor records the foreign sites of their team (docs/CHANNELS.md).
+    if path.startswith("/admin/violations"):
+        return ("team", "motivation", "performance")
     if path.startswith(("/admin/learning", "/admin/learning-results")):
         return ("learning_admin",)
     # Work Sites: operators practise, staff look in through learning management.

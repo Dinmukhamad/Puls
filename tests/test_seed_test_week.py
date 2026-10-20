@@ -50,8 +50,9 @@ async def test_operator_week_is_stable_and_plausible(session: AsyncSession) -> N
         assert value >= 0, code
         if code in ("quality", "efficiency"):
             assert value <= 100, code
-    assert first.weekly["hours_worked"] == sum(
-        value for (_, code), value in first.daily.items() if code == "hours_worked"
+    # The week's norm of hours is its hours against 40 h: the days' shares of 8 h, over five days.
+    assert first.weekly["hours_norm"] == round(
+        sum(value for (_, code), value in first.daily.items() if code == "hours_norm") / 5, 1
     )
     # The team shows every state in analytics: a quarter meets all goals, the rest miss some.
     weeks = [

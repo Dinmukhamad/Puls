@@ -13,10 +13,9 @@ from app.models.contest import ContestWeek, OperatorDayMetric
 from app.models.enums import Role
 from app.schemas.admin import DayMetricsBulkIn, MetricValueIn
 from app.schemas.common import Message
-from app.schemas.imports import ReportPreviewOut, ReportWeekOut
+from app.schemas.imports import ReportPendingOut, ReportPreviewOut, ReportWeekOut
 from app.services import imports as import_service
 from app.services import szov_reports
-from app.services import weekly as weekly_service
 from app.services.rules import write_audit
 
 router = APIRouter(prefix="/admin/day-metrics", tags=["Недели конкурса"])
@@ -98,12 +97,16 @@ async def _read_reports(
     return parsed, await szov_reports.build_plan(session, actor, parsed)
 
 
+def _label(start) -> str:
+    iso_year, iso_week, _ = start.isocalendar()
+    return f"{iso_year}-W{iso_week:02d}"
+
+
 async def _report_out(session, parsed, plan, weeks=None, detail=None) -> ReportPreviewOut:
     if weeks is None:
         weeks = []
         for item in plan["weeks"]:
-            start = item["days"][0]
-            iso_year, iso_week, _ = start.isocalendar()
+            iso_year, iso_week, _ = item["days"][0].isocalendar()
             week = await session.scalar(
                 select(ContestWeek).where(
                     ContestWeek.iso_year == iso_year, ContestWeek.iso_week == iso_week
@@ -111,9 +114,9 @@ async def _report_out(session, parsed, plan, weeks=None, detail=None) -> ReportP
             )
             weeks.append(
                 {
-                    "label": f"{iso_year}-W{iso_week:02d}",
+                    "label": _label(item["days"][0]),
                     "status": str(week.status) if week else "new",
-                    "operators": len(item["values"]),
+                    "operators": sum(1 for values in item["values"].values() if values),
                 }
             )
     return ReportPreviewOut(
@@ -124,6 +127,7 @@ async def _report_out(session, parsed, plan, weeks=None, detail=None) -> ReportP
         unmatched=plan["unmatched"],
         without_data=len(plan["without_data"]),
         day_values=len(plan["daily"]),
+        reported_to={team: last.isoformat() for team, last in plan["until"].items()},
         notes=plan["notes"],
         weeks=[
             ReportWeekOut(
@@ -132,6 +136,16 @@ async def _report_out(session, parsed, plan, weeks=None, detail=None) -> ReportP
                 ends_on=item["days"][-1].isoformat(),
             )
             for week, item in zip(weeks, plan["weeks"], strict=True)
+        ],
+        pending=[
+            ReportPendingOut(
+                label=_label(item["days"][0]),
+                starts_on=item["days"][0].isoformat(),
+                ends_on=item["days"][-1].isoformat(),
+                operators=item["operators"],
+                reason=item["reason"],
+            )
+            for item in plan["pending"]
         ],
         detail=detail,
     )
@@ -166,8 +180,9 @@ async def upload_reports(
     """
     Отчёты по командам и отчёт проверяющих за месяц.
 
-    Каждый день месяца сохраняется для аналитики, полные недели месяца — в показатели
-    конкурса. Недели не закрываются, коины не начисляются. Руководитель сразу получает
+    Данные отчётов хранятся по дням: каждый выгруженный день идёт в аналитику, неделя — в
+    показатели конкурса, когда все её дни есть в отчётах (неделя на стыке месяцев ждёт отчёта
+    соседнего месяца). Недели не закрываются, коины не начисляются. Руководитель сразу получает
     предварительный рейтинг, у супервайзера неделя ждёт расчёта руководителем.
     """
     parsed, plan = await _read_reports(session, actor, files, month)
@@ -176,8 +191,6 @@ async def upload_reports(
             "В отчётах нет операторов, которых вы ведёте на сайте", code="no_operators"
         )
     await szov_reports.ensure_metrics(session, parsed)
-    for start in (item["days"][0] for item in plan["weeks"]):
-        await weekly_service.get_or_create_week(session, start)
     result = await szov_reports.save(
         session, actor, plan, recalculate=actor.role in (Role.HEAD, Role.ADMIN)
     )

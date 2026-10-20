@@ -112,3 +112,29 @@ test("rank, lifetime coins, nominations and learning badges keep their distinct 
     assert.equal(card.facts.length, 3);
   }
 });
+
+test("overtime is described as a bonus over the 100 points on top of the norm of hours (docs/CHANNELS.md)", () => {
+  const norm = row({ code: "hours_norm", title: "Выполнение нормы часов", kind: "positive", max_points: 25, unit: "%" });
+  const overtime = row({ kind: "positive", title: "Переработки", unit: "ч", target_value: 8, max_points: 10, bonus_for: "hours_norm", bonus_share: 0.4 });
+  assert.deepEqual(values(definitionPresentation("metrics", overtime, [norm])), {
+    "Бонус к показателю": "Выполнение нормы часов — когда он выполнен на 100 %",
+    "Максимум": "10 баллов сверх 100 · 40 % баллов показателя",
+    "Полностью": "с 8 ч",
+    "Направление": "Линия",
+  });
+  const line = definitionRow("metrics", overtime, [norm]);
+  assert.equal(line.value, "До +10 баллов");
+  assert.equal(line.hint, "сверх 100, полностью с 8 ч");
+  assert.equal(line.meta, "Бонус к «Выполнение нормы часов», когда он выполнен на 100 %");
+  assert.equal(definitionRow("metrics", { ...overtime, description: "Своё описание" }, [norm]).meta, "Своё описание");
+  // A metric without points is shown for analytics, not as «0 баллов за цель».
+  assert.equal(definitionRow("metrics", row({ kind: "positive", unit: "сек", target_value: 120, max_points: 0 })).hint, "без баллов");
+});
+
+test("a nomination of one channel says among whom it is played", () => {
+  const chats = row({ metric_code: "quality", coins_reward: 100, channel: "chat" });
+  assert.equal(values(definitionPresentation("nominations", chats, metrics))["Среди кого"], "Операторы чатов");
+  assert.match(definitionRow("nominations", chats, metrics).meta, /^Чаты · Качество работы · /);
+  // For all operators nothing is added: the existing facts stay as they were.
+  assert.equal(definitionPresentation("nominations", row({ metric_code: "quality", channel: "all" }), metrics).facts.length, 3);
+});

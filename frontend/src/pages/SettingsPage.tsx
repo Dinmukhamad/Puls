@@ -68,12 +68,15 @@ function RulesSection() {
 }
 
 const C = "коинов";
+/** A new bonus gives 40 % of its main metric's points, as overtime does (docs/CHANNELS.md). */
+const BONUS_SHARE = .4;
 const ruleGroups: { title: string; subtitle: string; fields: FieldSpec[] }[] = [
   { title: "Баллы и коины", subtitle: "Баллы конкурса переводятся в коины после закрытия периода", fields: [
     { key: "points_per_coin", label: "Баллов за 1 коин", type: "number", required: true, min: .000001, step: "any", unit: "баллов" },
     { key: "rank1_bonus", label: "Бонус за 1 место конкурса", type: "number", required: true, min: 0, unit: C },
     { key: "rank2_bonus", label: "Бонус за 2 место конкурса", type: "number", required: true, min: 0, unit: C },
     { key: "rank3_bonus", label: "Бонус за 3 место конкурса", type: "number", required: true, min: 0, unit: C },
+    { key: "prize_min_points", label: "Минимум для приза за место", type: "number", required: true, min: 0, step: "any", unit: "баллов", hint: "Средняя неделя оператора за период. Ниже — место остаётся, приз не платится." },
   ] },
   { title: "Штрафы", subtitle: "Списываются при закрытии недели, после её начислений. Если коинов не хватает, остаток спишется при следующем закрытии", fields: [
     { key: "lateness_fine", label: "За каждое опоздание", type: "number", required: true, min: 0, unit: C },
@@ -83,9 +86,7 @@ const ruleGroups: { title: string; subtitle: string; fields: FieldSpec[] }[] = [
     { key: "no_lateness_bonus", label: "Неделя без опозданий", type: "number", required: true, min: 0, unit: C },
     { key: "no_forbidden_sites_bonus", label: "Без посторонних сайтов", type: "number", required: true, min: 0, unit: C },
     { key: "nomination_bonus_default", label: "Бонус номинации по умолчанию", type: "number", required: true, min: 0, unit: C },
-    { key: "driver_gratitude_bonus", label: "Благодарность водителя", type: "number", required: true, min: 0, unit: C },
-    { key: "gratitude_monthly_limit", label: "Благодарностей в месяц на оператора", type: "number", required: true, min: 0, hint: "0 — без ограничения", unit: "шт" },
-    { key: "nomination_min_participants", label: "Минимум участников для номинаций", type: "number", required: true, min: 0, unit: "чел." },
+    { key: "nomination_min_participants", label: "Минимум участников для номинаций", type: "number", required: true, min: 0, hint: "В каждом направлении: у номинации линии — среди операторов линии.", unit: "чел." },
   ] },
   { title: "Ручные операции", subtitle: "Ограничения для начислений и списаний сотрудниками", fields: [
     { key: "manual_max_abs_amount", label: "Максимум за одну операцию", type: "number", required: true, min: 1, unit: C },
@@ -191,9 +192,12 @@ function groups(kind: DefinitionKind, items: Definition[]): { title: string; sub
   if (kind === "metrics") {
     const channelOf = (row: Definition) => String(row.channel || "line");
     const results = (channel: string) => items.filter(row => row.kind !== "anti" && channelOf(row) === channel);
-    const total = (channel: string) => items.filter(row => row.kind !== "anti" && row.is_active && [channel, "all"].includes(channelOf(row)))
+    const active = (channel: string, bonus: boolean) => items.filter(row => row.kind !== "anti" && row.is_active && Boolean(row.bonus_for) === bonus && [channel, "all"].includes(channelOf(row)))
       .reduce((sum, row) => sum + Number(row.max_points || 0), 0);
-    const sum = (channel: string) => { const value = total(channel); return Math.abs(value - 100) < 1e-6 ? "в сумме 100 баллов" : `в сумме ${points(value)} — должно быть 100, чтобы неделя линии и чатов стоила одинаково`; };
+    const sum = (channel: string) => {
+      const value = active(channel, false), bonus = active(channel, true);
+      return `${Math.abs(value - 100) < 1e-6 ? "в сумме 100 баллов" : `в сумме ${points(value)} — должно быть 100, чтобы неделя линии и чатов стоила одинаково`}${bonus > 0 ? ` · бонус сверх — до ${points(bonus)}` : ""}`;
+    };
     const penalties = items.filter(row => row.kind === "anti");
     return [
       { title: "Линия · рабочие результаты", subtitle: `${count(results("line"), "показатель", "показателя", "показателей")} · ${sum("line")}`, items: results("line") },
@@ -202,7 +206,17 @@ function groups(kind: DefinitionKind, items: Definition[]): { title: string; sub
       { title: "Штрафные показатели", subtitle: `${count(penalties, "показатель", "показателя", "показателей")} · снижают итоговый балл до перевода в коины`, items: penalties },
     ].filter(group => group.items.length);
   }
-  return [{ title: kind === "nominations" ? "Номинации" : "Достижения", subtitle: kind === "nominations" ? `${count(items, "номинация", "номинации", "номинаций")} · победитель получает награду, когда закрываются итоги конкурса` : `${count(items, "достижение", "достижения", "достижений")} · открываются сами по подтверждённым результатам`, items }];
+  if (kind === "nominations") {
+    // Each one is played among the operators it can describe (docs/CHANNELS.md).
+    const among = (channel: string) => items.filter(row => String(row.channel || "all") === channel);
+    const subtitle = (list: Definition[], who: string) => `${count(list, "номинация", "номинации", "номинаций")} · ${who}, награда — когда закрываются итоги конкурса`;
+    return [
+      { title: "Линия", subtitle: subtitle(among("line"), "среди операторов линии"), items: among("line") },
+      { title: "Чаты", subtitle: subtitle(among("chat"), "среди операторов чатов"), items: among("chat") },
+      { title: "Все операторы", subtitle: subtitle(among("all"), "линия и чаты вместе"), items: among("all") },
+    ].filter(group => group.items.length);
+  }
+  return [{ title: "Достижения", subtitle: `${count(items, "достижение", "достижения", "достижений")} · открываются сами по подтверждённым результатам`, items }];
 }
 
 function DefinitionDetails({ kind, row, metrics, onClose, onEdit }: { kind: DefinitionKind; row: Definition; metrics: Definition[]; onClose: () => void; onEdit?: () => void }) {
@@ -214,29 +228,39 @@ function DefinitionDetails({ kind, row, metrics, onClose, onEdit }: { kind: Defi
 
 function defaultDefinition(kind: DefinitionKind): DefinitionInput {
   const common = { code: createInternalCode(kind), title: "", description: "", is_active: true, sort_order: 100 };
-  if (kind === "metrics") return { ...common, unit: "", kind: "positive", direction: "higher_is_better", target_value: 1, max_points: 20, penalty_per_unit: 0, allow_overachievement: false, channel: "line", bands: null };
-  if (kind === "nominations") return { ...common, metric_code: "", direction: "higher_is_better", require_zero: false, min_value: null, coins_reward: 5 };
+  if (kind === "metrics") return { ...common, unit: "", kind: "positive", direction: "higher_is_better", target_value: 1, max_points: 20, penalty_per_unit: 0, allow_overachievement: false, channel: "line", bands: null, bonus_for: null, bonus_share: null };
+  if (kind === "nominations") return { ...common, metric_code: "", direction: "higher_is_better", require_zero: false, min_value: null, coins_reward: 5, channel: "all" };
   return { ...common, icon: "", rule_type: "top_rank", rule_params: { max_rank: 3 }, coins_reward: 0, is_repeatable: false };
 }
 
 function DefinitionEditor({ kind, target, onClose }: { kind: DefinitionKind; target?: Definition; onClose: () => void }) {
-  const [values, setValues] = useState<DefinitionInput>(() => target ? { ...target } : defaultDefinition(kind));
-  const metrics = useQuery({ queryKey: ["configuration", "metrics"], queryFn: () => configuration.definitions("metrics"), enabled: kind !== "metrics" });
+  const [values, setValues] = useState<DefinitionInput>(() => {
+    const initial = target ? { ...target } : defaultDefinition(kind);
+    return kind === "metrics" ? { ...initial, bonus_percent: Math.round(Number(initial.bonus_share || BONUS_SHARE) * 1000) / 10 } : initial;
+  });
+  const metrics = useQuery({ queryKey: ["configuration", "metrics"], queryFn: () => configuration.definitions("metrics") });
   const client = useQueryClient(); const toast = useToast();
   const options = metrics.data?.map((m) => ({ value: m.code, label: `${m.title}${m.is_active ? "" : " · неактивен"}` })) ?? [];
   const fields: FieldSpec[] = [...commonFields];
-  const stepped = kind === "metrics" && Array.isArray(values.bands);
+  const bonus = kind === "metrics" && values.kind === "positive" && Boolean(values.bonus_for);
+  const stepped = kind === "metrics" && !bonus && Array.isArray(values.bands);
+  // A bonus over the 100 points builds on a metric of its channel that gives points itself (docs/CHANNELS.md).
+  const bases = (metrics.data ?? []).filter((m) => m.code !== values.code && m.kind === "positive" && !m.bonus_for && Number(m.max_points) > 0
+    && String(m.channel || "line") === String(values.channel || "line"));
   if (kind === "metrics") fields.push(
     { key: "channel", label: "Направление", type: "select", options: [{ value: "line", label: "Линия" }, { value: "chat", label: "Чаты" }, { value: "all", label: "Общий для линии и чатов" }], hint: "Линия и чаты соревнуются отдельно, у каждого свои показатели на 100 баллов. Общий — например, дисциплина." },
     { key: "unit", label: "Единица измерения", maxLength: 32, hint: "Например %, мин или шт." },
     { key: "kind", label: "Тип показателя", type: "select", options: [{ value: "positive", label: "Рабочий результат" }, { value: "anti", label: "Штрафной показатель" }] },
     { key: "direction", label: "Какой результат лучше", type: "select", options: directions },
-    { key: "target_value", label: "Целевое значение", type: "number", required: true, min: values.kind === "positive" ? .000001 : 0, step: "any" },
-    ...(stepped ? [] : [{ key: "max_points", label: "Баллы за выполнение цели", type: "number", required: true, min: 0, step: "any" } as FieldSpec]),
+    ...(values.kind === "positive" ? [{ key: "bonus_for", label: "Как даёт баллы", type: "select", options: [{ value: "", label: "Баллы за выполнение цели" }, ...bases.map((m) => ({ value: m.code, label: `Бонус к «${m.title}» сверх 100 баллов` }))], hint: "Бонус — как переработки: платится, только когда основной показатель выполнен на 100 %, и не входит в 100 баллов недели." } as FieldSpec] : []),
+    { key: "target_value", label: bonus ? "Значение для всего бонуса" : "Целевое значение", type: "number", required: true, min: values.kind === "positive" ? .000001 : 0, step: "any" },
+    ...(bonus ? [{ key: "bonus_percent", label: "Бонус — доля баллов основного показателя", type: "number", required: true, min: 1, step: "any", unit: "%", hint: `Сейчас это до ${points(Number(bases.find((m) => m.code === values.bonus_for)?.max_points ?? 0) * Number(values.bonus_percent || 0) / 100)} баллов; меньше значения — доля бонуса.` } as FieldSpec]
+      : stepped ? [] : [{ key: "max_points", label: "Баллы за выполнение цели", type: "number", required: true, min: 0, step: "any", hint: "0 — показатель без баллов: виден в аналитике, в рейтинг не идёт." } as FieldSpec]),
     { key: "penalty_per_unit", label: "Штраф в баллах за единицу нарушения", type: "number", required: true, min: 0, step: "any" },
     { key: "allow_overachievement", label: "Разрешить перевыполнение цели", type: "boolean", hint: "В текущем расчёте баллы ограничены наградой за выполнение цели." },
   );
   if (kind === "nominations") fields.push(
+    { key: "channel", label: "Среди кого", type: "select", options: [{ value: "all", label: "Все операторы" }, { value: "line", label: "Операторы линии" }, { value: "chat", label: "Операторы чатов" }], hint: "Номинация разыгрывается среди операторов направления: показатель чатов — у чатов, звонков — у линии." },
     { key: "metric_code", label: "Показатель для выбора победителя", type: "select", required: true, options: [...options, { value: "__progress__", label: "Прирост баллов к прошлой неделе" }] },
     { key: "direction", label: "Выбирать результат", type: "select", options: directions },
     { key: "require_zero", label: "Требовать нулевое значение", type: "boolean", hint: "Например, отсутствие опозданий." },
@@ -272,6 +296,10 @@ function DefinitionEditor({ kind, target, onClose }: { kind: DefinitionKind; tar
       data.bands = stepped && values.kind === "positive" && values.direction === "higher_is_better"
         ? (values.bands as MetricBand[]).map((band) => ({ from: Number(band.from), points: Number(band.points) })).sort((a, b) => a.from - b.from)
         : null;
+      // A bonus's points are its share of the main metric's: the server keeps them in step.
+      data.bonus_for = bonus ? values.bonus_for : null;
+      data.bonus_share = bonus ? Number(values.bonus_percent) / 100 : null;
+      delete data.bonus_percent;
     }
     if (kind === "badges") {
       if (["top_rank", "total_earned", "nomination_count"].includes(String(data.rule_type))) data.coins_reward = 0;
@@ -295,13 +323,13 @@ function DefinitionEditor({ kind, target, onClose }: { kind: DefinitionKind; tar
     });
   }
   function submit(event: FormEvent) { event.preventDefault(); if (!save.isPending) save.mutate(); }
-  return <Sheet title={target ? `Изменить: ${target.title}` : createTitles[kind]} size="l" onClose={() => { if (!save.isPending) onClose(); }} footer={<><Button disabled={save.isPending} onClick={onClose}>Отмена</Button><Button type="submit" form="configuration-definition" variant="primary" disabled={save.isPending || (kind !== "metrics" && !metrics.isSuccess)}>{save.isPending ? "Сохраняем…" : "Сохранить"}</Button></>}>
+  return <Sheet title={target ? `Изменить: ${target.title}` : createTitles[kind]} size="l" onClose={() => { if (!save.isPending) onClose(); }} footer={<><Button disabled={save.isPending} onClick={onClose}>Отмена</Button><Button type="submit" form="configuration-definition" variant="primary" disabled={save.isPending || !metrics.isSuccess}>{save.isPending ? "Сохраняем…" : "Сохранить"}</Button></>}>
     <form id="configuration-definition" className="stack" onSubmit={submit}>
       {kind === "badges" && <p className="muted">При сохранении проверяются подтверждённые результаты активных операторов. Первое выполненное условие открывает достижение и начисляет бонус. Полученные награды повторно не оплачиваются.</p>}
       {save.isError && <p role="alert" className="configuration-error">{configurationError(save.error)}</p>}
       {metrics.isError && <ErrorState error={new Error(configurationError(metrics.error))} onRetry={() => metrics.refetch()} />}
       {fields.map((spec) => <ConfigurationField key={spec.key} spec={spec} value={values[spec.key]} disabled={save.isPending} onChange={(v) => change(spec.key, v)} />)}
-      {kind === "metrics" && values.kind === "positive" && values.direction === "higher_is_better" && <BandsEditor unit={String(values.unit ?? "")} bands={stepped ? values.bands as MetricBand[] : null} disabled={save.isPending} onChange={(bands) => change("bands", bands)} />}
+      {kind === "metrics" && !bonus && values.kind === "positive" && values.direction === "higher_is_better" && <BandsEditor unit={String(values.unit ?? "")} bands={stepped ? values.bands as MetricBand[] : null} disabled={save.isPending} onChange={(bands) => change("bands", bands)} />}
       {kind === "badges" && <fieldset className="configuration-condition"><legend>Условия достижения</legend><div className="configuration-form-grid">{badgeFields.map((spec) => <ConfigurationField key={`${rule}-${spec.key}`} spec={spec} value={ruleParams[spec.key] ?? badgeDefault(spec.key, rule)} disabled={save.isPending} onChange={(v) => setValues((current) => ({ ...current, rule_params: { ...ruleParams, [spec.key]: typeof v === "number" ? v : String(v ?? "") } }))} />)}</div></fieldset>}
     </form>
   </Sheet>;

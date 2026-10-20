@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, CheckConstraint, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin
@@ -92,6 +92,9 @@ class GamificationSettings(Base, TimestampMixin):
 
     #: Минимальное количество участников недели для присуждения номинаций.
     nomination_min_participants: Mapped[int] = mapped_column(Integer, default=3)
+    #: Приз за место — только с этим средним баллом за неделю: за месяц — сумма баллов, делённая
+    #: на рассчитанные недели месяца, в недельном конкурсе — баллы недели. 0 — без порога.
+    prize_min_points: Mapped[float] = mapped_column(Float, default=50.0, server_default="50")
 
     updated_by_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True
@@ -117,6 +120,7 @@ class GamificationSettings(Base, TimestampMixin):
             "lateness_fine": self.lateness_fine,
             "forbidden_site_fine": self.forbidden_site_fine,
             "forbidden_sites_metric_code": self.forbidden_sites_metric_code,
+            "prize_min_points": self.prize_min_points,
         }
 
 

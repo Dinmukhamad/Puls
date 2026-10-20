@@ -6,7 +6,7 @@ import { formatDateRange, todayDateKey } from '../components/dateRange';
 import { calendarDate } from '../components/weekCalendar';
 import { Card, EmptyState } from '../components/ui';
 import { DeviationChart, GoalBar, MetricCards } from './AnalyticsDashboard';
-import { assess, finite, gapText, metricValue, periodCaption, shortNumber } from './analyticsInsights';
+import { assess, finite, gapText, metricValue, periodCaption, shortNumber, signalMark } from './analyticsInsights';
 import { categoryHealth, groupBreakdown, periodChange, weeklyColumns, weeklyCoverage, type AnalyticsCategory, type AnalyticsChannel } from './analyticsWorkspace';
 import './analytics-panels.css';
 
@@ -57,7 +57,7 @@ export function FourWeekTable({ report, onMetric }: { report: AnalyticsOut; onMe
             const value = metric.trend?.[week.index];
             const signal = assess(value, metric).signal;
             return <td key={week.starts_on}><span className={`analytics-week-reading analytics-signal--${signal}`} title={gapText(value, metric)}>
-              <span aria-hidden="true">{signal === 'missing' ? '—' : signal === 'met' ? '✓' : '!'}</span>{finite(value) ? metricValue(value, metric) : 'Нет данных'}
+              <span aria-hidden="true">{signalMark(signal)}</span>{finite(value) ? metricValue(value, metric) : 'Нет данных'}
               <span className="sr-only">. {gapText(value, metric)}</span>
             </span></td>;
           })}<td><Change current={metric.trend?.[last.index]} previous={weeks.length > 1 ? metric.trend?.[first.index] : null} metric={metric} /></td>

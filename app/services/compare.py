@@ -82,6 +82,7 @@ def metric_table(
             "points": None if my_points is None or definition.code not in my_points
             else round(my_points[definition.code], 2),
             "max_points": definition.max_points,
+            "bonus": bool(definition.bonus_for),
         })
     return out
 
@@ -184,7 +185,7 @@ def _channels(
                 "points": round(mine[best], 2), "is_me": best == viewer.id},
             "is_mine": channel == (viewer.channel or Channel.LINE),
             "metrics": [
-                {"title": d.title, "max_points": d.max_points}
+                {"title": d.title, "max_points": d.max_points, "bonus": bool(d.bonus_for)}
                 for d in channel_definitions(definitions, channel)
                 if d.kind == MetricKind.POSITIVE and d.max_points
             ],

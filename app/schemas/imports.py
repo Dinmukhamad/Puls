@@ -51,6 +51,17 @@ class ReportWeekOut(BaseModel):
     operators: int
 
 
+class ReportPendingOut(BaseModel):
+    """A week touching the month that waits for days not reported yet."""
+
+    label: str
+    starts_on: str
+    ends_on: str
+    operators: int
+    #: «ждёт отчёта за октябрь», «ждёт выгрузки после 18.10».
+    reason: str
+
+
 class ReportPreviewOut(BaseModel):
     month: str
     files: list[ReportFileOut]
@@ -59,6 +70,9 @@ class ReportPreviewOut(BaseModel):
     unmatched: list[str] = Field(default_factory=list)
     without_data: int = 0
     day_values: int = 0
+    #: The last day the team reports cover, by channel (line, chat); absent — no team report.
+    reported_to: dict[str, str] = Field(default_factory=dict)
     notes: list[ReportNoteOut] = Field(default_factory=list)
     weeks: list[ReportWeekOut] = Field(default_factory=list)
+    pending: list[ReportPendingOut] = Field(default_factory=list)
     detail: str | None = None

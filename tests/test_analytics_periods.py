@@ -1,8 +1,20 @@
 from datetime import date
 
-from app.models.contest import OperatorWeekMetric
+from sqlalchemy import update
+
+from app.models.contest import MetricDefinition, OperatorWeekMetric
 from app.services import weekly
 from tests.conftest import auth, login, make_user
+
+
+async def _summed_metrics_on(session) -> None:
+    """Hours and counts that add up over a week: switched off in the catalogue, on for these."""
+    await session.execute(
+        update(MetricDefinition)
+        .where(MetricDefinition.code.in_(("hours_worked", "driver_gratitudes")))
+        .values(is_active=True)
+    )
+    await session.commit()
 
 
 async def test_daily_values_upload_and_show_day_by_day(client, session, operator, supervisor):
@@ -128,6 +140,7 @@ async def test_week_range_lists_every_week_between_the_dates(client, session, op
 async def test_days_are_judged_against_a_days_share_of_weekly_targets(
     client, session, operator, supervisor
 ):
+    await _summed_metrics_on(session)
     second = await make_user(session, login="op2", group_id=operator.group_id)
     headers = auth(await login(client, supervisor.login))
     day = "2026-08-04"
@@ -160,7 +173,7 @@ async def test_days_are_judged_against_a_days_share_of_weekly_targets(
         1,
     )
     # Percentages, per-hour rates and violation limits do not depend on the period.
-    assert (targets["quality"], targets["calls_per_hour"], targets["lateness"]) == (100, 12, 1)
+    assert (targets["quality"], targets["calls_per_hour"], targets["lateness"]) == (100, 12, 0)
     assert metrics["hours_worked"]["below_target"] == 1, "only the 7-hour day misses 8 h"
     assert metrics["driver_gratitudes"]["below_target"] == 0
     assert {row["full_name"]: row["target_met"] for row in report["operators"]} == {
@@ -261,6 +274,7 @@ async def test_a_range_without_daily_values_is_read_by_its_contest_weeks(
 async def test_whole_contest_weeks_keep_weekly_values_when_days_are_also_loaded(
     client, session, operator, supervisor
 ):
+    await _summed_metrics_on(session)
     for day, hours in ((date(2026, 8, 3), 36), (date(2026, 8, 10), 40)):
         week = await weekly.get_or_create_week(session, day)
         session.add(

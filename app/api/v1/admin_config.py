@@ -134,6 +134,47 @@ def _with_bands(data: dict[str, Any]) -> dict[str, Any]:
     return data
 
 
+#: The share of the base metric's points a bonus gives unless set (overtime: 40 %).
+BONUS_SHARE = 0.4
+
+
+async def _with_bonus(
+    session: SessionDep, data: dict[str, Any], code: str, changes: dict[str, Any] | None = None
+) -> None:
+    """
+    A bonus over the 100 points (overtime, docs/CHANNELS.md): it builds on a metric of its channel
+    that adds points, and gives at most its share of that metric's points.
+    """
+    base_code = data.get("bonus_for")
+    target = changes if changes is not None else data
+    if not base_code:
+        if "bonus_for" in target:
+            target["bonus_share"] = None
+        return
+    if base_code == code:
+        raise DomainError("Бонус не может строиться на самом себе")
+    if data.get("bands") or data["kind"] != MetricKind.POSITIVE:
+        raise DomainError(
+            "Бонусом может быть только показатель, который добавляет баллы, без ступеней"
+        )
+    base = await session.scalar(select(MetricDefinition).where(MetricDefinition.code == base_code))
+    if base is None or base.kind != MetricKind.POSITIVE or base.bonus_for:
+        raise DomainError("Бонус строится на показателе, который сам даёт баллы")
+    if base.channel != data.get("channel"):
+        raise DomainError("Бонус и показатель, на котором он строится, — одного направления")
+    share = data.get("bonus_share") or BONUS_SHARE
+    target["bonus_share"] = share
+    target["max_points"] = round(share * base.max_points, 2)
+
+
+async def _sync_bonuses(session: SessionDep, metric: MetricDefinition) -> None:
+    """A bonus keeps its share of the points of the metric it builds on."""
+    for bonus in await session.scalars(
+        select(MetricDefinition).where(MetricDefinition.bonus_for == metric.code)
+    ):
+        bonus.max_points = round((bonus.bonus_share or BONUS_SHARE) * metric.max_points, 2)
+
+
 async def _validate_badge(session: SessionDep, data: dict[str, Any]) -> None:
     if str(data.get("code", "")).startswith("level_"):
         raise DomainError("Коды level_ зарезервированы для достижений за уровни")
@@ -254,8 +295,13 @@ async def list_metrics(
 async def create_metric(
     session: SessionDep, actor: HeadUser, payload: MetricCreate
 ) -> MetricDefinition:
-    data = _with_bands(_clean_changes(payload.model_dump(), ("unit", "description", "bands")))
+    data = _with_bands(
+        _clean_changes(
+            payload.model_dump(), ("unit", "description", "bands", "bonus_for", "bonus_share")
+        )
+    )
     _validate_metric(data)
+    await _with_bonus(session, data, data["code"])
     metric = MetricDefinition(**data)
     session.add(metric)
     await _save(session, actor, metric, "metric", data)
@@ -270,12 +316,19 @@ async def update_metric(
     if metric is None:
         raise NotFoundError(f"Показатель id={metric_id} не найден")
     changes = _with_bands(
-        _clean_changes(payload.model_dump(exclude_unset=True), ("unit", "description", "bands"))
+        _clean_changes(
+            payload.model_dump(exclude_unset=True),
+            ("unit", "description", "bands", "bonus_for", "bonus_share"),
+        )
     )
-    _validate_metric({**MetricOut.model_validate(metric).model_dump(), **changes})
+    merged = {**MetricOut.model_validate(metric).model_dump(), **changes}
+    _validate_metric(merged)
+    await _with_bonus(session, merged, metric.code, changes)
     before = {field: getattr(metric, field) for field in changes}
     for field, value in changes.items():
         setattr(metric, field, value)
+    if "max_points" in changes:
+        await _sync_bonuses(session, metric)
     await _save(session, actor, metric, "metric", changes, before)
     return metric
 

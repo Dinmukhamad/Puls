@@ -14,12 +14,11 @@ from app.services import weekly as weekly_service
 from tests.conftest import auth, login, make_group, make_user
 
 GOOD_METRICS = {
-    "hours_worked": 40,
+    "hours_norm": 100,
     "overtime": 8,
     "quality": 96,
     "efficiency": 92,
     "calls_per_hour": 13,
-    "driver_gratitudes": 4,
     "lateness": 0,
     "forbidden_sites": 0,
 }

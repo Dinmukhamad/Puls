@@ -28,6 +28,10 @@ class MetricSummary(BaseModel):
     description: str | None = None
     penalty_per_unit: float = 0
     trend: list[float | None] = Field(default_factory=list)
+    #: A bonus over the 100 points (overtime): shown, but not a goal everyone has to reach.
+    bonus: bool = False
+    #: False — a positive metric without points (chats' response time): for reference, no goal.
+    scored: bool = True
 
 
 class TrendPoint(BaseModel):

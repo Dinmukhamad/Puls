@@ -19,6 +19,10 @@ export interface MetricSummary {
   description: string | null;
   penalty_per_unit: number;
   trend: (number | null)[];
+  /** A bonus over the 100 points (overtime): below its target is no problem, only a smaller bonus. */
+  bonus?: boolean;
+  /** False — a metric without points (chats' response time, chats an hour): for reference, not a goal. */
+  scored?: boolean;
 }
 
 export interface TrendPoint {

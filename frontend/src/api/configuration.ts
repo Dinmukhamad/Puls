@@ -22,6 +22,8 @@ export interface Rules {
   rank1_bonus: number;
   rank2_bonus: number;
   rank3_bonus: number;
+  /** A place's prize needs this many points a week on average (docs/CHANNELS.md). */
+  prize_min_points: number;
   no_lateness_bonus: number;
   no_forbidden_sites_bonus: number;
   nomination_bonus_default: number;

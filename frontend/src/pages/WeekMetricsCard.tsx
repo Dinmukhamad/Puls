@@ -111,18 +111,24 @@ function MetricTile({ metric }: { metric: MetricProgress }) {
   const negative = metric.kind === "anti";
   const missing = metric.value === null;
   const score = negative ? metric.penalty : metric.points;
+  // Overtime is a bonus over the 100 points, paid once the norm of hours is met (docs/CHANNELS.md).
+  const bonus = Boolean(metric.bonus_for), locked = bonus && metric.unlocked === false;
+  // A metric without points is shown for the operator's own view, it does not move the score.
+  const unscored = !negative && !bonus && metric.max_points === 0;
+  const unit = metric.unit ? ` ${metric.unit}` : "";
   return (
     <li className="week-metric-tile">
       <div className="week-metric-tile__head">
-        <h3>{metric.title}</h3>
-        <span className={`week-metric-tile__score${missing ? " is-missing" : score === 0 ? " is-neutral" : negative ? " is-negative" : ""}`}>
-          <strong>{missing ? "—" : `${score > 0 ? negative ? "−" : "+" : ""}${points(score)}`}</strong>
-          <span>{negative ? "штрафные баллы" : "баллы"}</span>
+        <h3>{metric.title}{bonus && <> <Badge tone="accent">бонус</Badge></>}</h3>
+        <span className={`week-metric-tile__score${missing || unscored ? " is-missing" : score === 0 ? " is-neutral" : negative ? " is-negative" : ""}`}>
+          <strong>{missing || unscored ? "—" : `${score > 0 ? negative ? "−" : "+" : ""}${points(score)}`}</strong>
+          <span>{negative ? "штрафные баллы" : unscored ? "без баллов" : bonus ? `из ${points(metric.max_points)} сверх 100` : "баллы"}</span>
         </span>
       </div>
       {missing ? <p className="small secondary">Нет данных</p> : <>
-        <p className="small secondary">{negative && metric.value === 0 ? "Нарушений нет" : <>{points(metric.value)}{metric.unit ? ` ${metric.unit}` : ""}{!negative && <> · цель {points(metric.target)}{metric.unit ? ` ${metric.unit}` : ""}</>}</>}</p>
-        {!negative && metric.completion !== null && <Progress value={metric.completion} label={metric.title} tone="accent" />}
+        <p className="small secondary">{negative && metric.value === 0 ? "Нарушений нет" : <>{points(metric.value)}{unit}{!negative && <> · {bonus ? "полностью с" : "цель"} {points(metric.target)}{unit}</>}</>}</p>
+        {locked && <p className="small secondary">Бонус откроется, когда норма часов выполнена на 100 %.</p>}
+        {!negative && !locked && metric.completion !== null && <Progress value={metric.completion} label={metric.title} tone="accent" />}
       </>}
     </li>
   );

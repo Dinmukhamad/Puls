@@ -19,10 +19,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.errors import PermissionDeniedError
 from app.core.visibility import ranking_name
 from app.models.contest import (
-    TEST_SOURCE,
     ContestWeek,
     MetricDefinition,
-    OperatorWeekMetric,
     OperatorWeekResult,
 )
 from app.models.enums import Channel, MetricDirection, MetricKind, Role, WeekStatus
@@ -53,12 +51,8 @@ async def _has_data(session: AsyncSession, week: ContestWeek) -> bool:
     )
     if result is not None:
         return True
-    metric = await session.scalar(
-        select(OperatorWeekMetric.id)
-        .where(OperatorWeekMetric.week_id == week.id, OperatorWeekMetric.source != TEST_SOURCE)
-        .limit(1)
-    )
-    return metric is not None
+    # Records of foreign sites alone are no race yet: the week waits for the work's values.
+    return await weekly.has_work_data(session, week)
 
 
 async def default_week(session: AsyncSession) -> ContestWeek | None:
@@ -208,6 +202,7 @@ def metrics_of(
         direction = directions.get(item["code"], str(MetricDirection.HIGHER_IS_BETTER))
         target, top = float(item.get("target") or 0), float(item["max_points"])
         steps = (bands or {}).get(item["code"])
+        bonus = bool(item.get("bonus_for"))
         out.append({
             "code": item["code"], "title": item["title"], "unit": item.get("unit"),
             "direction": direction, "value": value, "target": target,
@@ -218,6 +213,9 @@ def metrics_of(
             "per_unit": round(top / target, 2)
             if target > 0 and direction == MetricDirection.HIGHER_IS_BETTER and not steps else None,
             "bands": steps,
+            # A bonus over the 100 points (overtime) counts only once its base metric is met.
+            "bonus": bonus,
+            "locked": bonus and not item.get("unlocked"),
         })
     out.sort(key=lambda m: (not m["reported"], -m["lost"]))
     return out
@@ -234,7 +232,7 @@ def pass_options(metrics: list[dict], gap: float, limit: int = 3) -> list[dict]:
     wanted = gap + PASS
     options = []
     for metric in metrics:
-        if not metric["reported"] or metric["lost"] + EPS < wanted:
+        if not metric["reported"] or metric.get("locked") or metric["lost"] + EPS < wanted:
             continue
         option = _option(metric, wanted)
         if option is not None:
@@ -248,7 +246,7 @@ def plan(metrics: list[dict], gap: float) -> dict:
     wanted = gap + PASS
     steps, total = [], 0.0
     for metric in metrics:
-        if not metric["reported"] or metric["lost"] <= EPS:
+        if not metric["reported"] or metric.get("locked") or metric["lost"] <= EPS:
             continue
         gain = min(metric["lost"], wanted - total)
         option = _option(metric, gain)
@@ -288,7 +286,8 @@ async def race(session: AsyncSession, viewer: User, week_id: int | None) -> dict
     period = rules.contest_period
     empty = {
         "week": None, "live": False, "period": period, "prizes": [], "participants": 0,
-        "max_points": 0.0, "me": None, "next": None, "behind": None, "podium": [],
+        "max_points": 0.0, "bonus_max": 0.0, "me": None, "next": None, "behind": None,
+        "podium": [],
         "standings": [], "metrics": [], "advice": None,
     }
     if week is None:
@@ -304,10 +303,12 @@ async def race(session: AsyncSession, viewer: User, week_id: int | None) -> dict
     others = [r for r in runners if r.user.id != viewer.id]
 
     metrics = metrics_of(me.breakdown if me else None, directions, bands)
+    # The week's 100 points; a bonus over them (overtime) is shown apart.
     if not metrics:
         top = channel_max_points(await weekly.active_metric_definitions(session), channel)
     else:
-        top = sum(m["max_points"] for m in metrics)
+        top = sum(m["max_points"] for m in metrics if not m["bonus"])
+    bonus_max = sum(m["max_points"] for m in metrics if m["bonus"])
 
     data = {
         **empty,
@@ -320,6 +321,7 @@ async def race(session: AsyncSession, viewer: User, week_id: int | None) -> dict
         if period == "week" else [],
         "participants": len(runners),
         "max_points": round(top, 2),
+        "bonus_max": round(bonus_max, 2),
         "standings": [_place(r, viewer, mine) for r in runners],
         "metrics": metrics,
     }
@@ -352,7 +354,11 @@ async def race(session: AsyncSession, viewer: User, week_id: int | None) -> dict
         nearest = below[0]
         data["behind"] = {**_place(nearest, viewer, mine), "lead": round(mine - nearest.points, 2)}
 
-    advice: dict = {"room": round(sum(m["lost"] for m in metrics), 2), "next": None, "podium": None}
+    advice: dict = {
+        "room": round(sum(m["lost"] for m in metrics if not m.get("locked")), 2),
+        "next": None,
+        "podium": None,
+    }
     if data["next"]:
         advice["next"] = {
             "rank": data["next"]["rank"], "name": data["next"]["name"],

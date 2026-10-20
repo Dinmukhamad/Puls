@@ -1,4 +1,5 @@
 import io
+from datetime import date, timedelta
 
 from openpyxl import Workbook
 from sqlalchemy import select
@@ -8,8 +9,10 @@ from app.models.contest import (
     MetricDefinition,
     OperatorDayMetric,
     OperatorWeekMetric,
+    ReportMonth,
 )
 from app.models.user import User
+from app.services import szov_reports
 from tests.conftest import auth, login
 
 AUGUST = [f"{day:02d}.08" for day in range(1, 32)]
@@ -296,6 +299,8 @@ async def test_line_chat_and_reviewers_reports_as_exported(client, session, oper
     # Chats: «др.» until 6 September, so 84 h is shared by the 24 days from the 7th.
     assert week(37, chat, "chat_hours_norm") == 81.6 and week(37, chat, "chat_overtime") == 0
     assert week(37, chat, "chat_response_time") == 112
+    # «Чаты» over the 20 h in chats: 50 a day all week.
+    assert week(37, chat, "chats_per_hour") == 17.5
     assert week(37, chat, "chat_quality") == 92 and week(37, chat, "quality") is None
     # A no-show among the fines: lateness by day is unknown and not written.
     assert week(37, chat, "lateness") is None
@@ -316,4 +321,166 @@ async def test_line_chat_and_reviewers_reports_as_exported(client, session, oper
             select(MetricDefinition.code).where(MetricDefinition.channel == "chat")
         )
     )
-    assert {"chat_hours_norm", "chat_overtime", "chat_response_time"} <= codes
+    assert {"chat_hours_norm", "chat_overtime", "chat_response_time", "chats_per_hour"} <= codes
+
+
+# Reports of any month, kept by day: weeks across months and months exported before their end.
+
+
+def month_of(year: int, month: int) -> list[date]:
+    days = [date(year, month, 1) + timedelta(days=n) for n in range(31)]
+    return [day for day in days if day.month == month]
+
+
+def weekdays(day: date) -> bool:
+    return day.weekday() < 5
+
+
+def line_book(year: int, month: int, rows: list[tuple], *, late: dict | None = None) -> bytes:
+    """A line team's report: rows of (name, norm, hours by day); 10 calls and 6 effective hours a
+    worked day; «Штрафы» with the lateness by day when given."""
+    days = month_of(year, month)
+    head = ["Оператор", "Ставка", "Норма часов (ч)", *[d.strftime("%d.%m") for d in days]]
+
+    def sheet(value):
+        return [head] + [
+            [name, 1, norm, *[value(hours(d)) for d in days]] for name, norm, hours in rows
+        ]
+
+    def worked(cell):
+        return isinstance(cell, int | float) and cell > 0
+
+    sheets = {
+        "Отработанные часы": sheet(lambda cell: cell),
+        "Звонки": sheet(lambda cell: 10 if worked(cell) else cell if cell == "др." else None),
+        "Эффективность": sheet(lambda cell: 6 if worked(cell) else None),
+    }
+    if late is not None:
+        fines = [["ФИО", "Ставка", *[d.strftime("%d.%m") for d in days], "Итого"]]
+        fines += [[name, 1, *["500" if d in late.get(name, ()) else None for d in days]]
+                  for name, _, _ in rows]
+        fines += [["Итого"], [], ["Сводка по операторам"],
+                  ["ФИО", "Ставка", "Опоздание, кол-во", "Не выход, кол-во"]]
+        fines += [[name, 1, len(late.get(name, ())), 0] for name, _, _ in rows]
+        sheets["Штрафы"] = fines
+    return book_of(sheets)
+
+
+async def _week_values(session, iso_week: int, user_id: int) -> dict[str, float]:
+    week = await session.scalar(
+        select(ContestWeek).where(ContestWeek.iso_year == 2026, ContestWeek.iso_week == iso_week)
+    )
+    if week is None:
+        return {}
+    return {
+        row.metric_code: row.value
+        for row in await session.scalars(
+            select(OperatorWeekMetric).where(
+                OperatorWeekMetric.week_id == week.id, OperatorWeekMetric.user_id == user_id
+            )
+        )
+    }
+
+
+def _post(client, headers, files, *, preview=False):
+    path = "/api/v1/admin/day-metrics/reports" + ("/preview" if preview else "")
+    return client.post(path, files=upload(files), headers=headers)
+
+
+async def test_a_week_across_two_months_is_built_from_both_reports(
+    client, session, operator, head, monkeypatch
+):
+    monkeypatch.setattr(szov_reports, "local_today", lambda: date(2026, 11, 5))
+    headers = auth(await login(client, head.login))
+    name = operator.full_name
+
+    def hours(day):
+        return 8 if weekdays(day) else 0
+
+    september = {"report_2026-09_1.xlsx": line_book(2026, 9, [(name, 176, hours)])}
+    preview = (await _post(client, headers, september, preview=True)).json()
+    assert [w["label"] for w in preview["weeks"]] == ["2026-W37", "2026-W38", "2026-W39"]
+    assert preview["reported_to"] == {"line": "2026-09-30"}
+    # The edge weeks wait for the neighbouring months.
+    assert [(w["label"], w["reason"]) for w in preview["pending"]] == [
+        ("2026-W36", "ждёт отчёта за август"), ("2026-W40", "ждёт отчёта за октябрь"),
+    ]
+    assert (await _post(client, headers, september)).status_code == 200
+    assert await _week_values(session, 40, operator.id) == {}
+
+    october = {"report_2026-10_1.xlsx": line_book(2026, 10, [(name, 176, hours)])}
+    saved = (await _post(client, headers, october)).json()
+    assert "2026-W40" in [w["label"] for w in saved["weeks"]]
+    assert [w["label"] for w in saved["pending"]] == ["2026-W44"]
+    # 28.09–04.10: 40 h against 3 days of 176 h / 30 and 4 days of 176 h / 31 = 40.31 h.
+    week = await _week_values(session, 40, operator.id)
+    assert week["hours_norm"] == 99.2 and week["overtime"] == 0
+    assert week["calls_per_hour"] == 1.25
+    item = await session.scalar(select(ReportMonth).where(ReportMonth.month == 10))
+    assert item.line_until == date(2026, 10, 31)
+
+
+async def test_a_month_exported_before_its_end_waits_for_the_rest(
+    client, session, operator, head, monkeypatch
+):
+    headers = auth(await login(client, head.login))
+    name = operator.full_name
+    late = {name: {date(2026, 10, 6)}}
+
+    def hours_until(last):
+        return lambda day: (8 if weekdays(day) else 0) if day.day <= last else None
+
+    # Exported on Tuesday 20 October: the hours end on Monday the 19th.
+    monkeypatch.setattr(szov_reports, "local_today", lambda: date(2026, 10, 20))
+    partial = {"report_2026-10_1.xlsx": line_book(
+        2026, 10, [(name, 176, hours_until(19))], late=late)}
+    body = (await _post(client, headers, partial)).json()
+    assert body["reported_to"] == {"line": "2026-10-19"}
+    assert [w["label"] for w in body["weeks"]] == ["2026-W41", "2026-W42"]
+    # The weeks the operator is in wait: for September and for the rest of the 19th's week.
+    pending = {w["label"]: w["reason"] for w in body["pending"]}
+    assert pending == {
+        "2026-W40": "ждёт отчёта за сентябрь", "2026-W43": "ждёт выгрузки после 19.10",
+    }
+    # The month's norm is shared by all its 31 days, not by the 19 exported: 40 h of 39.74 h.
+    week = await _week_values(session, 41, operator.id)
+    assert week["hours_norm"] == 100.6 and week["lateness"] == 1
+    # The week in progress gets nothing yet: no lateness 0, no hours.
+    assert await _week_values(session, 43, operator.id) == {}
+    days = {row.day for row in await session.scalars(
+        select(OperatorDayMetric).where(OperatorDayMetric.user_id == operator.id))}
+    assert max(days) == date(2026, 10, 19)
+
+    # The whole month later: the rest of the weeks, the same norm for the ones written.
+    monkeypatch.setattr(szov_reports, "local_today", lambda: date(2026, 11, 2))
+    full = {"report_2026-10_1.xlsx": line_book(
+        2026, 10, [(name, 176, hours_until(31))], late=late)}
+    body = (await _post(client, headers, full)).json()
+    assert body["reported_to"] == {"line": "2026-10-31"}
+    assert [w["label"] for w in body["weeks"]] == ["2026-W41", "2026-W42", "2026-W43"]
+    assert (await _week_values(session, 41, operator.id))["hours_norm"] == 100.6
+    week = await _week_values(session, 43, operator.id)
+    assert week["hours_norm"] == 100.6 and week["lateness"] == 0
+
+
+async def test_a_move_between_teams_keeps_both_reports(
+    client, session, operator, head, monkeypatch
+):
+    """Team reports uploaded one by one: the days one marks «др.» keep what the other said."""
+    monkeypatch.setattr(szov_reports, "local_today", lambda: date(2026, 11, 5))
+    headers = auth(await login(client, head.login))
+    name = operator.full_name
+
+    def first_team(day):
+        return "др." if day.day > 15 else 8 if weekdays(day) else 0
+
+    def second_team(day):
+        return "др." if day.day <= 15 else 8 if weekdays(day) else 0
+
+    for number, hours in ((1, first_team), (3, second_team)):
+        files = {f"report_2026-09_{number}.xlsx": line_book(2026, 9, [(name, 88, hours)])}
+        assert (await _post(client, headers, files)).status_code == 200
+    # 14–20 September: Monday and Tuesday in the first team, the rest in the second.
+    # Each team's 88 h is shared by its 15 days: 7 × 5.87 h = 41.07 h of norm for 40 h.
+    week = await _week_values(session, 38, operator.id)
+    assert week["hours_norm"] == 97.4 and week["calls_per_hour"] == 1.25

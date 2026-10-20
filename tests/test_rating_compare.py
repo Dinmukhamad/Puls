@@ -67,7 +67,7 @@ async def test_the_week_shows_everyone_by_short_name_with_places_week_by_week(
     assert [r["rank"] for r in rows] == [1, 2, 3, 4, 5]
     assert [r["is_me"] for r in rows] == [False, False, False, True, False]
     mine = rows[3]
-    assert mine["points"] == 91.25 and mine["group"] == "Группа G1"
+    assert mine["points"] == 99 and mine["group"] == "Группа G1"
     assert [m["rank"] for m in mine["trail"]] == [1, 4]
     assert [m["rank"] for m in rows[4]["trail"]] == [2, 5]
     # Places and points only: no coins or balances of other operators.
@@ -86,9 +86,9 @@ async def test_a_metric_shows_your_value_the_average_and_the_best_never_another_
     # Quality: 100, 96, 80, 80 of the others and 80 of op1.
     assert quality["me"] == 80 and quality["best"] == 100 and quality["average"] == 87.2
     assert quality["reported"] == 5 and quality["place"] == 3
-    assert quality["points"] == 20 and quality["max_points"] == 25
+    assert quality["points"] == 24 and quality["max_points"] == 30 and not quality["bonus"]
     assert set(quality) == {"code", "title", "unit", "direction", "target", "me", "average",
-                            "best", "reported", "place", "points", "max_points"}
+                            "best", "reported", "place", "points", "max_points", "bonus"}
     # Penalties are not compared here: only the metrics that add points.
     assert {m["code"] for m in body["metrics"]}.isdisjoint({"lateness", "forbidden_sites"})
 
@@ -106,12 +106,12 @@ async def test_teams_rank_by_the_average_of_their_operators(client, session, ope
     body = await _compare(client, period="week", week_id=week.id)
 
     teams = {t["name"]: t for t in body["teams"]}
-    # G2: Айгерим 100 and Тимур 85; G1: Жанна 99, Данияр 93.75 and op1 91.25.
-    assert teams["Группа G1"]["points"] == 94.67 and teams["Группа G1"]["members"] == 3
-    assert teams["Группа G2"]["points"] == 92.5
+    # G2: Айгерим 110 and Тимур 91.5; G1: Жанна 108.8, Данияр 102.33 and op1 99.
+    assert teams["Группа G1"]["points"] == 103.38 and teams["Группа G1"]["members"] == 3
+    assert teams["Группа G2"]["points"] == 100.75
     assert [t["name"] for t in body["teams"]] == ["Группа G1", "Группа G2"]
     assert teams["Группа G1"]["is_mine"] and not teams["Группа G2"]["is_mine"]
-    assert teams["Группа G2"]["best"] == {"name": "Айгерим А.", "points": 100.0, "is_me": False}
+    assert teams["Группа G2"]["best"] == {"name": "Айгерим А.", "points": 110.0, "is_me": False}
 
 
 async def test_a_week_nobody_has_calculated_is_scored_live(client, session, operator):

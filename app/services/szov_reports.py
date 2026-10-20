@@ -8,9 +8,11 @@ Team reports (``report_YYYY-MM*.xlsx``) come for the line (sheets «Отрабо
 in another team. The QA report (``monthly_report_dates_YYYY-MM.xlsx``) gives reviewers' scores per
 day and each operator's average for the month.
 
-Operators are matched by full name. Every day of the month is stored for analytics, and
-Monday–Sunday weeks lying fully inside the month are stored as contest week metrics. Weeks are never
-closed here, so no coins are awarded.
+Operators are matched by full name. What the reports say is kept by operator, day and kind
+(``ReportDayFact``), so a Monday–Sunday week that crosses two months is built from both monthly
+reports, and a month exported before its end waits for the rest. Every reported day goes to
+analytics; a week goes to the contest once each of its days is reported for the operator. Weeks are
+never closed here, so no coins are awarded.
 """
 
 from __future__ import annotations
@@ -32,10 +34,14 @@ from app.models.contest import (
     MetricDefinition,
     OperatorDayMetric,
     OperatorWeekMetric,
+    ReportDayFact,
+    ReportMonth,
 )
-from app.models.enums import Channel, MetricDirection, WeekStatus
+from app.models.enums import Channel, WeekStatus
 from app.models.user import User
 from app.services import weekly as weekly_service
+from app.services.economy import local_today
+from app.services.months import MONTHS
 
 MAX_FILES = 12
 MAX_FILE_BYTES = 5 * 1024 * 1024
@@ -48,6 +54,8 @@ FINES = "Штрафы"
 AWAY = "др."
 WEEK_HOURS, DAY_HOURS = 40, 8
 LINE, CHAT = str(Channel.LINE), str(Channel.CHAT)
+#: The source of the day and week values written from the reports.
+SOURCE = "report"
 #: Per channel: hours against the norm, hours above it, and the reviewers' score.
 CODES = {
     LINE: {"norm": "hours_norm", "overtime": "overtime", "quality": "quality"},
@@ -55,55 +63,15 @@ CODES = {
 }
 _DAY = re.compile(r"^(\d{2})\.(\d{2})$")
 _MONTH = re.compile(r"(20\d{2})-(0[1-9]|1[0-2])")
-HOURS_NORM = {
-    "code": "hours_norm",
-    "title": "Выполнение нормы часов",
-    "unit": "%",
-    "target_value": 100,
-    "max_points": 25,
-    "allow_overachievement": False,
-    "sort_order": 1,
-    "description": "Часы на линии, тренинги, тех. сбои и офлайн-активность против нормы часов "
-    "оператора из отчёта СЗоВ",
-}
-#: What the chat report gives besides the quality. No points until set in the settings.
-CHAT_METRICS = (
-    {
-        "code": "chat_hours_norm",
-        "title": "Норма часов в чатах",
-        "unit": "%",
-        "target_value": 100,
-        "max_points": 0,
-        "allow_overachievement": False,
-        "sort_order": 16,
-        "channel": CHAT,
-        "description": "Часы в чатах, тренинги, тех. сбои и офлайн-активность против нормы часов "
-        "из отчёта СЗоВ. Без баллов, пока их не зададут в настройках.",
-    },
-    {
-        "code": "chat_overtime",
-        "title": "Переработки в чатах",
-        "unit": "ч",
-        "target_value": 8,
-        "max_points": 0,
-        "sort_order": 17,
-        "channel": CHAT,
-        "description": "Часы сверх нормы за неделю. Без баллов, пока их не зададут в настройках.",
-    },
-    {
-        "code": "chat_response_time",
-        "title": "Среднее время ответа в чатах",
-        "unit": "сек",
-        "direction": MetricDirection.LOWER_IS_BETTER,
-        "target_value": 120,
-        "max_points": 0,
-        "allow_overachievement": False,
-        "sort_order": 18,
-        "channel": CHAT,
-        "description": "Среднее по дням из отчёта СЗоВ, меньше — лучше. Без баллов, пока их не "
-        "зададут в настройках.",
-    },
-)
+#: Kinds of facts: a team's report tells where the operator was that day, the reviewers' — scores.
+TEAMS = (LINE, CHAT)
+QUALITY = "quality"
+#: Someone with hours in the last week of a report carries the month's norm to the month's end.
+ACTIVE_DAYS = 7
+#: A month that is over is reported to its end when its last hours are this close to it.
+END_DAYS = 3
+#: What a report row of the day gives besides the hours, by the fact's key.
+DAY_KINDS = ("calls", "effective", "chats", "response")
 
 
 def normalize_name(name: object) -> str:
@@ -146,20 +114,20 @@ def _cell(row: tuple, column: int | None) -> object:
     return row[column] if column is not None and column < len(row) else None
 
 
-def month_weeks(year: int, month: int) -> list[list[date]]:
-    """Monday–Sunday weeks lying fully inside the month."""
-    day = date(year, month, 1)
-    day += timedelta(days=(7 - day.weekday()) % 7)
-    weeks = []
-    while (day + timedelta(days=6)).month == month:
-        weeks.append([day + timedelta(days=i) for i in range(7)])
-        day += timedelta(days=7)
-    return weeks
-
-
 def month_days(year: int, month: int) -> list[date]:
     days = [date(year, month, 1) + timedelta(days=i) for i in range(31)]
     return [day for day in days if day.month == month]
+
+
+def touching_weeks(year: int, month: int) -> list[list[date]]:
+    """Monday–Sunday weeks with at least one day in the month, the edge ones included."""
+    days = month_days(year, month)
+    monday = days[0] - timedelta(days=days[0].weekday())
+    weeks = []
+    while monday <= days[-1]:
+        weeks.append([monday + timedelta(days=i) for i in range(7)])
+        monday += timedelta(days=7)
+    return weeks
 
 
 @dataclass
@@ -167,11 +135,13 @@ class Team:
     """One operator in the reports of one channel (the line or chats)."""
 
     #: days[kind][day]: «hours» worked (the report counts trainings, tech failures and offline
-    #: activity in them), «extra» (those three), «calls», «effective», «response» (seconds),
-    #: «fines» (tenge).
+    #: activity in them), «extra» (those three), «calls», «effective», «chats», «response»
+    #: (seconds), «fines» (tenge).
     days: dict = field(default_factory=lambda: defaultdict(dict))
     #: Days in this team: «Отработанные часы» is not «др.».
     present: set = field(default_factory=set)
+    #: Days marked «др.» in «Отработанные часы».
+    away: set = field(default_factory=set)
     rate: float | None = None
     #: The month's «Норма часов (ч)», summed over the channel's reports; None without the column.
     norm: float | None = None
@@ -183,24 +153,29 @@ class Team:
     def hours(self, day: date) -> float:
         return self.days["hours"].get(day, 0.0)
 
-    def base(self, day: date) -> float:
-        """Hours on the line or in chats: «База часов», without the trainings and the rest."""
-        return max(0.0, self.hours(day) - self.days["extra"].get(day, 0.0))
+    def is_away(self, day: date) -> bool:
+        """In another team that day: «др.» in each of the channel's reports with the operator."""
+        return day in self.away and day not in self.present
 
-    @property
-    def span(self) -> set[date]:
-        """Days in the team from the first to the last day with hours: zeros before someone
-        started or after they left carry no norm."""
-        worked = sorted(day for day in self.present if self.hours(day) > 0)
-        return {day for day in self.present if worked and worked[0] <= day <= worked[-1]}
+    def span(self, days: list[date], last: date) -> set[date]:
+        """Days that carry the norm: from the first day with hours to the last one, without «др.».
+        Zeros before someone started or after they left carry none; someone with hours in the
+        last week of the report carries it to the month's end — the days not reported yet
+        included, so a month exported before its end shares the norm as the whole month will."""
+        worked = sorted(day for day, hours in self.days["hours"].items() if hours > 0)
+        if not worked:
+            return set()
+        stop = days[-1] if worked[-1] >= last - timedelta(days=ACTIVE_DAYS) else worked[-1]
+        return {day for day in days if worked[0] <= day <= stop and not self.is_away(day)}
 
-    def week_norm(self, days: list[date]) -> float:
-        """The report's norm shared evenly by the days of the span (the report splits it by
-        calendar days too); without it — 40 h × rate a week."""
-        span = self.span
-        if self.norm and span:
-            return self.norm * len(span & set(days)) / len(span)
-        return WEEK_HOURS * (self.rate or 1)
+    def norm_shares(self, days: list[date], last: date) -> dict[date, float]:
+        """The report's norm shared evenly by the calendar days of the span; without the norm
+        column (older reports) — 40 h × rate a week."""
+        span = self.span(days, last)
+        if not span:
+            return {}
+        share = self.norm / len(span) if self.norm else WEEK_HOURS * (self.rate or 1) / 7
+        return dict.fromkeys(span, share)
 
     def lateness(self, day: date) -> int:
         return 1 if self.days["fines"].get(day, 0) > 0 else 0
@@ -209,6 +184,22 @@ class Team:
     def lateness_known(self) -> bool:
         """Each day with a fine is a lateness only when the month has no other reasons."""
         return self.fines and self.late is not None and not (self.late and self.other_fines)
+
+    def fact(self, day: date, norm: float) -> dict:
+        """What the report says about the operator's day, as kept in ``ReportDayFact``."""
+        if self.is_away(day):
+            return {"away": True}
+        data = {"hours": self.hours(day), "norm": norm, "rate": self.rate or 1}
+        if extra := self.days["extra"].get(day):
+            data["extra"] = extra
+        for kind in DAY_KINDS:
+            if day in self.days[kind]:
+                data[kind] = self.days[kind][day]
+        if fine := self.days["fines"].get(day):
+            data["fine"] = fine
+        if self.lateness_known:
+            data["late"] = self.lateness(day)
+        return data
 
 
 @dataclass
@@ -297,6 +288,7 @@ def _read_hours(book, parsed: ParsedReports, channel: str) -> set[str]:
         for column, day in days.items():
             cell = _cell(row, column)
             if _away(cell):
+                team.away.add(day)
                 continue
             team.present.add(day)
             if (value := _number(cell)) is not None:
@@ -352,7 +344,10 @@ def _read_fines(book, parsed: ParsedReports, channel: str) -> None:
 
 def _read_team(book, parsed: ParsedReports, channel: str) -> int:
     people = _read_hours(book, parsed, channel)
-    sheets = {CALLS: "calls", EFFECTIVE: "effective"} if channel == LINE else {RESPONSE: "response"}
+    sheets = (
+        {CALLS: "calls", EFFECTIVE: "effective"} if channel == LINE
+        else {CHATS: "chats", RESPONSE: "response"}
+    )
     for title, kind in sheets.items():
         _read_days(book, title, parsed, channel, kind)
     for title in EXTRA:
@@ -439,78 +434,215 @@ def parse(files: list[tuple[str, bytes]], month: str | None = None) -> ParsedRep
     return parsed
 
 
-class Reading:
-    """One operator's month in the reports: the line and chat teams and the reviewers' scores."""
-
-    def __init__(self, parsed: ParsedReports, name: str, channel: str | None):
-        self.channel = str(channel or LINE)
-        self.teams = {c: parsed.teams[(c, name)] for c in (LINE, CHAT) if (c, name) in parsed.teams}
-        self.scores = parsed.quality.get(name, {})
-        self.month_quality = parsed.quality_month.get(name)
-
-    def channel_of(self, day: date) -> str:
-        """Where the operator worked that day; the site's channel when the reports don't tell."""
-        inside = [c for c, team in self.teams.items() if day in team.present]
-        return inside[0] if len(inside) == 1 else self.channel
-
-    def values(self, days: list[date], *, week: bool) -> dict[str, float]:
-        values: dict[str, float] = {}
-        for channel, team in self.teams.items():
-            values.update(self._team(channel, team, days, week=week))
-        for channel in (LINE, CHAT):
-            marks = [
-                score for d in days if self.channel_of(d) == channel
-                for score in self.scores.get(d, [])
-            ]
-            team = self.teams.get(channel)
-            if marks:
-                values[CODES[channel]["quality"]] = round(sum(marks) / len(marks), 1)
-            elif week and self.month_quality and team and sum(map(team.hours, days)) > 0:
-                # The QA report has scores without a date: a week without dated ones gets the
-                # month's average, as long as the operator worked that week.
-                values[CODES[channel]["quality"]] = round(self.month_quality[0], 1)
-        late = self._lateness(days, week=week)
-        if late is not None:
-            values["lateness"] = late
-        return values
-
-    def _team(self, channel: str, team: Team, days: list[date], *, week: bool) -> dict:
-        values = {}
-        codes = CODES[channel]
-        hours = sum(map(team.hours, days))
-        if hours > 0:
-            norm = team.week_norm(days) if week else DAY_HOURS * (team.rate or 1)
-            if norm > 0:
-                values[codes["norm"]] = round(hours / norm * 100, 1)
-                if week:
-                    values[codes["overtime"]] = round(max(0.0, hours - norm), 2)
-        if channel == LINE:
-            # The line's efficiency and calls per hour are over the hours on the line only.
-            base = sum(map(team.base, days))
-            if base > 0:
-                effective = sum(team.days["effective"].get(d, 0.0) for d in days)
-                calls = sum(team.days["calls"].get(d, 0.0) for d in days)
-                values["efficiency"] = round(min(100.0, effective / base * 100), 1)
-                values["calls_per_hour"] = round(calls / base, 2)
-        else:
-            # As the report: the plain average of the days' averages.
-            times = [team.days["response"][d] for d in days if d in team.days["response"]]
-            if times:
-                values["chat_response_time"] = round(sum(times) / len(times), 1)
-        return values
-
-    def _lateness(self, days: list[date], *, week: bool) -> int | None:
-        counted = [
-            team for team in self.teams.values()
-            if team.lateness_known
-            and (
-                team.present & set(days) if week
-                else any(team.hours(d) > 0 or team.lateness(d) for d in days)
-            )
+def report_until(parsed: ParsedReports, today: date) -> dict[str, date]:
+    """The last day each channel's team reports cover. A month that is over is reported to its
+    end (its last days without hours, at most three, are days off); the current month — to the
+    last day with hours, but not today: its shifts are still going on."""
+    days = month_days(parsed.year, parsed.month)
+    until = {}
+    for channel in TEAMS:
+        worked = [
+            day
+            for (team_channel, _), team in parsed.teams.items()
+            if team_channel == channel
+            for day, hours in team.days["hours"].items()
+            if hours > 0
         ]
-        if not counted:
-            return None
-        return sum(team.lateness(d) for team in counted for d in days if d in team.present)
+        if not worked:
+            continue
+        last = max(worked)
+        if days[-1] < today:
+            last = days[-1] if (days[-1] - last).days <= END_DAYS else last
+        else:
+            last = min(last, today - timedelta(days=1))
+        if last >= days[0]:
+            until[channel] = last
+    return until
+
+
+def month_facts(
+    parsed: ParsedReports, ids: dict[str, int], until: dict[str, date]
+) -> tuple[dict, set]:
+    """What the uploaded reports say by (operator, day, kind), and which (operator, kind) pairs
+    they speak for: a team report — up to its last day, the reviewers' — for the whole month."""
+    days = month_days(parsed.year, parsed.month)
+    facts, kinds = {}, set()
+    for (channel, name), team in parsed.teams.items():
+        user_id, last = ids.get(name), until.get(channel)
+        if user_id is None or last is None:
+            continue
+        kinds.add((user_id, channel))
+        shares = team.norm_shares(days, last)
+        for day in days:
+            if day <= last:
+                facts[(user_id, day, channel)] = team.fact(day, shares.get(day, 0.0))
+    for name in set(parsed.quality) | set(parsed.quality_month):
+        user_id = ids.get(name)
+        if user_id is None:
+            continue
+        kinds.add((user_id, QUALITY))
+        for day, scores in parsed.quality.get(name, {}).items():
+            if scores:
+                facts[(user_id, day, QUALITY)] = {"scores": list(scores)}
+    return facts, kinds
+
+
+def merge_facts(stored: dict, new: dict, kinds: set, days: list[date]) -> dict:
+    """The facts after the upload. A team report replaces what was kept about its days, except
+    the days it marks «др.»: those keep what another team's report said. The reviewers' report
+    replaces the operator's scores for the month."""
+    merged = dict(stored)
+    for user_id, kind in kinds:
+        for day in days:
+            key = (user_id, day, kind)
+            fresh = new.get(key)
+            if kind == QUALITY:
+                if fresh is None:
+                    merged.pop(key, None)
+                else:
+                    merged[key] = fresh
+            elif fresh is not None:
+                old = stored.get(key)
+                if not (fresh.get("away") and old and not old.get("away")):
+                    merged[key] = fresh
+    return merged
+
+
+def _team_values(channel: str, team: dict[date, dict], *, week: bool) -> dict[str, float]:
+    values: dict[str, float] = {}
+    codes = CODES[channel]
+    facts = list(team.values())
+    hours = sum(fact["hours"] for fact in facts)
+    if hours > 0:
+        norm = (
+            sum(fact.get("norm", 0.0) for fact in facts) if week
+            else DAY_HOURS * (facts[0].get("rate") or 1)
+        )
+        if norm > 0:
+            values[codes["norm"]] = round(hours / norm * 100, 1)
+            if week:
+                values[codes["overtime"]] = round(max(0.0, hours - norm), 2)
+    # Calls, efficiency and chats are over «База часов»: the hours on the line or in chats,
+    # without the trainings, tech failures and offline activity.
+    base = sum(max(0.0, fact["hours"] - fact.get("extra", 0.0)) for fact in facts)
+    if channel == LINE:
+        if base > 0:
+            effective = sum(fact.get("effective", 0.0) for fact in facts)
+            values["efficiency"] = round(min(100.0, effective / base * 100), 1)
+            values["calls_per_hour"] = round(sum(f.get("calls", 0.0) for f in facts) / base, 2)
+    else:
+        # As the report: the plain average of the days' averages.
+        times = [fact["response"] for fact in facts if "response" in fact]
+        if times:
+            values["chat_response_time"] = round(sum(times) / len(times), 1)
+        if base > 0 and any("chats" in fact for fact in facts):
+            values["chats_per_hour"] = round(sum(f.get("chats", 0.0) for f in facts) / base, 2)
+    return values
+
+
+def _lateness(teams: dict[str, dict[date, dict]], *, week: bool) -> int | None:
+    """A day with a fine is a lateness when the month's fines tell it (no other reasons). Counted
+    in the teams the operator worked in; unknown in any of them — unknown."""
+    counted = [
+        team for team in teams.values()
+        if (
+            sum(fact["hours"] for fact in team.values()) > 0 if week
+            else any(fact["hours"] > 0 or fact.get("fine") for fact in team.values())
+        )
+    ]
+    if not counted or any("late" not in fact for team in counted for fact in team.values()):
+        return None
+    return sum(fact["late"] for team in counted for fact in team.values())
+
+
+def values_of(
+    facts: dict[str, dict[date, dict]],
+    days: list[date],
+    channel: str,
+    *,
+    week: bool,
+    month_quality: list | tuple | None = None,
+) -> dict[str, float]:
+    """One operator's values for a week or a day from what the reports say about its days."""
+    teams = {
+        team: {
+            day: fact for day in days
+            if (fact := facts.get(team, {}).get(day)) and not fact.get("away")
+        }
+        for team in TEAMS
+    }
+    values: dict[str, float] = {}
+    for team, rows in teams.items():
+        if rows:
+            values.update(_team_values(team, rows, week=week))
+
+    def channel_of(day: date) -> str:
+        """Where the operator worked that day; the site's channel when the reports don't tell."""
+        inside = [team for team in TEAMS if day in teams[team]]
+        return inside[0] if len(inside) == 1 else channel
+
+    scores = facts.get(QUALITY, {})
+    for team in TEAMS:
+        marks = [
+            score for day in days if channel_of(day) == team
+            for score in scores.get(day, {}).get("scores", ())
+        ]
+        code = CODES[team]["quality"]
+        if marks:
+            values[code] = round(sum(marks) / len(marks), 1)
+        elif week and month_quality and sum(f["hours"] for f in teams[team].values()) > 0:
+            # The QA report has scores without a date: a week without dated ones gets the
+            # month's average, as long as the operator worked that week.
+            values[code] = round(month_quality[0], 1)
+    late = _lateness(teams, week=week)
+    if late is not None:
+        values["lateness"] = late
+    return values
+
+
+@dataclass
+class Coverage:
+    """Which days are reported for an operator: a team report says something about the day, or
+    the month's report of the operator's channel covers it and the operator is not in it."""
+
+    #: (year, month) → {channel: the last reported day}.
+    until: dict
+    #: (user_id, (year, month)) — the operator is in a team report of that month.
+    members: set
+
+    def covers(self, user_id: int, channel: str, facts: dict, day: date) -> bool:
+        if any(day in facts.get(team, {}) for team in TEAMS):
+            return True
+        month = (day.year, day.month)
+        if (user_id, month) in self.members:
+            return False
+        last = self.until.get(month, {}).get(channel)
+        return last is not None and day <= last
+
+
+def _waiting(gaps: dict[tuple[int, int], set[str]], until: dict) -> str:
+    """Why a week waits: gaps[(year, month)] — the channels of the operators missing those days."""
+    parts = []
+    for (year, month), channels in sorted(gaps.items()):
+        reported = until.get((year, month), {})
+        lacking = channels - set(reported)
+        name = MONTHS[month - 1]
+        if not reported or lacking == {LINE, CHAT}:
+            parts.append(f"отчёта за {name}")
+        elif lacking:
+            parts.append(f"отчёта {'линии' if LINE in lacking else 'чатов'} за {name}")
+        else:
+            last = min(reported[channel] for channel in channels)
+            parts.append(f"выгрузки после {last:%d.%m}")
+    return "ждёт " + " и ".join(dict.fromkeys(parts))
+
+
+def _month_quality(averages: dict, user_id: int, days: list[date]) -> list | None:
+    """The reviewers' month average for a week: of the month of its Thursday, else the other."""
+    for day in (days[3], days[0], days[-1]):
+        if value := averages.get((day.year, day.month), {}).get(user_id):
+            return value
+    return None
 
 
 async def _operators(session: AsyncSession, actor: User) -> dict[str, User]:
@@ -519,19 +651,54 @@ async def _operators(session: AsyncSession, actor: User) -> dict[str, User]:
     return {normalize_name(user.full_name): user for user in users}
 
 
-def _notes(readings: dict[str, Reading], names: dict[str, str]) -> list[dict]:
+async def _stored_facts(session: AsyncSession, users: set[int], first: date, last: date) -> dict:
+    if not users:
+        return {}
+    rows = await session.scalars(
+        select(ReportDayFact).where(
+            ReportDayFact.user_id.in_(users), ReportDayFact.day.between(first, last)
+        )
+    )
+    return {(row.user_id, row.day, row.kind): row.data for row in rows}
+
+
+async def _members(session: AsyncSession, users: set[int], months: set[tuple[int, int]]) -> set:
+    """Who is in a team report of the given months."""
+    members = set()
+    for year, month in months:
+        days = month_days(year, month)
+        found = await session.scalars(
+            select(ReportDayFact.user_id).distinct().where(
+                ReportDayFact.user_id.in_(users),
+                ReportDayFact.day.between(days[0], days[-1]),
+                ReportDayFact.kind.in_(TEAMS),
+            )
+        )
+        members |= {(user_id, (year, month)) for user_id in found}
+    return members
+
+
+def _notes(
+    parsed: ParsedReports, found: list[str], operators: dict[str, User], by_user: dict,
+    coverage: Coverage,
+) -> list[dict]:
     """What the person uploading should know: data the reports could not place."""
+    month = (parsed.year, parsed.month)
     groups: dict[str, list[str]] = defaultdict(list)
-    for name, reading in readings.items():
-        label = names[name]
-        teams = set(reading.teams)
-        if teams and reading.channel not in teams:
+    for name in found:
+        user = operators[name]
+        label, channel = user.full_name, str(user.channel or LINE)
+        teams = {team for team in TEAMS if (team, name) in parsed.teams}
+        if teams and channel not in teams:
             groups["channel"].append(label)
-        quality = reading.month_quality
-        dated = sum(len(scores) for scores in reading.scores.values())
-        if quality and quality[1] > dated:
-            groups["undated" if teams else "undated_lost"].append(label)
-        for team in reading.teams.values():
+        quality = parsed.quality_month.get(name)
+        dated = sum(len(scores) for scores in parsed.quality.get(name, {}).values())
+        if (user.id, month) not in coverage.members and (quality or dated):
+            reported = channel in coverage.until.get(month, {})
+            groups["not_in_team" if reported else "no_team"].append(label)
+        elif quality and quality[1] > dated:
+            groups["undated"].append(label)
+        for team in (parsed.teams[(c, name)] for c in teams):
             if team.fines and team.late and team.other_fines:
                 groups["lateness_unknown"].append(label)
             elif team.lateness_known and team.late and team.late > sum(
@@ -543,8 +710,9 @@ def _notes(readings: dict[str, Reading], names: dict[str, str]) -> list[dict]:
         "из карточки сотрудника",
         "undated": "Есть оценки без даты: в недели без оценок по датам записан средний балл за "
         "месяц",
-        "undated_lost": "Есть оценки без даты, но нет отчёта команды: эти оценки не попали в "
-        "недели",
+        "no_team": "Отчёта команды за месяц ещё нет: оценки сохранены, недели запишутся, когда "
+        "придёт отчёт команды",
+        "not_in_team": "Нет в отчётах команд за месяц: в недели записано только качество",
         "lateness_unknown": "В штрафах есть и другие причины: опоздания по дням не определить, "
         "они не записаны",
         "lateness_merged": "Несколько опозданий в один день: засчитано по одному за день",
@@ -557,84 +725,218 @@ def _notes(readings: dict[str, Reading], names: dict[str, str]) -> list[dict]:
 
 
 async def build_plan(session: AsyncSession, actor: User, parsed: ParsedReports) -> dict:
+    """What the upload changes: the kept facts, the days of the month and the weeks touching it
+    that are reported for their operators; the other weeks wait (``pending``)."""
     operators = await _operators(session, actor)
     found = sorted(name for name in parsed.names if name in operators)
-    readings = {name: Reading(parsed, name, operators[name].channel) for name in found}
-    weeks = []
-    for days in month_weeks(parsed.year, parsed.month):
-        rows = {operators[name].id: readings[name].values(days, week=True) for name in found}
-        weeks.append({"days": days, "values": {k: v for k, v in rows.items() if v}})
+    ids = {name: operators[name].id for name in found}
+    channels = {operators[name].id: str(operators[name].channel or LINE) for name in found}
+    month = (parsed.year, parsed.month)
+    days, weeks = month_days(*month), touching_weeks(*month)
+    until = report_until(parsed, local_today())
+    stored = await _stored_facts(session, set(ids.values()), weeks[0][0], weeks[-1][-1])
+    new, kinds = month_facts(parsed, ids, until)
+    facts = merge_facts(stored, new, kinds, days)
+    by_user = {user_id: defaultdict(dict) for user_id in ids.values()}
+    for (user_id, day, kind), data in facts.items():
+        by_user[user_id][kind][day] = data
+
+    neighbours = {(day.year, day.month) for day in (weeks[0][0], weeks[-1][-1])} - {month}
+    reports = {
+        (item.year, item.month): item
+        for item in await session.scalars(select(ReportMonth))
+        if (item.year, item.month) in neighbours | {month}
+    }
+    reported = {
+        key: {team: last for team in TEAMS if (last := getattr(item, f"{team}_until"))}
+        for key, item in reports.items()
+    }
+    for team, last in until.items():
+        current = reported.setdefault(month, {}).get(team)
+        reported[month][team] = max(last, current) if current else last
+    coverage = Coverage(reported, await _members(session, set(ids.values()), neighbours))
+    for user_id, user_facts in by_user.items():
+        team_days = (day for team in TEAMS for day in user_facts.get(team, {}))
+        if any((day.year, day.month) == month for day in team_days):
+            coverage.members.add((user_id, month))
+
+    averages = {
+        key: {int(user_id): value for user_id, value in (item.quality or {}).items()}
+        for key, item in reports.items()
+    }
+    quality = {
+        ids[name]: parsed.quality_month.get(name)
+        for name in found
+        if name in parsed.quality or name in parsed.quality_month
+    }
+    for user_id, value in quality.items():
+        if value:
+            averages.setdefault(month, {})[user_id] = list(value)
+        else:
+            averages.get(month, {}).pop(user_id, None)
+
     daily = {}
-    for day in month_days(parsed.year, parsed.month):
-        for name in found:
-            for code, value in readings[name].values([day], week=False).items():
-                daily[(operators[name].id, day, code)] = value
+    for user_id, user_facts in by_user.items():
+        for day in days:
+            for code, value in values_of(user_facts, [day], channels[user_id], week=False).items():
+                daily[(user_id, day, code)] = value
+    planned, pending = [], []
+    for week in weeks:
+        rows, gaps, waiting = {}, defaultdict(set), 0
+        for user_id, user_facts in by_user.items():
+            channel = channels[user_id]
+            missing = [
+                day for day in week if not coverage.covers(user_id, channel, user_facts, day)
+            ]
+            if not missing:
+                rows[user_id] = values_of(
+                    user_facts, week, channel, week=True,
+                    month_quality=_month_quality(averages, user_id, week),
+                )
+            elif any(day in user_facts.get(team, {}) for team in TEAMS for day in week):
+                waiting += 1
+                for day in missing:
+                    gaps[(day.year, day.month)].add(channel)
+        if any(rows.values()):
+            planned.append({"days": week, "values": rows})
+        if waiting:
+            pending.append({"days": week, "operators": waiting, "reason": _waiting(gaps, reported)})
+
     unmatched = sorted(
         parsed.labels.get(name, name)
         for name in parsed.names
         if name not in operators and AWAY not in name
     )
-    names = {name: operators[name].full_name for name in found}
+    changed = {
+        key: facts.get(key)
+        for key in set(facts) | set(stored)
+        if facts.get(key) != stored.get(key)
+    }
     return {
         "found": found,
         "unmatched": unmatched,
         "without_data": sorted(set(operators) - set(found)),
-        "names": names,
-        "weeks": weeks,
+        "names": {name: operators[name].full_name for name in found},
+        "month": month,
+        "users": sorted(ids.values()),
+        "until": until,
+        "facts": changed,
+        "quality": quality,
+        "weeks": planned,
+        "pending": pending,
         "daily": daily,
-        "notes": _notes(readings, names),
+        "notes": _notes(parsed, found, operators, by_user, coverage),
     }
 
 
 async def ensure_metrics(session: AsyncSession, parsed: ParsedReports | None = None) -> None:
-    """Hours are judged against the report's norm, so the catalogue needs hours_norm; a chat
-    report also brings the chats' hours, overtime and response time (no points until set)."""
-    metric = await session.scalar(
-        select(MetricDefinition).where(MetricDefinition.code == HOURS_NORM["code"])
-    )
-    if metric is None:
-        session.add(MetricDefinition(**HOURS_NORM, is_active=True))
-    elif not metric.is_active:
-        metric.is_active = True
+    """Hours are judged against the report's norm, so the catalogue needs «Выполнение нормы
+    часов»; a chat report brings the chats' metrics. Missing ones are created as the site's
+    defaults (``app/db/init_db.py``)."""
+    from app.db.init_db import CHAT_METRICS, CHAT_QUALITY, DEFAULT_METRICS
+
+    wanted = [item for item in DEFAULT_METRICS if item["code"] == "hours_norm"]
     if parsed is not None and any(item["kind"] == CHAT for item in parsed.files):
-        existing = set(
-            await session.scalars(
-                select(MetricDefinition.code).where(
-                    MetricDefinition.code.in_([item["code"] for item in CHAT_METRICS])
-                )
+        wanted += [CHAT_QUALITY, *CHAT_METRICS]
+    existing = {
+        metric.code: metric
+        for metric in await session.scalars(
+            select(MetricDefinition).where(
+                MetricDefinition.code.in_([item["code"] for item in wanted])
             )
         )
-        for item in CHAT_METRICS:
-            if item["code"] not in existing:
-                session.add(MetricDefinition(**item, is_active=True))
+    }
+    for item in wanted:
+        metric = existing.get(item["code"])
+        if metric is None:
+            session.add(MetricDefinition(**{"is_active": True, **item}))
+        elif item["code"] == "hours_norm" and not metric.is_active:
+            metric.is_active = True
+    await session.flush()
+
+
+async def _save_facts(session: AsyncSession, plan: dict) -> None:
+    changes = plan["facts"]
+    if not changes:
+        return
+    days = [day for _, day, _ in changes]
+    rows = {
+        (row.user_id, row.day, row.kind): row
+        for row in await session.scalars(
+            select(ReportDayFact).where(
+                ReportDayFact.user_id.in_({user_id for user_id, _, _ in changes}),
+                ReportDayFact.day.between(min(days), max(days)),
+            )
+        )
+    }
+    for (user_id, day, kind), data in changes.items():
+        row = rows.get((user_id, day, kind))
+        if data is None:
+            if row is not None:
+                await session.delete(row)
+        elif row is None:
+            session.add(ReportDayFact(user_id=user_id, day=day, kind=kind, data=data))
+        else:
+            row.data = data
+    await session.flush()
+
+
+async def _save_month(session: AsyncSession, plan: dict) -> None:
+    if not plan["until"] and not plan["quality"]:
+        return
+    year, month = plan["month"]
+    item = await session.scalar(
+        select(ReportMonth).where(ReportMonth.year == year, ReportMonth.month == month)
+    )
+    if item is None:
+        item = ReportMonth(year=year, month=month, quality={})
+        session.add(item)
+    for team, last in plan["until"].items():
+        current = getattr(item, f"{team}_until")
+        if current is None or last > current:
+            setattr(item, f"{team}_until", last)
+    if plan["quality"]:
+        quality = dict(item.quality or {})
+        for user_id, value in plan["quality"].items():
+            if value:
+                quality[str(user_id)] = list(value)
+            else:
+                quality.pop(str(user_id), None)
+        item.quality = quality
     await session.flush()
 
 
 async def save(session: AsyncSession, actor: User, plan: dict, *, recalculate: bool) -> dict:
-    daily = plan["daily"]
+    await _save_facts(session, plan)
+    await _save_month(session, plan)
+    daily, days = plan["daily"], month_days(*plan["month"])
     existing = (
         {
             (row.user_id, row.day, row.metric_code): row
             for row in await session.scalars(
                 select(OperatorDayMetric).where(
-                    OperatorDayMetric.day.in_({key[1] for key in daily}),
-                    OperatorDayMetric.user_id.in_({key[0] for key in daily}),
+                    OperatorDayMetric.user_id.in_(plan["users"]),
+                    OperatorDayMetric.day.between(days[0], days[-1]),
                 )
             )
         }
-        if daily
+        if plan["users"]
         else {}
     )
+    for key, row in existing.items():
+        # A day the reports no longer give a value for loses the one they gave before.
+        if key not in daily and row.source == SOURCE:
+            await session.delete(row)
     for (user_id, day, code), value in daily.items():
         row = existing.get((user_id, day, code))
         if row is None:
             session.add(
                 OperatorDayMetric(
-                    user_id=user_id, day=day, metric_code=code, value=value, source="report"
+                    user_id=user_id, day=day, metric_code=code, value=value, source=SOURCE
                 )
             )
         else:
-            row.value, row.source = value, "report"
+            row.value, row.source = value, SOURCE
 
     weeks = []
     for item in plan["weeks"]:
@@ -648,6 +950,11 @@ async def save(session: AsyncSession, actor: User, plan: dict, *, recalculate: b
                 select(OperatorWeekMetric).where(OperatorWeekMetric.week_id == week.id)
             )
         }
+        for (user_id, code), row in current.items():
+            # The operator's week is built anew: what the reports no longer give goes.
+            values = item["values"].get(user_id)
+            if values is not None and row.source == SOURCE and code not in values:
+                await session.delete(row)
         for user_id, values in item["values"].items():
             for code, value in values.items():
                 row = current.get((user_id, code))
@@ -658,16 +965,15 @@ async def save(session: AsyncSession, actor: User, plan: dict, *, recalculate: b
                             user_id=user_id,
                             metric_code=code,
                             value=value,
-                            source="report",
+                            source=SOURCE,
                         )
                     )
                 else:
-                    row.value, row.source = value, "report"
+                    row.value, row.source = value, SOURCE
         await session.flush()
         await weekly_service.invalidate_calculation(session, week)
-        if recalculate and item["values"]:
+        operators = sum(1 for values in item["values"].values() if values)
+        if recalculate and operators:
             await weekly_service.calculate_week(session, week)
-        weeks.append(
-            {"label": week.label, "status": str(week.status), "operators": len(item["values"])}
-        )
+        weeks.append({"label": week.label, "status": str(week.status), "operators": operators})
     return {"days": len(daily), "weeks": weeks}

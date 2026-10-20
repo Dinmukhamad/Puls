@@ -50,6 +50,11 @@ def zone() -> ZoneInfo:
     return ZoneInfo(get_settings().TIMEZONE)
 
 
+def local_today(now: datetime | None = None) -> date:
+    """Today where the contact centre works (settings.TIMEZONE), not on the server's clock."""
+    return (now or datetime.now(UTC)).astimezone(zone()).date()
+
+
 def this_month(now: datetime | None = None) -> tuple[int, int]:
     local = (now or datetime.now(UTC)).astimezone(zone())
     return local.year, local.month

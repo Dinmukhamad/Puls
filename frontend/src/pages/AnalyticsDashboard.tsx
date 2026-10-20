@@ -3,7 +3,7 @@ import type { AnalyticsOut, MetricSummary } from '../api/analytics';
 import { Chart } from '../components/Chart';
 import { ArrowUpRightIcon } from '../components/icons';
 import { Card, EmptyState, Select } from '../components/ui';
-import { assess, description, gapText, metricValue, shortNumber, periodCaption, STATE_LABEL, type OperatorInsight, type OperatorState } from './analyticsInsights';
+import { assess, description, gapText, metricValue, shortNumber, periodCaption, signalMark, STATE_LABEL, type OperatorInsight, type OperatorState } from './analyticsInsights';
 
 const STATES: OperatorState[] = ['ontrack', 'attention', 'critical', 'partial', 'missing'];
 const COLORS: Record<OperatorState, string> = { ontrack: '#16816b', attention: '#c48618', critical: '#d34a61', partial: '#94a3b8', missing: '#d4dbe4' };
@@ -113,7 +113,7 @@ export function DisciplineCard({ report, people, onOpen }: { report: AnalyticsOu
 
 export function OperatorMatrix({ people, metrics, onOpen }: { people: OperatorInsight[]; metrics: MetricSummary[]; onOpen: (id: number) => void }) {
   const title = useId();
-  return <div className="analytics-matrix-scroll" role="region" aria-labelledby={title} tabIndex={0}><span id={title} className="sr-only">Все показатели операторов, горизонтальная прокрутка</span><table className="table analytics-all-metrics"><thead><tr><th scope="col">Оператор</th>{metrics.map(m => <th scope="col" key={m.code}>{m.title}<small>{m.direction === 'lower_is_better' ? '≤' : '≥'} {metricValue(m.target, m)}</small></th>)}</tr></thead><tbody>{people.map(p => <tr key={p.row.user_id}><th scope="row"><button onClick={() => onOpen(p.row.user_id)}>{p.row.full_name}</button><small>{STATE_LABEL[p.state]}</small></th>{metrics.map(m => { const value = p.row.values[m.code]; const a = assess(value, m); return <td key={m.code}><span className={`analytics-matrix-cell analytics-signal--${a.signal}`} title={gapText(value, m)}>{a.signal === 'met' ? '✓' : a.signal === 'missing' ? '—' : '!'} {metricValue(value, m)}<small>{gapText(value, m)}</small></span></td>; })}</tr>)}</tbody></table></div>;
+  return <div className="analytics-matrix-scroll" role="region" aria-labelledby={title} tabIndex={0}><span id={title} className="sr-only">Все показатели операторов, горизонтальная прокрутка</span><table className="table analytics-all-metrics"><thead><tr><th scope="col">Оператор</th>{metrics.map(m => <th scope="col" key={m.code}>{m.title}<small>{m.direction === 'lower_is_better' ? '≤' : '≥'} {metricValue(m.target, m)}</small></th>)}</tr></thead><tbody>{people.map(p => <tr key={p.row.user_id}><th scope="row"><button onClick={() => onOpen(p.row.user_id)}>{p.row.full_name}</button><small>{STATE_LABEL[p.state]}</small></th>{metrics.map(m => { const value = p.row.values[m.code]; const a = assess(value, m); return <td key={m.code}><span className={`analytics-matrix-cell analytics-signal--${a.signal}`} title={gapText(value, m)}>{signalMark(a.signal)} {metricValue(value, m)}<small>{gapText(value, m)}</small></span></td>; })}</tr>)}</tbody></table></div>;
 }
 
 export function OperatorDetails({ person, report, metric, onMetric }: { person: OperatorInsight; report: AnalyticsOut; metric: MetricSummary; onMetric: (code: string) => void }) {

@@ -23,9 +23,10 @@ from app.models.contest import (
     OperatorWeekMetric,
     OperatorWeekResult,
 )
-from app.models.enums import BadgeRule, TxType, WeekStatus
+from app.models.enums import BadgeRule, Channel, TxType, WeekStatus
 from app.models.learning import LearningAward
 from app.models.progress import ProgressLevel
+from app.models.user import User
 from app.services.coins import earned_total
 
 
@@ -110,6 +111,8 @@ async def _best_rank_reached(session: AsyncSession, user_id: int, max_rank: int)
             OperatorWeekResult.user_id == user_id,
             ContestWeek.status == WeekStatus.CLOSED,
             OperatorWeekResult.rank.is_not(None),
+            # A week of zero points is shared by everyone in it: it is nobody's top three.
+            OperatorWeekResult.final_points > 0,
         )
     )
     return best is not None and best <= max_rank
@@ -153,6 +156,11 @@ async def evaluate_badge(
 
     if rule == BadgeRule.METRIC_THRESHOLD_STREAK:
         metric = str(params.get("metric", "quality"))
+        # The same badge counts a chat operator's own metric (docs/CHANNELS.md): their quality.
+        if params.get("chat_metric") and (
+            await session.scalar(select(User.channel).where(User.id == user_id))
+        ) == Channel.CHAT:
+            metric = str(params["chat_metric"])
         threshold = float(params.get("gte", 0))
         need = int(params.get("weeks", 1))
         streak = await _streak_length(

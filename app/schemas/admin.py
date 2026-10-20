@@ -215,6 +215,8 @@ class WeekCloseReportOut(BaseModel):
     nominations_awarded: int
     badges_awarded: int
     already_closed: bool = False
+    #: Not closed: no values from the work yet (the reports have not come).
+    skipped: bool = False
 
 
 class WeekPreviewRow(BaseModel):
@@ -271,6 +273,7 @@ class RulesOut(ORMModel):
     manual_monthly_limit: int
     coin_rate_tenge: float
     shop_monthly_budget_tenge: int
+    prize_min_points: float = 50.0
 
 
 class RulesUpdate(BaseModel):
@@ -296,6 +299,7 @@ class RulesUpdate(BaseModel):
     manual_monthly_limit: int | None = Field(default=None, ge=0, le=1000000)
     coin_rate_tenge: float | None = Field(default=None, gt=0, le=100000)
     shop_monthly_budget_tenge: int | None = Field(default=None, ge=0, le=100000000)
+    prize_min_points: float | None = Field(default=None, ge=0, le=1000)
 
 
 #: Whose points a metric gives: the line's, the chats' or everyone's (discipline), docs/CHANNELS.md.
@@ -320,6 +324,9 @@ class MetricOut(ORMModel):
     description: str | None = None
     channel: str = "line"
     bands: MetricBands | None = None
+    #: A bonus over the 100 points (overtime): the metric to meet first and the share of its points.
+    bonus_for: str | None = None
+    bonus_share: float | None = None
 
 
 class MetricCreate(BaseModel):
@@ -337,6 +344,8 @@ class MetricCreate(BaseModel):
     description: str | None = None
     channel: MetricChannel = "line"
     bands: MetricBands | None = None
+    bonus_for: str | None = Field(default=None, max_length=64)
+    bonus_share: float | None = Field(default=None, gt=0, le=1)
 
 
 class MetricUpdate(BaseModel):
@@ -353,6 +362,8 @@ class MetricUpdate(BaseModel):
     description: str | None = None
     channel: MetricChannel | None = None
     bands: MetricBands | None = None
+    bonus_for: str | None = Field(default=None, max_length=64)
+    bonus_share: float | None = Field(default=None, gt=0, le=1)
 
 
 class NominationOut(ORMModel):
@@ -364,6 +375,8 @@ class NominationOut(ORMModel):
     direction: MetricDirection
     require_zero: bool
     min_value: float | None = None
+    #: Among whom it is played for: the line, chats or everyone (docs/CHANNELS.md).
+    channel: str = "all"
     coins_reward: int
     is_active: bool
     sort_order: int
@@ -377,6 +390,7 @@ class NominationCreate(BaseModel):
     direction: MetricDirection = MetricDirection.HIGHER_IS_BETTER
     require_zero: bool = False
     min_value: float | None = None
+    channel: MetricChannel = "all"
     coins_reward: int = Field(default=5, ge=0)
     is_active: bool = True
     sort_order: int = 100
@@ -389,6 +403,7 @@ class NominationUpdate(BaseModel):
     direction: MetricDirection | None = None
     require_zero: bool | None = None
     min_value: float | None = None
+    channel: MetricChannel | None = None
     coins_reward: int | None = Field(default=None, ge=0)
     is_active: bool | None = None
     sort_order: int | None = None

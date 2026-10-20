@@ -86,6 +86,12 @@ function badgeCondition(row: Definition, metrics: readonly Definition[]): { cond
 
 /** «Линия», «Чаты», «Общий»: whose points a metric gives (docs/CHANNELS.md). */
 export const METRIC_CHANNELS: Record<string, string> = { line: "Линия", chat: "Чаты", all: "Общий для линии и чатов" };
+/** Among whom a nomination is played (docs/CHANNELS.md). */
+export const NOMINATION_CHANNELS: Record<string, string> = { line: "Операторы линии", chat: "Операторы чатов", all: "Все операторы" };
+
+function percent(share: number): string {
+  return `${quantity(Math.round(share * 1000) / 10)} %`;
+}
 
 /** A metric's thresholds, lowest first; none for a metric scored by its target. */
 export function bandsOf(row: Definition): MetricBand[] {
@@ -111,6 +117,16 @@ export function definitionPresentation(kind: DefinitionKind, row: Definition, me
       ],
     };
     const channel = { label: "Направление", value: METRIC_CHANNELS[text(row.channel) || "line"] ?? "Линия" };
+    const base = text(row.bonus_for);
+    if (base) return {
+      description: description || "Бонус сверх 100 баллов, когда основной показатель выполнен.",
+      facts: [
+        { label: "Бонус к показателю", value: `${metricName(base, metrics)} — когда он выполнен на 100 %` },
+        { label: "Максимум", value: `${score(numeric(row.max_points))} сверх 100 · ${percent(numeric(row.bonus_share, .4))} баллов показателя` },
+        { label: "Полностью", value: `с ${measured(numeric(row.target_value), text(row.unit))}` },
+        channel,
+      ],
+    };
     if (bandsOf(row).length) return {
       description: description || "Баллы по ступеням: значение от порога и выше даёт баллы этой ступени.",
       facts: [
@@ -135,6 +151,7 @@ export function definitionPresentation(kind: DefinitionKind, row: Definition, me
       ? "Нулевое значение; максимум итоговых баллов"
       : row.direction === "lower_is_better" ? "Минимальное значение" : "Максимальное значение";
     const eligibility = row.min_value == null ? "" : `; участие от ${measured(numeric(row.min_value), metricUnit(code, metrics))}`;
+    const among = NOMINATION_CHANNELS[text(row.channel)];
     return {
       description: description || (row.require_zero
         ? "Среди операторов с нулевым значением показателя побеждает лучший по итоговым баллам недели."
@@ -145,6 +162,7 @@ export function definitionPresentation(kind: DefinitionKind, row: Definition, me
         { label: "Награда", value: numeric(row.coins_reward) > 0 ? coinsWithUnit(numeric(row.coins_reward)) : "Без начисления коинов" },
         { label: "Показатель", value: metricName(code, metrics) },
         { label: "Условие победы", value: `${selection}${eligibility}` },
+        ...(among && text(row.channel) !== "all" ? [{ label: "Среди кого", value: among }] : []),
       ],
     };
   }
@@ -179,6 +197,12 @@ export function definitionRow(kind: DefinitionKind, row: Definition, metrics: re
         coin: false,
       };
     }
+    if (text(row.bonus_for)) return {
+      meta: description || `Бонус к «${metricName(text(row.bonus_for), metrics)}», когда он выполнен на 100 %`,
+      value: `До +${score(numeric(row.max_points))}`,
+      hint: `сверх 100, полностью с ${measured(numeric(row.target_value), text(row.unit))}`,
+      coin: false,
+    };
     if (bandsOf(row).length) return {
       meta: `Ступени: ${bandsText(row)}`,
       value: `До ${score(numeric(row.max_points))}`,
@@ -188,14 +212,15 @@ export function definitionRow(kind: DefinitionKind, row: Definition, metrics: re
     return {
       meta: [row.direction === "lower_is_better" ? "Меньше — лучше" : "Больше — лучше", row.allow_overachievement ? "перевыполнение разрешено" : "", description].filter(Boolean).join(" · "),
       value: `Цель ${measured(numeric(row.target_value), text(row.unit))}`,
-      hint: `${score(numeric(row.max_points))} за цель`,
+      // A metric without points is shown for analytics until the settings give it some.
+      hint: numeric(row.max_points) > 0 ? `${score(numeric(row.max_points))} за цель` : "без баллов",
       coin: false,
     };
   }
   const facts = definitionPresentation(kind, row, metrics).facts;
   const reward = numeric(row.coins_reward);
   if (kind === "nominations") return {
-    meta: `${facts[1].value} · ${facts[2].value}`,
+    meta: [text(row.channel) && text(row.channel) !== "all" ? METRIC_CHANNELS[text(row.channel)] : "", facts[1].value, facts[2].value].filter(Boolean).join(" · "),
     value: reward > 0 ? coinsWithUnit(reward) : "Без коинов",
     hint: "победителю",
     coin: reward > 0,

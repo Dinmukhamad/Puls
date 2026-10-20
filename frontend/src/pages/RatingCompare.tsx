@@ -286,7 +286,7 @@ function MetricLine({ metric }: { metric: CompareMetric }) {
   const good = diff != null && (lower ? diff < 0 : diff > 0);
   return <li className="compare-metric">
     <div className="compare-metric__head">
-      <span className="compare-metric__title">{metric.title}</span>
+      <span className="compare-metric__title">{metric.title}{metric.bonus && <> <Badge tone="accent">бонус</Badge></>}</span>
       {metric.place != null ? <span className={`compare-metric__place${metric.place === 1 ? " is-best" : ""}`}>{metric.place === 1 ? <><MedalIcon size={14} />лучший результат</> : `${metric.place}-е из ${metric.reported}`}</span>
         : <span className="compare-metric__place muted">нет данных</span>}
     </div>
@@ -315,13 +315,13 @@ export function ChannelsCard({ data }: { data: CompareOut }) {
   const channels = data.channels ?? [];
   if (channels.filter((item) => item.participants > 0).length < 2) return null;
   return <Card title="Направления" className="compare-channels-card"
-    subtitle="Линия и чаты соревнуются отдельно. У каждого свои показатели на 100 баллов и один курс коинов, поэтому средняя неделя сравнима">
+    subtitle="Линия и чаты соревнуются отдельно. У каждого свои показатели на 100 баллов и бонус за переработки сверх них, один курс коинов, поэтому средняя неделя сравнима">
     <ul className="compare-channels">{channels.map((item) => <li key={item.channel} className={`compare-channel${item.is_mine ? " is-mine" : ""}`}>
       <span className="compare-channel__name">{CHANNEL_LABELS[item.channel]}{item.is_mine && <span className="tag-me">ваше</span>}</span>
       <span className="compare-channel__average"><strong>{item.average == null ? "—" : points(item.average)}</strong><small>средняя неделя оператора{data.period === "month" ? " за месяц" : ""}</small></span>
       <span className="compare-channel__bar" aria-hidden="true"><span style={{ width: `${Math.min(100, Math.max(0, item.average ?? 0))}%` }} /></span>
       <span className="compare-channel__meta">{item.participants} {plural(item.participants, "оператор", "оператора", "операторов")}{item.best ? ` · лучший — ${item.best.is_me ? "вы" : item.best.name}, ${points(item.best.points)}` : ""}</span>
-      <span className="compare-channel__scale">{item.metrics.map((metric) => `${metric.title} — ${points(metric.max_points)}`).join(" · ")}</span>
+      <span className="compare-channel__scale">{item.metrics.map((metric) => metric.bonus ? `${metric.title} — бонус до +${points(metric.max_points)}` : `${metric.title} — ${points(metric.max_points)}`).join(" · ")}</span>
     </li>)}</ul>
   </Card>;
 }

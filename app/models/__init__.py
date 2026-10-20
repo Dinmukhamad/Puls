@@ -35,6 +35,9 @@ from app.models.contest import (
     OperatorMonthResult,
     OperatorWeekMetric,
     OperatorWeekResult,
+    ReportDayFact,
+    ReportMonth,
+    Violation,
 )
 from app.models.crm import CrmAppeal, CrmAttachment, CrmCategory, CrmInstruction
 from app.models.crm_draft import CrmDraft, CrmDraftAttachment
@@ -134,6 +137,8 @@ __all__ = [
     "ProgressLevel",
     "Raffle",
     "RaffleEntry",
+    "ReportDayFact",
+    "ReportMonth",
     "Role",
     "ScenarioAttempt",
     "ShopItem",
@@ -144,6 +149,7 @@ __all__ = [
     "User",
     "UserAvatar",
     "UserBadge",
+    "Violation",
     "VoiceAIUsage",
     "VoiceScenario",
     "VoiceTrainingAttempt",

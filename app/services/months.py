@@ -34,7 +34,7 @@ from app.models.user import User
 from app.services import coins as coins_service
 from app.services.economy import is_last_week_of_month, week_month
 from app.services.rules import get_rules
-from app.services.weekly import PROGRESS_METRIC
+from app.services.weekly import PROGRESS_METRIC, in_scope, prize_reached
 
 MONTHS = (
     "январь", "февраль", "март", "апрель", "май", "июнь",
@@ -175,16 +175,23 @@ async def calculate(session: AsyncSession, item: ContestMonth) -> list[OperatorM
             },
         ))
     # The month's places, and their prizes, are played for within each channel.
-    channels = dict((await session.execute(
-        select(User.id, User.channel).where(User.id.in_(list(by_user) or [0]))
-    )).all())
-    _rank(results, {user_id: channel or Channel.LINE for user_id, channel in channels.items()})
+    channels = {
+        user_id: channel or Channel.LINE
+        for user_id, channel in (await session.execute(
+            select(User.id, User.channel).where(User.id.in_(list(by_user) or [0]))
+        )).all()
+    }
+    _rank(results, channels)
     for result in results:
-        result.coins_rank_bonus = rules.rank_bonus(result.rank)
+        # A place pays only with an average week of at least the rules' points.
+        average = result.points / len(weeks)
+        result.coins_rank_bonus = (
+            rules.rank_bonus(result.rank) if prize_reached(average, rules) else 0
+        )
         session.add(result)
     await session.flush()
 
-    bonus = await _nominations(session, item, results, len(weeks), rules)
+    bonus = await _nominations(session, item, results, len(weeks), rules, channels)
     for result in results:
         result.coins_nomination_bonus = bonus.get(result.user_id, 0)
     item.status = WeekStatus.CALCULATED
@@ -201,9 +208,9 @@ def _value(nomination: NominationDefinition, result: OperatorMonthResult) -> flo
     return (breakdown.get("averages") or {}).get(nomination.metric_code)
 
 
-async def _nominations(session, item, results, weeks_total, rules) -> dict[int, int]:
-    if len(results) < rules.nomination_min_participants:
-        return {}
+async def _nominations(
+    session, item, results, weeks_total, rules, channels: dict[int, str] | None = None
+) -> dict[int, int]:
     enough = math.ceil(weeks_total / 2)
     eligible = [r for r in results if r.weeks >= enough]
     bonus: dict[int, int] = {}
@@ -212,8 +219,12 @@ async def _nominations(session, item, results, weeks_total, rules) -> dict[int, 
         .where(NominationDefinition.is_active.is_(True))
         .order_by(NominationDefinition.sort_order, NominationDefinition.id)
     ):
+        # A channel's nomination is played for among its operators (docs/CHANNELS.md).
+        scoped = [r for r in results if in_scope(nomination, (channels or {}).get(r.user_id))]
+        if len(scoped) < rules.nomination_min_participants:
+            continue
         candidates = []
-        for result in eligible:
+        for result in (r for r in eligible if r in scoped):
             value = _value(nomination, result)
             if value is None:
                 continue

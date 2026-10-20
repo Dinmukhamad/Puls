@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-from datetime import date, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, File, UploadFile, status
@@ -16,7 +15,7 @@ from app.core.deps import (
     managed_operators_filter,
     visible_users_filter,
 )
-from app.core.errors import ConflictError
+from app.core.errors import ConflictError, DomainError
 from app.models.contest import TEST_SOURCE, ContestWeek, OperatorWeekMetric, OperatorWeekResult
 from app.models.enums import Channel, WeekStatus
 from app.models.user import User
@@ -32,6 +31,7 @@ from app.schemas.imports import ImportPreviewOut
 from app.schemas.rating import WeekOut
 from app.services import imports as import_service
 from app.services import weekly as weekly_service
+from app.services.economy import local_today
 from app.services.rules import write_audit
 from app.services.scoring import channel_definitions
 
@@ -223,6 +223,11 @@ async def close(session: SessionDep, actor: HeadUser, week_id: int) -> WeekClose
     Повторный вызов безопасен - начисления защищены ключами идемпотентности.
     """
     week = await weekly_service.get_week(session, week_id, lock=True)
+    if week.status != WeekStatus.CLOSED and week.ends_on >= local_today():
+        raise DomainError(
+            f"Неделя ещё идёт: итоги можно опубликовать после {week.ends_on:%d.%m}",
+            code="week_not_over",
+        )
     report = await weekly_service.close_week(session, week, actor_id=actor.id)
     await write_audit(
         session,
@@ -249,18 +254,17 @@ async def close_previous(session: SessionDep, actor: HeadUser) -> WeekCloseRepor
     Закрывает неделю, завершившуюся накануне, не требуя знать её идентификатор.
 
     Точка входа для внешнего планировщика там, где встроенный не работает:
-    на тарифах, где сервис засыпает без трафика. Вызов идемпотентен.
+    на тарифах, где сервис засыпает без трафика. Вызов идемпотентен. Неделя без
+    показателей работы (отчёты ещё не пришли) не закрывается: ``skipped``.
     """
-    week = await weekly_service.get_or_create_week(session, date.today() - timedelta(days=3))
-    week = await weekly_service.get_week(session, week.id, lock=True)
-    report = await weekly_service.close_week(session, week, actor_id=actor.id)
+    week, report = await weekly_service.close_previous(session, actor_id=actor.id)
     await write_audit(
         session,
         actor_id=actor.id,
         action="week.close_previous",
         entity_type="contest_week",
         entity_id=week.id,
-        payload={"coins_awarded": report.coins_awarded},
+        payload={"coins_awarded": report.coins_awarded, "skipped": report.skipped},
     )
     await session.commit()
     return WeekCloseReportOut(**asdict(report))

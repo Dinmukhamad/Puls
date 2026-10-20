@@ -119,6 +119,7 @@
 .analytics-signal--risk { --signal:var(--insight-orange,#b55717); --signal-bg:var(--status-warning-tint); }
 .analytics-signal--critical { --signal:var(--insight-red,#ce3854); --signal-bg:var(--status-danger-tint); }
 .analytics-signal--missing { --signal:var(--text-tertiary); --signal-bg:var(--surface-secondary); }
+.analytics-signal--bonus, .analytics-signal--info { --signal:var(--text-secondary); --signal-bg:var(--surface-secondary); }
 .analytics-signal-text { color:var(--signal); font-size:12px; }
 .analytics-pulse { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; }
 .analytics-pulse-card { min-width:0; display:flex; flex-direction:column; align-items:flex-start; gap:13px; padding:21px; text-align:left; font:inherit; color:var(--text-primary); background:var(--surface-primary); border:1px solid var(--border-subtle); border-top:3px solid var(--signal); border-radius:20px; cursor:pointer; box-shadow:var(--shadow-card); }

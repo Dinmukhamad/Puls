@@ -44,6 +44,10 @@ export interface ReportsResult {
   /** What the reports could not place, and whose it is. */
   notes?: { code: string; title: string; names: string[] }[];
   weeks: { label: string; starts_on: string; ends_on: string; status: string; operators: number }[];
+  /** The last day the team reports cover, by channel: a month exported before its end waits for the rest. */
+  reported_to?: Partial<Record<"line" | "chat", string>>;
+  /** Weeks touching the month that wait for days not reported yet: the neighbouring month or the next export. */
+  pending?: { label: string; starts_on: string; ends_on: string; operators: number; reason: string }[];
 }
 const reportsForm = (files: File[], month: string) => {
   const multipart = new FormData();

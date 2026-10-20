@@ -11,7 +11,19 @@ import { coins, periodLabel, WEEK_STATUS_LABELS } from "../utils/format";
 const KIND_LABELS = { line: "Линия · отчёт команды", chat: "Чаты · отчёт команды", quality: "Оценки проверяющих", unknown: "Не распознан" } as const;
 const KIND_TONES = { line: "accent", chat: "accent", quality: "accent", unknown: "danger" } as const;
 
-/** Monthly SZoV reports as exported: every day for analytics, full weeks for the contest. */
+/** «весь месяц», «по 16.10» or «линия по 19.10 · чаты по 15.10»: how far the team reports go. */
+export function reportedTo(result: Pick<ReportsResult, "month" | "reported_to">): string {
+  const entries = Object.entries(result.reported_to ?? {}) as ["line" | "chat", string][];
+  if (!entries.length) return "нет отчёта команды";
+  const [year, month] = result.month.split("-").map(Number);
+  const end = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
+  if (entries.every(([, day]) => day === end)) return "весь месяц";
+  const date = (day: string) => `${day.slice(8, 10)}.${day.slice(5, 7)}`;
+  if (entries.every(([, day]) => day === entries[0][1])) return `по ${date(entries[0][1])}`;
+  return entries.map(([channel, day]) => `${channel === "line" ? "линия" : "чаты"} ${day === end ? "весь месяц" : `по ${date(day)}`}`).join(" · ");
+}
+
+/** Monthly SZoV reports as exported: every reported day for analytics, each week once all its days are in. */
 export function ReportsUpload({ onSaved }: { onSaved?: () => void }) {
   const { atLeast } = useAuth();
   const toast = useToast();
@@ -64,7 +76,7 @@ export function ReportsUpload({ onSaved }: { onSaved?: () => void }) {
       <ul className="workflow-issues">{result.files.map((file) => <li key={file.filename}>
         <Badge tone={KIND_TONES[file.kind]}>{KIND_LABELS[file.kind]}</Badge> {file.filename}{file.kind !== "unknown" && ` · ${coins(file.people)} чел.`}
       </li>)}</ul>
-      <div className="kpi-grid"><KPI label="Месяц" value={result.month} /><KPI label="Операторов найдено" value={coins(result.matched)} />
+      <div className="kpi-grid"><KPI label="Месяц" value={result.month} /><KPI label="Данные команд" value={reportedTo(result)} /><KPI label="Операторов найдено" value={coins(result.matched)} />
         <KPI label="Не найдено на сайте" value={coins(result.unmatched.length)} /><KPI label="Дневных значений" value={coins(result.day_values)} /></div>
       {!!result.unmatched.length && <details className="workflow-note ui-note"><summary>Кого нет на сайте ({result.unmatched.length})</summary>
         <p>Их данные пропущены. Проверьте ФИО в карточке сотрудника: оно должно совпадать с отчётом.</p>
@@ -72,11 +84,15 @@ export function ReportsUpload({ onSaved }: { onSaved?: () => void }) {
       {result.notes?.map((note) => <details key={note.code} className="workflow-note ui-note"><summary>{note.title} ({note.names.length})</summary>
         <p>{note.names.join(", ")}</p></details>)}
       <div><h3 className="group-title">Недели месяца</h3>
+        {!result.weeks.length && <p className="small secondary">Ни одна неделя ещё не собрана целиком.</p>}
         <ul className="workflow-issues">{result.weeks.map((week) => <li key={week.label}>
           {periodLabel(week.starts_on, week.ends_on)} · {coins(week.operators)} операторов · {week.status === "closed" ? "закрыта, не изменится" : week.status === "new" ? "будет открыта" : WEEK_STATUS_LABELS[week.status] ?? week.status}
+        </li>)}
+        {result.pending?.map((week) => <li key={`pending-${week.label}`} className="secondary">
+          <Badge tone="neutral">Ждёт</Badge> {periodLabel(week.starts_on, week.ends_on)} · {week.reason} · {coins(week.operators)} операторов
         </li>)}</ul>
-        <p className="workflow-note">Линия: норма часов (с тренингами, тех. сбоями и офлайн-активностью, против нормы из отчёта), переработки, эффективность, звонки в час. Чаты: норма часов, переработки, среднее время ответа. Качество — из оценок проверяющих, опоздания — из «Штрафов».</p>
-        <p className="workflow-note">Каждый день месяца попадёт в аналитику по дням и месяцам. Неполные недели на краях месяца идут только в дни. Коины не начисляются — итоги недели публикуются как обычно.
+        <p className="workflow-note">Линия: норма часов (с тренингами, тех. сбоями и офлайн-активностью, против нормы из отчёта), переработки, эффективность, звонки в час. Чаты: норма часов, переработки, среднее время ответа, чатов в час. Качество — из оценок проверяющих, опоздания — из «Штрафов».</p>
+        <p className="workflow-note">Каждый выгруженный день попадёт в аналитику. Неделя на стыке месяцев запишется, когда загрузят отчёт соседнего месяца; дни после выгрузки — со следующей выгрузкой. Коины не начисляются — итоги недели публикуются, когда она закончится.
           {!atLeast("head") && " Рейтинг пересчитает руководитель."}</p>
       </div>
       {save.isError && <ErrorState error={save.error} />}

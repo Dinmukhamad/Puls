@@ -76,6 +76,12 @@ def range_label(first: date, last: date) -> str:
     return f"{first:%d.%m.%Y}" if first == last else f"{first:%d.%m.%Y}–{last:%d.%m.%Y}"
 
 
+def scored(metric: MetricDefinition) -> bool:
+    """Whether a metric gives or takes points: a positive one without points (chats' response time
+    or chats an hour, docs/CHANNELS.md) is shown for reference only."""
+    return metric.kind == MetricKind.ANTI or metric.max_points > 0 or bool(metric.bonus_for)
+
+
 async def range_bounds(
     session: AsyncSession, date_from: date | None, date_to: date | None
 ) -> tuple[date, date]:
@@ -564,12 +570,16 @@ async def report(
                 reported=reported,
                 total=len(users),
                 coverage=reported / len(users) if users else None,
-                below_target=sum(
-                    at_target(value, metric, grain) is False for value in current_values
-                ),
+                # A bonus (overtime) is extra and a metric without points is for reference: being
+                # without them is not being below a goal.
+                below_target=0
+                if metric.bonus_for or not scored(metric)
+                else sum(at_target(value, metric, grain) is False for value in current_values),
                 description=metric.description,
                 penalty_per_unit=metric.penalty_per_unit,
                 trend=[average(observations(ids, metric.code, start)) for start in starts],
+                bonus=bool(metric.bonus_for),
+                scored=scored(metric),
             )
         )
     result.operators_with_data = sum(

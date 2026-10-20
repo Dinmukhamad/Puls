@@ -8,6 +8,7 @@ import { ApiError, downloadFile } from "../api/client";
 import { admin } from "../api/endpoints";
 import type { Channel, OperatorRowOut } from "../api/types";
 import { ManualCoinsSheet } from "../components/ManualCoinsSheet";
+import { ViolationSheet } from "../components/ViolationSheet";
 import { useToast } from "../components/Toast";
 import { DownloadIcon, SearchIcon } from "../components/icons";
 import { GlassSurface } from "../components/GlassSurface";
@@ -37,6 +38,8 @@ export function AdminOperatorsPage() {
   const { can } = useAccess(); const { atLeast } = useAuth();
   const canOverview = can("overview");
   const canCredit = can("motivation") && atLeast("supervisor");
+  // Foreign sites are recorded the moment a supervisor notices them (docs/CHANNELS.md).
+  const canRecord = atLeast("supervisor") && (can("team") || can("motivation") || can("performance"));
   const [period, setPeriod] = useState<DateRange>();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
@@ -44,6 +47,7 @@ export function AdminOperatorsPage() {
   const [channel, setChannel] = useState<Channel | "all">("all");
   const only = channel === "all" ? undefined : channel;
   const [target, setTarget] = useState<OperatorRowOut | null>(null);
+  const [offender, setOffender] = useState<OperatorRowOut | null>(null);
   const size = 25;
 
   const summary = useQuery({
@@ -81,7 +85,7 @@ export function AdminOperatorsPage() {
       <div className="page-head">
         <div>
           <h1 className="page-title">{teamTitles().metrics}</h1>
-          <p className="page-subtitle">Баллы, коины и нарушения операторов за период{canCredit ? " · ручное начисление коинов" : ""}</p>
+          <p className="page-subtitle">Баллы, коины и нарушения операторов за период{canCredit ? " · ручное начисление коинов" : ""}{canRecord ? " · отметка посторонних сайтов" : ""}</p>
         </div>
         <div className="page-head__actions">
           {can("reports") && <Button icon={<DownloadIcon size={17} />} disabled={!period} onClick={exportCsv}>
@@ -210,6 +214,9 @@ export function AdminOperatorsPage() {
                       <AntiCell value={row.lateness} available={!period || !!row.metrics_available} />
                       <AntiCell value={row.forbidden_sites} available={!period || !!row.metrics_available} />
                       <td className="cell-actions">
+                        {canRecord && <Button size="s" variant="plain" onClick={() => setOffender(row)} aria-label={`Отметить посторонние сайты: ${row.full_name}`}>
+                          Сайты
+                        </Button>}
                         {canCredit && <Button size="s" onClick={() => setTarget(row)}>
                           Начислить
                         </Button>}
@@ -260,9 +267,14 @@ export function AdminOperatorsPage() {
                         </span>
                       </span>
                     </div>
-                    {canCredit && <Button size="s" block onClick={() => setTarget(row)}>
-                      Начислить коины
-                    </Button>}
+                    {(canCredit || canRecord) && <div className="operators-card-actions">
+                      {canRecord && <Button size="s" block onClick={() => setOffender(row)}>
+                        Посторонние сайты
+                      </Button>}
+                      {canCredit && <Button size="s" block onClick={() => setTarget(row)}>
+                        Начислить коины
+                      </Button>}
+                    </div>}
                   </li>
                 ))}
               </ul>
@@ -281,6 +293,7 @@ export function AdminOperatorsPage() {
       </Card>
 
       {target && canCredit && <ManualCoinsSheet operator={target} onClose={() => setTarget(null)} />}
+      {offender && canRecord && <ViolationSheet operator={offender} onClose={() => setOffender(null)} />}
     </div>
   );
 }

@@ -47,6 +47,8 @@ from app.services.scoring import channel_definitions, points_to_coins, score_wee
 #: Служебный код номинации «Лучший прогресс недели»: сравнивает итоговые баллы
 #: с предыдущей неделей вместо обычного показателя.
 PROGRESS_METRIC = "__progress__"
+#: The source of the foreign sites a supervisor recorded on the site (services/violations.py).
+VIOLATION_SOURCE = "violation"
 
 
 @dataclass(slots=True)
@@ -60,6 +62,8 @@ class WeekCloseReport:
     nominations_awarded: int
     badges_awarded: int
     already_closed: bool = False
+    #: Not closed: the week has no values from the work itself yet (see ``has_work_data``).
+    skipped: bool = False
 
 
 # --------------------------------------------------------------------------- #
@@ -165,17 +169,27 @@ async def previous_week(session: AsyncSession, week: ContestWeek) -> ContestWeek
 async def _load_metric_values(
     session: AsyncSession, week_id: int
 ) -> dict[int, dict[str, float]]:
-    """Показатели недели, сгруппированные по операторам. Тестовые значения в расчёт не идут."""
+    """
+    Показатели недели, сгруппированные по операторам. Тестовые значения в расчёт не идут.
+
+    Участник недели — оператор с показателями работы: одна отметка супервайзера о посторонних
+    сайтах не ставит его в рейтинг недели с нулём баллов (docs/CHANNELS.md).
+    """
     rows = await session.execute(
         select(
             OperatorWeekMetric.user_id,
             OperatorWeekMetric.metric_code,
             OperatorWeekMetric.value,
+            OperatorWeekMetric.source,
         ).where(OperatorWeekMetric.week_id == week_id, OperatorWeekMetric.source != TEST_SOURCE)
     )
     grouped: dict[int, dict[str, float]] = {}
-    for user_id, code, value in rows:
+    working: set[int] = set()
+    for user_id, code, value, source in rows:
         grouped.setdefault(user_id, {})[code] = float(value)
+        if source != VIOLATION_SOURCE:
+            working.add(user_id)
+    grouped = {user_id: values for user_id, values in grouped.items() if user_id in working}
     return grouped
 
 
@@ -254,6 +268,7 @@ async def calculate_week(
         )
     )
     participants = list(participants)
+    await _clean_sites_by_default(session, week, participants, values_by_user, rules, definitions)
 
     prev = await previous_week(session, week)
     previous_ranks: dict[int, int] = {}
@@ -333,6 +348,47 @@ async def calculate_week(
     return results
 
 
+async def _clean_sites_by_default(
+    session: AsyncSession,
+    week: ContestWeek,
+    participants: list[User],
+    values_by_user: dict[int, dict[str, float]],
+    rules: GamificationSettings,
+    definitions: list[MetricDefinition],
+) -> None:
+    """
+    Foreign sites are recorded on the site the moment a supervisor notices them
+    (services/violations.py): an operator of the week without a record had none, so the week
+    counts 0 and pays the «без посторонних сайтов» bonus.
+    """
+    code = rules.forbidden_sites_metric_code
+    if not any(d.code == code for d in definitions):
+        return
+    stored = set(
+        await session.scalars(
+            select(OperatorWeekMetric.user_id).where(
+                OperatorWeekMetric.week_id == week.id, OperatorWeekMetric.metric_code == code
+            )
+        )
+    )
+    for user in participants:
+        values = values_by_user.setdefault(user.id, {})
+        if code in values:
+            continue
+        values[code] = 0.0
+        if user.id not in stored:
+            session.add(
+                OperatorWeekMetric(
+                    week_id=week.id,
+                    user_id=user.id,
+                    metric_code=code,
+                    value=0.0,
+                    source=VIOLATION_SOURCE,
+                )
+            )
+    await session.flush()
+
+
 async def invalidate_calculation(session: AsyncSession, week: ContestWeek) -> None:
     """Metric edits invalidate the shared ranking before a new calculation."""
     if week.status == WeekStatus.CLOSED:
@@ -400,7 +456,11 @@ def _apply_coin_preview(
 ) -> None:
     """Заполняет расчётные поля коинов без проведения операций (шаги 4-5 п. 7)."""
     result.coins_from_points = points_to_coins(result.final_points, rules.points_per_coin)
-    result.coins_rank_bonus = 0 if monthly(rules) else rules.rank_bonus(result.rank)
+    result.coins_rank_bonus = (
+        0
+        if monthly(rules) or not prize_reached(result.final_points, rules)
+        else rules.rank_bonus(result.rank)
+    )
     result.coins_fine = week_fine(result, rules)
 
     lateness, sites = discipline_bonuses(result, rules, set(raw_values))
@@ -426,11 +486,8 @@ async def _award_nominations(
 
     Возвращает суммарный бонус за номинации по операторам. При слишком малом
     числе участников номинации не присуждаются - иначе победителем становится
-    единственный участник.
+    единственный участник. Номинация направления разыгрывается среди его операторов.
     """
-    if len(results) < rules.nomination_min_participants:
-        return {}
-
     nominations = await session.scalars(
         select(NominationDefinition)
         .where(NominationDefinition.is_active.is_(True))
@@ -441,7 +498,10 @@ async def _award_nominations(
     bonus_by_user: dict[int, int] = {}
 
     for nomination in nominations:
-        candidate = _pick_nomination_winner(nomination, results, by_user)
+        scoped = [r for r in results if in_scope(nomination, (r.breakdown or {}).get("channel"))]
+        if len(scoped) < rules.nomination_min_participants:
+            continue
+        candidate = _pick_nomination_winner(nomination, scoped, by_user)
         if candidate is None:
             continue
         result, value = candidate
@@ -459,6 +519,17 @@ async def _award_nominations(
 
     await session.flush()
     return bonus_by_user
+
+
+def in_scope(nomination: NominationDefinition, channel: str | None) -> bool:
+    """Whether an operator of ``channel`` plays for the nomination: its channel's or everyone's."""
+    scope = nomination.channel or "all"
+    return scope == "all" or scope == (channel or Channel.LINE)
+
+
+def prize_reached(points: float, rules: GamificationSettings) -> bool:
+    """A prize for a place needs at least the rules' points for a week (0 — no threshold)."""
+    return points + 1e-9 >= max(0.0, rules.prize_min_points or 0.0)
 
 
 def _nomination_value(
@@ -518,6 +589,42 @@ def _pick_nomination_winner(
 # --------------------------------------------------------------------------- #
 # Закрытие недели и начисление коинов
 # --------------------------------------------------------------------------- #
+
+
+async def has_work_data(session: AsyncSession, week: ContestWeek) -> bool:
+    """Whether the week has values from the work itself (reports, files, entered by hand). The
+    supervisors' violation records alone, or the test week's values, are nothing to publish yet:
+    the SZoV reports come once a month, after the week."""
+    return (
+        await session.scalar(
+            select(OperatorWeekMetric.id)
+            .where(
+                OperatorWeekMetric.week_id == week.id,
+                OperatorWeekMetric.source.not_in((TEST_SOURCE, VIOLATION_SOURCE)),
+            )
+            .limit(1)
+        )
+        is not None
+    )
+
+
+async def close_previous(
+    session: AsyncSession, *, actor_id: int | None = None
+) -> tuple[ContestWeek, WeekCloseReport]:
+    """
+    Closes the week that ended before the latest Monday — for the scheduler and an external cron.
+
+    A week without values from the work (the reports have not come yet) stays open: closed empty,
+    it would never take the reports' values, so it waits to be published by hand.
+    """
+    week = await get_or_create_week(session, economy.local_today() - timedelta(days=3))
+    week = await get_week(session, week.id, lock=True)
+    if week.status != WeekStatus.CLOSED and not await has_work_data(session, week):
+        return week, WeekCloseReport(
+            week_id=week.id, week_label=week.label, participants=0, coins_awarded=0,
+            nominations_awarded=0, badges_awarded=0, skipped=True,
+        )
+    return week, await close_week(session, week, actor_id=actor_id)
 
 
 async def close_week(

@@ -1,6 +1,6 @@
 import type { AnalyticsOperator, AnalyticsOut, MetricSummary } from '../api/analytics';
 
-export type Signal = 'met' | 'watch' | 'risk' | 'critical' | 'missing';
+export type Signal = 'met' | 'watch' | 'risk' | 'critical' | 'missing' | 'bonus' | 'info';
 export type OperatorState = 'ontrack' | 'attention' | 'critical' | 'partial' | 'missing';
 export const STATE_LABEL: Record<OperatorState, string> = {
   ontrack: 'Все цели выполнены', attention: 'Нужно внимание', critical: 'Сильное отставание',
@@ -8,18 +8,22 @@ export const STATE_LABEL: Record<OperatorState, string> = {
 };
 export const SIGNAL_LABEL: Record<Signal, string> = {
   met: 'Цель выполнена', watch: 'Нужно внимание', risk: 'Отклонение от 10%',
-  critical: 'Отклонение от 20%', missing: 'Нет данных',
+  critical: 'Отклонение от 20%', missing: 'Нет данных', bonus: 'Бонус не полностью', info: 'Без баллов, для справки',
 };
+/** The mark in a cell: met, missing, a bonus not taken in full, reference only, or something to look at. */
+export const signalMark = (signal: Signal) => signal === 'met' ? '✓' : signal === 'missing' ? '—' : signal === 'bonus' ? '+' : signal === 'info' ? '·' : '!';
+/** Not a goal of the operator: a bonus over the 100 points, or a metric without points (docs/CHANNELS.md). */
+const optional = (metric: MetricSummary) => Boolean(metric.bonus) || (metric.scored === false && metric.kind !== 'anti');
 const EXPLANATIONS: Record<string, string> = {
   quality: 'Средняя оценка качества звонков оператора.',
   chat_quality: 'Средняя оценка качества ответов в чатах. Баллы недели — по ступеням KPI чатов.',
   chat_hours_norm: 'Отработанное в чатах время относительно нормы часов.',
-  chat_overtime: 'Часы работы в чатах сверх нормы за неделю.',
+  chat_overtime: 'Часы работы в чатах сверх нормы за неделю. Бонус сверх 100 баллов, когда норма выполнена.',
   chat_response_time: 'Среднее время ответа в чатах. Чем меньше, тем лучше.',
   efficiency: 'Доля продуктивного времени в отработанном.',
   hours_norm: 'Отработанное время относительно нормы с учётом ставки.',
   hours_worked: 'Сколько часов отработал оператор.',
-  overtime: 'Часы работы сверх основного графика.',
+  overtime: 'Часы работы сверх нормы за неделю. Бонус сверх 100 баллов, когда норма выполнена.',
   calls_per_hour: 'Сколько звонков обработано за час работы.',
   driver_gratitudes: 'Количество благодарностей от водителей.',
   lateness: 'Количество зарегистрированных опозданий.',
@@ -46,6 +50,10 @@ export function assess(value: number | null | undefined, metric: MetricSummary) 
   const margin = (value - metric.target) * (metric.direction === 'lower_is_better' ? -1 : 1);
   const percent = metric.target > 0 ? margin / metric.target * 100 : null;
   const penalty = metric.kind === 'anti' && value > 0;
+  // A bonus (overtime) is extra: less than its target is a smaller bonus, never a problem.
+  if (metric.bonus) return { signal: (margin < 0 ? 'bonus' : 'met') as Signal, margin, percent, issue: false };
+  // A metric without points is for reference: its target is shown, missing it is no problem.
+  if (optional(metric)) return { signal: (margin < 0 ? 'info' : 'met') as Signal, margin, percent, issue: false };
   const signal: Signal = margin < 0
     ? percent !== null && percent <= -20 + 1e-8 ? 'critical' : percent !== null && percent <= -10 + 1e-8 ? 'risk' : 'watch'
     : penalty ? 'watch' : 'met';
@@ -56,6 +64,7 @@ export function gapText(value: number | null | undefined, metric: MetricSummary)
   const { margin } = assess(value, metric);
   if (margin === null) return 'Нет данных';
   const unit = metric.unit === '%' ? 'п.п.' : metric.unit ?? '';
+  if (metric.bonus) return margin < 0 ? `До полного бонуса ${shortNumber(-margin)} ${unit}`.trim() : 'Полный бонус';
   if (margin < 0) return `${metric.direction === 'lower_is_better' ? 'Выше лимита' : 'До цели'} ${shortNumber(-margin)} ${unit}`.trim();
   if (metric.kind === 'anti' && value! > 0) return 'Есть нежелательные события';
   return margin === 0 ? 'Точно на цели' : `Лучше цели на ${shortNumber(margin)} ${unit}`.trim();
@@ -70,15 +79,17 @@ export function movement(current: number | null | undefined, previous: number | 
 export function operatorInsight(row: AnalyticsOperator, metrics: MetricSummary[], latenessCode = 'lateness') {
   const cells = metrics.map(metric => ({ metric, value: row.values[metric.code] ?? null, ...assess(row.values[metric.code], metric) }));
   const reported = cells.filter(c => c.signal !== 'missing').length;
+  // Every goal is met without a bonus or a metric without points: their absence is not missing data either.
+  const complete = cells.every(c => optional(c.metric) || c.signal !== 'missing');
   const issues = cells.filter(c => c.issue).sort((a, b) => {
-    const weight = { critical: 4, risk: 3, watch: 2, met: 1, missing: 0 };
+    const weight: Record<Signal, number> = { critical: 4, risk: 3, watch: 2, bonus: 1, info: 1, met: 1, missing: 0 };
     return weight[b.signal] - weight[a.signal] || (a.percent ?? 0) - (b.percent ?? 0);
   });
   const state: OperatorState = issues.some(c => c.signal === 'critical') ? 'critical' : issues.length ? 'attention'
-    : !reported ? 'missing' : reported < metrics.length ? 'partial' : 'ontrack';
+    : !reported ? 'missing' : !complete ? 'partial' : 'ontrack';
   const improving = cells.filter(c => movement(c.value, row.previous_values?.[c.metric.code], c.metric) === 'up').length;
   const worsening = cells.filter(c => movement(c.value, row.previous_values?.[c.metric.code], c.metric) === 'down').length;
-  return { row, cells, issues, state, reported, met: cells.filter(c => c.signal === 'met').length, improving, worsening,
+  return { row, cells, issues, state, reported, complete, met: cells.filter(c => c.signal === 'met').length, improving, worsening,
     late: finite(row.values[latenessCode]) && row.values[latenessCode]! > 0,
     worst: Math.min(0, ...issues.map(c => c.percent ?? 0)),
   };
@@ -99,7 +110,7 @@ export function matchesFilter(item: OperatorInsight, status: string, selected: M
     case 'down': return item.worsening > 0;
     case 'up': return item.improving > 0;
     case 'late': return item.late;
-    case 'missing': return item.reported < item.cells.length;
+    case 'missing': return !item.complete;
     case 'partial': return item.state === 'partial';
     case 'empty': return item.state === 'missing';
     case 'below': return assess(item.row.values[selected.code], selected).issue;

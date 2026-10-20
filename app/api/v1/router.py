@@ -37,6 +37,7 @@ from app.api.v1 import (
     telegram,
     telemetry,
     trainee,
+    violations,
     voice_scenarios,
     voice_training,
     wallet,
@@ -66,6 +67,7 @@ api_router.include_router(admin_panel.router)
 api_router.include_router(admin_weeks.router)
 api_router.include_router(economy.router)
 api_router.include_router(admin_days.router)
+api_router.include_router(violations.router)
 api_router.include_router(admin_config.router)
 api_router.include_router(admin_users.router)
 api_router.include_router(supervisor_teams.router)

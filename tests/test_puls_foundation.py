@@ -115,11 +115,11 @@ async def test_file_preview_apply_calculate_publish_is_idempotent(
     week = await weekly.get_or_create_week(session, date(2026, 8, 3))
     await session.commit()
     if extension == "csv":
-        content = b"login,quality,hours_worked\nop1,98,40\n"
+        content = b"login,quality,hours_norm\nop1,98,100\n"
     else:
         workbook = Workbook()
-        workbook.active.append(["login", "quality", "hours_worked"])
-        workbook.active.append(["op1", 98, 40])
+        workbook.active.append(["login", "quality", "hours_norm"])
+        workbook.active.append(["op1", 98, 100])
         stream = BytesIO()
         workbook.save(stream)
         content = stream.getvalue()

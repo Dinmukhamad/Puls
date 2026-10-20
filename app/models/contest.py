@@ -105,6 +105,10 @@ class MetricDefinition(Base, TimestampMixin):
     )
     #: Ступени вместо плавного расчёта: [{"from": 80, "points": 20}, …] — от порога и выше.
     bands: Mapped[list | None] = mapped_column(JSONType, nullable=True)
+    #: Бонус сверх 100 баллов (переработки): баллы идут, только когда показатель ``bonus_for``
+    #: выполнен, и не больше ``bonus_share`` его баллов (docs/CHANNELS.md).
+    bonus_for: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    bonus_share: Mapped[float | None] = mapped_column(Float, nullable=True)
 
 
 class OperatorWeekMetric(Base, TimestampMixin):
@@ -202,6 +206,8 @@ class NominationDefinition(Base, TimestampMixin):
     require_zero: Mapped[bool] = mapped_column(Boolean, default=False)
     #: Минимальное значение показателя, ниже которого номинация не присуждается.
     min_value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    #: Среди кого разыгрывается: «line», «chat» или «all» — все операторы (docs/CHANNELS.md).
+    channel: Mapped[str] = mapped_column(String(16), default="all", server_default="all")
     coins_reward: Mapped[int] = mapped_column(Integer, default=100)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=100)
@@ -299,3 +305,66 @@ class MonthNominationWinner(Base, TimestampMixin):
 
     nomination: Mapped[NominationDefinition] = relationship("NominationDefinition")
     user: Mapped[User] = relationship("User")
+
+
+class Violation(Base, TimestampMixin):
+    """
+    A violation a supervisor noticed and recorded on the site: foreign sites for now
+    (docs/CHANNELS.md). The week's count of them is its metric ``forbidden_sites``.
+    """
+
+    __tablename__ = "violations"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    week_id: Mapped[int] = mapped_column(
+        ForeignKey("contest_weeks.id", ondelete="CASCADE"), index=True
+    )
+    #: The metric it counts towards (rules.forbidden_sites_metric_code).
+    metric_code: Mapped[str] = mapped_column(String(64), default="forbidden_sites")
+    count: Mapped[int] = mapped_column(Integer, default=1)
+    noticed_on: Mapped[date] = mapped_column(Date)
+    comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    cancelled_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
+
+class ReportDayFact(Base, TimestampMixin):
+    """
+    What the monthly SZoV reports say about one operator's day, by kind: «line» and «chat» (a
+    team's hours, norm, calls or chats, fines) and «quality» (reviewers' scores). Weeks are built
+    from these, so a week that crosses two months gets both halves (docs/SZOV_REPORTS.md).
+    """
+
+    __tablename__ = "report_day_facts"
+    __table_args__ = (UniqueConstraint("user_id", "day", "kind", name="uq_report_day_fact"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    day: Mapped[date] = mapped_column(Date, index=True)
+    kind: Mapped[str] = mapped_column(String(16))
+    data: Mapped[dict[str, Any]] = mapped_column(JSONType, default=dict)
+
+
+class ReportMonth(Base, TimestampMixin):
+    """A month of SZoV reports on the site: the last day the line's and the chats' team reports
+    cover, and the reviewers' month averages (scores without a date)."""
+
+    __tablename__ = "report_months"
+    __table_args__ = (UniqueConstraint("year", "month", name="uq_report_month"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    year: Mapped[int] = mapped_column(Integer)
+    month: Mapped[int] = mapped_column(Integer)
+    #: Days up to these are reported; later ones wait for the next export. None — no team report
+    #: of the channel yet.
+    line_until: Mapped[date | None] = mapped_column(Date, nullable=True)
+    chat_until: Mapped[date | None] = mapped_column(Date, nullable=True)
+    #: {user_id: [average, count]} from the reviewers' report.
+    quality: Mapped[dict[str, Any]] = mapped_column(JSONType, default=dict)
+

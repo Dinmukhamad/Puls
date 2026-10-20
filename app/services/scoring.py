@@ -31,9 +31,12 @@ class MetricScore:
     max_points: float
     #: Штрафные баллы, вычитаемые из суммы (только для антипоказателей).
     penalty: float
+    #: A bonus over the 100 points: the metric it builds on and whether that one is met yet.
+    bonus_for: str | None = None
+    unlocked: bool | None = None
 
     def as_dict(self) -> dict[str, object]:
-        return {
+        out: dict[str, object] = {
             "code": self.code,
             "title": self.title,
             "unit": self.unit,
@@ -45,6 +48,10 @@ class MetricScore:
             "max_points": self.max_points,
             "penalty": self.penalty,
         }
+        if self.bonus_for:
+            out["bonus_for"] = self.bonus_for
+            out["unlocked"] = self.unlocked
+        return out
 
 
 @dataclass(slots=True)
@@ -89,10 +96,59 @@ def channel_definitions(
 
 
 def channel_max_points(definitions: list[MetricDefinition], channel: str | None) -> float:
-    """The most points a week of ``channel`` gives: its metrics that add points (100 by design)."""
+    """The points a full week of ``channel`` gives: its metrics that add points (100 by design),
+    without the bonus over them (overtime)."""
     return sum(
         d.max_points for d in channel_definitions(definitions, channel)
-        if d.kind == MetricKind.POSITIVE
+        if d.kind == MetricKind.POSITIVE and not d.bonus_for
+    )
+
+
+def bonus_cap(definition: MetricDefinition, base: MetricDefinition | None) -> float:
+    """The most a bonus metric adds: its share of the points of the metric it builds on."""
+    if base is None or not definition.bonus_share:
+        return 0.0
+    return round(max(0.0, definition.bonus_share) * base.max_points, 2)
+
+
+def score_bonus(
+    definition: MetricDefinition,
+    value: float | None,
+    base: MetricDefinition | None,
+    base_score: MetricScore | None,
+) -> MetricScore:
+    """
+    A bonus over the 100 points (overtime, docs/CHANNELS.md): nothing until the base metric is met,
+    then up to ``bonus_share`` of its points, all of them from the target value up.
+    """
+    cap = bonus_cap(definition, base)
+    unlocked = bool(
+        base_score is not None
+        and base_score.value is not None
+        and (base_score.completion or 0.0) >= 1.0 - 1e-6
+    )
+    if value is not None and not math.isfinite(value):
+        raise ValueError("Значение показателя должно быть конечным числом")
+    completion: float | None = None
+    points = 0.0
+    if value is not None:
+        target = definition.target_value
+        reach = (1.0 if value > 0 else 0.0) if target <= 0 else max(0.0, min(value / target, 1.0))
+        completion = round(reach, 4)
+        points = round(cap * reach, 2) if unlocked else 0.0
+    return MetricScore(
+        code=definition.code,
+        title=definition.title,
+        unit=definition.unit,
+        kind=MetricKind.POSITIVE,
+        value=value,
+        target=definition.target_value,
+        completion=completion,
+        points=points,
+        max_points=cap,
+        penalty=0.0,
+        bonus_for=definition.bonus_for,
+        unlocked=unlocked,
     )
 
 
@@ -157,7 +213,17 @@ def score_week(definitions: list[MetricDefinition], values: dict[str, float | No
     затем вычитаются антипоказатели, и только после этого результат переводится
     в коины. Итог не опускается ниже нуля.
     """
-    scores = [score_metric(d, values.get(d.code)) for d in definitions]
+    by_code = {d.code: d for d in definitions}
+    plain = {
+        d.code: score_metric(d, values.get(d.code)) for d in definitions if not d.bonus_for
+    }
+    # A bonus is scored after the metric it builds on: it counts only once that one is met.
+    scores = [
+        plain[d.code]
+        if not d.bonus_for
+        else score_bonus(d, values.get(d.code), by_code.get(d.bonus_for), plain.get(d.bonus_for))
+        for d in definitions
+    ]
     base = sum(s.points for s in scores)
     penalty = sum(s.penalty for s in scores)
     final = max(0.0, base - penalty)

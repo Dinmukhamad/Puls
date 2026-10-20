@@ -170,6 +170,10 @@ class RaceMetric(BaseModel):
     bands: list[dict[str, float]] | None = Field(
         default=None, description="Ступени: от порога и выше — его баллы (docs/CHANNELS.md)"
     )
+    bonus: bool = Field(default=False, description="Бонус сверх 100 баллов (переработки)")
+    locked: bool = Field(
+        default=False, description="Бонус ещё не идёт: показатель-основа не выполнен"
+    )
 
 
 class RaceOption(BaseModel):
@@ -217,6 +221,7 @@ class RaceOut(BaseModel):
     prizes: list[int] = Field(default_factory=list, description="Бонусы за 1-3 места недели")
     participants: int
     max_points: float
+    bonus_max: float = Field(default=0.0, description="Сколько ещё может дать бонус сверх 100")
     me: RaceMe | None = None
     next: RacePlace | None = None
     behind: RaceBehind | None = None
@@ -287,6 +292,7 @@ class CompareMetric(BaseModel):
     place: int | None = Field(default=None, description="Место оператора по этому показателю")
     points: float | None = None
     max_points: float
+    bonus: bool = Field(default=False, description="Бонус сверх 100 баллов (переработки)")
 
 
 class CompareChannel(BaseModel):

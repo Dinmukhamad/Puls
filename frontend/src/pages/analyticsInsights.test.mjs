@@ -84,3 +84,27 @@ test('a chosen range is named by its own dates whatever step its chart uses', as
   // The last-period reports keep their former captions.
   assert.equal(periodCaption({ grain: 'month', period_from: '2026-08-01', period_to: '2026-08-31', period_label: null }), 'август 2026 г.');
 });
+
+test('overtime is a bonus over the 100 points: less than its target is a smaller bonus, never a problem (docs/CHANNELS.md)', () => {
+  const overtime = { code: 'overtime', title: 'Переработки', target: 8, unit: 'ч', direction: 'higher_is_better', kind: 'positive', bonus: true };
+  assert.deepEqual(assess(3, overtime), { signal: 'bonus', margin: -5, percent: -62.5, issue: false });
+  assert.equal(assess(8, overtime).signal, 'met');
+  assert.equal(gapText(3, overtime), 'До полного бонуса 5 ч');
+  assert.equal(gapText(9, overtime), 'Полный бонус');
+  // Without overtime every goal can still be met: its absence is neither a problem nor missing data.
+  const insight = operatorInsight(row({ quality: 90, lateness: 0 }), [quality, late, overtime]);
+  assert.equal(insight.state, 'ontrack');
+  assert.equal(insight.issues.length, 0);
+  assert.equal(matchesFilter(insight, 'missing', quality), false);
+});
+
+test('a metric without points is for reference: its target is shown, missing it is no problem', () => {
+  const response = { code: 'chat_response_time', title: 'Время ответа', target: 120, unit: 'сек', direction: 'lower_is_better', kind: 'positive', scored: false };
+  assert.deepEqual(assess(130, response), { signal: 'info', margin: -10, percent: -8.333333333333332, issue: false });
+  assert.equal(assess(100, response).signal, 'met');
+  assert.equal(gapText(130, response), 'Выше лимита 10 сек');
+  const insight = operatorInsight(row({ quality: 90, lateness: 0, chat_response_time: 130 }), [quality, late, response]);
+  assert.equal(insight.state, 'ontrack');
+  // A penalty metric is never «for reference», whatever its points.
+  assert.equal(assess(1, { ...late, scored: false }).issue, true);
+});
