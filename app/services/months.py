@@ -34,7 +34,7 @@ from app.models.user import User
 from app.services import coins as coins_service
 from app.services.economy import is_last_week_of_month, week_month
 from app.services.rules import get_rules
-from app.services.weekly import PROGRESS_METRIC, in_scope, prize_reached
+from app.services.weekly import PROGRESS_METRIC, in_scope, prize_reached, refuse_demo
 
 MONTHS = (
     "январь", "февраль", "март", "апрель", "май", "июнь",
@@ -261,6 +261,7 @@ async def close(session: AsyncSession, item: ContestMonth, *, actor_id: int | No
             "Сначала закройте все недели месяца: места считаются по их итогам",
             code="month_weeks_open",
         )
+    await refuse_demo(session, [w.id for w in weeks])
     results = await calculate(session, item)
     rules = await get_rules(session)
     name = month_name(item.year, item.month)

@@ -20,6 +20,7 @@ from app.core.errors import ConflictError, NotFoundError
 from app.db.base import utcnow
 from app.models.coin import CoinTransaction
 from app.models.contest import (
+    DEMO_SOURCE,
     TEST_SOURCE,
     ContestWeek,
     MetricDefinition,
@@ -661,6 +662,8 @@ async def close_week(
             already_closed=True,
         )
 
+    await refuse_demo(session, [week.id])
+
     if recalculate:
         results = await calculate_week(session, week)
     else:
@@ -721,6 +724,20 @@ async def close_week(
         nominations_awarded=len(winners),
         badges_awarded=badges_awarded,
     )
+
+
+async def refuse_demo(session: AsyncSession, week_ids: list[int]) -> None:
+    """Demo values earn places, never coins: their weeks stay unclosed until they are removed."""
+    if week_ids and await session.scalar(
+        select(OperatorWeekMetric.id).where(
+            OperatorWeekMetric.week_id.in_(week_ids), OperatorWeekMetric.source == DEMO_SOURCE
+        ).limit(1)
+    ):
+        raise ConflictError(
+            "В неделе есть демо-данные: по ним коины не начисляются. Сначала удалите их: "
+            "python -m scripts.seed_demo_season --remove",
+            code="demo_data",
+        )
 
 
 async def _post_week_transactions(
