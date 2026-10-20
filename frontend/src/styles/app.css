@@ -1746,97 +1746,147 @@ select.input {
  * -------------------------------------------------------------------------- */
 
 .login {
+  position: relative;
   min-height: 100vh;
   min-height: 100dvh;
   display: grid;
-  grid-template-columns: 1.05fr 1fr;
-}
-
-.login__visual {
-  position: relative;
+  place-items: center;
+  padding: var(--sp-8) max(16px, env(safe-area-inset-right, 0px)) var(--sp-8) max(16px, env(safe-area-inset-left, 0px));
   overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  padding: var(--sp-12);
-  background: var(--gradient-brand);
-  color: #fff;
 }
 
-/* Мягкое свечение вместо анимированных частиц. */
-.login__visual::after {
-  content: "";
+/* Линия пульса во всю ширину: тонкая серая линия и бегущий по ней тёмный импульс. Фон — пятна body. */
+.login__pulse {
   position: absolute;
-  width: 620px;
-  height: 620px;
-  right: -160px;
-  bottom: -220px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(255, 255, 255, 0.28), transparent 62%);
+  left: 0;
+  top: 50%;
+  width: 100%;
+  height: 340px;
+  transform: translateY(-50%);
   pointer-events: none;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.login__pulse-line {
+  stroke: var(--text-primary);
+  stroke-opacity: 0.09;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.login__pulse-beat {
+  stroke: var(--accent-primary);
+  stroke-opacity: 0.55;
+  stroke-width: 2.5;
+  vector-effect: non-scaling-stroke;
+  stroke-dasharray: 70 1000;
+  stroke-dashoffset: 1070;
+  animation: login-beat 5.5s cubic-bezier(0.45, 0, 0.25, 1) infinite;
+}
+
+@keyframes login-beat {
+  to { stroke-dashoffset: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login__pulse-beat { animation: none; stroke-dasharray: none; stroke-opacity: 0.18; }
+}
+
+.login__card {
+  position: relative;
+  width: min(420px, 100%);
+  padding: 36px 36px 28px;
+  border-radius: var(--radius-xl, 28px);
 }
 
 .login__brand {
   display: flex;
   align-items: center;
   gap: var(--sp-3);
-  font-size: var(--text-section);
-  font-weight: 650;
-  position: relative;
-  z-index: 1;
-}
-
-.login__claim {
-  position: relative;
-  z-index: 1;
-  max-width: 22ch;
-  font-size: var(--text-display);
+  margin-bottom: 28px;
+  font-size: 19px;
   font-weight: 680;
-  line-height: 1.1;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.02em;
 }
 
-.login__points {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
-  font-size: var(--text-secondary-size);
-  opacity: 0.92;
-}
-
-.login__form-side {
+.login__mark {
   display: grid;
   place-items: center;
-  padding: var(--sp-8);
-  background: var(--bg-primary);
-}
-
-.login__card {
-  width: min(380px, 100%);
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--gradient-brand);
+  color: #fff;
+  box-shadow: 0 6px 18px rgba(20, 25, 35, 0.22);
 }
 
 .login__title {
-  font-size: var(--text-section);
-  font-weight: 650;
-  letter-spacing: -0.02em;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
 }
 
 .login__subtitle {
   color: var(--text-secondary);
   font-size: var(--text-secondary-size);
-  margin: var(--sp-1) 0 var(--sp-6);
+  margin: var(--sp-2) 0 var(--sp-6);
+  text-wrap: balance;
 }
 
-.login__mobile-brand {
-  display: none;
+/* Глаз внутри поля пароля: поле оставляет ему место справа. */
+.login__password {
+  position: relative;
+}
+
+.login__password .input {
+  padding-right: 48px;
+}
+
+.login__reveal {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-s);
+  background: transparent;
+  color: var(--text-tertiary);
+  transform: translateY(-50%);
+  cursor: pointer;
+}
+
+.login__reveal:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.login__caps {
+  color: var(--status-warning-text);
+  font-size: var(--text-caption);
+  font-weight: 600;
 }
 
 .login__hint {
   font-size: var(--text-caption);
   color: var(--text-tertiary);
   margin-bottom: var(--sp-3);
+}
+
+.login__help {
+  margin-top: var(--sp-4);
+  color: var(--text-tertiary);
+  font-size: var(--text-caption);
+  line-height: 1.5;
+  text-align: center;
+  text-wrap: balance;
 }
 
 .notice {
@@ -2850,32 +2900,23 @@ details.ui-note[open] > summary { margin-bottom: var(--sp-3); }
   }
 
   .login {
-    grid-template-columns: minmax(0, 1fr);
+    padding-block: var(--sp-6);
   }
 
-  .login__visual {
-    display: none;
+  .login__card {
+    padding: 28px 22px 22px;
+    border-radius: 24px;
   }
 
-  .login__mobile-brand {
-    display: flex;
-    align-items: center;
-    gap: var(--sp-3);
-    justify-content: center;
-    margin-bottom: var(--sp-6);
-    font-size: var(--text-section);
-    font-weight: 650;
+  /* Над карточкой, а не за ней: на узком экране всплеск пульса виден целиком. */
+  .login__pulse {
+    top: 0;
+    height: 150px;
+    transform: none;
   }
 
-  .login__mobile-brand .sidebar__mark {
-    width: 36px;
-    height: 36px;
-  }
-
-  .login__form-side {
-    padding: var(--sp-6) var(--sp-5);
-    background: radial-gradient(120% 60% at 50% 0%, var(--accent-tint) 0%, transparent 60%),
-      var(--bg-primary);
+  .login__title {
+    font-size: 25px;
   }
 
   .filterbar {
