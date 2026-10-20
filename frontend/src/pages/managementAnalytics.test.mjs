@@ -82,7 +82,9 @@ test('role-specific headings and scope are determined by the authenticated profi
     const { ManagementAnalyticsPage } = await load('tab=groups', role);
     const html = renderToStaticMarkup(React.createElement(ManagementAnalyticsPage));
     assert.match(html, role === 'head' ? /Аналитика руководителя/ : /Аналитика супервайзера/);
-    assert.match(html, role === 'head' ? /Линия · все группы/ : /Линия · только мои операторы/);
+    // Line or chats sits in the heading; the scope chip that repeated it is gone.
+    assert.match(html, /<div class="ma-heading-actions"><div class="segmented" role="radiogroup" aria-label="Направление">/);
+    assert.doesNotMatch(html, /ma-scope|Линия · все группы|Линия · только мои операторы/);
     assert.doesNotMatch(html, /Выбрать роль|Переключить роль/);
   }
 });

@@ -128,10 +128,14 @@ function buildMonthGrid(month: Date, weekStartsOn: 0 | 1): Date[] {
 
 /* ─── Shared classes ────────────────────────────────────────── */
 
+// The site's look (its tokens are bridged in styles/ui.css): soft grey controls, a dark choice with a soft shadow, a ring
+// around today.
 const RING = "focus-visible:ring-2 focus-visible:ring-[color:var(--primitive-ring,color-mix(in_srgb,var(--foreground)_45%,transparent))]";
 const HOVER = "hover:bg-[color:var(--primitive-surface-hover,color-mix(in_srgb,var(--foreground)_4%,transparent))]";
-const SOLID = "bg-[color:var(--primitive-control-solid,var(--primary))] text-[color:var(--primitive-control-solid-foreground,var(--primary-foreground))]";
-const CONTROL_BORDER = "border-[color:var(--primitive-control-border,color-mix(in_srgb,var(--foreground)_14%,transparent))]";
+const SOFT = "bg-[color:var(--primitive-control-soft,transparent)]";
+const SOLID = "bg-[var(--primary)] text-[var(--primary-foreground)] font-[650] shadow-[0_2px_8px_color-mix(in_srgb,var(--primary)_35%,transparent)]";
+const TODAY = "shadow-[inset_0_0_0_1.5px_var(--primary)] font-semibold";
+const BAND = "bg-[color:var(--primitive-surface-selected,color-mix(in_srgb,var(--foreground)_6%,transparent))]";
 
 /* ─── <Calendar> ────────────────────────────────────────────── */
 
@@ -371,18 +375,18 @@ export const Calendar = React.forwardRef<HTMLDivElement, CalendarProps>((props, 
 
       {/* Header: arrows step by the open view (a month, a year, twelve years); the month and the year
           are buttons that open their grids, so a far date is two taps away instead of many arrows. */}
-      <div className="mb-2 flex items-center justify-between gap-2">
+      <div className="mb-3 flex items-center justify-between gap-2">
         <button
           type="button"
           aria-label={arrowLabels[0]}
           onClick={() => step(-1)}
           className={cn(
-            "flex size-8 shrink-0 items-center justify-center rounded-[var(--primitive-radius-control-sm,0.625rem)] border text-[var(--foreground)]",
+            "flex size-[34px] shrink-0 items-center justify-center rounded-full text-[var(--foreground)]",
             "outline-none transition-colors duration-150",
-            CONTROL_BORDER, HOVER, RING,
+            SOFT, HOVER, RING,
           )}
         >
-          <IconChevronLeft className="size-4" stroke={1.9} />
+          <IconChevronLeft className="size-4" stroke={2} />
         </button>
 
         <div className="flex min-w-0 items-center gap-1.5">
@@ -401,12 +405,11 @@ export const Calendar = React.forwardRef<HTMLDivElement, CalendarProps>((props, 
                 aria-expanded={quickNav ? open : undefined}
                 onClick={() => (open ? setNavView("days") : view === "years" ? openYearsView() : openView("months"))}
                 className={cn(
-                  "inline-flex h-8 items-center gap-1 rounded-full border px-3 text-[14px] font-semibold tracking-[-0.01em] text-[var(--foreground)]",
+                  "inline-flex h-[34px] items-center gap-1.5 rounded-full px-3.5 text-[15px] font-[650] tracking-[-0.01em] text-[var(--foreground)]",
                   "outline-none transition-colors duration-150",
                   RING,
-                  !quickNav && "border-transparent",
-                  quickNav && !open && cn(CONTROL_BORDER, "bg-[color:var(--primitive-control-soft,transparent)]", HOVER),
-                  open && "border-[var(--primary)] bg-[color:var(--primitive-surface-selected,color-mix(in_srgb,var(--foreground)_6%,transparent))] text-[var(--primary)]",
+                  quickNav && !open && cn(SOFT, HOVER),
+                  open && BAND,
                 )}
               >
                 {label}
@@ -414,7 +417,7 @@ export const Calendar = React.forwardRef<HTMLDivElement, CalendarProps>((props, 
                   <IconChevronDown
                     aria-hidden="true"
                     className={cn("size-3.5 transition-transform duration-150", open && "rotate-180")}
-                    stroke={2.2}
+                    stroke={2.4}
                   />
                 )}
               </button>
@@ -427,12 +430,12 @@ export const Calendar = React.forwardRef<HTMLDivElement, CalendarProps>((props, 
           aria-label={arrowLabels[1]}
           onClick={() => step(1)}
           className={cn(
-            "flex size-8 shrink-0 items-center justify-center rounded-[var(--primitive-radius-control-sm,0.625rem)] border text-[var(--foreground)]",
+            "flex size-[34px] shrink-0 items-center justify-center rounded-full text-[var(--foreground)]",
             "outline-none transition-colors duration-150",
-            CONTROL_BORDER, HOVER, RING,
+            SOFT, HOVER, RING,
           )}
         >
-          <IconChevronRight className="size-4" stroke={1.9} />
+          <IconChevronRight className="size-4" stroke={2} />
         </button>
       </div>
 
@@ -448,11 +451,11 @@ export const Calendar = React.forwardRef<HTMLDivElement, CalendarProps>((props, 
               transition={{ duration: prefersReducedMotion ? 0.12 : 0.18, ease: EASE_OUT }}
             >
               {/* Weekday row */}
-              <div className="mb-1 grid grid-cols-7">
+              <div className="mb-1.5 grid grid-cols-7">
                 {weekdayLabels.map((label, i) => (
                   <div
                     key={`${label}-${i}`}
-                    className="flex h-7 items-center justify-center text-[length:var(--primitive-text-hint,0.6875rem)] font-medium text-[var(--muted-foreground)]"
+                    className="flex h-7 items-center justify-center text-[11px] font-semibold tracking-[0.02em] text-[var(--muted-foreground)]"
                   >
                     {label}
                   </div>
@@ -464,7 +467,7 @@ export const Calendar = React.forwardRef<HTMLDivElement, CalendarProps>((props, 
                 ref={dayGridRef}
                 role="grid"
                 aria-label={monthLabel}
-                className="grid grid-cols-7 gap-y-0.5"
+                className="grid grid-cols-7 gap-y-1"
                 onKeyDown={(e) => {
                   const deltas: Record<string, number> = {
                     ArrowLeft: -1,
@@ -503,18 +506,18 @@ export const Calendar = React.forwardRef<HTMLDivElement, CalendarProps>((props, 
               >
                 {weeks.map((week, weekIndex) => (
                   <div key={weekIndex} role="row" className="contents">
-                    {week.map((date) => {
+                    {week.map((date, column) => {
                       const state = cellState(date);
                       return (
                         <div
                           key={date.toISOString()}
                           role="gridcell"
                           aria-selected={state.isSelected || undefined}
-                          className="relative flex h-8 items-center justify-center"
+                          className="relative flex h-10 items-center justify-center"
                         >
-                          {/* Range band: full width between the endpoints, half width
-                              on the endpoint cells themselves so it visually meets
-                              the solid selected circle instead of leaving a gap. */}
+                          {/* Range band: full width between the endpoints, half width on the endpoint
+                              cells themselves so it meets the dark circle without a gap, and rounded where
+                              a week's row starts or ends. */}
                           {mode === "range" &&
                             currentRange?.from &&
                             currentRange?.to &&
@@ -522,8 +525,11 @@ export const Calendar = React.forwardRef<HTMLDivElement, CalendarProps>((props, 
                             (state.isInRange || state.isRangeStart || state.isRangeEnd) && (
                               <div
                                 className={cn(
-                                  "absolute inset-y-0 bg-[color:var(--primitive-surface-selected,color-mix(in_srgb,var(--foreground)_6%,transparent))]",
+                                  "absolute inset-y-0",
+                                  BAND,
                                   state.isRangeStart ? "left-1/2 right-0" : state.isRangeEnd ? "left-0 right-1/2" : "inset-x-0",
+                                  column === 0 && !state.isRangeStart && "rounded-l-full",
+                                  column === 6 && !state.isRangeEnd && "rounded-r-full",
                                 )}
                               />
                             )}
@@ -537,18 +543,13 @@ export const Calendar = React.forwardRef<HTMLDivElement, CalendarProps>((props, 
                             tabIndex={isSameDay(date, focusableDate) ? 0 : -1}
                             onClick={() => handleSelectDay(date)}
                             className={cn(
-                              "relative z-10 flex size-8 items-center justify-center rounded-full text-[13px] tabular-nums",
-                              "outline-none transition-colors duration-150",
-                              "focus-visible:ring-2 focus-visible:ring-[color:var(--primitive-ring,color-mix(in_srgb,var(--foreground)_45%,transparent))]",
-                              state.outsideMonth ? "text-[var(--muted-foreground)]/40" : "text-[var(--foreground)]",
-                              !state.isSelected &&
-                                !state.isDayDisabled &&
-                                "hover:bg-[color:var(--primitive-surface-hover,color-mix(in_srgb,var(--foreground)_4%,transparent))]",
-                              state.isSelected &&
-                                "bg-[color:var(--primitive-control-solid,var(--primary))] text-[color:var(--primitive-control-solid-foreground,var(--primary-foreground))] hover:bg-[color:var(--primitive-control-solid-hover,color-mix(in_srgb,var(--primary)_90%,var(--background)))]",
-                              state.isToday &&
-                                !state.isSelected &&
-                                "border border-[var(--border)] font-semibold",
+                              "relative z-10 flex size-[38px] items-center justify-center rounded-full text-[14px] tabular-nums",
+                              "outline-none transition-[background-color,box-shadow,color] duration-150",
+                              RING,
+                              state.outsideMonth ? "text-[var(--muted-foreground)]" : "text-[var(--foreground)]",
+                              !state.isSelected && !state.isDayDisabled && HOVER,
+                              state.isSelected && SOLID,
+                              state.isToday && !state.isSelected && TODAY,
                               state.isDayDisabled &&
                                 !state.isBookedDay &&
                                 "pointer-events-none text-[var(--muted-foreground)] opacity-30",
@@ -594,11 +595,11 @@ export const Calendar = React.forwardRef<HTMLDivElement, CalendarProps>((props, 
                         openView("days");
                       }}
                       className={cn(
-                        "flex h-11 items-center justify-center rounded-[var(--primitive-radius-control-sm,0.625rem)] text-[13px] text-[var(--foreground)]",
-                        "outline-none transition-colors duration-150",
+                        "flex h-11 items-center justify-center rounded-[var(--primitive-radius-control-sm,0.625rem)] text-[14px] text-[var(--foreground)]",
+                        "outline-none transition-[background-color,box-shadow,color] duration-150",
                         RING,
-                        shown ? cn(SOLID, "font-semibold") : HOVER,
-                        current && !shown && "border border-[var(--border)] font-semibold",
+                        shown ? SOLID : cn(SOFT, HOVER),
+                        current && !shown && TODAY,
                       )}
                     >
                       {name}
@@ -632,11 +633,11 @@ export const Calendar = React.forwardRef<HTMLDivElement, CalendarProps>((props, 
                         openView("months");
                       }}
                       className={cn(
-                        "flex h-11 items-center justify-center rounded-[var(--primitive-radius-control-sm,0.625rem)] text-[13px] tabular-nums text-[var(--foreground)]",
-                        "outline-none transition-colors duration-150",
+                        "flex h-11 items-center justify-center rounded-[var(--primitive-radius-control-sm,0.625rem)] text-[14px] tabular-nums text-[var(--foreground)]",
+                        "outline-none transition-[background-color,box-shadow,color] duration-150",
                         RING,
-                        shown ? cn(SOLID, "font-semibold") : HOVER,
-                        year === today.getFullYear() && !shown && "border border-[var(--border)] font-semibold",
+                        shown ? SOLID : cn(SOFT, HOVER),
+                        year === today.getFullYear() && !shown && TODAY,
                       )}
                     >
                       {year}

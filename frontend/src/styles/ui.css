@@ -45,4 +45,4 @@
 /* The site has its own «.grid» (app.css: a 24px gap); inside a primitive «grid» is only Tailwind's display. */
 [data-slot="calendar"] .grid { gap: 0; }
 [data-slot="calendar"] .grid.gap-1\.5 { gap: calc(var(--spacing) * 1.5); }
-[data-slot="calendar"] .grid.gap-y-0\.5 { row-gap: calc(var(--spacing) * 0.5); }
+[data-slot="calendar"] .grid.gap-y-1 { row-gap: calc(var(--spacing) * 1); }

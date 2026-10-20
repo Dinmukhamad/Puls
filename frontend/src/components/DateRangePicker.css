@@ -9,15 +9,13 @@
 .date-range-picker button:focus-visible, .date-range-picker__popup button:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
 .date-range-picker__popup { z-index: 120; inset: auto; margin: 0; box-sizing: border-box; padding: 14px 14px 12px; border: 1px solid var(--glass-border, var(--control-border)); border-radius: var(--radius-xl, 22px); background: var(--surface-opaque); color: var(--text-primary); box-shadow: 0 18px 50px rgba(0, 0, 0, .18), 0 2px 8px rgba(0, 0, 0, .06); overflow-y: auto; overscroll-behavior: contain; }
 @supports (backdrop-filter: blur(1px)) { .date-range-picker__popup { background: color-mix(in srgb, var(--surface-opaque) 96%, transparent); backdrop-filter: blur(24px) saturate(1.6); } }
-/* The days are the Calendar primitive (components/ui/calendar.tsx) in the site's sizes: the popup is its surface, and
-   phones keep finger-sized days. These rules outrank the primitive's utilities on purpose. */
-.date-range-picker__loading { display: grid; place-items: center; height: 322px; color: var(--text-tertiary); font-size: 13px; }
+/* The days are the Calendar primitive (components/ui/calendar.tsx), drawn in the site's look: the popup is its surface,
+   and phones keep finger-sized days. These rules outrank the primitive's utilities on purpose. */
+.date-range-picker__loading { display: grid; place-items: center; height: 340px; color: var(--text-tertiary); font-size: 13px; }
 .date-range-picker__popup .date-range-picker__calendar { max-width: none; padding: 0; border: 0; border-radius: 0; background: transparent; }
-.date-range-picker__popup [data-slot="calendar"] [role="gridcell"] { height: 40px; }
-.date-range-picker__popup [data-slot="calendar"] [role="gridcell"] > button { width: 38px; height: 38px; font-size: 14px; }
 /* The month and year grids take the days' height, so the popup keeps its size while they are open. */
-.date-range-picker__popup [data-calendar-view] > [role="group"] { height: 274px; grid-auto-rows: 1fr; }
-.date-range-picker__popup [data-calendar-view] button { height: auto; font-size: 14px; }
+.date-range-picker__popup [data-calendar-view] > [role="group"] { height: 286px; grid-auto-rows: 1fr; }
+.date-range-picker__popup [data-calendar-view] button { height: auto; }
 .date-range-picker__hint { min-height: 20px; margin: 12px 2px; color: var(--text-secondary); font-size: 13px; line-height: 1.4; font-variant-numeric: tabular-nums; }
 .date-range-picker__hint strong { color: var(--text-primary); font-weight: 600; }
 .date-range-picker__footer { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding-top: 12px; border-top: 1px solid var(--separator); }

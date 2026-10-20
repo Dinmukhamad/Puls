@@ -35,7 +35,6 @@ const SHORTCUTS: Record<AnalyticsChannel, { tab: AnalyticsCategory; title: strin
     { tab: 'discipline', title: 'Дисциплина', hint: 'Опоздания и другие нежелательные события', metric: 'lateness' },
   ],
 };
-const CHANNEL_NAMES: Record<AnalyticsChannel, string> = { line: 'Линия', chat: 'Чаты' };
 
 /** Explicit four-week windows avoid mixing a partial week with completed weeks. */
 export function useManagementAnalytics() {
@@ -118,7 +117,7 @@ export function ManagementAnalyticsPage() {
   </>;
 
   return <div className="stack analytics-page analytics-lead management-analytics">
-    <header className="page-head ma-heading"><div><p className="analytics-eyebrow">ПУЛЬС КОМАНДЫ</p><h1 className="page-title">{head ? 'Аналитика руководителя' : 'Аналитика супервайзера'}</h1><p className="page-subtitle">{head ? 'Все команды, динамика результатов и точки внимания.' : 'Результаты вашей команды и операторы, которым нужна поддержка.'}</p></div><div className="ma-heading-actions"><SegmentedControl label="Направление" value={channel} options={[{ value: 'line', label: 'Линия' }, { value: 'chat', label: 'Чаты' }]} onChange={report.setChannel} /><span className="ma-scope">{`${CHANNEL_NAMES[channel]} · ${head ? 'все группы' : 'только мои операторы'}`}</span><Button size="s" disabled={data.isFetching || report.weekly.isFetching} onClick={() => { void data.refetch(); if (report.mode === 'range') void report.weekly.refetch(); void report.groups.refetch(); }}>{data.isFetching || report.weekly.isFetching ? 'Обновляем…' : 'Обновить'}</Button></div></header>
+    <header className="page-head ma-heading"><div><p className="analytics-eyebrow">ПУЛЬС КОМАНДЫ</p><h1 className="page-title">{head ? 'Аналитика руководителя' : 'Аналитика супервайзера'}</h1><p className="page-subtitle">{head ? 'Все команды, динамика результатов и точки внимания.' : 'Результаты вашей команды и операторы, которым нужна поддержка.'}</p></div><div className="ma-heading-actions"><SegmentedControl label="Направление" value={channel} options={[{ value: 'line', label: 'Линия' }, { value: 'chat', label: 'Чаты' }]} onChange={report.setChannel} /><Button size="s" disabled={data.isFetching || report.weekly.isFetching} onClick={() => { void data.refetch(); if (report.mode === 'range') void report.weekly.refetch(); void report.groups.refetch(); }}>{data.isFetching || report.weekly.isFetching ? 'Обновляем…' : 'Обновить'}</Button></div></header>
 
     <GlassSurface className={`ma-filters${hasGroupFilter ? '' : ' ma-filters--single-group'}`} variant="regular">
       <div className="field ma-period-control">

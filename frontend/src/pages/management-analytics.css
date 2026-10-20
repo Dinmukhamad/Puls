@@ -2,8 +2,7 @@
 .ma-heading { align-items: center; }
 .ma-heading .page-title { letter-spacing: -.04em; }
 .ma-heading-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
-.ma-scope { padding: 10px 14px; border: 1px solid var(--border-strong); border-radius: 12px; font-size: 12px; background: var(--surface-primary); }
-/* Line or chats: first in the heading's row, as tall as the scope beside it. */
+/* Line or chats beside «Обновить», as tall as the button. */
 .ma-heading-actions .segmented__item { min-height: 30px; padding-block: 4px; }
 .ma-filters { padding: 20px; border-radius: 20px; display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, .8fr) minmax(0, 1fr); align-items: start; gap: 14px 18px; }
 .ma-filters--single-group { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); }
