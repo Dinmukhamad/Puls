@@ -1,10 +1,8 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
+import { lazy, Suspense, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
-import { ChevronLeftIcon, ChevronRightIcon } from "./icons";
 import { Button } from "./ui";
 import { Select } from "./Select";
-import { calendarDate, dateKey, monthCaption, shiftDays, shiftMonth } from "./weekCalendar";
-import { formatDateRange, inclusiveRangeDays, moveCalendarMonth, rangeCalendarDays, todayDateKey, validDateRange, type DateRange } from "./dateRange";
+import { formatDateRange, inclusiveRangeDays, todayDateKey, validDateRange, type DateRange } from "./dateRange";
 import "./DateRangePicker.css";
 
 export type { DateRange } from "./dateRange";
@@ -26,12 +24,17 @@ export interface DateRangePickerProps {
 }
 
 const usePopoverLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
-const capitalized = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+// The calendar and its animations load with the first opened picker, not with every page.
+const Calendar = lazy(() => import("./ui/calendar").then((module) => ({ default: module.Calendar })));
+// The site speaks «YYYY-MM-DD»; the calendar speaks local dates.
+const asDate = (key: string) => new Date(Number(key.slice(0, 4)), Number(key.slice(5, 7)) - 1, Number(key.slice(8, 10)) || 1);
+const asKey = (date: Date) => `${String(date.getFullYear()).padStart(4, "0")}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 const days = (n: number) => `${n} ${n % 10 === 1 && n % 100 !== 11 ? "день" : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? "дня" : "дней"}`;
 
 /**
  * One calendar and nothing else: the first tap is the period's start, the second its end (or Apply right
- * away for one day). Dates are a draft until Apply: selecting a day never starts a data request.
+ * away for one day). Dates are a draft until Apply: selecting a day never starts a data request. The days are
+ * the site's Calendar primitive (components/ui/calendar.tsx): months slide, and the month or the year is a tap away.
  */
 export function DateRangePicker({ value, defaultRange, onChange, disabled = false, loading = false, className = "", ariaLabel = "Период", single = false, placeholder, onClear }: DateRangePickerProps) {
   const id = useId();
@@ -44,14 +47,9 @@ export function DateRangePicker({ value, defaultRange, onChange, disabled = fals
   const [draft, setDraft] = useState<DateRange>({ date_from: today, date_to: today });
   const [month, setMonth] = useState(today.slice(0, 7));
   const [anchor, setAnchor] = useState<string | null>(null);
-  const [hovered, setHovered] = useState<string | null>(null);
-  const [focusedDate, setFocusedDate] = useState(today);
   const valid = validDateRange(draft);
-  const grid = rangeCalendarDays(month);
   const count = inclusiveRangeDays(draft);
   const caption = !effective && loading ? "Загрузка периода…" : !validDateRange(effective) && placeholder ? placeholder : formatDateRange(effective);
-  const preview = anchor && hovered ? { date_from: anchor < hovered ? anchor : hovered, date_to: anchor < hovered ? hovered : anchor } : draft;
-  const activeDay = grid.some((day) => day.key === focusedDate) ? focusedDate : grid.find((day) => day.inMonth)?.key;
 
   function close(restoreFocus = false) {
     setOpen(false);
@@ -61,8 +59,8 @@ export function DateRangePicker({ value, defaultRange, onChange, disabled = fals
   function toggle() {
     if (open) { close(); return; }
     const initial = validDateRange(effective) ? effective : { date_from: today, date_to: today };
-    setDraft({ ...initial }); setMonth(initial.date_from.slice(0, 7)); setFocusedDate(initial.date_from);
-    setAnchor(null); setHovered(null); setPosition({});
+    setDraft({ ...initial }); setMonth(initial.date_from.slice(0, 7));
+    setAnchor(null); setPosition({});
     // Keep the DOM inside an existing dialog's focus trap and inert boundary.
     setHost(root.current?.closest<HTMLElement>(".sheet") ?? document.body);
     setOpen(true);
@@ -72,24 +70,6 @@ export function DateRangePicker({ value, defaultRange, onChange, disabled = fals
     if (single) { onChange({ date_from: key, date_to: key }); close(true); return; }
     if (!anchor) { setDraft({ date_from: key, date_to: key }); setAnchor(key); }
     else { setDraft({ date_from: key < anchor ? key : anchor, date_to: key < anchor ? anchor : key }); setAnchor(null); }
-    setHovered(null); setFocusedDate(key);
-  }
-
-  function focusDate(key: string) {
-    if (!calendarDate(key) || key < "0001-01-01" || key > "9999-12-31") return;
-    setFocusedDate(key); setMonth(key.slice(0, 7));
-    requestAnimationFrame(() => panel.current?.querySelector<HTMLButtonElement>(`[data-date="${key}"]`)?.focus({ preventScroll: true }));
-  }
-
-  function onDayKey(event: KeyboardEvent<HTMLButtonElement>, key: string) {
-    const date = calendarDate(key)!;
-    let next: string | undefined;
-    const shifts: Record<string, number> = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 };
-    if (event.key in shifts) next = dateKey(shiftDays(date, shifts[event.key]));
-    else if (event.key === "Home") next = dateKey(shiftDays(date, -((date.getUTCDay() + 6) % 7)));
-    else if (event.key === "End") next = dateKey(shiftDays(date, 6 - ((date.getUTCDay() + 6) % 7)));
-    else if (event.key === "PageUp" || event.key === "PageDown") next = moveCalendarMonth(key, (event.key === "PageUp" ? -1 : 1) * (event.shiftKey ? 12 : 1));
-    if (next) { event.preventDefault(); event.stopPropagation(); focusDate(next); }
   }
 
   useEffect(() => { if (disabled) setOpen(false); }, [disabled]);
@@ -128,16 +108,25 @@ export function DateRangePicker({ value, defaultRange, onChange, disabled = fals
   usePopoverLayoutEffect(() => {
     if (!open || position.top === undefined) return;
     const popup = panel.current;
+    let waiting: MutationObserver | undefined;
+    // The day to start from; on the first opening the calendar is still loading, so wait for it to appear.
+    const focusDay = () => {
+      if (!popup?.isConnected || panel.current !== popup || popup.contains(document.activeElement)) return true;
+      const day = popup.querySelector<HTMLButtonElement>('[data-slot="calendar"] [role="grid"] button[tabindex="0"]');
+      day?.focus({ preventScroll: true });
+      return !!day;
+    };
     const frame = requestAnimationFrame(() => {
-      if (!popup?.isConnected || panel.current !== popup || popup.contains(document.activeElement)) return;
-      (popup.querySelector<HTMLButtonElement>(`[data-date="${focusedDate}"]`) ?? popup.querySelector<HTMLButtonElement>('[data-date][tabindex="0"]'))?.focus({ preventScroll: true });
+      if (focusDay() || !popup) return;
+      waiting = new MutationObserver(() => { if (focusDay()) waiting?.disconnect(); });
+      waiting.observe(popup, { childList: true, subtree: true });
     });
     function outside(event: Event) {
       if (event.target instanceof Node && !root.current?.contains(event.target) && !panel.current?.contains(event.target)) close();
     }
     document.addEventListener("pointerdown", outside, true); document.addEventListener("focusin", outside);
-    return () => { cancelAnimationFrame(frame); document.removeEventListener("pointerdown", outside, true); document.removeEventListener("focusin", outside); };
-  }, [open, position.top, focusedDate]);
+    return () => { cancelAnimationFrame(frame); waiting?.disconnect(); document.removeEventListener("pointerdown", outside, true); document.removeEventListener("focusin", outside); };
+  }, [open, position.top]);
 
   return <div ref={root} className={`date-range-picker ${className}`.trim()}>
     <button type="button" className="date-range-picker__trigger" ref={trigger} disabled={disabled} aria-label={`${ariaLabel}: ${caption}. Открыть календарь`} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? `${id}-calendar` : undefined} aria-busy={loading || undefined} onClick={toggle}>
@@ -147,18 +136,12 @@ export function DateRangePicker({ value, defaultRange, onChange, disabled = fals
     </button>
     {open && host && createPortal(<div ref={panel} id={`${id}-calendar`} className="date-range-picker__popup" role="dialog" aria-modal="false" aria-labelledby={`${id}-title`} style={position} {...{ popover: "manual" }} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(true); } }}>
       <h2 className="sr-only" id={`${id}-title`}>{single ? "Выберите дату" : "Выберите период"}</h2>
-      <div className="date-range-picker__month"><button type="button" className="date-range-picker__arrow" aria-label="Предыдущий месяц" disabled={month <= "0001-01"} onClick={() => setMonth(shiftMonth(month, -1))}><ChevronLeftIcon size={18} /></button><strong aria-live="polite">{capitalized(monthCaption(month))}</strong><button type="button" className="date-range-picker__arrow" aria-label="Следующий месяц" disabled={month >= "9999-12"} onClick={() => setMonth(shiftMonth(month, 1))}><ChevronRightIcon size={18} /></button></div>
-      <div className="date-range-picker__weekdays" aria-hidden="true">{["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"].map((day) => <span key={day}>{day}</span>)}</div>
-      <div className="date-range-picker__days" role="group" aria-label={`Даты: ${monthCaption(month)}`} onPointerLeave={() => setHovered(null)}>{grid.map((day, index) => {
-        const selected = valid && day.key >= draft.date_from && day.key <= draft.date_to;
-        const inPreview = validDateRange(preview) && day.key >= preview.date_from && day.key <= preview.date_to;
-        const from = inPreview && day.key === preview.date_from, to = inPreview && day.key === preview.date_to;
-        // The band runs across a week's row and rounds where the period or the row starts and ends.
-        const rowStart = index % 7 === 0, rowEnd = index % 7 === 6;
-        const label = calendarDate(day.key)?.toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }) ?? "Дата вне допустимого диапазона";
-        const cls = ["date-range-picker__cell", inPreview && "is-in-range", from && "is-from", to && "is-to", inPreview && rowStart && "is-row-start", inPreview && rowEnd && "is-row-end"].filter(Boolean).join(" ");
-        return <span key={day.key} className={cls}><button type="button" data-date={day.key} className={`date-range-picker__day${!day.inMonth ? " is-outside" : ""}${from || to ? " is-endpoint" : ""}`} disabled={!day.selectable} tabIndex={day.key === activeDay ? 0 : -1} aria-label={`${label}${single ? from ? ", выбрана" : "" : from && to ? ", начало и конец периода" : from ? ", начало периода" : to ? ", конец периода" : ""}`} aria-pressed={selected} aria-current={day.key === today ? "date" : undefined} onFocus={() => setFocusedDate(day.key)} onPointerEnter={() => anchor && setHovered(day.key)} onKeyDown={(event) => onDayKey(event, day.key)} onClick={() => pickDate(day.key)}>{day.day}</button></span>;
-      })}</div>
+      <Suspense fallback={<div className="date-range-picker__loading" role="status">Загрузка календаря…</div>}>{single
+        ? <Calendar className="date-range-picker__calendar" month={asDate(`${month}-01`)} onMonthChange={(next) => setMonth(asKey(next).slice(0, 7))}
+          selected={validDateRange(effective) ? asDate(effective.date_from) : undefined} onSelect={(date) => pickDate(date ? asKey(date) : effective?.date_from ?? today)} />
+        : <Calendar mode="range" className="date-range-picker__calendar" month={asDate(`${month}-01`)} onMonthChange={(next) => setMonth(asKey(next).slice(0, 7))}
+          selected={anchor ? { from: asDate(anchor) } : valid ? { from: asDate(draft.date_from), to: asDate(draft.date_to) } : {}}
+          onSelect={(range) => { if (range?.from && !range.to) { setDraft({ date_from: asKey(range.from), date_to: asKey(range.from) }); setAnchor(asKey(range.from)); } else if (range?.from && range.to) { setDraft({ date_from: asKey(range.from), date_to: asKey(range.to) }); setAnchor(null); } }} />}</Suspense>
       {single ? <footer className="date-range-picker__footer">
         <Button onClick={() => close(true)}>Отмена</Button>
         {onClear && validDateRange(effective) ? <Button onClick={() => { onClear(); close(true); }}>Очистить</Button> : <Button onClick={() => pickDate(today)}>Сегодня</Button>}

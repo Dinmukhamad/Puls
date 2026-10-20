@@ -1,0 +1,46 @@
+/*
+ * Tailwind for the shadcn-style primitives in src/components/ui/ (the calendar). The rest of the
+ * site keeps its own CSS, so Tailwind is wired narrowly:
+ * - no Preflight: the site's reset in app.css stays the only one;
+ * - utilities are generated only from src/components/ui/, so a page class such as «grid» or
+ *   «hidden» never picks up a Tailwind rule;
+ * - utilities are not in a cascade layer: like the site's own classes they win over element rules
+ *   such as `button { color: inherit }`.
+ */
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" source(none);
+@source "../components/ui";
+
+/* The primitives speak shadcn's tokens; here they are the site's, in both themes. */
+[data-slot="calendar"] {
+  --background: var(--surface-opaque);
+  --foreground: var(--text-primary);
+  --muted-foreground: var(--text-tertiary);
+  --border: var(--accent-primary);
+  --primary: var(--accent-primary);
+  --primary-foreground: var(--text-on-accent);
+  --primitive-surface-hover: var(--surface-tertiary);
+  --primitive-surface-selected: var(--accent-tint-strong, var(--accent-tint));
+  --primitive-ring: var(--accent-primary);
+  --primitive-radius-control-sm: 10px;
+  --primitive-radius-surface: var(--radius-l, 16px);
+  font-variant-numeric: tabular-nums;
+}
+
+/* What Preflight would do for the calendar's buttons; zero specificity, so utilities win. */
+:where([data-slot="calendar"]) :where(button) {
+  margin: 0;
+  padding: 0;
+  border: 0 solid;
+  background: none;
+  font: inherit;
+  color: inherit;
+}
+
+/* The calendar draws its own focus ring; the site's outline would double it. */
+[data-slot="calendar"] button:focus-visible { outline: none; }
+
+/* The site has its own «.grid» (app.css: a 24px gap); inside a primitive «grid» is only Tailwind's display. */
+[data-slot="calendar"] .grid { gap: 0; }
+[data-slot="calendar"] .grid.gap-1 { gap: calc(var(--spacing) * 1); }
+[data-slot="calendar"] .grid.gap-y-0\.5 { row-gap: calc(var(--spacing) * 0.5); }

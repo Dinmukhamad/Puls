@@ -1,6 +1,8 @@
+import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { defineConfig, type Plugin } from "vite";
 import releaseDetails from "./src/pwa/release.json";
 
@@ -72,7 +74,8 @@ export default defineConfig(({ command }) => ({
   define: {
     ...(command === "build" ? { __PULS_RELEASE__: JSON.stringify(releaseTemplate) } : {}),
   },
-  plugins: [react(), pulsPwa()],
+  plugins: [react(), tailwindcss(), pulsPwa()],
+  resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
   server: {
     port: 5173,
     // В разработке фронт ходит на локальный бэкенд через прокси,

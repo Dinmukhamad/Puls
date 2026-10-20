@@ -6,6 +6,7 @@ import { BrowserRouter } from "react-router-dom";
 // Global styles first: page styles imported by the app must be able to refine them.
 import "./styles/tokens.css";
 import "./styles/app.css";
+import "./styles/ui.css";
 import { App } from "./App";
 import { AuthProvider } from "./auth/AuthContext";
 import { AccessProvider } from "./auth/AccessContext";
