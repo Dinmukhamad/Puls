@@ -17,7 +17,18 @@
 .week-picker__close { display: grid; place-items: center; flex: 0 0 36px; width: 36px; height: 36px; padding: 0; border: 1px solid var(--control-border); border-radius: var(--radius-s); background: var(--surface-secondary); color: var(--text-secondary); font-size: 23px; cursor: pointer; }
 .week-picker__month { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; }
 .week-picker__month .week-picker__arrow { border: 1px solid var(--control-border); }
-.week-picker__month strong { font-size: 14px; text-transform: capitalize; }
+.week-picker__picks { display: flex; justify-content: center; gap: 6px; min-width: 0; }
+.week-picker__pick { display: inline-flex; align-items: center; gap: 4px; height: 36px; padding: 0 12px; border: 1px solid var(--control-border); border-radius: 999px; background: var(--surface-secondary); color: var(--text-primary); font: inherit; font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; cursor: pointer; }
+.week-picker__pick:hover { background: var(--surface-tertiary); }
+.week-picker__pick svg { transition: transform .15s; }
+.week-picker__pick[aria-expanded="true"] { border-color: var(--accent-primary); background: var(--accent-tint); color: var(--accent-primary); }
+.week-picker__pick[aria-expanded="true"] svg { transform: rotate(180deg); }
+/* Month and year grids: only months and years with weeks can be chosen. */
+.week-picker__grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; padding-top: 4px; }
+.week-picker__grid button { min-height: 44px; padding: 0 4px; border: 1px solid transparent; border-radius: 10px; background: var(--surface-secondary); color: var(--text-primary); font: inherit; font-size: 13px; font-variant-numeric: tabular-nums; cursor: pointer; }
+.week-picker__grid button:hover:not(:disabled) { background: var(--surface-tertiary); border-color: var(--separator); }
+.week-picker__grid button:disabled { background: transparent; color: var(--text-quaternary); cursor: default; }
+.week-picker__grid button[aria-pressed="true"] { background: var(--accent-primary); color: var(--text-on-accent); font-weight: 650; }
 .week-picker__weekdays, .week-picker__week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); align-items: center; text-align: center; }
 .week-picker__weekdays { padding: 3px 0 8px; color: var(--text-tertiary); font-size: 11px; font-weight: 600; }
 .week-picker__weeks { display: flex; flex-direction: column; gap: 4px; }

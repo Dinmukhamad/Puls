@@ -1,9 +1,9 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import type { WeekOut } from "../api/types";
-import { ChevronLeftIcon, ChevronRightIcon } from "./icons";
+import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon } from "./icons";
 import { WEEK_STATUS_LABELS } from "../utils/format";
-import { adjacentAvailableMonth, adjacentWeek, availableWeeks, calendarWeeks, monthCaption, weekRange } from "./weekCalendar";
+import { MONTH_NAMES, adjacentAvailableMonth, adjacentWeek, availableMonths, availableWeeks, calendarWeeks, monthCaption, monthInYear, weekRange } from "./weekCalendar";
 import "./WeekPicker.css";
 
 const usePopoverLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
@@ -25,6 +25,9 @@ export function WeekPicker({ weeks, value, resolvedWeekId, onChange, label = "Н
   const root = useRef<HTMLDivElement>(null), trigger = useRef<HTMLButtonElement>(null), panel = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [month, setMonth] = useState("");
+  /** Weeks of the month, or the month and year grids opened from the popup's month row. */
+  const [view, setView] = useState<"weeks" | "months" | "years">("weeks");
+  const focusView = useRef(false);
   const [position, setPosition] = useState<CSSProperties>({});
   const [host, setHost] = useState<HTMLElement | null>(null);
   const choices = availableWeeks(weeks);
@@ -35,16 +38,25 @@ export function WeekPicker({ weeks, value, resolvedWeekId, onChange, label = "Н
   const previous = adjacentWeek(choices, selectedId, -1), next = adjacentWeek(choices, selectedId, 1);
   const caption = effective && authoritative ? weekRange(effective) : loading ? "Загрузка недель…" : value !== undefined ? "Неделя недоступна" : choices.length ? latestLabel : "Нет доступных недель";
   const rows = calendarWeeks(month, choices);
-  const previousMonth = adjacentAvailableMonth(month, choices, -1), nextMonth = adjacentAvailableMonth(month, choices, 1);
+  const months = new Set(availableMonths(choices));
+  const years = [...new Set([...months].map((item) => Number(item.slice(0, 4))))];
+  const year = Number(month.slice(0, 4)), monthName = MONTH_NAMES[Number(month.slice(5, 7)) - 1] ?? "";
+  // The arrows step through what is shown: months with weeks, or years with weeks.
+  const previousYear = years.filter((item) => item < year).at(-1), nextYear = years.find((item) => item > year);
+  const previousMonth = view === "weeks" ? adjacentAvailableMonth(month, choices, -1) : view === "months" && previousYear !== undefined ? monthInYear(month, previousYear, choices) : undefined;
+  const nextMonth = view === "weeks" ? adjacentAvailableMonth(month, choices, 1) : view === "months" && nextYear !== undefined ? monthInYear(month, nextYear, choices) : undefined;
+  const stepLabels = view === "months" ? ["Предыдущий год", "Следующий год"] : ["Предыдущий месяц", "Следующий месяц"];
 
   function close(restoreFocus = false) {
     setOpen(false);
     if (restoreFocus) trigger.current?.focus({ preventScroll: true });
   }
   function pick(weekId: number | undefined) { onChange(weekId); close(true); }
+  function show(next: typeof view) { focusView.current = true; setView(next); }
   function toggle() {
     if (open) { close(); return; }
     setMonth(effective?.starts_on.slice(0, 7) ?? new Date().toISOString().slice(0, 7));
+    setView("weeks");
     // Remain inside an existing Sheet so its focus trap and inert boundary work.
     setHost(root.current?.closest<HTMLElement>(".sheet") ?? document.body);
     setPosition({});
@@ -81,7 +93,7 @@ export function WeekPicker({ weeks, value, resolvedWeekId, onChange, label = "Н
       window.visualViewport?.removeEventListener("resize", place);
       if (topLayer && popup?.matches(":popover-open")) popup.hidePopover();
     };
-  }, [open, host, month]);
+  }, [open, host, month, view]);
 
   usePopoverLayoutEffect(() => {
     if (!open || position.visibility !== "visible") return;
@@ -100,6 +112,14 @@ export function WeekPicker({ weeks, value, resolvedWeekId, onChange, label = "Н
     return () => { cancelAnimationFrame(frame); document.removeEventListener("pointerdown", outside, true); document.removeEventListener("focusin", outside); };
   }, [open, position.visibility]);
 
+  useEffect(() => {
+    if (!focusView.current) return;
+    focusView.current = false;
+    // The grid that just opened (or the weeks again) continues from its current choice.
+    const grid = panel.current?.querySelector<HTMLElement>("[data-week-view]");
+    (grid?.querySelector<HTMLButtonElement>('button[aria-pressed="true"]') ?? grid?.querySelector<HTMLButtonElement>("button:not(:disabled)"))?.focus({ preventScroll: true });
+  }, [view]);
+
   return <div className="week-picker" ref={root} onKeyDown={(event) => { if (event.key === "Escape" && open) { event.preventDefault(); event.stopPropagation(); close(true); } }}>
     <span className="field__label" id={`${id}-label`}>{label}</span>
     <div className="week-picker__control">
@@ -110,12 +130,30 @@ export function WeekPicker({ weeks, value, resolvedWeekId, onChange, label = "Н
       </button>
       <button type="button" className="week-picker__arrow" aria-label="Следующая неделя" title={next ? weekRange(next) : "Более поздних недель нет"} disabled={!next || loading} onClick={() => next && onChange(next.id)}><ChevronRightIcon size={17} /></button>
     </div>
-    {open && host && createPortal(<div ref={panel} id={`${id}-calendar`} className="week-picker__popup" role="dialog" aria-modal="false" aria-labelledby={`${id}-title`} style={position} {...{ popover: "manual" }} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(true); } }}>
+    {open && host && createPortal(<div ref={panel} id={`${id}-calendar`} className="week-picker__popup" role="dialog" aria-modal="false" aria-labelledby={`${id}-title`} style={position} {...{ popover: "manual" }} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); if (view === "weeks") close(true); else show("weeks"); } }}>
       <header className="week-picker__head"><div><strong id={`${id}-title`}>Выберите неделю</strong><span>Нажмите на строку с датами</span></div><button type="button" className="week-picker__close" aria-label="Закрыть календарь" onClick={() => close(true)}>×</button></header>
-      <div className="week-picker__month"><button type="button" className="week-picker__arrow" aria-label="Предыдущий месяц" disabled={!previousMonth} onClick={() => previousMonth && setMonth(previousMonth)}><ChevronLeftIcon size={17} /></button><strong aria-live="polite">{monthCaption(month)}</strong><button type="button" className="week-picker__arrow" aria-label="Следующий месяц" disabled={!nextMonth} onClick={() => nextMonth && setMonth(nextMonth)}><ChevronRightIcon size={17} /></button></div>
-      <div className="week-picker__weekdays" aria-hidden="true">{["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"].map((day) => <span key={day}>{day}</span>)}</div>
-      <div className="week-picker__weeks" role="group" aria-label={`Недели: ${monthCaption(month)}`}>{rows.map((row) => <button type="button" key={row.start} className="week-picker__week" disabled={!row.week} aria-pressed={!!row.week && row.week.id === selectedId} title={row.week ? `${weekRange(row.week)} · ${WEEK_STATUS_LABELS[row.week.status] ?? row.week.status}` : "Нет недельных данных"} aria-label={row.week ? `Неделя ${weekRange(row.week, true)}. ${WEEK_STATUS_LABELS[row.week.status] ?? row.week.status}` : `Неделя ${row.start}: данных нет`} onClick={() => row.week && pick(row.week.id)}>{row.days.map((day) => <span key={day.key} className={day.inMonth ? undefined : "week-picker__outside-month"} aria-hidden="true">{day.day}</span>)}</button>)}</div>
-      <p className="week-picker__hint">Серые даты — недельных данных ещё нет.</p>
+      <div className="week-picker__month">
+        <button type="button" className="week-picker__arrow" aria-label={stepLabels[0]} disabled={!previousMonth} onClick={() => previousMonth && setMonth(previousMonth)}><ChevronLeftIcon size={17} /></button>
+        <div className="week-picker__picks" aria-live="polite">
+          {([["months", monthName, "Выбрать месяц"], ["years", String(year), "Выбрать год"]] as const).map(([target, text, action]) =>
+            <button type="button" key={target} className="week-picker__pick" aria-expanded={view === target} aria-label={`${action}: сейчас ${text}`} onClick={() => show(view === target ? "weeks" : target)}>{text}<ChevronDownIcon size={14} /></button>)}
+        </div>
+        <button type="button" className="week-picker__arrow" aria-label={stepLabels[1]} disabled={!nextMonth} onClick={() => nextMonth && setMonth(nextMonth)}><ChevronRightIcon size={17} /></button>
+      </div>
+      {view === "weeks" && <div data-week-view="weeks">
+        <div className="week-picker__weekdays" aria-hidden="true">{["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"].map((day) => <span key={day}>{day}</span>)}</div>
+        <div className="week-picker__weeks" role="group" aria-label={`Недели: ${monthCaption(month)}`}>{rows.map((row) => <button type="button" key={row.start} className="week-picker__week" disabled={!row.week} aria-pressed={!!row.week && row.week.id === selectedId} title={row.week ? `${weekRange(row.week)} · ${WEEK_STATUS_LABELS[row.week.status] ?? row.week.status}` : "Нет недельных данных"} aria-label={row.week ? `Неделя ${weekRange(row.week, true)}. ${WEEK_STATUS_LABELS[row.week.status] ?? row.week.status}` : `Неделя ${row.start}: данных нет`} onClick={() => row.week && pick(row.week.id)}>{row.days.map((day) => <span key={day.key} className={day.inMonth ? undefined : "week-picker__outside-month"} aria-hidden="true">{day.day}</span>)}</button>)}</div>
+      </div>}
+      {view === "months" && <div className="week-picker__grid" data-week-view="months" role="group" aria-label={`Месяцы ${year} года`}>
+        {MONTH_NAMES.map((name, index) => {
+          const key = `${year}-${String(index + 1).padStart(2, "0")}`;
+          return <button type="button" key={key} disabled={!months.has(key)} aria-pressed={key === month} title={months.has(key) ? undefined : "Недельных данных нет"} onClick={() => { setMonth(key); show("weeks"); }}>{name}</button>;
+        })}
+      </div>}
+      {view === "years" && <div className="week-picker__grid" data-week-view="years" role="group" aria-label="Годы с неделями">
+        {years.map((item) => <button type="button" key={item} aria-pressed={item === year} onClick={() => { setMonth(monthInYear(month, item, choices) ?? month); show("months"); }}>{item}</button>)}
+      </div>}
+      <p className="week-picker__hint">{view === "weeks" ? "Серые даты — недельных данных ещё нет." : view === "months" ? "Серые месяцы — недельных данных нет." : "Здесь только годы, за которые есть недели."}</p>
       {!choices.length && <p className="week-picker__empty" role="status">{loading ? "Загружаем доступные недели…" : "Пока нет доступных недель"}</p>}
       <button type="button" className="week-picker__latest" onClick={() => pick(undefined)}>{latestLabel}<span>{effective && authoritative && value === undefined ? weekRange(effective) : "Автоматический выбор"}</span></button>
     </div>, host)}

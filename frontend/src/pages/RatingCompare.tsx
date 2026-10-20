@@ -7,6 +7,7 @@ import { rating } from "../api/endpoints";
 import type { CompareMetric, CompareOut, CompareRow, CompareTeam } from "../api/types";
 import { Chart } from "../components/Chart";
 import { ChevronLeftIcon, ChevronRightIcon, MedalIcon } from "../components/icons";
+import { Select } from "../components/Select";
 import { Sheet } from "../components/Sheet";
 import { Badge, Card, Delta, EmptyState, ErrorState, SegmentedControl, Skeleton } from "../components/ui";
 import { WeekPicker } from "../components/WeekPicker";
@@ -118,7 +119,10 @@ export function CompareFilters({ state }: { state: CompareState }) {
         onChange={(value) => set({ week: value === undefined ? undefined : String(value), with: undefined })} />
       : <div className="head-step" role="group" aria-label="Месяц рейтинга">
         <button type="button" className="head-step__arrow" aria-label="Предыдущий месяц" disabled={index <= 0} onClick={() => step(choices[index - 1])}><ChevronLeftIcon size={16} /></button>
-        <span className="head-step__label" aria-live="polite">{shown ? monthTitle(shown.name) : "…"}</span>
+        {/* The month's name opens the list of all contest months, newest first: no stepping to a far one. */}
+        <Select className="head-step__select" aria-label="Выбрать месяц рейтинга" placeholder="…" disabled={!choices.length}
+          value={shown ? `${shown.year}-${shown.month}` : ""} onChange={(value) => set({ month: value, with: undefined })}
+          options={[...choices].reverse().map((m) => ({ value: `${m.year}-${m.month}`, label: monthTitle(m.name) }))} />
         <button type="button" className="head-step__arrow" aria-label="Следующий месяц" disabled={index < 0 || index >= choices.length - 1} onClick={() => step(choices[index + 1])}><ChevronRightIcon size={16} /></button>
       </div>}
     {status && <Badge tone={data?.status === "closed" ? "success" : data?.live ? "info" : "warning"}>{status}</Badge>}

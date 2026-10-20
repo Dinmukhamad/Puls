@@ -32,6 +32,13 @@
 .head-step__arrow:disabled { opacity: .32; cursor: default; }
 .head-step__arrow:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
 .head-step__label { min-width: 116px; padding: 0 4px; text-align: center; font-size: 13px; font-weight: 600; white-space: nowrap; }
+/* The month's name is the site's Select without its field frame: it opens the list of contest months. */
+.head-step .puls-select { width: auto; }
+.head-step .puls-select__trigger.head-step__select { min-width: 132px; height: 34px; padding: 0 8px; gap: 4px; justify-content: center; border: 0; border-radius: var(--radius-s); background: transparent; font-size: 13px; font-weight: 600; }
+.head-step .puls-select__trigger.head-step__select:hover:not(:disabled) { background: var(--surface-hover); }
+.head-step .puls-select__trigger.head-step__select:focus { background: transparent; box-shadow: none; }
+.head-step .puls-select__trigger.head-step__select:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+.head-step .puls-select__trigger.head-step__select .puls-select__chevron { width: 14px; height: 14px; }
 .head-filters .week-picker { width: 232px; gap: 0; }
 .head-filters .week-picker__control { display: flex; width: 100%; }
 .head-filters .week-picker > .field__label, .head-filters .week-picker__trigger small { position: absolute; width: 1px; height: 1px; margin: -1px; clip-path: inset(50%); overflow: hidden; white-space: nowrap; }

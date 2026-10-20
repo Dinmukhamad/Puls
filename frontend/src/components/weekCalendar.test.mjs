@@ -8,7 +8,7 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 const built = await transform(readFileSync(new URL("./weekCalendar.ts", import.meta.url), "utf8"), { loader: "ts", format: "esm" });
-const { calendarDate, dateKey, shiftMonth, monthCaption, weekRange, availableWeeks, adjacentWeek, calendarWeeks, adjacentAvailableMonth } = await import(`data:text/javascript;base64,${Buffer.from(built.code).toString("base64")}`);
+const { calendarDate, dateKey, shiftMonth, monthCaption, weekRange, availableWeeks, adjacentWeek, calendarWeeks, adjacentAvailableMonth, availableMonths, monthInYear, MONTH_NAMES } = await import(`data:text/javascript;base64,${Buffer.from(built.code).toString("base64")}`);
 const week = (id, starts_on, ends_on, status = "closed") => ({ id, starts_on, ends_on, status, label: "not-for-the-user" });
 const dates = [week(701, "2026-09-14", "2026-09-20"), week(702, "2026-09-28", "2026-10-04"), week(703, "2026-10-05", "2026-10-11", "calculated"), week(704, "2026-10-12", "2026-10-18", "open")];
 
@@ -86,6 +86,18 @@ test("available month navigation includes end-month and skips wholly absent mont
   assert.equal(adjacentAvailableMonth("2026-10", periods, 1), "2026-12");
   assert.equal(adjacentAvailableMonth("2027-01", periods, -1), "2026-12");
   assert.equal(adjacentAvailableMonth("2027-01", periods, 1), undefined);
+});
+
+test("the month and year grids offer only months with weeks, and a picked year lands near the shown month", () => {
+  const periods = [week(1, "2025-03-03", "2025-03-09"), week(2, "2025-11-24", "2025-11-30"), dates[1], week(999, "2026-12-28", "2027-01-03")];
+  assert.deepEqual(availableMonths(periods), ["2025-03", "2025-11", "2026-09", "2026-10", "2026-12", "2027-01"]);
+  assert.equal(monthInYear("2026-10", 2025, periods), "2025-11");
+  assert.equal(monthInYear("2026-05", 2025, periods), "2025-03");
+  assert.equal(monthInYear("2026-07", 2025, periods), "2025-03", "a tie keeps the earlier month");
+  assert.equal(monthInYear("2026-10", 2027, periods), "2027-01");
+  assert.equal(monthInYear("2026-10", 2024, periods), undefined);
+  assert.equal(MONTH_NAMES.length, 12);
+  assert.equal(MONTH_NAMES[9], "Октябрь");
 });
 
 test("invalid periods cannot become clickable calendar choices", () => {

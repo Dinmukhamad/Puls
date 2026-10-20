@@ -79,6 +79,15 @@ test("the page shows your place, the teams, everyone with places by week and the
   assert.match(html, /data-tour="rating-views"/);
 });
 
+test("the month's name opens the list of contest months, not only arrows", () => {
+  compare = month(); search = "";
+  const html = renderToStaticMarkup(React.createElement(OperatorRating));
+  assert.match(html, /role="combobox" class="input puls-select__trigger head-step__select"[^>]*aria-label="Выбрать месяц рейтинга"/);
+  assert.match(html, /<span class="puls-select__value">Октябрь 2026<\/span>/);
+  assert.match(html, /<option value="2026-10" selected="">Октябрь 2026<\/option>/);
+  assert.match(html, /aria-label="Предыдущий месяц"/);
+});
+
 test("older links to the weeks open the week", () => {
   compare = { ...month(), period: "week" };
   for (const query of ["view=weeks", "week=41", "period=week"]) {

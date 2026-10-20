@@ -20,6 +20,8 @@ export function shiftMonth(month: string, amount: number): string {
   return monthKey(date);
 }
 
+export const MONTH_NAMES = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
+
 export function monthCaption(month: string): string {
   const date = calendarDate(`${month}-01`);
   return date ? date.toLocaleDateString("ru-RU", { month: "long", year: "numeric", timeZone: "UTC" }) : month;
@@ -72,9 +74,21 @@ export function calendarWeeks(month: string, weeks: readonly WeekOut[]): Calenda
   return rows;
 }
 
-export function adjacentAvailableMonth(month: string, weeks: readonly WeekOut[], direction: -1 | 1): string | undefined {
+/** Months holding a day of some available week, in order: the only ones the month and year grids offer. */
+export function availableMonths(weeks: readonly WeekOut[]): string[] {
   const months = new Set<string>();
   for (const week of availableWeeks(weeks)) { months.add(week.starts_on.slice(0, 7)); months.add(week.ends_on.slice(0, 7)); }
-  const sorted = [...months].sort();
+  return [...months].sort();
+}
+
+export function adjacentAvailableMonth(month: string, weeks: readonly WeekOut[], direction: -1 | 1): string | undefined {
+  const sorted = availableMonths(weeks);
   return direction === -1 ? sorted.filter((item) => item < month).at(-1) : sorted.find((item) => item > month);
+}
+
+/** Where a year picked in the grid lands: its available month nearest to the shown one (the earlier on a tie). */
+export function monthInYear(month: string, year: number, weeks: readonly WeekOut[]): string | undefined {
+  const target = Number(month.slice(5, 7));
+  const distance = (item: string) => Math.abs(Number(item.slice(5, 7)) - target);
+  return availableMonths(weeks).filter((item) => item.startsWith(`${year}-`)).reduce<string | undefined>((best, item) => best === undefined || distance(item) < distance(best) ? item : best, undefined);
 }

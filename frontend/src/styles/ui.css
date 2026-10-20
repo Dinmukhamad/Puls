@@ -21,6 +21,8 @@
   --primary-foreground: var(--text-on-accent);
   --primitive-surface-hover: var(--surface-tertiary);
   --primitive-surface-selected: var(--accent-tint-strong, var(--accent-tint));
+  --primitive-control-border: var(--control-border);
+  --primitive-control-soft: var(--surface-secondary);
   --primitive-ring: var(--accent-primary);
   --primitive-radius-control-sm: 10px;
   --primitive-radius-surface: var(--radius-l, 16px);
@@ -42,5 +44,5 @@
 
 /* The site has its own «.grid» (app.css: a 24px gap); inside a primitive «grid» is only Tailwind's display. */
 [data-slot="calendar"] .grid { gap: 0; }
-[data-slot="calendar"] .grid.gap-1 { gap: calc(var(--spacing) * 1); }
+[data-slot="calendar"] .grid.gap-1\.5 { gap: calc(var(--spacing) * 1.5); }
 [data-slot="calendar"] .grid.gap-y-0\.5 { row-gap: calc(var(--spacing) * 0.5); }

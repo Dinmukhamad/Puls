@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
-import { IconChevronLeft, IconChevronRight } from "@tabler/icons-react";
+import { IconChevronDown, IconChevronLeft, IconChevronRight } from "@tabler/icons-react";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 
@@ -38,7 +38,7 @@ interface CalendarSharedProps {
   bookedDates?: Date[];
   /** Dates with a scheduled-event indicator dot. */
   events?: CalendarEvent[];
-  /** Enables the fast month/year jump view when clicking the header label. Default true. */
+  /** The header's month and year buttons open month and year grids. Default true. */
   quickNav?: boolean;
   className?: string;
 }
@@ -126,47 +126,12 @@ function buildMonthGrid(month: Date, weekStartsOn: 0 | 1): Date[] {
   });
 }
 
-/* ─── Quick-Nav Tooltip ─────────────────────────────────────── */
+/* ─── Shared classes ────────────────────────────────────────── */
 
-/**
- * Minimal CSS-only tooltip for the header's month/year quick-nav controls.
- * Kept local instead of the Tooltip primitive: it needs no portal/positioning
- * logic for a fixed-position label, so a Tooltip (+ Radix) dependency isn't
- * worth it here, and primitives can't import each other's source directly.
- */
-function QuickNavTooltip({
-  label,
-  disabled,
-  children,
-}: {
-  label: string;
-  disabled?: boolean;
-  children: React.ReactElement;
-}) {
-  if (disabled) return children;
-
-  return (
-    <span className="group/tip relative inline-flex">
-      {children}
-      <span
-        role="tooltip"
-        aria-hidden="true"
-        className={cn(
-          "pointer-events-none absolute left-1/2 top-full z-20 mt-1.5 -translate-x-1/2 whitespace-nowrap",
-          "rounded-[var(--primitive-radius-control-sm,0.625rem)] bg-[var(--foreground)] px-1.5 py-0.5 text-[10.5px] font-medium text-[var(--background)]",
-          "origin-top scale-95 opacity-0 transition-[opacity,transform] delay-0 duration-150 ease-[cubic-bezier(0.23,1,0.32,1)]",
-          // Hover-only: no focus-within trigger (would fire on click since
-          // the button receives focus) and force-hidden on :active so a
-          // click can't leave a stale label visible mid-transition.
-          "group-hover/tip:scale-100 group-hover/tip:opacity-100 group-hover/tip:delay-300",
-          "group-active/tip:!opacity-0 group-active/tip:!delay-0 group-active/tip:!duration-0",
-        )}
-      >
-        {label}
-      </span>
-    </span>
-  );
-}
+const RING = "focus-visible:ring-2 focus-visible:ring-[color:var(--primitive-ring,color-mix(in_srgb,var(--foreground)_45%,transparent))]";
+const HOVER = "hover:bg-[color:var(--primitive-surface-hover,color-mix(in_srgb,var(--foreground)_4%,transparent))]";
+const SOLID = "bg-[color:var(--primitive-control-solid,var(--primary))] text-[color:var(--primitive-control-solid-foreground,var(--primary-foreground))]";
+const CONTROL_BORDER = "border-[color:var(--primitive-control-border,color-mix(in_srgb,var(--foreground)_14%,transparent))]";
 
 /* ─── <Calendar> ────────────────────────────────────────────── */
 
@@ -208,10 +173,29 @@ export const Calendar = React.forwardRef<HTMLDivElement, CalendarProps>((props, 
   // navigating the actual displayed month.
   const [yearAnchor, setYearAnchor] = React.useState(() => displayedMonth.getFullYear());
 
+  // A view opened from the header or a grid takes the focus to its current button, so the keyboard
+  // continues where the eye goes; switching views from outside (none today) would not steal it.
+  const viewsRef = React.useRef<HTMLDivElement | null>(null);
+  const focusViewRef = React.useRef(false);
+
+  function openView(view: "days" | "months" | "years") {
+    focusViewRef.current = true;
+    setNavView(view);
+  }
+
   function openYearsView() {
     setYearAnchor(displayedMonth.getFullYear());
-    setNavView("years");
+    openView("years");
   }
+
+  React.useEffect(() => {
+    if (!focusViewRef.current) return;
+    focusViewRef.current = false;
+    const target = navView === "days"
+      ? dayGridRef.current?.querySelector<HTMLElement>('button[tabindex="0"]')
+      : viewsRef.current?.querySelector<HTMLElement>(`[data-calendar-view="${navView}"] button[aria-current="true"]`);
+    target?.focus({ preventScroll: true });
+  }, [navView]);
 
   // When keyboard nav crosses a month boundary, the day grid remounts (its
   // motion.div key changes) so the old DOM node queried synchronously is the
@@ -303,6 +287,15 @@ export const Calendar = React.forwardRef<HTMLDivElement, CalendarProps>((props, 
     setMonth(addMonths(displayedMonth, offset), offset >= 0 ? 1 : -1);
   }
 
+  /** The header arrows: a month over the days, a year over the months, twelve years over the years. */
+  function step(dir: -1 | 1) {
+    if (navView === "years") setYearAnchor((y) => y + dir * 12);
+    else goToMonth(navView === "months" ? dir * 12 : dir);
+  }
+  const arrowLabels = navView === "days"
+    ? ["Предыдущий месяц", "Следующий месяц"]
+    : navView === "months" ? ["Предыдущий год", "Следующий год"] : ["Предыдущие годы", "Следующие годы"];
+
   const weekdayLabels = weekStartsOn === 1 ? WEEKDAY_LABELS_MON : WEEKDAY_LABELS_SUN;
   const grid = React.useMemo(
     () => buildMonthGrid(displayedMonth, weekStartsOn),
@@ -363,99 +356,87 @@ export const Calendar = React.forwardRef<HTMLDivElement, CalendarProps>((props, 
         "bg-[var(--background)]",
         className,
       )}
+      onKeyDown={(e) => {
+        // Escape leaves the month or year grid first; the next one is the popup's.
+        if (e.key !== "Escape" || navView === "days") return;
+        e.preventDefault();
+        e.stopPropagation();
+        openView("days");
+      }}
     >
       {/* Screen-reader announcement when the displayed month changes. */}
       <div className="sr-only" aria-live="polite" aria-atomic="true">
         {monthLabel}
       </div>
 
-      {/* Header */}
-      <div className="mb-2 flex items-center justify-between gap-1">
+      {/* Header: arrows step by the open view (a month, a year, twelve years); the month and the year
+          are buttons that open their grids, so a far date is two taps away instead of many arrows. */}
+      <div className="mb-2 flex items-center justify-between gap-2">
         <button
           type="button"
-          aria-label="Предыдущий месяц"
-          onClick={() => goToMonth(-1)}
+          aria-label={arrowLabels[0]}
+          onClick={() => step(-1)}
           className={cn(
-            "flex size-7 shrink-0 items-center justify-center rounded-[var(--primitive-radius-control-sm,0.625rem)] text-[var(--muted-foreground)]",
+            "flex size-8 shrink-0 items-center justify-center rounded-[var(--primitive-radius-control-sm,0.625rem)] border text-[var(--foreground)]",
             "outline-none transition-colors duration-150",
-            "hover:bg-[color:var(--primitive-surface-hover,color-mix(in_srgb,var(--foreground)_4%,transparent))] hover:text-[var(--foreground)]",
-            "focus-visible:ring-2 focus-visible:ring-[color:var(--primitive-ring,color-mix(in_srgb,var(--foreground)_45%,transparent))]",
+            CONTROL_BORDER, HOVER, RING,
           )}
         >
           <IconChevronLeft className="size-4" stroke={1.9} />
         </button>
 
-        <div className="flex items-center gap-0.5">
-          <QuickNavTooltip label="Выбрать месяц" disabled={!quickNav}>
-            <button
-              type="button"
-              disabled={!quickNav}
-              aria-label="Выбрать месяц"
-              onClick={() => setNavView("months")}
-              className={cn(
-                "rounded-[var(--primitive-radius-control-sm,0.625rem)] px-1.5 py-1 text-[13px] font-medium tracking-[-0.01em] text-[var(--foreground)]",
-                "outline-none transition-colors duration-150",
-                quickNav && "hover:bg-[color:var(--primitive-surface-hover,color-mix(in_srgb,var(--foreground)_4%,transparent))]",
-                "focus-visible:ring-2 focus-visible:ring-[color:var(--primitive-ring,color-mix(in_srgb,var(--foreground)_45%,transparent))]",
-                navView === "months" && "bg-[color:var(--primitive-surface-selected,color-mix(in_srgb,var(--foreground)_6%,transparent))]",
-              )}
-            >
-              {MONTH_NAMES[displayedMonth.getMonth()]}
-            </button>
-          </QuickNavTooltip>
-
-          <QuickNavTooltip label={navView === "months" ? "Выбрать год" : "Быстрый переход"} disabled={!quickNav}>
-            <button
-              type="button"
-              disabled={!quickNav}
-              aria-label="Выбрать месяц или год"
-              onClick={() => (navView === "months" ? openYearsView() : setNavView("months"))}
-              className={cn(
-                "rounded-[var(--primitive-radius-control-sm,0.625rem)] px-0.5 py-1 text-[13px] font-medium text-[var(--muted-foreground)]/40",
-                "outline-none transition-colors duration-150",
-                quickNav && "hover:text-[var(--muted-foreground)]",
-                "focus-visible:ring-2 focus-visible:ring-[color:var(--primitive-ring,color-mix(in_srgb,var(--foreground)_45%,transparent))]",
-              )}
-            >
-              |
-            </button>
-          </QuickNavTooltip>
-
-          <QuickNavTooltip label="Выбрать год" disabled={!quickNav}>
-            <button
-              type="button"
-              disabled={!quickNav}
-              aria-label="Выбрать год"
-              onClick={openYearsView}
-              className={cn(
-                "rounded-[var(--primitive-radius-control-sm,0.625rem)] px-1.5 py-1 text-[13px] font-medium tracking-[-0.01em] text-[var(--foreground)]",
-                "outline-none transition-colors duration-150",
-                quickNav && "hover:bg-[color:var(--primitive-surface-hover,color-mix(in_srgb,var(--foreground)_4%,transparent))]",
-                "focus-visible:ring-2 focus-visible:ring-[color:var(--primitive-ring,color-mix(in_srgb,var(--foreground)_45%,transparent))]",
-                navView === "years" && "bg-[color:var(--primitive-surface-selected,color-mix(in_srgb,var(--foreground)_6%,transparent))]",
-              )}
-            >
-              {displayedMonth.getFullYear()}
-            </button>
-          </QuickNavTooltip>
+        <div className="flex min-w-0 items-center gap-1.5">
+          {([
+            ["months", MONTH_NAMES[displayedMonth.getMonth()], "Выбрать месяц"],
+            ["years", String(displayedMonth.getFullYear()), "Выбрать год"],
+          ] as const).map(([view, label, action]) => {
+            const open = navView === view;
+            return (
+              <button
+                key={view}
+                type="button"
+                disabled={!quickNav}
+                data-calendar-pick={view}
+                aria-label={quickNav ? `${action}: сейчас ${label}` : undefined}
+                aria-expanded={quickNav ? open : undefined}
+                onClick={() => (open ? setNavView("days") : view === "years" ? openYearsView() : openView("months"))}
+                className={cn(
+                  "inline-flex h-8 items-center gap-1 rounded-full border px-3 text-[14px] font-semibold tracking-[-0.01em] text-[var(--foreground)]",
+                  "outline-none transition-colors duration-150",
+                  RING,
+                  !quickNav && "border-transparent",
+                  quickNav && !open && cn(CONTROL_BORDER, "bg-[color:var(--primitive-control-soft,transparent)]", HOVER),
+                  open && "border-[var(--primary)] bg-[color:var(--primitive-surface-selected,color-mix(in_srgb,var(--foreground)_6%,transparent))] text-[var(--primary)]",
+                )}
+              >
+                {label}
+                {quickNav && (
+                  <IconChevronDown
+                    aria-hidden="true"
+                    className={cn("size-3.5 transition-transform duration-150", open && "rotate-180")}
+                    stroke={2.2}
+                  />
+                )}
+              </button>
+            );
+          })}
         </div>
 
         <button
           type="button"
-          aria-label="Следующий месяц"
-          onClick={() => goToMonth(1)}
+          aria-label={arrowLabels[1]}
+          onClick={() => step(1)}
           className={cn(
-            "flex size-7 shrink-0 items-center justify-center rounded-[var(--primitive-radius-control-sm,0.625rem)] text-[var(--muted-foreground)]",
+            "flex size-8 shrink-0 items-center justify-center rounded-[var(--primitive-radius-control-sm,0.625rem)] border text-[var(--foreground)]",
             "outline-none transition-colors duration-150",
-            "hover:bg-[color:var(--primitive-surface-hover,color-mix(in_srgb,var(--foreground)_4%,transparent))] hover:text-[var(--foreground)]",
-            "focus-visible:ring-2 focus-visible:ring-[color:var(--primitive-ring,color-mix(in_srgb,var(--foreground)_45%,transparent))]",
+            CONTROL_BORDER, HOVER, RING,
           )}
         >
           <IconChevronRight className="size-4" stroke={1.9} />
         </button>
       </div>
 
-      <div className="relative overflow-hidden">
+      <div ref={viewsRef} className="relative overflow-hidden">
         <AnimatePresence mode="popLayout" initial={false} custom={direction}>
           {navView === "days" && (
             <motion.div
@@ -592,95 +573,76 @@ export const Calendar = React.forwardRef<HTMLDivElement, CalendarProps>((props, 
           {navView === "months" && (
             <motion.div
               key="months"
+              data-calendar-view="months"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: prefersReducedMotion ? 0.12 : 0.15, ease: EASE_OUT }}
-              className="grid grid-cols-3 gap-1 py-1"
+              className="py-1"
             >
-              {MONTH_NAMES.map((name, i) => (
-                <button
-                  key={name}
-                  type="button"
-                  onClick={() => {
-                    setMonth(new Date(displayedMonth.getFullYear(), i, 1), 1);
-                    setNavView("days");
-                  }}
-                  className={cn(
-                    "flex h-10 items-center justify-center rounded-[var(--primitive-radius-control-sm,0.625rem)] text-[13px] text-[var(--foreground)]",
-                    "outline-none transition-colors duration-150",
-                    "hover:bg-[color:var(--primitive-surface-hover,color-mix(in_srgb,var(--foreground)_4%,transparent))]",
-                    i === displayedMonth.getMonth() &&
-                      "bg-[color:var(--primitive-control-solid,var(--primary))] text-[color:var(--primitive-control-solid-foreground,var(--primary-foreground))]",
-                  )}
-                >
-                  {name.slice(0, 3)}
-                </button>
-              ))}
+              <div className="grid grid-cols-3 gap-1.5" role="group" aria-label={`Месяцы ${displayedMonth.getFullYear()} года`}>
+                {MONTH_NAMES.map((name, i) => {
+                  const shown = i === displayedMonth.getMonth();
+                  const current = i === today.getMonth() && displayedMonth.getFullYear() === today.getFullYear();
+                  return (
+                    <button
+                      key={name}
+                      type="button"
+                      aria-current={shown ? "true" : undefined}
+                      onClick={() => {
+                        setMonth(new Date(displayedMonth.getFullYear(), i, 1), i >= displayedMonth.getMonth() ? 1 : -1);
+                        openView("days");
+                      }}
+                      className={cn(
+                        "flex h-11 items-center justify-center rounded-[var(--primitive-radius-control-sm,0.625rem)] text-[13px] text-[var(--foreground)]",
+                        "outline-none transition-colors duration-150",
+                        RING,
+                        shown ? cn(SOLID, "font-semibold") : HOVER,
+                        current && !shown && "border border-[var(--border)] font-semibold",
+                      )}
+                    >
+                      {name}
+                    </button>
+                  );
+                })}
+              </div>
             </motion.div>
           )}
 
           {navView === "years" && (
             <motion.div
               key="years"
+              data-calendar-view="years"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: prefersReducedMotion ? 0.12 : 0.15, ease: EASE_OUT }}
+              className="py-1"
             >
-              {/* Decade pager, the 12-year grid below is a window, not the full range. */}
-              <div className="mb-1 flex items-center justify-between px-0.5">
-                <button
-                  type="button"
-                  aria-label="Предыдущие годы"
-                  onClick={() => setYearAnchor((y) => y - 12)}
-                  className={cn(
-                    "flex size-7 shrink-0 items-center justify-center rounded-[var(--primitive-radius-control-sm,0.625rem)] text-[var(--muted-foreground)]",
-                    "outline-none transition-colors duration-150",
-                    "hover:bg-[color:var(--primitive-surface-hover,color-mix(in_srgb,var(--foreground)_4%,transparent))] hover:text-[var(--foreground)]",
-                    "focus-visible:ring-2 focus-visible:ring-[color:var(--primitive-ring,color-mix(in_srgb,var(--foreground)_45%,transparent))]",
-                  )}
-                >
-                  <IconChevronLeft className="size-4" stroke={1.9} />
-                </button>
-                <span className="text-[length:var(--primitive-text-hint,0.6875rem)] font-medium text-[var(--muted-foreground)]">
-                  {yearAnchor - 5}–{yearAnchor + 6}
-                </span>
-                <button
-                  type="button"
-                  aria-label="Следующие годы"
-                  onClick={() => setYearAnchor((y) => y + 12)}
-                  className={cn(
-                    "flex size-7 shrink-0 items-center justify-center rounded-[var(--primitive-radius-control-sm,0.625rem)] text-[var(--muted-foreground)]",
-                    "outline-none transition-colors duration-150",
-                    "hover:bg-[color:var(--primitive-surface-hover,color-mix(in_srgb,var(--foreground)_4%,transparent))] hover:text-[var(--foreground)]",
-                    "focus-visible:ring-2 focus-visible:ring-[color:var(--primitive-ring,color-mix(in_srgb,var(--foreground)_45%,transparent))]",
-                  )}
-                >
-                  <IconChevronRight className="size-4" stroke={1.9} />
-                </button>
-              </div>
-
-              <div className="grid grid-cols-3 gap-1 py-1">
-                {Array.from({ length: 12 }, (_, i) => yearAnchor - 5 + i).map((year) => (
-                  <button
-                    key={year}
-                    type="button"
-                    onClick={() => {
-                      setMonth(new Date(year, displayedMonth.getMonth(), 1), 1);
-                      setNavView("months");
-                    }}
-                    className={cn(
-                      "flex h-10 items-center justify-center rounded-[var(--primitive-radius-control-sm,0.625rem)] text-[13px] tabular-nums text-[var(--foreground)]",
-                      "outline-none transition-colors duration-150",
-                      "hover:bg-[color:var(--primitive-surface-hover,color-mix(in_srgb,var(--foreground)_4%,transparent))]",
-                      year === displayedMonth.getFullYear() &&
-                        "bg-[color:var(--primitive-control-solid,var(--primary))] text-[color:var(--primitive-control-solid-foreground,var(--primary-foreground))]",
-                    )}
-                  >
-                    {year}
-                  </button>
-                ))}
+              <div className="grid grid-cols-3 gap-1.5" role="group" aria-label={`Годы ${yearAnchor - 5}–${yearAnchor + 6}`}>
+                {Array.from({ length: 12 }, (_, i) => yearAnchor - 5 + i).map((year) => {
+                  const shown = year === displayedMonth.getFullYear();
+                  return (
+                    <button
+                      key={year}
+                      type="button"
+                      aria-current={shown ? "true" : undefined}
+                      onClick={() => {
+                        setMonth(new Date(year, displayedMonth.getMonth(), 1), year >= displayedMonth.getFullYear() ? 1 : -1);
+                        openView("months");
+                      }}
+                      className={cn(
+                        "flex h-11 items-center justify-center rounded-[var(--primitive-radius-control-sm,0.625rem)] text-[13px] tabular-nums text-[var(--foreground)]",
+                        "outline-none transition-colors duration-150",
+                        RING,
+                        shown ? cn(SOLID, "font-semibold") : HOVER,
+                        year === today.getFullYear() && !shown && "border border-[var(--border)] font-semibold",
+                      )}
+                    >
+                      {year}
+                    </button>
+                  );
+                })}
               </div>
             </motion.div>
           )}
