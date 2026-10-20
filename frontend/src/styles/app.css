@@ -1846,6 +1846,16 @@ select.input {
   padding-right: 48px;
 }
 
+/* Edge рисует в поле пароля свой глаз; у входа есть свой, второй не нужен. Каждый псевдоэлемент — своим правилом:
+   браузер, который не знает один из них, пропускает всё правило целиком. */
+.login__password .input::-ms-reveal {
+  display: none;
+}
+
+.login__password .input::-ms-clear {
+  display: none;
+}
+
 .login__reveal {
   position: absolute;
   top: 50%;
