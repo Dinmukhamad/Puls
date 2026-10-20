@@ -59,6 +59,8 @@ class UserOut(ORMModel):
     gender: Gender | None = None
     guide_name: str | None = None
     city_controls: CityControls | None = None
+    # Подсказки Пульсара, которые учётная запись уже видела: {подсказка: "done" | "closed"}.
+    tours_seen: dict[str, Literal["done", "closed"]] | None = None
 
 
 class TrainingUserOut(ORMModel):
@@ -163,6 +165,12 @@ class UserUpdate(PhoneMixin, TelegramUsernameMixin):
             if name in self.model_fields_set and getattr(self, name) is None:
                 raise ValueError("ФИО, роль, статус и направление не могут быть пустыми")
         return self
+
+
+class TourSeen(BaseModel):
+    """Подсказка Пульсара пройдена до конца ("done") или закрыта раньше ("closed")."""
+
+    state: Literal["done", "closed"]
 
 
 class GuideUpdate(BaseModel):

@@ -70,6 +70,8 @@ export interface UserOut {
   guide_name?: string | null;
   /** Как оператор двигает камеру в городе; null — ещё не выбрал, город спросит при входе. */
   city_controls?: CityControls | null;
+  /** Подсказки Пульсара на рабочих сайтах, которые учётная запись уже видела. */
+  tours_seen?: Partial<Record<string, "done" | "closed">> | null;
 }
 
 export type Gender = "male" | "female";

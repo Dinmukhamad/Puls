@@ -71,6 +71,9 @@ class User(Base, TimestampMixin):
     # Ступени зданий учебных районов, рост которых оператор уже видел ({район: ступень}): город
     # празднует рост один раз, с какого бы устройства оператор ни зашёл. Пусто — ещё не заходил.
     city_levels_seen: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # Подсказки Пульсара на рабочих сайтах, которые учётная запись уже видела ({подсказка:
+    # "done" или "closed"}): сама подсказка запускается один раз, с любого устройства.
+    tours_seen: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     # Когда оператор прошёл экскурсию Пульсара по сайту: миссия Академии «Как устроен Puls»
     # засчитывается с этого момента. Пусто — ещё не проходил.
     site_tour_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

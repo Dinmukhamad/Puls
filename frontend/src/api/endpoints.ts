@@ -35,6 +35,8 @@ export const auth = {
   me: (signal?: AbortSignal) => request<UserOut>(`${V1}/auth/me`, { signal, timeoutMs: 25_000 }),
   /** Свой помощник: фигура в городе и имя вместо «Пульсар». */
   guide: (json: { gender?: Gender; guide_name?: string | null; city_controls?: CityControls }) => request<UserOut>(`${V1}/auth/guide`, { method: "PUT", json }),
+  /** Подсказка Пульсара пройдена до конца или закрыта: сама она больше не запустится ни на одном устройстве. */
+  tourSeen: (tour: string, state: "done" | "closed") => request<UserOut>(`${V1}/auth/tours/${encodeURIComponent(tour)}`, { method: "PUT", json: { state } }),
   changeLogin: (login: string, currentPassword: string) =>
     request<UserOut>(`${V1}/auth/username`, {
       method: "POST",

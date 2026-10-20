@@ -7,7 +7,17 @@ from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 import jwt
-from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    Path,
+    Request,
+    Response,
+    UploadFile,
+    status,
+)
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
@@ -31,6 +41,7 @@ from app.schemas.user import (
     PasswordChange,
     RefreshRequest,
     Token,
+    TourSeen,
     UserOut,
 )
 from app.services import avatars
@@ -159,6 +170,33 @@ async def update_guide(session: SessionDep, user: CurrentUser, payload: GuideUpd
     # Явный null сбрасывает выбор камеры: город снова спросит при входе.
     if "city_controls" in changes:
         user.city_controls = changes["city_controls"]
+    await session.commit()
+    return await me(session, user)
+
+
+# Подсказок Пульсара на рабочих сайтах около десятка; запас на новые, но не бесконечный список.
+_TOURS_LIMIT = 32
+
+
+@router.put("/tours/{tour}", response_model=UserOut, summary="Подсказка Пульсара пройдена")
+async def see_tour(
+    session: SessionDep,
+    user: CurrentUser,
+    payload: TourSeen,
+    tour: Annotated[str, Path(pattern=r"^[A-Za-z][A-Za-z0-9_-]{0,39}$")],
+) -> User:
+    """
+    Запоминает для учётной записи, что подсказка Пульсара уже была: сама она больше не
+    запускается ни на одном устройстве, повторить её можно кнопкой «Помощь Пульсара».
+    Пройденная до конца («done») остаётся пройденной, даже если позже её закрыли раньше конца.
+    """
+    seen = dict(user.tours_seen or {})
+    if seen.get(tour) == "done" or seen.get(tour) == payload.state:
+        return await me(session, user)
+    if tour not in seen and len(seen) >= _TOURS_LIMIT:
+        raise ConflictError("Слишком много подсказок Пульсара", code="tours_limit")
+    seen[tour] = payload.state
+    user.tours_seen = seen
     await session.commit()
     return await me(session, user)
 

@@ -2,6 +2,8 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import { auth as authApi } from "../api/endpoints";
+import { browserOnly, queueTourSave, seenTour, type TourState } from "./workSiteTours";
 import { categoryRules, crm, type CrmAppeal } from "../api/crm";
 import { crmTraining, crmTrainingKey, type CrmTaskKey, type CrmTrainingTask } from "../api/crmTraining";
 import { CourseFormHint, CourseLessonDone, CoursePracticeTask, CrmCourseDock, useJustPassed, type CourseLocation } from "./crm/CrmCourseDock";
@@ -42,7 +44,7 @@ const OktellSite = lazy(() => import("./oktell/OktellSite").then(module => ({ de
 const OktellVoiceCall = lazy(() => import("./oktell/OktellVoiceCall").then(module => ({ default: module.OktellVoiceCall })));
 
 export function WorkSitesPage() {
-  const { user } = useAuth(), navigate = useNavigate();
+  const { user, applyProfile } = useAuth(), navigate = useNavigate();
   const [params, setParams] = useSearchParams(), client = useQueryClient();
   const currentParams = useRef(params);
   currentParams.current = params;
@@ -290,19 +292,47 @@ export function WorkSitesPage() {
     if (call?.state === "crm" && driver && park) { setCrmCall(call.id); if (view === "create") openSite("crm"); else create(); setCoach({ id: "appeals", steps: appealTour(driverAccount(driver, park)), cross: true }); return; }
     if (call && driver && park) setCoach({ id: tour, steps: callTour(call, driver, park) });
   }
-  const endCoach = useCallback((finished: boolean) => { setCoach(current => { const key = current && seenKey(current.id); if (key) try { localStorage.setItem(key, finished ? "done" : "closed"); } catch { /* Optional preference. */ } return null; }); }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const browserTour = (tour: string) => { const key = seenKey(tour); if (!key) return null; try { return localStorage.getItem(key); } catch { return null; } };
+  // The account remembers a walk on every device (docs/TRAINING_CRM.md, «Подсказки Пульсара»); this browser keeps a copy
+  // for a moment without the server. A finished walk stays finished.
+  const userRef = useRef(user); userRef.current = user;
+  const rememberTour = useCallback((tour: string, state: TourState) => {
+    const key = seenKey(tour);
+    if (!key) return;
+    try { if (localStorage.getItem(key) !== "done") localStorage.setItem(key, state); } catch { /* The account keeps it. */ }
+    const known = userRef.current?.tours_seen?.[tour];
+    if (known === "done" || known === state) return;
+    void queueTourSave(() => authApi.tourSeen(tour, state)).then(applyProfile, () => { /* This browser remembers it; the next visit tells the account. */ });
+  }, [user?.id, applyProfile]); // eslint-disable-line react-hooks/exhaustive-deps
+  const coachRef = useRef(coach); coachRef.current = coach;
+  const endCoach = useCallback((finished: boolean) => {
+    const current = coachRef.current;
+    setCoach(null);
+    if (current) rememberTour(current.id, finished ? "done" : "closed");
+  }, [rememberTour]);
+  // Walks this browser remembered before the account could (until 2.24.113) move to the account once.
+  useEffect(() => {
+    if (!user) return;
+    const ids = [...new Set(["appeals", "drivers", "fleet", "oktell", ...Object.values(SECTION_TOURS)])];
+    for (const [tour, state] of browserOnly(user.tours_seen, Object.fromEntries(ids.map(tour => [tour, browserTour(tour)]))))
+      void queueTourSave(() => authApi.tourSeen(tour, state)).then(applyProfile, () => { /* Tried again on the next visit. */ });
+  }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   // CRM training opens explicitly; optional tours explain controls and never grade a task.
-  // The first visit to the dispatch starts the tour of the cabinet once.
+  // The first visit to the dispatch starts the tour of the cabinet once per account, and not after a driver's call is
+  // solved there: the operator already knows the cabinet.
   useEffect(() => {
     if (guidedAttempt || site !== "dispatch" || !fleetQuery.data || coach) return;
-    let seen = true; try { seen = !!localStorage.getItem(seenKey("fleet")); } catch { /* Without storage the tour stays manual. */ }
-    if (!seen) { const timer = window.setTimeout(() => startFleetTour("fleet"), 700); return () => window.clearTimeout(timer); }
+    if (seenTour(user?.tours_seen, "fleet", browserTour("fleet")) || fleetQuery.data.calls.some(call => call.state === "solved")) return;
+    const timer = window.setTimeout(() => { rememberTour("fleet", "closed"); startFleetTour("fleet"); }, 700);
+    return () => window.clearTimeout(timer);
   }, [fleetQuery.data, site, guidedAttempt]); // eslint-disable-line react-hooks/exhaustive-deps
-  // The first visit to Oktell walks through it once; «Помощь Пульсара» replays the walk.
+  // The first visit to Oktell walks through it once per account, and not after its exercises are done; «Помощь Пульсара»
+  // replays the walk.
   useEffect(() => {
-    if (guidedAttempt || site !== "oktell" || !oktellLoaded || coach) return;
-    let seen = true; try { seen = !!localStorage.getItem(seenKey("oktell")); } catch { /* Without storage the tour stays manual. */ }
-    if (!seen) { const timer = window.setTimeout(() => setCoach({ id: "oktell", steps: OKTELL_TOUR }), 700); return () => window.clearTimeout(timer); }
+    if (guidedAttempt || site !== "oktell" || !oktellState || coach) return;
+    if (seenTour(user?.tours_seen, "oktell", browserTour("oktell")) || oktellState.completed.length > 0) return;
+    const timer = window.setTimeout(() => { rememberTour("oktell", "closed"); setCoach({ id: "oktell", steps: OKTELL_TOUR }); }, 700);
+    return () => window.clearTimeout(timer);
   }, [oktellLoaded, site, guidedAttempt]); // eslint-disable-line react-hooks/exhaustive-deps
   const exit = () => { if (!dirty || window.confirm("В обращении есть несохранённые изменения. Покинуть форму?")) navigate(scenarioAttemptId ? `/training/scenarios/attempts/${encodeURIComponent(scenarioAttemptId)}` : `/training/city?district=${site}`); };
   // On a driver's page the address is the link operators copy into CRM: its ID finds the same account there.
