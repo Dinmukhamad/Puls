@@ -143,7 +143,7 @@ async def main() -> None:
                             user_id=operator.id,
                             metric_code=code,
                             value=value,
-                            source="demo",
+                            source="manual",
                         )
                     )
         await session.commit()

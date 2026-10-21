@@ -35,10 +35,9 @@ const team = (admin = false, supervisor = false) => section("team", "Коман�
   tab("/admin/operators", "Показатели сотрудников"),
 ]);
 const analytics = (supervisor = false) => section("analytics", "Аналитика", TrophyIcon, [
-  tab("/analytics?tab=summary", "Обзор"), tab("/analytics?tab=weeks", "4 недели"),
+  tab("/analytics?tab=summary", "Обзор"), tab("/analytics?tab=metrics", "Показатели"),
   ...(!supervisor ? [tab("/analytics?tab=groups", "Группы")] : []),
-  tab("/analytics?tab=quality", "Качество"), tab("/analytics?tab=productivity", "Производительность"),
-  tab("/analytics?tab=discipline", "Дисциплина"), tab("/analytics?tab=operators", "Операторы"),
+  tab("/analytics?tab=operators", "Операторы"),
   ...(supervisor ? [tab("/admin/periods", "Периоды"), tab("/admin/settings", "Правила и показатели")] : []),
 ]);
 const performance = (admin = false) => section("performance", "Показатели", InboxIcon, [
@@ -245,26 +244,6 @@ export function appEntryRedirect(pathname: string, home: string, canPath: (path:
   if (pathname.startsWith("/training/voice") && !canPath(pathname)) return canPath("/training/city") ? "/training/city" : home;
   if (pathname === "/admin/learning" && !canPath("/admin/learning")) return canPath("/admin/learning-analytics") ? "/admin/learning-analytics" : home;
   return null;
-}
-
-/**
- * Analytics dashboards with nothing to show for the open channel: chats have productivity only once
- * their hours or response time are loaded (docs/CHANNELS.md). The page tells, the menu leaves them out.
- */
-let hidden: readonly string[] = [];
-const hiddenListeners = new Set<() => void>();
-export const hiddenDashboards = {
-  get: () => hidden,
-  subscribe: (listener: () => void) => { hiddenListeners.add(listener); return () => { hiddenListeners.delete(listener); }; },
-  set: (next: readonly string[]) => {
-    if (next.join() === hidden.join()) return;
-    hidden = next; hiddenListeners.forEach((listener) => listener());
-  },
-};
-
-export function sectionTabs(item: NavItem, pathname: string, empty: readonly string[] = []): SectionTab[] {
-  if (pathname !== "/analytics" || !empty.length) return item.tabs;
-  return item.tabs.filter((link) => !empty.some((name) => link.to === `/analytics?tab=${name}`));
 }
 
 export function subsectionDestination(link: SectionTab, pathname: string, search: string): string {

@@ -9,7 +9,7 @@ import "./reports.css";
 
 const reports: { title: string; text: string; to: string; icon: ReactNode }[] = [
   { title: "Рабочие показатели", text: "Сводка, сравнение групп и показатели сотрудников", to: "/analytics", icon: <TrophyIcon /> },
-  { title: "Качество", text: "Покрытие оценками и недельная матрица", to: "/analytics?tab=quality&metric=quality", icon: <MedalIcon /> },
+  { title: "Качество", text: "Покрытие оценками и недельная матрица", to: "/analytics?tab=metrics&category=quality&metric=quality", icon: <MedalIcon /> },
   { title: "Аналитика симулятора", text: "Прогресс, ошибки и активность операторов в Driver Simulator", to: "/admin/learning-analytics", icon: <DisplayIcon /> },
   { title: "История коинов", text: "Баланс операторов, начисления, списания и возвраты", to: "/admin/wallet", icon: <CoinIcon /> },
   { title: "Магазин", text: "Заявки, решения и выдача покупок", to: "/admin/requests", icon: <StoreIcon /> },

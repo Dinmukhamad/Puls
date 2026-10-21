@@ -20,11 +20,12 @@ test("trainees have three learning-only destinations even after explicit workpla
 test("management analytics offers the shared dashboards and a groups dashboard only to leadership", () => {
   for (const role of ["supervisor", "head", "admin"]) {
     const tabs = nav.currentSection(role, "/analytics").tabs.map(item => item.to);
-    for (const id of ["summary", "weeks", "quality", "productivity", "discipline", "operators"]) {
+    assert.deepEqual(nav.currentSection(role, "/analytics").tabs.filter(item => item.to.startsWith("/analytics?")).map(item => item.label), role === "supervisor" ? ["Обзор", "Показатели", "Операторы"] : ["Обзор", "Показатели", "Группы", "Операторы"]);
+    for (const id of ["summary", "metrics", "operators"]) {
       assert.ok(tabs.includes(`/analytics?tab=${id}`), `${role}: ${id}`);
     }
     assert.equal(tabs.includes("/analytics?tab=groups"), role !== "supervisor");
-    const destination = new URL(nav.subsectionDestination({ to: "/analytics?tab=weeks", label: "4 недели" }, "/analytics", "?window=weeks&from=2026-09-14&to=2026-10-11&group_id=5&page=3"), "https://puls.test");
+    const destination = new URL(nav.subsectionDestination({ to: "/analytics?tab=metrics", label: "Показатели" }, "/analytics", "?window=weeks&from=2026-09-14&to=2026-10-11&group_id=5&page=3"), "https://puls.test");
     assert.equal(destination.searchParams.get("window"), "weeks");
     assert.equal(destination.searchParams.get("group_id"), "5");
     assert.equal(destination.searchParams.get("from"), "2026-09-14");
@@ -357,17 +358,8 @@ test("chat operators take no calls: no voice trainer, an old link leads to their
   assert.equal(nav.canVisit("head", "/training/voice", nav.defaultAccess("head"), false, "chat"), true);
 });
 
-test("analytics leaves out a dashboard the open channel has nothing for and keeps the channel between tabs", () => {
+test("analytics keeps the channel between tabs", () => {
   const analytics = nav.visibleNavigation("head").find((item) => item.id === "analytics");
-  const labels = (empty, path = "/analytics") => nav.sectionTabs(analytics, path, empty).map((tab) => tab.label);
-  assert.ok(labels([]).includes("Производительность"));
-  assert.ok(!labels(["productivity"]).includes("Производительность") && labels(["productivity"]).includes("Качество"));
-  assert.ok(labels(["productivity"], "/admin/summary").includes("Производительность"), "only the analytics page");
-  const seen = [];
-  const stop = nav.hiddenDashboards.subscribe(() => seen.push(nav.hiddenDashboards.get()));
-  nav.hiddenDashboards.set(["productivity"]); nav.hiddenDashboards.set(["productivity"]); nav.hiddenDashboards.set([]);
-  stop();
-  assert.deepEqual(seen, [["productivity"], []], "an unchanged list wakes nobody");
-  const quality = analytics.tabs.find((tab) => tab.to === "/analytics?tab=quality");
-  assert.equal(nav.subsectionDestination(quality, "/analytics", "?tab=summary&channel=chat"), "/analytics?tab=quality&channel=chat");
+  const metrics = analytics.tabs.find((tab) => tab.to === "/analytics?tab=metrics");
+  assert.equal(nav.subsectionDestination(metrics, "/analytics", "?tab=summary&channel=chat"), "/analytics?tab=metrics&channel=chat");
 });

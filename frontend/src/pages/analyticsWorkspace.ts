@@ -133,3 +133,29 @@ export function categoryHealth(report: AnalyticsOut, category: AnalyticsCategory
     total: people.length,
   };
 }
+
+export type AnalyticsDashboard = 'summary' | 'metrics' | 'groups' | 'operators';
+const CATEGORIES: AnalyticsCategory[] = ['quality', 'productivity', 'discipline'];
+const asCategory = (value: string | null) => CATEGORIES.find(item => item === value);
+
+/**
+ * The open dashboard and category. Old links keep working: the four-week tab is now the bottom of the
+ * overview, and quality, productivity and discipline are categories of one metrics dashboard.
+ */
+export function analyticsDashboard(params: URLSearchParams): { tab: AnalyticsDashboard; category: AnalyticsCategory; legacy: boolean } {
+  const requested = params.get('tab') ?? 'summary';
+  const old = asCategory(requested);
+  if (old) return { tab: 'metrics', category: old, legacy: true };
+  if (requested === 'weeks') return { tab: 'summary', category: 'quality', legacy: true };
+  const tab = (['summary', 'metrics', 'groups', 'operators'] as const).find(item => item === requested) ?? 'summary';
+  return { tab, category: asCategory(params.get('category')) ?? 'quality', legacy: false };
+}
+
+/** The address of an old link in the new dashboards, so the section menu marks the right tab. */
+export function currentDashboardSearch(params: URLSearchParams): URLSearchParams {
+  const { tab, category } = analyticsDashboard(params);
+  const next = new URLSearchParams(params);
+  next.set('tab', tab);
+  if (tab === 'metrics') next.set('category', category); else next.delete('category');
+  return next;
+}

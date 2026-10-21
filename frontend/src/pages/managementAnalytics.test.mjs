@@ -90,16 +90,17 @@ test('role-specific headings and scope are determined by the authenticated profi
 });
 
 test('chats are one channel at a time and switching drops the other channel\'s picks', async () => {
-  const { result, updates } = await load('channel=chat&tab=productivity&metric=quality&operators=7&status=late&page=3&group_id=4');
+  const { result, updates } = await load('channel=chat&tab=metrics&category=productivity&metric=quality&operators=7&status=late&page=3&group_id=4');
   assert.equal(result.channel, 'chat');
   assert.equal(result.filters.channel, 'chat');
   result.setChannel('line');
   assert.equal(updates[0].has('channel'), false);
   for (const key of ['metric', 'operators', 'status', 'page']) assert.equal(updates[0].has(key), false, key);
   assert.equal(updates[0].get('group_id'), '4');
-  const back = await load('tab=productivity&metric=efficiency');
+  const back = await load('tab=metrics&category=productivity&metric=efficiency');
   back.result.setChannel('chat');
   assert.equal(back.updates[0].get('channel'), 'chat');
-  // The tab stays: chats show productivity once their hours or response time are loaded.
-  assert.equal(back.updates[0].get('tab'), 'productivity');
+  // The category stays: chats show productivity once their hours or response time are loaded.
+  assert.equal(back.updates[0].get('tab'), 'metrics');
+  assert.equal(back.updates[0].get('category'), 'productivity');
 });

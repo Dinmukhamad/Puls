@@ -38,6 +38,10 @@
 .management-analytics .analytics-row-filters { align-items: flex-end; }
 .management-analytics .analytics-section-heading { gap: 14px; flex-wrap: wrap; }
 .management-analytics .analytics-section-heading p { margin-bottom: 0; }
+/* Overview ends with the four weeks; the metrics dashboard opens with its category switch. */
+.ma-weeks-heading { margin-top: 10px; }
+.ma-category-switch { display: flex; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.ma-category-switch .segmented { flex: none; }
 .management-analytics :is(.analytics-person-name, .analytics-week-metric, .analytics-group-summary button) > svg { vertical-align: middle; margin-left: 5px; }
 @media (max-width: 1100px) { .ma-heading-actions { justify-content: flex-start; } .ma-heading { flex-wrap: wrap; } .ma-pulse { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ma-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ma-filters:not(.ma-filters--single-group) > .ma-period-control { grid-column: 1 / -1; } }
 @media (max-width: 767px) { .management-analytics { gap: 18px; } .ma-filters { padding: 16px; gap: 14px; grid-template-columns: minmax(0, 1fr); } .ma-filters :is(.date-range-picker__trigger, .puls-select__trigger, .btn) { height: 50px; min-height: 50px; } .ma-reading { flex-direction: column; align-items: flex-start; gap: 10px; } .ma-shortcuts, .ma-overview-bottom { grid-template-columns: 1fr; } .ma-pulse { gap: 10px; } .ma-pulse-card { padding: 16px; gap: 14px; border-radius: 16px; } .ma-pulse-card > strong { font-size: 32px; } .ma-pulse-card > span { align-items: flex-start; } .ma-pulse-card > span i { display: none; } .ma-heading .page-title { font-size: 27px; } .ma-heading-actions { width: 100%; justify-content: space-between; } }

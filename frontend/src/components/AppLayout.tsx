@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { useAccess } from "../auth/AccessContext";
 import { useSidebarPeek } from "../hooks/useSidebarPeek";
 import { SectionGuard } from "./SectionGuard";
-import { ACCOUNT_SECTION, currentSection, currentTab, hiddenDashboards, mobileNavigation, sectionTabs, subsectionDestination, visibleNavigation } from "../navigation";
+import { ACCOUNT_SECTION, currentSection, currentTab, mobileNavigation, subsectionDestination, visibleNavigation } from "../navigation";
 import { AccountMenu } from "./AccountMenu";
 import { GlassSurface } from "./GlassSurface";
 import { ChevronLeftIcon, LogoutIcon, MenuIcon, PulsMark } from "./icons";
@@ -34,7 +34,6 @@ export function AppLayout() {
   const items = user ? visibleNavigation(user.role, allowed, isDeveloper, user.channel) : [];
   const active = user ? currentSection(user.role, location.pathname, location.search, allowed, isDeveloper, user.channel) : undefined;
   const activeTab = active ? currentTab(active, location.pathname, location.search) : undefined;
-  const emptyDashboards = useSyncExternalStore(hiddenDashboards.subscribe, hiddenDashboards.get);
   const { primary, overflow } = mobileNavigation(items);
   const separateProfile = !items.some((item) => item.id === "profile");
   // «Мой город» занимает весь экран: меню сжимается до плавающих карточек поверх карты. У стажёра это его учебный город.
@@ -68,7 +67,7 @@ export function AppLayout() {
 
     <main className="main"><div className={`main__inner${location.pathname === "/profile" ? " main__inner--profile" : ""}`}>
       {/* A section label alone above the page title only repeats it, so it comes with the tabs. */}
-      {active && !immersive && active.tabs.length > 1 && <div className="section-navigation"><p className="section-navigation__title">{active.label}</p><nav className="section-navigation__tabs" aria-label={`Подразделы: ${active.label}`}>{sectionTabs(active, location.pathname, emptyDashboards).map((item) => <Link key={item.to} to={subsectionDestination(item, location.pathname, location.search)} data-tour={`tab-${item.to.split(/[?#]/)[0].slice(1)}`} className={activeTab?.to === item.to ? "section-navigation__tab is-active" : "section-navigation__tab"} aria-current={activeTab?.to === item.to ? "page" : undefined}>{item.label}</Link>)}</nav></div>}
+      {active && !immersive && active.tabs.length > 1 && <div className="section-navigation"><p className="section-navigation__title">{active.label}</p><nav className="section-navigation__tabs" aria-label={`Подразделы: ${active.label}`}>{active.tabs.map((item) => <Link key={item.to} to={subsectionDestination(item, location.pathname, location.search)} data-tour={`tab-${item.to.split(/[?#]/)[0].slice(1)}`} className={activeTab?.to === item.to ? "section-navigation__tab is-active" : "section-navigation__tab"} aria-current={activeTab?.to === item.to ? "page" : undefined}>{item.label}</Link>)}</nav></div>}
       <SectionGuard><Outlet /></SectionGuard>
     </div></main>
 

@@ -4,7 +4,7 @@ import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
 
 const compiled = await build({ entryPoints: [fileURLToPath(new URL('./analyticsWorkspace.ts', import.meta.url))], bundle: true, platform: 'node', format: 'esm', write: false });
-const { selectedPeriodReport, weekWindow, completedWeekWindow, mean, periodChange, metricCategory, categoryMetrics, categoryHealth, metricTrend, weeklyColumns, weeklyCoverage, groupBreakdown, analyticsChannel, channelCategories } = await import(`data:text/javascript;base64,${Buffer.from(compiled.outputFiles[0].text).toString('base64')}`);
+const { selectedPeriodReport, weekWindow, completedWeekWindow, mean, periodChange, metricCategory, categoryMetrics, categoryHealth, metricTrend, weeklyColumns, weeklyCoverage, groupBreakdown, analyticsChannel, channelCategories, analyticsDashboard, currentDashboardSearch } = await import(`data:text/javascript;base64,${Buffer.from(compiled.outputFiles[0].text).toString('base64')}`);
 
 const quality = { code: 'quality', title: 'Качество', target: 80, unit: '%', direction: 'higher_is_better', kind: 'positive' };
 const efficiency = { ...quality, code: 'efficiency', title: 'Эффективность' };
@@ -192,4 +192,19 @@ test('chats keep their quality under «Качество» and have productivity 
   assert.deepEqual(channelCategories('line'), ['quality', 'productivity', 'discipline']);
   // The line unless a link asks for chats; anything else is the line too.
   assert.deepEqual([null, 'chat', 'line', 'junk'].map(analyticsChannel), ['line', 'chat', 'line', 'line']);
+});
+
+test('four dashboards: old links open their place, nothing behind them is lost', () => {
+  const open = search => analyticsDashboard(new URLSearchParams(search));
+  assert.deepEqual(open(''), { tab: 'summary', category: 'quality', legacy: false });
+  assert.deepEqual(open('tab=metrics&category=discipline'), { tab: 'metrics', category: 'discipline', legacy: false });
+  assert.deepEqual(open('tab=metrics&category=nonsense'), { tab: 'metrics', category: 'quality', legacy: false });
+  assert.deepEqual(open('tab=unknown'), { tab: 'summary', category: 'quality', legacy: false });
+  for (const category of ['quality', 'productivity', 'discipline']) {
+    assert.deepEqual(open(`tab=${category}`), { tab: 'metrics', category, legacy: true });
+    const moved = currentDashboardSearch(new URLSearchParams(`tab=${category}&metric=x&channel=chat&from=2026-09-01`));
+    assert.equal(moved.toString(), `tab=metrics&metric=x&channel=chat&from=2026-09-01&category=${category}`);
+  }
+  // The four weeks are the bottom of the overview now.
+  assert.equal(currentDashboardSearch(new URLSearchParams('tab=weeks&category=discipline&group_id=4')).toString(), 'tab=summary&group_id=4');
 });
