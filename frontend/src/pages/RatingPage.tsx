@@ -24,7 +24,7 @@ import { WeekPicker } from "../components/WeekPicker";
 import { WEEK_STATUS_LABELS, coins, dateOnly, points } from "../utils/format";
 import { useAuth } from "../auth/AuthContext";
 import { MonthContest } from "./MonthContest";
-import { OperatorRating } from "./OperatorRating";
+import { OperatorRatingPage } from "./OperatorRating";
 import "./rating.css";
 
 const MEDAL_LABEL: Record<string, string> = {
@@ -37,8 +37,8 @@ export function RatingPage() {
   const [params, setParams] = useSearchParams();
   const { user } = useAuth();
   if (params.get("tab") === "progress") return <Navigate to="/cabinet" replace />;
-  // Operators compare themselves with everyone (docs/RATING_COMPARE.md); staff keep the contest tables.
-  if (user?.role === "operator") return <OperatorRating />;
+  // Operators open on the month's contest and compare themselves with everyone one tap away (docs/RATING_COMPARE.md).
+  if (user?.role === "operator") return <OperatorRatingPage />;
   // The contest is monthly (docs/COIN_ECONOMY.md); the weeks stay one tap away.
   const view = params.get("view") === "weeks" || params.has("week") ? "weeks" : "month";
   const toggle = <div data-tour="rating-views"><SegmentedControl label="Период рейтинга" value={view} options={[{ value: "month", label: "Конкурс месяца" }, { value: "weeks", label: "Недели" }]} onChange={(value) => { const next = new URLSearchParams(params); next.delete("week"); next.delete("page"); if (value === "weeks") next.set("view", "weeks"); else next.delete("view"); setParams(next); }} /></div>;

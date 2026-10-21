@@ -16,13 +16,14 @@ const MEDALS = ["gold", "silver", "bronze"] as const;
  * once, when its last week is closed or a head closes it.
  */
 export function MonthContest() {
-  const { atLeast } = useAuth();
+  const { user, atLeast } = useAuth();
   const [picked, setPicked] = useState<{ year: number; month: number } | null>(null);
   const options = useQuery({ queryKey: ["contest-months"], queryFn: economy.months });
   const query = useQuery({ queryKey: ["contest-month", picked?.year, picked?.month], queryFn: () => economy.month(picked?.year, picked?.month) });
   const [confirm, setConfirm] = useState(false);
   // Places are within a channel (docs/CHANNELS.md): one channel's table at a time.
-  const [channel, setChannel] = useState<"line" | "chat">("line");
+  // An operator starts on their own channel.
+  const [channel, setChannel] = useState<"line" | "chat">(user?.role === "operator" && user.channel === "chat" ? "chat" : "line");
   const client = useQueryClient(); const toast = useToast();
   const refresh = (data: ContestMonth) => { client.setQueryData(["contest-month", picked?.year, picked?.month], data); void client.invalidateQueries({ queryKey: ["contest-months"] }); };
   const calculate = useMutation({ mutationFn: () => economy.calculate(query.data!.year, query.data!.month), onSuccess: (data) => { refresh(data); toast.success("Места месяца пересчитаны"); } });

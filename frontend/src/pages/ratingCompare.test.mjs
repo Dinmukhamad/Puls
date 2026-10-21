@@ -28,7 +28,7 @@ const load = (file) => {
   })[name] ?? require(name), module, module.exports);
   return module.exports;
 };
-const { OperatorRating } = load(built.outputFiles.find((file) => file.path.endsWith("OperatorRating.js")));
+const { OperatorRating, OperatorRatingPage } = load(built.outputFiles.find((file) => file.path.endsWith("OperatorRating.js")));
 const { chosenColleague, leadLine, weeksAhead, scale, HeadToHead, signedPoints, ChannelsCard } = load(built.outputFiles.find((file) => file.path.endsWith("RatingCompare.js")));
 
 const week = (id, startsOn, endsOn, status, live = false) => ({ id, label: `2026-W${id}`, starts_on: startsOn, ends_on: endsOn, status, live });
@@ -76,7 +76,17 @@ test("the page shows your place, the teams, everyone with places by week and the
   assert.match(html, /чужие значения без имён/);
   assert.match(html, /лучший результат/);
   assert.match(html, /−2,39 к среднему/);
-  assert.match(html, /data-tour="rating-views"/);
+});
+
+test("operators open on the month's contest; «Сравнение» and its old links open the comparison", () => {
+  compare = month();
+  for (const query of ["view=compare", "view=weeks", "week=41", "period=week", "month=2026-9"]) {
+    search = query;
+    const html = renderToStaticMarkup(React.createElement(OperatorRatingPage));
+    assert.match(html, /aria-checked="true"[^>]*>Сравнение</, query);
+    assert.match(html, /Ваше место/, query);
+    assert.equal(html.match(/data-tour="rating-views"/g)?.length, 1, query);
+  }
 });
 
 test("the month's name opens the list of contest months, not only arrows", () => {

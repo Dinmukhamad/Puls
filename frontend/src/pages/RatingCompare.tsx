@@ -111,9 +111,9 @@ export function CompareFilters({ state }: { state: CompareState }) {
   const status = !data ? "" : period === "week"
     ? data.live ? "Неделя идёт" : data.status === "closed" ? "Итог опубликован" : "Предварительный расчёт"
     : data.status === "closed" ? "Итоги опубликованы" : `Закрыто недель: ${closed} из ${data.month?.weeks_planned ?? closed}`;
-  return <div className="head-filters" data-tour="rating-views">
+  return <div className="head-filters">
     <SegmentedControl label="Период рейтинга" value={period} options={[{ value: "month", label: "Месяц" }, { value: "week", label: "Неделя" }]}
-      onChange={(value) => set({ period: value === "week" ? "week" : undefined, view: undefined, week: undefined, month: undefined, with: undefined })} />
+      onChange={(value) => set({ period: value === "week" ? "week" : undefined, view: "compare", week: undefined, month: undefined, with: undefined })} />
     {period === "week"
       ? <WeekPicker label="Неделя" weeks={weeks.data ?? []} value={weekId} resolvedWeekId={data?.week?.id} latestLabel="Текущая неделя" latestPreference="latest" loading={weeks.isLoading}
         onChange={(value) => set({ week: value === undefined ? undefined : String(value), with: undefined })} />
