@@ -52,7 +52,7 @@ test("the rules show every number with its unit, the course under the rate, and 
   for (const unit of ['unit: "баллов"', 'unit: C', 'unit: "чел."', 'unit: "симв."', 'unit: "₸"']) assert.ok(page.includes(unit), unit);
   // Driver gratitude is paused (docs/CHANNELS.md): its bonus and monthly limit are not offered.
   assert.doesNotMatch(page, /driver_gratitude_bonus|gratitude_monthly_limit/);
-  assert.match(page, /key: "prize_min_points", label: "Минимум для приза за место"/);
+  assert.match(page, /key: "prize_min_points", label: "Минимум для приза"/);
   assert.match(page, /: spec\.unit \? <span className="input-unit"><input className="input" type="number" inputMode="decimal"/);
   assert.match(page, /\{index === 0 && <div className="configuration-example" aria-label="Проверка курса">/);
   assert.doesNotMatch(page, /<Card title="Проверка курса"/);
@@ -60,7 +60,7 @@ test("the rules show every number with its unit, the course under the rate, and 
   assert.match(page, /const dirty = normalizedRules\(values\) !== normalizedRules\(\{ \.\.\.initial \}\);/);
   assert.match(page, /\{dirty && <Button disabled=\{save\.isPending\} onClick=\{\(\) => \{ setValues\(\{ \.\.\.initial \}\); save\.reset\(\); \}\}>Отменить<\/Button>\}/);
   assert.match(css, /\.rules-save\.is-dirty \{ position: sticky; bottom: var\(--sp-4\);/);
-  assert.match(css, /\.rules-grid \{ column-count: 2; column-gap: var\(--sp-5\); \}/);
+  assert.match(css, /\.rules-grid \{ display: grid; grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/);
 });
 
 test("periods are a history of weeks; a week opens with its status and actions at the top and its results as a table", () => {

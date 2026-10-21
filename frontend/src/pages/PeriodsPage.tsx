@@ -108,6 +108,8 @@ function PeriodWorkspace() {
       {canImport && !selected && <div className="page-head__actions"><Button variant="primary" onClick={() => setOpening(true)}>Открыть неделю</Button></div>}</div>
     {error && <ErrorState error={error} />}
     {!selected ? <>
+      {/* The monthly reports are how weeks get their data: above the history, which only grows. */}
+      {canImport && <ReportsUpload />}
       <Card title="Периоды" subtitle={weeks.data ? `${history.length} ${plural(history.length, "неделя", "недели", "недель")} · новые сверху` : undefined} padded={false} className="periods-list">
         {weeks.isLoading && <div className="card__body"><Skeleton height={120} /></div>}
         {weeks.isError && <div className="card__body"><ErrorState error={weeks.error} onRetry={() => weeks.refetch()} /></div>}
@@ -118,7 +120,6 @@ function PeriodWorkspace() {
           <ChevronRightIcon size={16} />
         </button></li>)}</ul>}
       </Card>
-      {canImport && <ReportsUpload />}
     </> : <>
       <button type="button" className="periods-back" onClick={() => selectWeek()}>← Все периоды</button>
       <Card className="period-head">

@@ -79,7 +79,7 @@ export function ReportsUpload({ onSaved }: { onSaved?: () => void }) {
   const clear = () => choose([]);
 
   return <Card title="Месячные отчёты СЗоВ"
-    subtitle="Загрузите отчёты команд линии и чатов (report_…) и оценки проверяющих (monthly_report_dates_…) — всё остальное сайт посчитает сам">
+    subtitle="Отчёты команд (report_…) и оценки проверяющих (monthly_report_dates_…) — остальное сайт посчитает сам">
     <div className="reports-upload">
       <FileDrop accept=".xlsx" multiple disabled={busy} files={files} onFiles={list => choose(list)}
         title={files.length ? `Выбрано файлов: ${files.length}` : "Перетащите сюда все файлы за месяц"} busy={inspect.isPending && "Читаем отчёты…"}

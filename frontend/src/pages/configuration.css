@@ -10,12 +10,24 @@
 /* The grid and the editor space their fields themselves: no extra margin under each field. */
 .configuration-form-grid .field, .configuration-editor .field { margin: 0; }
 .configuration-editor { gap: 20px; }
-.configuration-toggle { display: flex; gap: 12px; align-items: flex-start; cursor: pointer; }
-.configuration-toggle > input { width: 20px; height: 20px; flex-shrink: 0; margin-top: 2px; accent-color: var(--accent-primary); }
-.configuration-toggle > span { display: grid; gap: 5px; font-size: 14px; }
+.configuration-editor .configuration-form-grid { gap: 14px 16px; }
+/* A yes/no setting: the words on the left, the site's switch on the right (as in the chest settings). */
+.configuration-toggle { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 12px 16px; border-radius: var(--radius-m); background: var(--surface-secondary); cursor: pointer; }
+.configuration-toggle > span { display: grid; gap: 3px; min-width: 0; font-size: 14px; }
 .configuration-toggle strong { font-weight: 600; }
-.configuration-toggle > span > span { color: var(--text-secondary); line-height: 1.5; font-size: 12px; }
-.configuration-toggles { display: grid; gap: 20px; margin-top: 24px; }
+.configuration-toggle > span > span { color: var(--text-secondary); line-height: 1.45; font-size: 12px; }
+.configuration-toggle > input { -webkit-appearance: none; appearance: none; position: relative; flex: none; width: 42px; height: 26px; margin: 0; border-radius: 20px; background: var(--text-tertiary); transition: background .15s; cursor: pointer; }
+.configuration-toggle > input::before { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px #0002; transition: transform .15s; }
+.configuration-toggle > input:checked { background: var(--status-success); }
+.configuration-toggle > input:checked::before { transform: translateX(16px); }
+.configuration-toggle > input:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 3px; }
+.configuration-toggle:has(input:disabled) { cursor: default; opacity: .6; }
+.configuration-toggles { display: grid; gap: 8px; }
+/* The editor's fields under small headings, two columns, the long ones across both. */
+.configuration-section { display: grid; gap: 14px; min-width: 0; }
+.configuration-section + .configuration-section { padding-top: 20px; border-top: 1px solid var(--separator); }
+.configuration-section__title { margin: 0; color: var(--text-tertiary); font-size: var(--text-micro, 11px); font-weight: 650; letter-spacing: .06em; text-transform: uppercase; }
+.configuration-wide { grid-column: 1 / -1; }
 .configuration-error { padding: 14px 16px; border-radius: var(--radius-s); background: var(--status-danger-tint); color: var(--status-danger-text); font-size: 14px; }
 .configuration-note { border: 1px solid var(--border-strong); padding: 16px 20px; border-radius: var(--radius-m); background: var(--surface-secondary); color: var(--text-secondary); font-size: 14px; line-height: 1.6; }
 /* The field, the sign and the result sit on the input's line, not on the label's. */
@@ -105,8 +117,11 @@
 }
 
 /* «Правила расчёта»: the groups in two columns on a wide screen, filling each from the top; one column on a phone. */
-.rules-grid { column-count: 2; column-gap: var(--sp-5); }
-.rules-grid > .card { break-inside: avoid; margin-bottom: var(--sp-5); }
+/* Cards in pairs of the same height, so the page reads in even rows. */
+.rules-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-5); align-items: stretch; }
+.rules-grid > .rules-wide { grid-column: 1 / -1; }
+.rules-three .configuration-form-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.rules-grid .configuration-toggles { margin-top: var(--sp-4); }
 .rules-grid .configuration-example { margin-top: var(--sp-5); padding-top: var(--sp-4); border-top: 1px solid var(--separator); }
 .configuration-form-grid--single { grid-template-columns: minmax(0, 1fr); }
 /* A number and its unit in one field. */
@@ -118,8 +133,8 @@
 .rules-save > span { margin-right: auto; color: var(--text-secondary); font-size: var(--text-caption); }
 .rules-save.is-dirty { position: sticky; bottom: var(--sp-4); z-index: 20; background: var(--surface-opaque); border: 1px solid var(--border-strong); box-shadow: 0 8px 30px #0001; }
 .rules-save.is-dirty > span { color: var(--text-primary); font-size: var(--text-secondary-size); }
-@media (max-width: 1100px) { .rules-grid { column-count: 1; } }
-@media (max-width: 767px) { .rules-save.is-dirty { bottom: calc(var(--tabbar-height) + 10px + var(--safe-bottom) + var(--sp-3)); } .rules-save.is-dirty > .btn { flex: 1; } }
+@media (max-width: 1100px) { .rules-grid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 767px) { .rules-three .configuration-form-grid { grid-template-columns: minmax(0, 1fr); } .rules-save.is-dirty { bottom: calc(var(--tabbar-height) + 10px + var(--safe-bottom) + var(--sp-3)); } .rules-save.is-dirty > .btn { flex: 1; } }
 
 /* Points by steps (docs/CHANNELS.md): a threshold and its points per row. */
 .configuration-bands { display: grid; gap: 12px; }

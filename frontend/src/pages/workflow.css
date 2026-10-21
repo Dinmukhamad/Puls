@@ -23,7 +23,10 @@
 @media(max-width:900px) { .sessions-filters { grid-template-columns:repeat(2, minmax(0, 1fr)); } .sessions-filters > :nth-child(2) { grid-column:auto; } .sessions-filters > .btn { grid-column:1 / -1; } }
 @media(max-width:767px) { .sessions-filters { grid-template-columns:minmax(0, 1fr); } .sessions-filters > .btn { grid-column:auto; } }
 /* Monthly reports: the files, then the month when their names do not say it. */
-.reports-upload { display:grid; gap:var(--sp-4); }
+/* The files and the month side by side: the block stays low above the weeks' history. */
+.reports-upload { display:grid; grid-template-columns:minmax(0,1fr) 280px; align-items:start; gap:var(--sp-4) var(--sp-5); }
+.reports-upload .file-drop { padding:var(--sp-4) var(--sp-5); }
+@media (max-width: 900px) { .reports-upload { grid-template-columns:minmax(0,1fr); } }
 .reports-upload__month { max-width:340px; margin:0; }
 .reports-upload__kpis { grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); }
 .reports-upload__weeks-title { margin-top:0; }
