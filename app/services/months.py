@@ -347,8 +347,21 @@ async def view(session: AsyncSession, item: ContestMonth, *, viewer: User | None
         select(User).where(User.id.in_([r.user_id for r in results] or [0])))}
     winners = list(await session.scalars(
         select(MonthNominationWinner).where(MonthNominationWinner.month_id == item.id)))
-    titles = {n.id: n.title for n in await session.scalars(select(NominationDefinition))}
+    definitions = {n.id: n for n in await session.scalars(select(NominationDefinition))}
     weeks = await month_weeks(session, item.year, item.month)
+    # An operator sees their own channel only: its places and the nominations they play for
+    # (docs/CHANNELS.md). Leaders see both.
+    own = (
+        (viewer.channel or Channel.LINE)
+        if viewer is not None and Role(viewer.role) == Role.OPERATOR else None
+    )
+
+    def channel_of(user_id: int) -> str:
+        return str((users[user_id].channel if user_id in users else None) or Channel.LINE)
+
+    def shown(nomination_id: int) -> bool:
+        definition = definitions.get(nomination_id)
+        return own is None or definition is None or in_scope(definition, own)
 
     def who(user_id: int) -> str | None:
         user = users.get(user_id)
@@ -375,14 +388,19 @@ async def view(session: AsyncSession, item: ContestMonth, *, viewer: User | None
                 "coins_nomination_bonus": r.coins_nomination_bonus,
                 "mine": viewer is not None and viewer.id == r.user_id,
                 # Places are within the channel (docs/CHANNELS.md).
-                "channel": (users[r.user_id].channel if r.user_id in users else None) or "line",
+                "channel": channel_of(r.user_id),
             }
             for r in results
+            if own is None or channel_of(r.user_id) == own
         ],
         "nominations": [
-            {"nomination_id": w.nomination_id, "title": titles.get(w.nomination_id, ""),
+            {"nomination_id": w.nomination_id,
+             "title": definitions[w.nomination_id].title if w.nomination_id in definitions else "",
+             "channel": str(definitions[w.nomination_id].channel or "all")
+             if w.nomination_id in definitions else "all",
              "user_id": w.user_id, "name": who(w.user_id), "value": round(w.value, 2),
-             "coins": w.coins_awarded}
+             "coins": w.coins_awarded, "mine": viewer is not None and viewer.id == w.user_id}
             for w in winners
+            if shown(w.nomination_id)
         ],
     }

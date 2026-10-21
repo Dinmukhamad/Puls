@@ -70,3 +70,29 @@
   .race-options__move { grid-column: 1; white-space: normal; }
   .race-options__gain { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
 }
+
+/* The operator's month contest (MonthContest): places as rows with a bar instead of a long table. */
+.contest-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.contest-row { display: grid; grid-template-columns: 36px minmax(0, 1.2fr) minmax(80px, 2fr) 72px 64px; gap: 12px; align-items: center; padding: 9px 12px; border-radius: 12px; }
+.contest-row.is-me { background: var(--accent-tint); box-shadow: inset 3px 0 0 var(--accent-primary); }
+.contest-row__rank { font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text-secondary); }
+.contest-row.is-top .contest-row__rank { color: var(--gold-text); }
+.contest-row__name { font-weight: 550; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.contest-row__bar { height: 8px; border-radius: 99px; background: var(--surface-tertiary); overflow: hidden; }
+.contest-row__bar > span { display: block; height: 100%; border-radius: inherit; background: var(--text-tertiary); opacity: .55; }
+.contest-row.is-me .contest-row__bar > span { background: var(--accent-primary); opacity: 1; }
+.contest-row.is-top .contest-row__bar > span { background: var(--coin-color); opacity: .9; }
+.contest-row__points { text-align: right; font-weight: 650; font-variant-numeric: tabular-nums; }
+.contest-row__diff { text-align: right; font-size: 13px; font-variant-numeric: tabular-nums; color: var(--text-secondary); }
+.contest-row__diff.is-ahead { color: var(--status-warning-text, var(--text-secondary)); }
+.contest-row__diff.is-behind { color: var(--status-success-text); }
+.contest-more { display: flex; justify-content: center; padding-top: 12px; }
+.nomination.is-me { box-shadow: inset 3px 0 0 var(--accent-primary); }
+@media (max-width: 640px) {
+  .contest-row { grid-template-columns: 28px minmax(0, 1fr) auto; grid-template-areas: "rank name points" "rank bar diff"; gap: 4px 10px; }
+  .contest-row__rank { grid-area: rank; }
+  .contest-row__name { grid-area: name; }
+  .contest-row__bar { grid-area: bar; }
+  .contest-row__points { grid-area: points; }
+  .contest-row__diff { grid-area: diff; }
+}

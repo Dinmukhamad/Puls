@@ -46,7 +46,7 @@ export function RacePage() {
   const race = useQuery({ queryKey: ["race", weekId], queryFn: () => rating.race(weekId), placeholderData: keepPreviousData });
   // The week and how final its places are sit beside the title as one small row, as on «Рейтинг».
   const heading = (filters?: ReactNode) => <header className="page-head page-head--filters"><div><h1 className="page-title">Гонка недели</h1>
-    <p className="page-subtitle">Ваше место среди всех операторов: кого догнать и что подтянуть</p></div>{filters}</header>;
+    <p className="page-subtitle">Ваше место в вашем направлении: кого догнать и что подтянуть</p></div>{filters}</header>;
 
   if (race.isLoading) return <div className="stack">{heading()}<div className="page-skeleton">
     <Skeleton height={60} radius="var(--radius-l)" /><Skeleton height={190} radius="var(--radius-xl)" /><Skeleton height={320} radius="var(--radius-xl)" />

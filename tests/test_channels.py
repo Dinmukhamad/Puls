@@ -165,9 +165,10 @@ async def test_the_rating_compares_the_channels_by_the_average_week(client, sess
     ]
     assert body["metrics"][0]["average"] == 91.5 and body["metrics"][0]["place"] == 2
     assert [m["bonus"] for m in body["metrics"]] == [False, False, True]
+    # An operator sees their own channel only: nothing of the line, not even its best.
     channels = {c["channel"]: c for c in body["channels"]}
+    assert set(channels) == {"chat"}
     assert channels["chat"]["average"] == 80 and channels["chat"]["is_mine"]
-    assert channels["line"]["participants"] == 2 and channels["line"]["best"]["points"] == 110
     assert [(m["title"], m["max_points"], m["bonus"]) for m in channels["chat"]["metrics"]] == [
         ("Качество чатов", 75, False),
         ("Норма часов в чатах", 25, False),
@@ -185,6 +186,35 @@ async def test_the_month_plays_its_places_within_each_channel(session, operator)
         results[people["c1"].id].coins_rank_bonus == results[people["op1"].id].coins_rank_bonus > 0
     )
     assert results[people["c3"].id].rank == 3
+
+
+async def test_an_operator_sees_the_month_of_their_own_channel(client, session, operator, head):
+    people, _, _ = await _calculated(session, operator)
+    item = await months.get_or_create(session, 2026, 6)
+    await months.calculate(session, item)
+    await session.commit()
+
+    async def month(login_name):
+        response = await client.get(
+            "/api/v1/contest/month", params={"year": 2026, "month": 6},
+            headers=auth(await login(client, login_name)),
+        )
+        assert response.status_code == 200, response.text
+        return response.json()
+
+    line = await month("op1")
+    assert {r["channel"] for r in line["standings"]} == {"line"}
+    assert {r["user_id"] for r in line["standings"]} == {people["op1"].id, people["l2"].id}
+    assert all(n["channel"] in ("line", "all") for n in line["nominations"])
+    chat = await month("c2")
+    assert {r["user_id"] for r in chat["standings"]} == {people[n].id for n in ("c1", "c2", "c3")}
+    assert all(n["channel"] in ("chat", "all") for n in chat["nominations"])
+    assert any(n["channel"] == "chat" for n in chat["nominations"])
+    # Leaders keep both channels.
+    both = await month("head1")
+    assert {r["channel"] for r in both["standings"]} == {"line", "chat"}
+    ids = lambda body: {n["nomination_id"] for n in body["nominations"]}  # noqa: E731
+    assert ids(both) >= ids(line) | ids(chat) and ids(chat) - ids(line)
 
 
 async def test_staff_see_one_channel_at_a_time(client, session, operator, head):

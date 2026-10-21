@@ -29,7 +29,7 @@ export function OperatorRatingPage() {
     onChange={(value) => setParams(value === "compare" ? { view: "compare" } : {})} /></div>;
   if (compare) return <OperatorRating toggle={toggle} />;
   return <div className="stack">
-    <header className="page-head"><div><h1 className="page-title">Рейтинг</h1><p className="page-subtitle">Места и номинации месяца среди всех операторов</p></div></header>
+    <header className="page-head"><div><h1 className="page-title">Рейтинг</h1><p className="page-subtitle">Места и номинации месяца в вашем направлении</p></div></header>
     {toggle}
     <MonthContest />
   </div>;

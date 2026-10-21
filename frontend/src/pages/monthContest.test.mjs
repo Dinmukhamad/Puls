@@ -9,7 +9,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 const require = createRequire(import.meta.url);
 let month, role = "operator";
 const fakes = {
-  "fake:auth": { useAuth: () => ({ atLeast: (r) => ["operator", "supervisor", "head", "admin"].indexOf(role) >= ["operator", "supervisor", "head", "admin"].indexOf(r) }) },
+  "fake:auth": { useAuth: () => ({ user: { role, channel: "line" }, atLeast: (r) => ["operator", "supervisor", "head", "admin"].indexOf(role) >= ["operator", "supervisor", "head", "admin"].indexOf(r) }) },
   "fake:toast": { useToast: () => ({ success() {} }) },
 };
 const built = await build({
@@ -39,17 +39,47 @@ const base = {
   nominations: [{ nomination_id: 5, title: "Лучшее качество", user_id: 2, name: "Оператор 2", value: 98, coins: 100 }],
 };
 
-test("the month shows its podium, nominations, the operator's own prize and the full table", () => {
+test("an operator sees the podium, their own result with the gaps, and the places around them", () => {
   month = base; role = "operator";
   const html = renderToStaticMarkup(React.createElement(MonthContest));
   assert.match(html, /Конкурс месяца · октябрь 2026/);
+  assert.match(html, /Среди операторов линии/);
   assert.match(html, /Закрыто недель: 1 из 4/);
   assert.match(html, /Топ-3 месяца/);
   assert.match(html, /\+300 коинов/);
-  assert.match(html, /Лучшее качество/);
-  // The operator's own line: place, points and the prize waiting for the month to close.
-  assert.match(html, /2 место<\/strong> · 350 баллов за 4 недели · приз 300 коинов после закрытия месяца/);
-  assert.doesNotMatch(html, /Закрыть месяц/);
+  // The operator's own month: the place, the points, the gaps and the prize so far.
+  assert.match(html, /<strong>2<\/strong><span>место из 4<\/span>/);
+  assert.match(html, /350 баллов/);
+  assert.match(html, /номинация: Лучшее качество/);
+  assert.match(html, /До 1-го места<\/span><strong>30<\/strong>/);
+  assert.match(html, /Запас над 3-м местом<\/span><strong>50<\/strong>/);
+  assert.match(html, /Приз сейчас<\/span><strong>\+300<\/strong>/);
+  assert.match(html, /class="nomination is-me"/);
+  // Instead of the table: the places around, their gap to the operator; one channel, no switch.
+  assert.match(html, /Рядом с вами/);
+  assert.match(html, /Операторы линии · 4 участника/);
+  assert.match(html, /contest-row__diff is-ahead">\+30</);
+  assert.match(html, /contest-row__diff is-behind">−230</);
+  assert.doesNotMatch(html, /Таблица месяца|aria-label="Направление"|Закрыть месяц|Пересчитать/);
+});
+
+test("the places around show two above and two below, everyone one tap away", () => {
+  role = "operator";
+  const standings = Array.from({ length: 12 }, (_, i) => row(i + 1, i + 1, 400 - i * 5, i === 9 ? { mine: true } : {}));
+  month = { ...base, standings, nominations: [] };
+  const html = renderToStaticMarkup(React.createElement(MonthContest));
+  const ranks = [...html.matchAll(/contest-row__rank">(\d+)</g)].map((m) => Number(m[1]));
+  assert.deepEqual(ranks, [8, 9, 10, 11, 12]);
+  assert.match(html, /Все операторы \(12\)/);
+  assert.match(html, /До топ-3<\/span><strong>35<\/strong>/);
+});
+
+test("leaders keep the channel switch and the month's table", () => {
+  month = base; role = "head";
+  const html = renderToStaticMarkup(React.createElement(MonthContest));
+  assert.match(html, /aria-label="Направление"/);
+  assert.match(html, /Таблица месяца/);
+  assert.doesNotMatch(html, /Рядом с вами/);
 });
 
 test("a head can close the month only when all its weeks are closed", () => {

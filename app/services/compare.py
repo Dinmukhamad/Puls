@@ -21,7 +21,7 @@ from app.models.contest import (
     MetricDefinition,
     OperatorMonthResult,
 )
-from app.models.enums import Channel, MetricDirection, MetricKind
+from app.models.enums import Channel, MetricDirection, MetricKind, Role
 from app.models.user import Group, User
 from app.services import months, race, weekly
 from app.services.economy import week_month
@@ -172,7 +172,11 @@ def _channels(
     average week of an operator compares fairly. ``points`` are each operator's points of a week.
     """
     out = []
+    own = viewer.channel or Channel.LINE
     for channel in Channel:
+        # An operator sees their own channel only (docs/CHANNELS.md).
+        if Role(viewer.role) == Role.OPERATOR and channel != own:
+            continue
         mine = {
             uid: p for uid, p in points.items() if (users[uid].channel or Channel.LINE) == channel
         }
@@ -183,7 +187,7 @@ def _channels(
             "best": None if best is None else {
                 "name": ranking_name(viewer, users[best]) or "Оператор",
                 "points": round(mine[best], 2), "is_me": best == viewer.id},
-            "is_mine": channel == (viewer.channel or Channel.LINE),
+            "is_mine": channel == own,
             "metrics": [
                 {"title": d.title, "max_points": d.max_points, "bonus": bool(d.bonus_for)}
                 for d in channel_definitions(definitions, channel)

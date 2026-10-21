@@ -85,7 +85,7 @@ export function scale(metric: Pick<CompareMetric, "me" | "average" | "best" | "t
 
 export function RatingHead({ children }: { children?: ReactNode }) {
   return <header className="page-head page-head--filters"><div><h1 className="page-title">Рейтинг</h1>
-    <p className="page-subtitle">Ваше место среди всех операторов</p></div>{children}</header>;
+    <p className="page-subtitle">Ваше место среди операторов вашего направления</p></div>{children}</header>;
 }
 
 export function CompareLoading() {
