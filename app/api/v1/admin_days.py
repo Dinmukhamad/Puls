@@ -214,5 +214,7 @@ async def upload_reports(
         parsed,
         plan,
         weeks=result["weeks"],
-        detail=f"Сохранено: {result['days']} дневных значений, недель — {saved}",
+        detail=f"Сохранено дневных значений: {result['days']}. "
+        + (f"Записано недель: {saved}." if saved
+           else "Недели запишутся, когда в отчётах будут все их дни."),
     )

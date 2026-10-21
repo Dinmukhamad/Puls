@@ -123,7 +123,8 @@ test("ranked default displays API-resolved dates while preserving an automatic l
 test("explicit calendar selection shows dates and readable status", () => {
   const html = render({ value: 704, resolvedWeekId: 703 });
   assert.match(html, /12\.10–18\.10\.2026/);
-  assert.match(html, /Идёт/);
+  // The week is over and not calculated yet: it no longer «goes».
+  assert.match(html, /Не рассчитана/);
   assert.match(html, /aria-label="Следующая неделя"[^>]*disabled=""/);
   assert.doesNotMatch(html, /Последняя рассчитанная/);
 });

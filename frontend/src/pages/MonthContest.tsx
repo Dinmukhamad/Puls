@@ -6,7 +6,7 @@ import { MedalIcon, SparkIcon } from "../components/icons";
 import { Sheet } from "../components/Sheet";
 import { useToast } from "../components/Toast";
 import { Badge, Button, Card, EmptyState, ErrorState, RowsSkeleton, SegmentedControl, Select } from "../components/ui";
-import { coins, points } from "../utils/format";
+import { coins, plural, points, pointsWord } from "../utils/format";
 import "./race.css";
 
 const MEDALS = ["gold", "silver", "bronze"] as const;
@@ -40,6 +40,7 @@ export function MonthContest() {
   if (query.isError) return <ErrorState error={query.error} onRetry={() => query.refetch()} />;
   const data = query.data!;
   const closedWeeks = data.weeks.filter((w) => w.status === "closed").length;
+  const canClose = !!data.weeks.length && closedWeeks === data.weeks.length;
   const standings = data.standings.filter((row) => operator || (row.channel ?? "line") === channel);
   const top = standings.filter((row) => row.rank !== null && row.rank <= 3);
   const mine = standings.find((row) => row.mine);
@@ -49,18 +50,22 @@ export function MonthContest() {
   if (!choices.some((m) => m.year === data.year && m.month === data.month)) choices.unshift({ year: data.year, month: data.month, label: data.label, name: data.name, status: data.status });
 
   return <div className="stack month-contest">
-    <Card title={`Конкурс месяца · ${data.name}`} subtitle={operator ? `Среди операторов ${channelName}: места — по сумме баллов недель месяца, номинации — по средним показателям. Призы начисляются, когда месяц закрыт.` : "Места — по сумме баллов всех недель месяца, номинации — по средним показателям. Призы начисляются, когда месяц закрыт."}
+    <Card title={`Конкурс месяца · ${data.name}`} subtitle={operator ? `Среди операторов ${channelName}: места — по сумме баллов недель месяца, номинации — по средним показателям. Призы начисляются, когда месяц закрыт.` : "Места — по сумме баллов недель месяца, внутри направления; номинации — по средним показателям. Призы начисляются, когда месяц закрыт."}
       action={<Badge tone={data.status === "closed" ? "success" : "warning"}>{data.status === "closed" ? "Итоги опубликованы" : "Месяц идёт"}</Badge>}>
       <div className="month-contest__head">
-        <label className="field"><span className="field__label">Месяц</span>
-          <Select aria-label="Месяц конкурса" value={`${data.year}-${data.month}`} onChange={(value) => { const [y, m] = value.split("-").map(Number); setPicked({ year: y, month: m }); }}
-            options={choices.map((m) => ({ value: `${m.year}-${m.month}`, label: `${m.name}${m.status === "closed" ? " · итоги" : ""}` }))} /></label>
-        <p className="secondary small">Закрыто недель: {closedWeeks} из {data.weeks_planned}. Неделя относится к месяцу своего четверга.</p>
-        {!operator && <SegmentedControl label="Направление" value={channel} options={[{ value: "line", label: "Линия" }, { value: "chat", label: "Чаты" }]} onChange={setChannel} />}
-        {atLeast("supervisor") && data.status !== "closed" && <div className="row">
-          <Button size="s" disabled={calculate.isPending} onClick={() => calculate.mutate()}>{calculate.isPending ? "Считаем…" : "Пересчитать"}</Button>
-          {atLeast("head") && <Button size="s" variant="primary" disabled={closedWeeks < data.weeks.length || !data.weeks.length} onClick={() => setConfirm(true)}>Закрыть месяц</Button>}
-        </div>}
+        <div className="month-contest__pick">
+          <label className="field"><span className="field__label">Месяц</span>
+            <Select aria-label="Месяц конкурса" value={`${data.year}-${data.month}`} onChange={(value) => { const [y, m] = value.split("-").map(Number); setPicked({ year: y, month: m }); }}
+              options={choices.map((m) => ({ value: `${m.year}-${m.month}`, label: `${m.name}${m.status === "closed" ? " · итоги" : ""}` }))} /></label>
+          {!operator && <div className="field"><span className="field__label">Направление</span><SegmentedControl label="Направление" value={channel} options={[{ value: "line", label: "Линия" }, { value: "chat", label: "Чаты" }]} onChange={setChannel} /></div>}
+        </div>
+        <div className="month-contest__status">
+          <p className="secondary small">Опубликовано недель: {closedWeeks} из {data.weeks_planned}. Неделя относится к месяцу своего четверга.{canClose || data.status === "closed" || !atLeast("head") ? "" : " Закрыть месяц можно, когда опубликованы все его недели."}</p>
+          {atLeast("supervisor") && data.status !== "closed" && <div className="row">
+            <Button size="s" disabled={calculate.isPending} onClick={() => calculate.mutate()}>{calculate.isPending ? "Считаем…" : "Пересчитать"}</Button>
+            {atLeast("head") && <Button size="s" variant="primary" disabled={!canClose} onClick={() => setConfirm(true)}>Закрыть месяц</Button>}
+          </div>}
+        </div>
       </div>
       {(calculate.isError || close.isError) && <ErrorState error={calculate.error ?? close.error} />}
     </Card>
@@ -72,7 +77,7 @@ export function MonthContest() {
         <span className="podium__rank" aria-hidden="true">{row.rank}</span>
         <span className="podium__medal"><MedalIcon size={14} />{row.rank} место</span>
         <span className="podium__name">{row.name ?? "Оператор"}{row.mine && <span className="tag-me">это вы</span>}</span>
-        <span className="podium__group">{points(row.points)} баллов</span>
+        <span className="podium__group">{points(row.points)} {pointsWord(row.points)}</span>
         {row.coins_rank_bonus > 0 && <span className="podium__coins">+{coins(row.coins_rank_bonus)} коинов</span>}
       </li>)}</ol></Card>}
       {nominations.length > 0 && <Card title="Номинации месяца"><ul className="nominations">{nominations.map((n) => <li key={n.nomination_id} className={`nomination${n.user_id === mine?.user_id ? " is-me" : ""}`}>
@@ -85,7 +90,14 @@ export function MonthContest() {
           <td className="num">{row.rank}</td><td>{row.name ?? "Оператор"}{row.mine && <span className="tag-me">это вы</span>}</td>
           <td className="num">{points(row.points)}</td><td className="num">{row.weeks}</td>
           <td className="num">{row.coins_rank_bonus + row.coins_nomination_bonus ? `+${coins(row.coins_rank_bonus + row.coins_nomination_bonus)}` : "—"}</td>
-        </tr>)}</tbody></table></div></Card>}
+        </tr>)}</tbody></table></div>
+        {/* On a phone the table gives way to cards (app.css). */}
+        <ul className="card-list month-contest__cards">{standings.map((row) => <li key={row.user_id} className="list-card">
+          <div className="list-card__head"><span className="cell-person"><span className="rank-badge">{row.rank ?? "—"}</span><span className="cell-person__text"><span className="cell-person__name">{row.name ?? "Оператор"}</span></span></span>
+            <strong>{points(row.points)}</strong></div>
+          <div className="list-card__metrics"><span className="list-card__metric"><span>Недель</span><span>{row.weeks}</span></span>
+            <span className="list-card__metric"><span>Приз</span><span>{row.coins_rank_bonus + row.coins_nomination_bonus ? `+${coins(row.coins_rank_bonus + row.coins_nomination_bonus)}` : "—"}</span></span></div>
+        </li>)}</ul></Card>}
     </>}
 
     {confirm && <Sheet title={`Закрыть ${data.name}?`} size="s" onClose={() => { if (!close.isPending) setConfirm(false); }} footer={<><Button disabled={close.isPending} onClick={() => setConfirm(false)}>Отмена</Button><Button variant="primary" disabled={close.isPending} onClick={() => close.mutate()}>{close.isPending ? "Начисляем…" : "Закрыть и начислить"}</Button></>}>
@@ -94,8 +106,7 @@ export function MonthContest() {
   </div>;
 }
 
-const weeksWord = (n: number) => n % 10 === 1 && n % 100 !== 11 ? "неделю" : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? "недели" : "недель";
-const pointsWord = (n: number) => { const whole = Math.abs(Math.round(n * 100)) % 100 === 0 ? Math.abs(Math.round(n)) : 0; return whole && whole % 10 === 1 && whole % 100 !== 11 ? "балл" : whole && [2, 3, 4].includes(whole % 10) && ![12, 13, 14].includes(whole % 100) ? "балла" : "баллов"; };
+const weeksWord = (n: number) => plural(n, "неделю", "недели", "недель");
 
 /** The operator's month at a glance: the place, the points, how far the next places are and the prize. */
 function YourMonth({ mine, standings, closed, won }: { mine: MonthStanding; standings: MonthStanding[]; closed: boolean; won: string[] }) {
@@ -149,7 +160,7 @@ function OperatorStandings({ standings, channelName }: { standings: MonthStandin
   const start = Math.max(0, Math.min(at - 2, standings.length - 5));
   const near = mine ? standings.slice(start, start + 5) : standings.slice(0, 5);
   const count = standings.length;
-  const people = count % 10 === 1 && count % 100 !== 11 ? "участник" : [2, 3, 4].includes(count % 10) && ![12, 13, 14].includes(count % 100) ? "участника" : "участников";
+  const people = plural(count, "участник", "участника", "участников");
   return <Card title={mine ? "Рядом с вами" : "Места месяца"} subtitle={`Операторы ${channelName} · ${count} ${people}`}>
     <ol className="contest-rows">{(all ? standings : near).map((row) => <StandingRow key={row.user_id} row={row} mine={mine} low={low} high={high} />)}</ol>
     {count > near.length && <div className="contest-more"><Button size="s" aria-expanded={all} onClick={() => setAll(!all)}>{all ? "Свернуть" : `Все операторы (${count})`}</Button></div>}

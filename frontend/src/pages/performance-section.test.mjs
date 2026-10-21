@@ -14,7 +14,7 @@ async function load(path) {
 }
 const { definitionRow, badgeIcon } = await load("./definitionPresentation.ts");
 const { periodNext } = await load("./PeriodsPage.tsx");
-const { reportedTo } = await load("./ReportsUpload.tsx");
+const { reportedTo, monthName, monthWeeks } = await load("./ReportsUpload.tsx");
 const read = path => readFileSync(fileURLToPath(new URL(path, import.meta.url)), "utf8");
 
 const metric = (extra = {}) => ({ id: 1, code: "quality", title: "Качество работы", description: null, is_active: true, kind: "positive", direction: "higher_is_better", target_value: 100, unit: "%", max_points: 25, penalty_per_unit: 0, allow_overachievement: false, ...extra });
@@ -72,6 +72,13 @@ test("periods are a history of weeks; a week opens with its status and actions a
   assert.equal(reportedTo({ month: "2026-10", reported_to: { line: "2026-10-16", chat: "2026-10-16" } }), "по 16.10");
   assert.equal(reportedTo({ month: "2026-10", reported_to: { line: "2026-10-31", chat: "2026-10-15" } }), "линия весь месяц · чаты по 15.10");
   assert.equal(reportedTo({ month: "2026-10", reported_to: {} }), "нет отчёта команды");
+  assert.equal(monthName("2026-10"), "Октябрь 2026");
+  // The month's weeks in date order, whatever list they came from.
+  const weeks = monthWeeks({
+    weeks: [{ label: "W41", starts_on: "2026-10-05", ends_on: "2026-10-11", status: "closed", operators: 4 }, { label: "W42", starts_on: "2026-10-12", ends_on: "2026-10-18", status: "calculated", operators: 4 }],
+    pending: [{ label: "W40", starts_on: "2026-09-28", ends_on: "2026-10-04", operators: 4, reason: "ждёт отчёта за сентябрь" }],
+  });
+  assert.deepEqual(weeks.map((week) => [week.label, week.state]), [["W40", "pending"], ["W41", "closed"], ["W42", "saved"]]);
   // A week is published once it is over.
   const week = { calculated_at: null, closed_at: null, ends_on: "2026-10-25" };
   assert.equal(periodNext({ ...week, status: "open" }, "2026-10-26"), "Завершилась · загрузите показатели и рассчитайте");
@@ -84,6 +91,11 @@ test("periods are a history of weeks; a week opens with its status and actions a
   // The actions sit in the week's header, before the steps and the long list.
   assert.ok(page.indexOf(">Опубликовать итоги</Button>") < page.indexOf('<ol className="workflow-steps"'));
   assert.ok(page.indexOf('<ol className="workflow-steps"') < page.indexOf('<ol className="period-results"'));
+  // A published week no longer asks to load; the line and the chats each have their own places.
+  assert.match(page, /\{!closed && !!preview\.data\.missing_metrics\.length && <p className="workflow-error">/);
+  assert.match(page, /byChannel\(preview\.data\.rows\)/);
+  // A file with errors is not «ready»: it says what blocks the save.
+  assert.match(page, /Сохранить можно, когда в файле не останется ошибок/);
   // Data nobody has is said once, not on every row; a row names only its own gaps.
   assert.match(page, /const own = \(row\.missing_metrics \?\? \[\]\)\.filter\(code => !common\.has\(code\)\);/);
   assert.match(page, /\[\[row\.coins_from_points, "за баллы"\], \[row\.coins_rank_bonus, "за место"\], \[row\.coins_discipline_bonus, "дисциплина"\], \[row\.coins_nomination_bonus, "номинации"\]\]/);

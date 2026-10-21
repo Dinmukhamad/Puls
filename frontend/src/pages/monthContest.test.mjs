@@ -44,7 +44,7 @@ test("an operator sees the podium, their own result with the gaps, and the place
   const html = renderToStaticMarkup(React.createElement(MonthContest));
   assert.match(html, /Конкурс месяца · октябрь 2026/);
   assert.match(html, /Среди операторов линии/);
-  assert.match(html, /Закрыто недель: 1 из 4/);
+  assert.match(html, /Опубликовано недель: 1 из 4/);
   assert.match(html, /Топ-3 месяца/);
   assert.match(html, /\+300 коинов/);
   // The operator's own month: the place, the points, the gaps and the prize so far.

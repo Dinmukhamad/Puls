@@ -226,6 +226,9 @@ async def test_staff_see_one_channel_at_a_time(client, session, operator, head):
         )
     ).json()
     assert chat["header"]["participants"] == 3 and [r["rank"] for r in chat["rows"]] == [1, 2, 3]
+    # The week's nominations follow the channel too: no line nomination among the chats'.
+    codes = {n["code"] for n in chat["nominations"]}
+    assert "best_chat_quality" in codes and "best_quality" not in codes
     line = (await client.get("/api/v1/rating", params={"week_id": week.id}, headers=headers)).json()
     assert line["header"]["participants"] == 2
 

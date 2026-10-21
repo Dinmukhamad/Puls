@@ -25,6 +25,10 @@
 /* Monthly reports: the files, then the month when their names do not say it. */
 .reports-upload { display:grid; gap:var(--sp-4); }
 .reports-upload__month { max-width:340px; margin:0; }
+.reports-upload__kpis { grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); }
+.reports-upload__weeks-title { margin-top:0; }
+.reports-upload__weeks { list-style:none; margin:var(--sp-2) 0 0; padding:0; display:grid; gap:var(--sp-2); }
+.reports-upload__weeks li { display:flex; flex-wrap:wrap; align-items:center; gap:var(--sp-2) var(--sp-3); font-size:var(--text-caption); }
 
 /*
  * «Расчёт и история периодов» (docs/PERFORMANCE_SECTION.md): the weeks as rows, newest first; a week opens with its
@@ -57,6 +61,7 @@
 .period-result { display:grid; grid-template-columns:48px minmax(0,1fr) 110px minmax(150px,auto); align-items:center; gap:var(--sp-4); padding:var(--sp-2) var(--sp-5); border-top:1px solid var(--separator); }
 .period-result--head { padding-block:var(--sp-2); color:var(--text-tertiary); font-size:var(--text-micro); font-weight:600; text-transform:uppercase; letter-spacing:.04em; }
 .period-result--head > :nth-child(3), .period-result--head > :nth-child(4) { text-align:right; }
+.period-result-group { padding:var(--sp-3) var(--sp-5) var(--sp-2); border-top:1px solid var(--separator); background:var(--surface-secondary); color:var(--text-secondary); font-size:var(--text-micro); font-weight:650; text-transform:uppercase; letter-spacing:.04em; }
 .period-result__rank { display:grid; place-items:center; width:32px; height:32px; border-radius:50%; background:var(--surface-secondary); color:var(--text-secondary); font-size:var(--text-caption); font-weight:650; font-variant-numeric:tabular-nums; }
 .period-result__rank.is-top { background:var(--coin-tint); color:var(--gold-text); }
 .period-result__person { display:flex; align-items:center; gap:var(--sp-3); min-width:0; }

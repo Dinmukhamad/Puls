@@ -44,11 +44,18 @@ export function dateOnly(iso: string): string {
   });
 }
 
+const localDate = (iso: string) => { const [y, m, d] = iso.slice(0, 10).split("-").map(Number); return new Date(y, m - 1, d); };
+
+/** «19–25 окт.» within a month, «28 сент. – 4 окт.» across two. */
 export function periodLabel(start: string, end: string): string {
-  const from = new Date(start).toLocaleDateString("ru-RU", { day: "2-digit", month: "short" });
-  const to = new Date(end).toLocaleDateString("ru-RU", { day: "2-digit", month: "short" });
-  return `${from} - ${to}`;
+  const from = localDate(start), to = localDate(end);
+  const dayMonth = (date: Date) => date.toLocaleDateString("ru-RU", { day: "numeric", month: "short" });
+  return from.getMonth() === to.getMonth() && from.getFullYear() === to.getFullYear()
+    ? `${from.getDate()}–${dayMonth(to)}` : `${dayMonth(from)} – ${dayMonth(to)}`;
 }
+
+/** «1 балл», «2 балла», «100 баллов», and a fraction takes «балла»: «97,9 балла». */
+export const pointsWord = (value: number) => Number.isInteger(Math.round(value * 100) / 100) ? plural(Math.round(value), "балл", "балла", "баллов") : "балла";
 
 /** Склонение существительного: 1 коин, 2 коина, 5 коинов. */
 export function plural(count: number, one: string, few: string, many: string): string {
@@ -96,8 +103,15 @@ export const REQUEST_STATUS_LABELS: Record<string, string> = {
 export const WEEK_STATUS_LABELS: Record<string, string> = {
   open: "Идёт",
   calculated: "Рассчитана",
-  closed: "Закрыта",
+  closed: "Опубликована",
 };
+
+/** A week's status on the screens: an open week that is already over waits for its calculation, it no longer «goes». */
+export function weekStatusLabel(week: { status: string; ends_on?: string }, today = new Date()): string {
+  const key = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  if (week.status === "open" && week.ends_on && week.ends_on < key) return "Не рассчитана";
+  return WEEK_STATUS_LABELS[week.status] ?? week.status;
+}
 
 /** The operator's channel (docs/CHANNELS.md): own metrics on 100 points and own places. */
 export const CHANNEL_LABELS: Record<string, string> = { line: "Линия", chat: "Чаты" };

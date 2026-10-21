@@ -6,7 +6,10 @@
 .configuration-section-head { display: flex; justify-content: space-between; gap: 16px; align-items: center; flex-wrap: wrap; }
 .configuration-section-head h2 { font-size: 20px; font-weight: 650; letter-spacing: -.025em; }
 .configuration-description { font-size: 14px; line-height: 1.6; color: var(--text-secondary); white-space: pre-wrap; overflow-wrap: anywhere; }
-.configuration-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.configuration-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; align-items: start; }
+/* The grid and the editor space their fields themselves: no extra margin under each field. */
+.configuration-form-grid .field, .configuration-editor .field { margin: 0; }
+.configuration-editor { gap: 20px; }
 .configuration-toggle { display: flex; gap: 12px; align-items: flex-start; cursor: pointer; }
 .configuration-toggle > input { width: 20px; height: 20px; flex-shrink: 0; margin-top: 2px; accent-color: var(--accent-primary); }
 .configuration-toggle > span { display: grid; gap: 5px; font-size: 14px; }
@@ -60,8 +63,12 @@
 
 /* Экономика коинов: выпуск и сжигание бок о бок, на телефоне — друг под другом. */
 .economy-split { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: var(--sp-4); }
-.month-contest__head { display: flex; flex-wrap: wrap; align-items: end; gap: var(--sp-3) var(--sp-5); }
+.month-contest__head { display: grid; gap: var(--sp-4); }
 .month-contest__head p { margin: 0; }
+.month-contest__pick { display: flex; flex-wrap: wrap; align-items: end; gap: var(--sp-3) var(--sp-5); }
+.month-contest__pick .field { margin: 0; }
+.month-contest__status { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-3) var(--sp-5); }
+.month-contest__cards { padding: var(--sp-4); }
 
 /*
  * Metrics, nominations and achievements as rows (docs/PERFORMANCE_SECTION.md): the title and what it is on the left, the

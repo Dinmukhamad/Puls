@@ -86,7 +86,7 @@ const ruleGroups: { title: string; subtitle: string; fields: FieldSpec[] }[] = [
     { key: "no_lateness_bonus", label: "Неделя без опозданий", type: "number", required: true, min: 0, unit: C },
     { key: "no_forbidden_sites_bonus", label: "Без посторонних сайтов", type: "number", required: true, min: 0, unit: C },
     { key: "nomination_bonus_default", label: "Бонус номинации по умолчанию", type: "number", required: true, min: 0, unit: C },
-    { key: "nomination_min_participants", label: "Минимум участников для номинаций", type: "number", required: true, min: 0, hint: "В каждом направлении: у номинации линии — среди операторов линии.", unit: "чел." },
+    { key: "nomination_min_participants", label: "Минимум участников", type: "number", required: true, min: 0, hint: "Для номинации, в каждом направлении: у номинации линии — среди операторов линии.", unit: "чел." },
   ] },
   { title: "Ручные операции", subtitle: "Ограничения для начислений и списаний сотрудниками", fields: [
     { key: "manual_max_abs_amount", label: "Максимум за одну операцию", type: "number", required: true, min: 1, unit: C },
@@ -129,7 +129,7 @@ function RulesEditor({ initial, metrics }: { initial: Rules; metrics: Definition
         {index === 0 && <div className="configuration-example" aria-label="Проверка курса"><label className="field"><span className="field__label">Пример: баллы конкурса</span><input className="input" type="number" min={0} step="any" value={sample} onChange={(e) => setSample(e.target.value)} /></label><span className="configuration-example__equals" aria-hidden="true">=</span><output className="configuration-example__result" aria-live="polite"><strong>{Number.isFinite(rate) && rate > 0 && Number.isFinite(Number(sample)) ? coins(Math.floor(Math.max(0, Number(sample)) / rate)) : "—"}</strong> коинов</output>{Number.isFinite(rate) && rate > 0 && <span className="configuration-example__rate">Курс: {coins(rate)} {plural(rate, "балл", "балла", "баллов")} = 1 коин, дробная часть отбрасывается. Без бонусов за места и дисциплину.</span>}</div>}
       </Card>)}
       <Card title="Конкурс" subtitle="Баллы, дисциплина и штрафы начисляются каждую неделю"><div className="configuration-form-grid configuration-form-grid--single">
-        {field({ key: "contest_period", label: "Места и номинации", type: "select", required: true, options: [{ value: "month", label: "Раз в месяц, среди всех операторов" }, { value: "week", label: "Каждую неделю" }], hint: "Неделя относится к месяцу своего четверга. Месяц закрывается вместе с его последней неделей." })}
+        {field({ key: "contest_period", label: "Места и номинации", type: "select", required: true, options: [{ value: "month", label: "Раз в месяц, внутри направления" }, { value: "week", label: "Каждую неделю" }], hint: "Неделя относится к месяцу своего четверга. Месяц закрывается вместе с его последней неделей." })}
       </div></Card>
       <Card title="Дисциплина и видимость"><div className="configuration-form-grid">
         {field({ key: "lateness_metric_code", label: "Показатель опозданий", type: "select", options: metricOptions, required: true })}
@@ -166,7 +166,7 @@ function DefinitionSection({ kind, navigation }: { kind: DefinitionKind; navigat
     <GlassSurface variant="regular" className="configuration-filters"><label className="field configuration-search"><span className="field__label">Поиск</span><input className="input" type="search" value={search} placeholder="Название или описание" onChange={(e) => setParams({ tab: kind, search: e.target.value, status }, { replace: true })} /></label><label className="field"><span className="field__label">Статус</span><Select aria-label="Статус записей" value={status} options={[{ value: "all", label: "Все" }, { value: "active", label: "Активные" }, { value: "archived", label: "Неактивные" }]} onChange={(value) => setParams({ tab: kind, search, status: value })} /></label></GlassSurface>
     {query.isLoading && <RowsSkeleton />}{query.isError && <ErrorState error={new Error(configurationError(query.error))} onRetry={() => query.refetch()} />}
     {items?.length === 0 && <EmptyState title="Записи не найдены" hint="Измените фильтры или добавьте новую запись." />}
-    {items && items.length > 0 && groups(kind, items).map(group => <Card key={group.title} title={group.title} subtitle={group.subtitle} padded={false} className="definition-list">
+    {items && items.length > 0 && groups(kind, items).map(group => ({ ...group, items: [...group.items.filter(row => row.is_active), ...group.items.filter(row => !row.is_active)] })).map(group => <Card key={group.title} title={group.title} subtitle={group.subtitle} padded={false} className="definition-list">
       <ul className="definition-rows">{group.items.map((row) => {
         const line = definitionRow(kind, row, metrics);
         return <li key={row.id}><button type="button" className={`definition-row${row.is_active ? "" : " is-inactive"}`} onClick={() => atLeast("head") ? setEditor(row) : setDetails(row)}
@@ -188,7 +188,11 @@ function DefinitionSection({ kind, navigation }: { kind: DefinitionKind; navigat
  * is one list. Each channel's results add up to 100 points, so a perfect week pays the same coins (docs/CHANNELS.md).
  */
 function groups(kind: DefinitionKind, items: Definition[]): { title: string; subtitle: string; items: Definition[] }[] {
-  const count = (list: Definition[], one: string, few: string, many: string) => `${list.length} ${plural(list.length, one, few, many)}`;
+  // The inactive ones are kept for history: counted apart, so «7 показателей» means seven that work.
+  const count = (list: Definition[], one: string, few: string, many: string) => {
+    const off = list.filter(row => !row.is_active).length, on = list.length - off;
+    return `${on} ${plural(on, one, few, many)}${off ? ` · неактивных: ${off}` : ""}`;
+  };
   if (kind === "metrics") {
     const channelOf = (row: Definition) => String(row.channel || "line");
     const results = (channel: string) => items.filter(row => row.kind !== "anti" && channelOf(row) === channel);
@@ -324,7 +328,7 @@ function DefinitionEditor({ kind, target, onClose }: { kind: DefinitionKind; tar
   }
   function submit(event: FormEvent) { event.preventDefault(); if (!save.isPending) save.mutate(); }
   return <Sheet title={target ? `Изменить: ${target.title}` : createTitles[kind]} size="l" onClose={() => { if (!save.isPending) onClose(); }} footer={<><Button disabled={save.isPending} onClick={onClose}>Отмена</Button><Button type="submit" form="configuration-definition" variant="primary" disabled={save.isPending || !metrics.isSuccess}>{save.isPending ? "Сохраняем…" : "Сохранить"}</Button></>}>
-    <form id="configuration-definition" className="stack" onSubmit={submit}>
+    <form id="configuration-definition" className="stack configuration-editor" onSubmit={submit}>
       {kind === "badges" && <p className="muted">При сохранении проверяются подтверждённые результаты активных операторов. Первое выполненное условие открывает достижение и начисляет бонус. Полученные награды повторно не оплачиваются.</p>}
       {save.isError && <p role="alert" className="configuration-error">{configurationError(save.error)}</p>}
       {metrics.isError && <ErrorState error={new Error(configurationError(metrics.error))} onRetry={() => metrics.refetch()} />}

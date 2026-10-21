@@ -6,12 +6,29 @@ import { reports, type ReportsResult } from "../api/periods";
 import { useAuth } from "../auth/AuthContext";
 import { useToast } from "../components/Toast";
 import { Badge, Button, Card, ErrorState, KPI, Select } from "../components/ui";
-import { coins, periodLabel, WEEK_STATUS_LABELS } from "../utils/format";
+import { coins, periodLabel, plural } from "../utils/format";
 
 const KIND_LABELS = { line: "Линия · отчёт команды", chat: "Чаты · отчёт команды", quality: "Оценки проверяющих", unknown: "Не распознан" } as const;
 const KIND_TONES = { line: "accent", chat: "accent", quality: "accent", unknown: "danger" } as const;
 
 /** «весь месяц», «по 16.10» or «линия по 19.10 · чаты по 15.10»: how far the team reports go. */
+/** «Октябрь 2026» for «2026-10». */
+export const monthName = (key: string) => { const [year, month] = key.split("-").map(Number); const name = new Date(year, month - 1, 1).toLocaleDateString("ru-RU", { month: "long", year: "numeric" }).replace(" г.", ""); return name.charAt(0).toUpperCase() + name.slice(1); };
+const operatorsWord = (count: number) => `${coins(count)} ${plural(count, "оператор", "оператора", "операторов")}`;
+
+/** The month's weeks in order: written now, waiting for days, or published and left as they are. */
+export function monthWeeks(result: Pick<ReportsResult, "weeks" | "pending">) {
+  return [
+    ...result.weeks.map((week) => ({ ...week, state: week.status === "closed" ? "closed" as const : "saved" as const, reason: "" })),
+    ...(result.pending ?? []).map((week) => ({ ...week, status: "pending", state: "pending" as const })),
+  ].sort((a, b) => a.starts_on.localeCompare(b.starts_on));
+}
+const WEEK_STATES = {
+  saved: { label: "Запишется", tone: "accent" },
+  pending: { label: "Ждёт", tone: "neutral" },
+  closed: { label: "Опубликована", tone: "success" },
+} as const;
+
 export function reportedTo(result: Pick<ReportsResult, "month" | "reported_to">): string {
   const entries = Object.entries(result.reported_to ?? {}) as ["line" | "chat", string][];
   if (!entries.length) return "нет отчёта команды";
@@ -76,20 +93,19 @@ export function ReportsUpload({ onSaved }: { onSaved?: () => void }) {
       <ul className="workflow-issues">{result.files.map((file) => <li key={file.filename}>
         <Badge tone={KIND_TONES[file.kind]}>{KIND_LABELS[file.kind]}</Badge> {file.filename}{file.kind !== "unknown" && ` · ${coins(file.people)} чел.`}
       </li>)}</ul>
-      <div className="kpi-grid"><KPI label="Месяц" value={result.month} /><KPI label="Данные команд" value={reportedTo(result)} /><KPI label="Операторов найдено" value={coins(result.matched)} />
+      <div className="kpi-grid reports-upload__kpis"><KPI label="Месяц" value={monthName(result.month)} /><KPI label="Данные команд" value={reportedTo(result)} /><KPI label="Операторов найдено" value={coins(result.matched)} />
         <KPI label="Не найдено на сайте" value={coins(result.unmatched.length)} /><KPI label="Дневных значений" value={coins(result.day_values)} /></div>
       {!!result.unmatched.length && <details className="workflow-note ui-note"><summary>Кого нет на сайте ({result.unmatched.length})</summary>
         <p>Их данные пропущены. Проверьте ФИО в карточке сотрудника: оно должно совпадать с отчётом.</p>
         <p>{result.unmatched.join(", ")}</p></details>}
       {result.notes?.map((note) => <details key={note.code} className="workflow-note ui-note"><summary>{note.title} ({note.names.length})</summary>
         <p>{note.names.join(", ")}</p></details>)}
-      <div><h3 className="group-title">Недели месяца</h3>
-        {!result.weeks.length && <p className="small secondary">Ни одна неделя ещё не собрана целиком.</p>}
-        <ul className="workflow-issues">{result.weeks.map((week) => <li key={week.label}>
-          {periodLabel(week.starts_on, week.ends_on)} · {coins(week.operators)} операторов · {week.status === "closed" ? "закрыта, не изменится" : week.status === "new" ? "будет открыта" : WEEK_STATUS_LABELS[week.status] ?? week.status}
-        </li>)}
-        {result.pending?.map((week) => <li key={`pending-${week.label}`} className="secondary">
-          <Badge tone="neutral">Ждёт</Badge> {periodLabel(week.starts_on, week.ends_on)} · {week.reason} · {coins(week.operators)} операторов
+      <div><h3 className="group-title reports-upload__weeks-title">Недели месяца</h3>
+        {!result.weeks.length && !result.pending?.length && <p className="small secondary">Ни одна неделя ещё не собрана целиком.</p>}
+        <ul className="reports-upload__weeks">{monthWeeks(result).map((week) => <li key={`${week.state}-${week.label}`}>
+          <Badge tone={WEEK_STATES[week.state].tone}>{saved && week.state === "saved" ? "Записана" : WEEK_STATES[week.state].label}</Badge>
+          <strong>{periodLabel(week.starts_on, week.ends_on)}</strong>
+          <span className="secondary">{week.state === "closed" ? "итоги опубликованы, не изменится" : week.state === "pending" ? `${week.reason} · ${operatorsWord(week.operators)}` : operatorsWord(week.operators)}</span>
         </li>)}</ul>
         <p className="workflow-note">Линия: норма часов (с тренингами, тех. сбоями и офлайн-активностью, против нормы из отчёта), переработки, эффективность, звонки в час. Чаты: норма часов, переработки, среднее время ответа, чатов в час. Качество — из оценок проверяющих, опоздания — из «Штрафов».</p>
         <p className="workflow-note">Каждый выгруженный день попадёт в аналитику. Неделя на стыке месяцев запишется, когда загрузят отчёт соседнего месяца; дни после выгрузки — со следующей выгрузкой. Коины не начисляются — итоги недели публикуются, когда она закончится.

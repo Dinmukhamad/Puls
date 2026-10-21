@@ -2,7 +2,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties
 import { createPortal } from "react-dom";
 import type { WeekOut } from "../api/types";
 import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon } from "./icons";
-import { WEEK_STATUS_LABELS } from "../utils/format";
+import { weekStatusLabel } from "../utils/format";
 import { MONTH_NAMES, adjacentAvailableMonth, adjacentWeek, availableMonths, availableWeeks, calendarWeeks, monthCaption, monthInYear, weekRange } from "./weekCalendar";
 import "./WeekPicker.css";
 
@@ -126,7 +126,7 @@ export function WeekPicker({ weeks, value, resolvedWeekId, onChange, label = "Н
       <button type="button" className="week-picker__arrow" aria-label="Предыдущая неделя" title={previous ? weekRange(previous) : "Более ранних недель нет"} disabled={!previous || loading} onClick={() => previous && onChange(previous.id)}><ChevronLeftIcon size={17} /></button>
       <button type="button" className="week-picker__trigger" ref={trigger} aria-label={`${label}: ${caption}. Открыть календарь`} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? `${id}-calendar` : undefined} onClick={toggle}>
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3" /><path d="M7 3v4M17 3v4M3 11h18M7 15h2M12 15h2" /></svg>
-        <span><strong>{caption}</strong><small>{value === undefined ? [latestLabel, effective ? WEEK_STATUS_LABELS[effective.status] ?? effective.status : null].filter(Boolean).join(" · ") : effective ? WEEK_STATUS_LABELS[effective.status] ?? effective.status : "Неделя недоступна"}</small></span>
+        <span><strong>{caption}</strong><small>{value === undefined ? [latestLabel, effective ? weekStatusLabel(effective) : null].filter(Boolean).join(" · ") : effective ? weekStatusLabel(effective) : "Неделя недоступна"}</small></span>
       </button>
       <button type="button" className="week-picker__arrow" aria-label="Следующая неделя" title={next ? weekRange(next) : "Более поздних недель нет"} disabled={!next || loading} onClick={() => next && onChange(next.id)}><ChevronRightIcon size={17} /></button>
     </div>
@@ -142,7 +142,7 @@ export function WeekPicker({ weeks, value, resolvedWeekId, onChange, label = "Н
       </div>
       {view === "weeks" && <div data-week-view="weeks">
         <div className="week-picker__weekdays" aria-hidden="true">{["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"].map((day) => <span key={day}>{day}</span>)}</div>
-        <div className="week-picker__weeks" role="group" aria-label={`Недели: ${monthCaption(month)}`}>{rows.map((row) => <button type="button" key={row.start} className="week-picker__week" disabled={!row.week} aria-pressed={!!row.week && row.week.id === selectedId} title={row.week ? `${weekRange(row.week)} · ${WEEK_STATUS_LABELS[row.week.status] ?? row.week.status}` : "Нет недельных данных"} aria-label={row.week ? `Неделя ${weekRange(row.week, true)}. ${WEEK_STATUS_LABELS[row.week.status] ?? row.week.status}` : `Неделя ${row.start}: данных нет`} onClick={() => row.week && pick(row.week.id)}>{row.days.map((day) => <span key={day.key} className={day.inMonth ? undefined : "week-picker__outside-month"} aria-hidden="true">{day.day}</span>)}</button>)}</div>
+        <div className="week-picker__weeks" role="group" aria-label={`Недели: ${monthCaption(month)}`}>{rows.map((row) => <button type="button" key={row.start} className="week-picker__week" disabled={!row.week} aria-pressed={!!row.week && row.week.id === selectedId} title={row.week ? `${weekRange(row.week)} · ${weekStatusLabel(row.week)}` : "Нет недельных данных"} aria-label={row.week ? `Неделя ${weekRange(row.week, true)}. ${weekStatusLabel(row.week)}` : `Неделя ${row.start}: данных нет`} onClick={() => row.week && pick(row.week.id)}>{row.days.map((day) => <span key={day.key} className={day.inMonth ? undefined : "week-picker__outside-month"} aria-hidden="true">{day.day}</span>)}</button>)}</div>
       </div>}
       {view === "months" && <div className="week-picker__grid" data-week-view="months" role="group" aria-label={`Месяцы ${year} года`}>
         {MONTH_NAMES.map((name, index) => {

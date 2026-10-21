@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { periods, type ImportIssue, type ImportPreview } from "../api/periods";
+import { periods, type ImportIssue, type ImportPreview, type PeriodPreview } from "../api/periods";
 import { configuration } from "../api/configuration";
 import { useAuth } from "../auth/AuthContext";
 import { Sheet } from "../components/Sheet";
@@ -12,13 +12,15 @@ import { weekRange } from "../components/weekCalendar";
 import { DatePicker } from "../components/DateRangePicker";
 import { todayDateKey } from "../components/dateRange";
 import { FileDrop } from "../components/FileDrop";
-import { coins, dateOnly, plural, points, periodLabel, WEEK_STATUS_LABELS } from "../utils/format";
+import { coins, dateOnly, plural, points, periodLabel, weekStatusLabel } from "../utils/format";
 import type { WeekOut } from "../api/types";
 import { ReportsUpload } from "./ReportsUpload";
 import "./workflow.css";
 
 const steps = ["Загрузка", "Проверка", "Расчёт", "Публикация"];
 const STATUS_TONES = { open: "accent", calculated: "warning", closed: "success" } as const;
+/** An open week that is over waits for its calculation: no «running» accent for it. */
+const statusTone = (week: Pick<WeekOut, "status" | "ends_on">) => week.status === "open" && week.ends_on < todayDateKey() ? "neutral" : STATUS_TONES[week.status as keyof typeof STATUS_TONES] ?? "neutral";
 
 /** What a period's status means for the one who opens it, and what to do next. */
 export function periodNext(week: Pick<WeekOut, "status" | "calculated_at" | "closed_at"> & Partial<Pick<WeekOut, "ends_on">>, today = todayDateKey()): string {
@@ -112,7 +114,7 @@ function PeriodWorkspace() {
         {weeks.data && !history.length && <EmptyState title="Недель пока нет" hint={canImport ? "Откройте неделю или загрузите месячные отчёты СЗоВ — недели появятся сами." : "Недели появятся, когда супервайзер загрузит показатели."} />}
         {history.length > 0 && <ul className="period-rows">{history.map(item => <li key={item.id}><button type="button" className="period-row" onClick={() => selectWeek(item.id)}>
           <span className="period-row__main"><strong>{periodLabel(item.starts_on, item.ends_on)}</strong><span>{periodNext(item)}</span></span>
-          <Badge tone={STATUS_TONES[item.status as keyof typeof STATUS_TONES] ?? "neutral"}>{WEEK_STATUS_LABELS[item.status]}</Badge>
+          <Badge tone={statusTone(item)}>{weekStatusLabel(item)}</Badge>
           <ChevronRightIcon size={16} />
         </button></li>)}</ul>}
       </Card>
@@ -121,7 +123,7 @@ function PeriodWorkspace() {
       <button type="button" className="periods-back" onClick={() => selectWeek()}>← Все периоды</button>
       <Card className="period-head">
         <div className="period-head__main">
-          <div className="period-head__title"><h2>{week ? periodLabel(week.starts_on, week.ends_on) : "Период"}</h2>{week && <Badge tone={STATUS_TONES[week.status as keyof typeof STATUS_TONES] ?? "neutral"}>{WEEK_STATUS_LABELS[week.status]}</Badge>}</div>
+          <div className="period-head__title"><h2>{week ? periodLabel(week.starts_on, week.ends_on) : "Период"}</h2>{week && <Badge tone={statusTone(week)}>{weekStatusLabel(week)}</Badge>}</div>
           <p>{week ? periodNext(week) : weeks.isLoading ? "Загружаем период…" : "Период не найден"}</p>
         </div>
         {!closed && week && (canPublish ? <div className="period-head__actions">
@@ -139,7 +141,9 @@ function PeriodWorkspace() {
             <KPI label="Ошибок" value={coins(inspected.errors.length)} tone={inspected.errors.length ? "accent" : "neutral"} /><KPI label="Предупреждений" value={coins(inspected.warnings.length)} /></div>
           <Issues title="Исправьте ошибки в файле" issues={inspected.errors} />
           <Issues title="Обратите внимание" issues={inspected.warnings} />
-          <div className="period-check__save"><span>Готово к загрузке: {coins(inspected.valid_values)} {plural(inspected.valid_values, "значение", "значения", "значений")}.</span>
+          <div className="period-check__save"><span>{inspected.errors.length
+            ? `Сохранить можно, когда в файле не останется ошибок. Без них загрузится ${coins(inspected.valid_values)} ${plural(inspected.valid_values, "значение", "значения", "значений")}.`
+            : `Готово к загрузке: ${coins(inspected.valid_values)} ${plural(inspected.valid_values, "значение", "значения", "значений")}.`}</span>
             {applied ? <Badge tone="success">Показатели сохранены</Badge> : <Button variant="primary" disabled={!inspected.can_apply || busy || closed} onClick={() => apply.mutate()}>{apply.isPending ? "Сохраняем…" : "Сохранить показатели"}</Button>}</div>
         </div>}
         <details className="workflow-note ui-note"><summary>Как подготовить файл</summary>
@@ -154,21 +158,23 @@ function PeriodWorkspace() {
         {preview.data && <>
           <div className="card__body period-results-summary">
             <div className="kpi-grid kpi-grid--2"><KPI label="Участников" value={coins(preview.data.participants)} /><KPI label={closed ? "Начислено коинов" : "Будет начислено"} value={coins(preview.data.coins_total)} tone="coin" /></div>
-            {!!preview.data.missing_metrics.length && <p className="workflow-error">Ни у кого нет данных: {missingMetricsLabel(preview.data.missing_metrics)}. Если они должны быть, загрузите их перед публикацией.</p>}
+            {!closed && !!preview.data.missing_metrics.length && <p className="workflow-error">Ни у кого нет данных: {missingMetricsLabel(preview.data.missing_metrics)}. Если они должны быть, загрузите их перед публикацией.</p>}
           </div>
           {!preview.data.rows.length ? <EmptyState title="Расчёт ещё не подготовлен" hint={canPublish ? "Сохраните показатели и нажмите «Рассчитать» вверху." : "Руководитель рассчитает период после загрузки показателей."} />
             : <ol className="period-results" aria-label="Итоги операторов">
               <li className="period-result period-result--head" aria-hidden="true"><span>Место</span><span>Оператор</span><span>Баллы</span><span>Коины</span></li>
-              {preview.data.rows.map(row => {
+              {byChannel(preview.data.rows).flatMap(({ channel, rows }) => [
+                ...(channel ? [<li key={`channel-${channel}`} className="period-result-group" aria-hidden="true">{channel === "chat" ? "Чаты" : "Линия"} · {rows.length} {plural(rows.length, "оператор", "оператора", "операторов")} · свои места</li>] : []),
+                ...rows.map(row => {
                 const own = (row.missing_metrics ?? []).filter(code => !common.has(code));
                 const parts = [[row.coins_from_points, "за баллы"], [row.coins_rank_bonus, "за место"], [row.coins_discipline_bonus, "дисциплина"], [row.coins_nomination_bonus, "номинации"]].filter(([value]) => Number(value) !== 0).map(([value, label]) => `${label} ${coins(Number(value))}`);
                 return <li key={row.user_id} className="period-result">
                   <span className={`period-result__rank${row.rank != null && row.rank <= 3 ? " is-top" : ""}`}>{row.rank ?? "—"}</span>
-                  <span className="period-result__person"><Avatar name={row.full_name} id={row.user_id} size={32} /><span><strong>{row.full_name}</strong>{row.channel === "chat" && <Badge tone="info">Чаты · место среди чатов</Badge>}{own.length > 0 && <small className="period-result__missing">Нет данных: {missingMetricsLabel(own)}</small>}</span></span>
+                  <span className="period-result__person"><Avatar name={row.full_name} id={row.user_id} size={32} /><span><strong>{row.full_name}</strong>{own.length > 0 && <small className="period-result__missing">Нет данных: {missingMetricsLabel(own)}</small>}</span></span>
                   <span className="period-result__points">{points(row.final_points)}</span>
                   <span className="period-result__coins"><strong>{coins(row.coins_total)}</strong>{parts.length > 1 && <small>{parts.join(" · ")}</small>}</span>
                 </li>;
-              })}
+              })])}
             </ol>}
         </>}
       </Card>
@@ -192,4 +198,12 @@ function PeriodWorkspace() {
 function Issues({ title, issues }: { title: string; issues: ImportIssue[] }) {
   if (!issues.length) return null;
   return <div><h3 className="group-title">{title}</h3><ul className="workflow-issues">{issues.map((issue, i) => <li key={i}>{issue.row !== null ? `Строка ${issue.row}: ` : ""}{issue.message}</li>)}</ul></div>;
+}
+
+/** Places are within a channel (docs/CHANNELS.md): the line's and the chats' rows each under their own heading. */
+function byChannel(rows: PeriodPreview["rows"]): { channel: "line" | "chat" | null; rows: PeriodPreview["rows"] }[] {
+  const line = rows.filter((row) => row.channel !== "chat"), chat = rows.filter((row) => row.channel === "chat");
+  const byRank = (list: PeriodPreview["rows"]) => [...list].sort((a, b) => (a.rank ?? Infinity) - (b.rank ?? Infinity));
+  if (!chat.length || !line.length) return [{ channel: null, rows: byRank(rows) }];
+  return [{ channel: "line", rows: byRank(line) }, { channel: "chat", rows: byRank(chat) }];
 }

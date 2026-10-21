@@ -16,6 +16,7 @@ from app.models.contest import (
 )
 from app.models.enums import Channel, WeekStatus
 from app.models.user import CoinAccount, Group, User
+from app.services.weekly import in_scope
 
 
 @dataclass(slots=True)
@@ -198,16 +199,21 @@ async def my_row(
 
 
 async def nominations(
-    session: AsyncSession, week: ContestWeek, viewer: User
+    session: AsyncSession, week: ContestWeek, viewer: User, channel: str | None = None
 ) -> list[NominationRow]:
-    """Номинации недели с победителями; без победителя - с пустым слотом."""
-    definitions = list(
-        await session.scalars(
+    """
+    Номинации недели с победителями; без победителя - с пустым слотом. С ``channel`` — только
+    номинации, за которые играют операторы этого направления (docs/CHANNELS.md).
+    """
+    definitions = [
+        definition
+        for definition in await session.scalars(
             select(NominationDefinition)
             .where(NominationDefinition.is_active.is_(True))
             .order_by(NominationDefinition.sort_order, NominationDefinition.id)
         )
-    )
+        if channel is None or in_scope(definition, channel)
+    ]
     winners = await session.execute(
         select(NominationWinner, User.full_name, Group.name)
         .join(User, User.id == NominationWinner.user_id)

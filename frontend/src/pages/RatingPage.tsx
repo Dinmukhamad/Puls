@@ -21,7 +21,7 @@ import {
 } from "../components/ui";
 import { GlassSurface } from "../components/GlassSurface";
 import { WeekPicker } from "../components/WeekPicker";
-import { WEEK_STATUS_LABELS, coins, dateOnly, points } from "../utils/format";
+import { coins, dateOnly, plural, points, pointsWord, weekStatusLabel } from "../utils/format";
 import { useAuth } from "../auth/AuthContext";
 import { MonthContest } from "./MonthContest";
 import { OperatorRatingPage } from "./OperatorRating";
@@ -49,7 +49,7 @@ export function RatingPage() {
 
 function RatingHeading({ personal, month }: { personal?: boolean; month?: boolean }) {
   return <header className="page-head"><div><h1 className="page-title">Рейтинг</h1>
-    <p className="page-subtitle">{month ? "Места и номинации месяца среди всех операторов" : personal ? "Ваш результат по неделям" : "Результаты команды по неделям"}</p>
+    <p className="page-subtitle">{month ? "Места и номинации месяца — у линии и у чатов свои" : personal ? "Ваш результат по неделям" : "Результаты команды по неделям"}</p>
   </div></header>;
 }
 
@@ -133,11 +133,14 @@ function Leaderboard({ toggle }: { toggle?: ReactNode }) {
 
       {data.nominations.length > 0 && (
         <Card title="Номинации недели">
-          <ul className="nominations">
-            {data.nominations.map((nomination) => (
-              <NominationItem key={nomination.code} nomination={nomination} />
-            ))}
-          </ul>
+          {/* Until the week is calculated nobody has won: one line instead of a card per nomination. */}
+          {data.nominations.some((nomination) => nomination.winner_name || nomination.winner_hidden)
+            ? <ul className="nominations">
+              {data.nominations.map((nomination) => (
+                <NominationItem key={nomination.code} nomination={nomination} />
+              ))}
+            </ul>
+            : <p className="muted">Победителей пока нет: {data.nominations.length} {plural(data.nominations.length, "номинация определится", "номинации определятся", "номинаций определятся")} после расчёта недели.</p>}
         </Card>
       )}
 
@@ -227,7 +230,7 @@ export function PersonalRatingCard({ data }: { data: RatingOut }) {
   const { header, my_row: row, my_podium_state: state } = data;
   const calculated = header.status !== "open" && state !== "uncalculated";
   return <Card title="Моё место" variant="highlight"
-    subtitle={`${dateOnly(header.period_start)} — ${dateOnly(header.period_end)} · ${WEEK_STATUS_LABELS[header.status] ?? header.status}`}>
+    subtitle={`${dateOnly(header.period_start)} — ${dateOnly(header.period_end)} · ${weekStatusLabel({ status: header.status, ends_on: header.period_end })}`}>
     <div className="rating-personal">
       {calculated && row?.rank != null ? <>
         <p className="rating-personal__place">Место <strong>{row.rank}</strong> из {header.participants}</p>
@@ -303,7 +306,7 @@ function PodiumPlace({ entry }: { entry: PodiumEntry }) {
         <CoinAmount value={entry.coins_week} size="l" />
         <span className="muted micro">за неделю</span>
       </span>
-      <span className="podium__points">{points(entry.points)} балла(ов)</span>
+      <span className="podium__points">{points(entry.points)} {pointsWord(entry.points)}</span>
     </li>
   );
 }

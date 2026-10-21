@@ -220,7 +220,7 @@ async def leaderboard(
                 coins_awarded=n.coins_awarded,
                 winner_hidden=n.winner_hidden,
             )
-            for n in await rating_service.nominations(session, week, user)
+            for n in await rating_service.nominations(session, week, user, channel)
         ],
         rows=[_to_row(row) for row in rows],
         total=total,

@@ -316,7 +316,10 @@ async def preview_file(
                     row=row_number,
                     field="user_id" if identity else "login",
                     code="unknown_operator",
-                    message="Действующий оператор не найден в вашей зоне ответственности",
+                    message=(
+                        f"«{login or identity}» — действующий оператор не найден "
+                        "в вашей зоне ответственности"
+                    ),
                 )
             )
             continue
