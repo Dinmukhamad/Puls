@@ -13,8 +13,8 @@
  * its centre, where its main building grows. Pure data, no three.js.
  */
 import { segmentDistance } from "./generate";
-import { onRailway } from "./railway";
-import { onSquare, stationSquare } from "./stationSquare";
+import { onRailway, railPoint, STATION, type RailLine } from "./railway";
+import { lakeSquare, onSquare, stationSquare, type StationSquare } from "./stationSquare";
 import { polygonsOverlap, segmentPolygonDistance, type ModuleSlot } from "./estates";
 import type { Point, Road, WorldData } from "./types";
 
@@ -616,83 +616,123 @@ function islandLand(world: WorldData, cuts: readonly number[] = BORDERS): LandGr
 }
 
 /**
- * The lake city: rectangles round the lake on the lines where its streets ran, every cell LAND_CELL across. District 1
- * has the top, 2 the left and the bottom left, 3 the right and the bottom right; the boulevard from the lake to the
- * station parts the bottom. Bands: the corners of the inner square by the lake, the frame round it, the strips at the
- * edge of the land. Each block lies on one side of every district border, so a border runs along whole block sides,
- * where both blocks keep half the gap clear.
+ * The lake city's lines on the cells' lattice (world/sales.ts sizes its land by them): the inner square round the lake,
+ * the frame round it and the edge of the town's first land, where its streets ran; then the edges of the fourth band
+ * and of the whole land, which make the lake city's land as large as the island city's.
  */
-function lakeLand(world: WorldData): LandGrid {
-  const line = world.railway, square = stationSquare(world), rect = world.land.rectangle!;
-  const lake = (rect.lake ?? 46) + 12, pier = rectangle(4, 48, 0, 44, 18, 0), boulevard = rectangle(0, 85, 0, 60, 10.4, 0);
-  const streets = world.roads.streets;
-  const clear = (corners: Point[], centre: Point) => {
+export const LAKE_LINES = { inner: 66, frameX: 132, frameZ: 111, firstX: 141, firstZ: 120, ringX: 222, ringZ: 183, edgeX: 303, edgeZ: 249 } as const;
+
+/**
+ * Where the lake city's station stood at the edge of its first land, before the land grew round it (2.14–2.24.119). Cut
+ * into 2, 4 or 5 districts, the first land keeps its cells round it as they were: the cuts between the districts and
+ * their blocks there come from those cells, so what the districts built there keeps its address.
+ */
+const FIRST_STATION: RailLine = { x: 4, z: 128, dx: 0, dz: 1, length: 56, side: 1 };
+
+/**
+ * Is a lake city's cell (by its corners, `centre` its middle) clear of the lake's shore, the pier, the boulevard from
+ * the lake to the station's forecourt, the streets, the railway and the station's square?
+ */
+function lakeClear(lake: number, line: RailLine | undefined, square: StationSquare | null, streets: readonly Road[]) {
+  const pier = rectangle(4, 48, 0, 44, 18, 0), end = (line ? railPoint(line, STATION.forecourt).z : 112) + 3;
+  const boulevard = rectangle(0, (55 + end) / 2, 0, end - 55, 10.4, 0);
+  return (corners: Point[], centre: Point) => {
     if (corners.some(p => Math.hypot(p.x, p.z) < lake)) return false;
     if (polygonsOverlap(corners, pier) || polygonsOverlap(corners, boulevard)) return false;
     if (streets.length && !offStreets(streets, corners, centre)) return false;
     return !(line && [...corners, centre].some(p => onRailway(line, p, 1) || (square ? onSquare(line, square, p, 1) : false)));
   };
+}
+
+/**
+ * The lake city: rectangles round the lake on the lines where its streets ran, every cell LAND_CELL across. District 1
+ * has the top, 2 the left and the bottom left, 3 the right and the bottom right; the boulevard from the lake to the
+ * station parts the bottom. Bands: the corners of the inner square by the lake, the frame round it, the strips at the
+ * edge of the first land, then two bands round it out to the hills. Each block lies on one side of every district
+ * border, so a border runs along whole block sides, where both blocks keep half the gap clear.
+ */
+function lakeLand(world: WorldData): LandGrid {
+  const rect = world.land.rectangle!, clear = lakeClear((rect.lake ?? 46) + 12, world.railway, stationSquare(world), world.roads.streets);
   const b = builder(clear), g = BORDER_GAP / 2;
-  // The lines where the streets ran (world/sales.ts), on the cells' lattice: the inner square, the outer frame, the edge.
-  const INNER = 66, OUTER_X = 132, OUTER_Z = 111, EDGE_X = 141, EDGE_Z = 120;
-  /** A block from x0 to x1 and z0 to z1; `cut` names its sides along a district border, which keep half the gap clear. */
-  const add = (district: number, band: number, x0: number, x1: number, z0: number, z1: number, cut: Partial<Record<"x0" | "x1" | "z0" | "z1", true>> = {}) =>
-    b.add(district, band, { kind: "rect", x0: x0 + (cut.x0 ? g : 0), x1: x1 - (cut.x1 ? g : 0), z0: z0 + (cut.z0 ? g : 0), z1: z1 - (cut.z1 ? g : 0) }, Math.round((x1 - x0) / LAND_CELL), Math.round((z1 - z0) / LAND_CELL));
+  const { inner: INNER, frameX: OUTER_X, frameZ: OUTER_Z, firstX: FIRST_X, firstZ: FIRST_Z, ringX: RING_X, ringZ: RING_Z, edgeX: EDGE_X, edgeZ: EDGE_Z } = LAKE_LINES;
+  type Cut = Partial<Record<BlockSide, true | number>>;
+  /**
+   * A block from x0 to x1 and z0 to z1; `cut` names its sides along a district border, which keep half the gap clear
+   * (or as much as given).
+   */
+  const add = (district: number, band: number, x0: number, x1: number, z0: number, z1: number, cut: Cut = {}) => {
+    const by = (side: BlockSide) => cut[side] === true ? g : cut[side] ?? 0;
+    return b.add(district, band, { kind: "rect", x0: x0 + by("x0"), x1: x1 - by("x1"), z0: z0 + by("z0"), z1: z1 - by("z1") }, Math.round((x1 - x0) / LAND_CELL), Math.round((z1 - z0) / LAND_CELL));
+  };
+  /** District 2's block, or district 3's: its mirror image, the cut sides with it. */
+  const side = (district: number, band: number, x0: number, x1: number, z0: number, z1: number, cut: Cut = {}) => district === 2
+    ? add(district, band, x0, x1, z0, z1, cut)
+    : add(district, band, -x1, -x0, z0, z1, { x0: cut.x1, x1: cut.x0, z0: cut.z0, z1: cut.z1 });
   // District 1, the top: the lake's top corners, the frame's top in three (its middle meets district 1's own corners), the top strip.
   add(1, 1, -INNER, INNER, -INNER, 0, { x0: true, x1: true, z1: true });
   add(1, 2, -OUTER_X, -INNER, -OUTER_Z, -INNER, { x0: true, z1: true });
   const top = add(1, 2, -INNER, INNER, -OUTER_Z, -INNER);
   add(1, 2, INNER, OUTER_X, -OUTER_Z, -INNER, { x1: true, z1: true });
-  add(1, 3, -OUTER_X, OUTER_X, -EDGE_Z, -OUTER_Z);
+  add(1, 3, -OUTER_X, OUTER_X, -FIRST_Z, -OUTER_Z);
   // Districts 2 and 3, mirror images: the lake's bottom corner, the frame's side (in two: its top half meets district 1)
   // and bottom, the side strip (in two likewise) and the bottom strip.
   const sides = [2, 3].map(district => {
-    const m = district === 2 ? 1 : -1;
-    // A rectangle mirrored for district 3, its cut sides with it.
-    const put = (band: number, x0: number, x1: number, z0: number, z1: number, cut: Partial<Record<"x0" | "x1" | "z0" | "z1", true>> = {}) => m > 0
-      ? add(district, band, x0, x1, z0, z1, cut)
-      : add(district, band, -x1, -x0, z0, z1, { ...(cut.x1 ? { x0: true } : {}), ...(cut.x0 ? { x1: true } : {}), ...(cut.z0 ? { z0: true } : {}), ...(cut.z1 ? { z1: true } : {}) });
+    const put = (band: number, x0: number, x1: number, z0: number, z1: number, cut: Cut = {}) => side(district, band, x0, x1, z0, z1, cut);
     put(1, -INNER, 0, 0, INNER, { x1: true, z0: true });
     put(2, -OUTER_X, -INNER, -INNER, 0, { x1: true, z0: true });
-    const side = put(2, -OUTER_X, -INNER, 0, INNER);
+    const frame = put(2, -OUTER_X, -INNER, 0, INNER);
     put(2, -OUTER_X, 0, INNER, OUTER_Z, { x1: true });
-    put(3, -EDGE_X, -OUTER_X, -OUTER_Z, -INNER, { x1: true });
-    put(3, -EDGE_X, -OUTER_X, -INNER, OUTER_Z);
-    put(3, -OUTER_X, 0, OUTER_Z, EDGE_Z, { x1: true });
-    return side;
+    put(3, -FIRST_X, -OUTER_X, -OUTER_Z, -INNER, { x1: true });
+    put(3, -FIRST_X, -OUTER_X, -INNER, OUTER_Z);
+    put(3, -OUTER_X, 0, OUTER_Z, FIRST_Z, { x1: true });
+    return frame;
   });
+  // The land round the first, its blocks numbered after the first land's, which keep theirs. The first land's corners,
+  // where the frame's streets met its edge: the top two district 1's, the whole gap kept from the side strips of 2 and 3
+  // below them; the bottom two the side districts' own.
+  add(1, 3, -FIRST_X, -OUTER_X, -FIRST_Z, -OUTER_Z, { z1: BORDER_GAP });
+  add(1, 3, OUTER_X, FIRST_X, -FIRST_Z, -OUTER_Z, { z1: BORDER_GAP });
+  for (const district of [2, 3]) side(district, 3, -FIRST_X, -OUTER_X, OUTER_Z, FIRST_Z);
+  // Two bands round it, each from the edge of the last. District 1 has the top from edge to edge: its outer pieces reach
+  // down to the frame's top street, where its border with 2 and 3 runs on from the first land's corners to the edge,
+  // district 1 keeping the whole gap as there. 2 and 3 have the sides below it and the bottom, parted by the boulevard.
+  for (const [band, ix, iz, ox, oz] of [[4, FIRST_X, FIRST_Z, RING_X, RING_Z], [5, RING_X, RING_Z, EDGE_X, EDGE_Z]]) {
+    add(1, band, -ix, ix, -oz, -iz);
+    add(1, band, -ox, -ix, -oz, -OUTER_Z, { z1: BORDER_GAP });
+    add(1, band, ix, ox, -oz, -OUTER_Z, { z1: BORDER_GAP });
+    for (const district of [2, 3]) {
+      side(district, band, -ox, -ix, -OUTER_Z, oz);
+      side(district, band, -ix, 0, iz, oz, { x1: true });
+    }
+  }
   const centres = [
     ...(top ? [b.centre(top, "z1")] : []),
     ...(sides[0] ? [b.centre(sides[0], "x1")] : []),
     ...(sides[1] ? [b.centre(sides[1], "x0")] : []),
   ];
-  return { city: "sales", bands: 3, blocks: b.blocks, centres };
+  return { city: "sales", bands: 5, blocks: b.blocks, centres };
 }
 
 /**
  * The lake city cut into `count` districts other than its first three: the same land (the inner square by the lake,
- * the frame round it, the strips at the edge) on the same lattice, parted by straight cuts out from the lake's middle
- * into districts of about equal numbers of cells, the first along the boulevard to the station. As on the island city,
- * each band of each district is one block round its cells, its centre in the second band on the middle of its sector.
+ * the frame round it, the strips at the edge of the first land and the two bands round it) on the same lattice, parted
+ * by straight cuts out from the lake's middle into districts of about equal numbers of cells, the first along the
+ * boulevard to the station. As on the island city, each band of each district is one block round its cells, its
+ * centre in the second band on the middle of its sector. The first land is cut as it was round its first station
+ * (FIRST_STATION), and its cells alone set the cuts and the centres: its blocks keep their cells' addresses.
  */
 function lakeSectorLand(world: WorldData, count: number): LandGrid {
-  const line = world.railway, square = stationSquare(world), rect = world.land.rectangle!;
-  const lake = (rect.lake ?? 46) + 12, pier = rectangle(4, 48, 0, 44, 18, 0), boulevard = rectangle(0, 85, 0, 60, 10.4, 0);
-  const streets = world.roads.streets;
-  const clear = (corners: Point[], centre: Point) => {
-    if (corners.some(p => Math.hypot(p.x, p.z) < lake)) return false;
-    if (polygonsOverlap(corners, pier) || polygonsOverlap(corners, boulevard)) return false;
-    if (streets.length && !offStreets(streets, corners, centre)) return false;
-    return !(line && [...corners, centre].some(p => onRailway(line, p, 1) || (square ? onSquare(line, square, p, 1) : false)));
-  };
-  const INNER = 66, OUTER_X = 132, OUTER_Z = 111, EDGE_X = 141, EDGE_Z = 120;
-  /** The band of the cell from (x, z): 0 off the land (past the edge, or in a corner beyond both strips). */
+  const rect = world.land.rectangle!, lake = (rect.lake ?? 46) + 12, firstSquare = lakeSquare(FIRST_STATION);
+  const clear = lakeClear(lake, world.railway, stationSquare(world), world.roads.streets), first = lakeClear(lake, FIRST_STATION, firstSquare, firstSquare.streets);
+  const { inner: INNER, frameX: OUTER_X, frameZ: OUTER_Z, firstX: FIRST_X, firstZ: FIRST_Z, ringX: RING_X, ringZ: RING_Z, edgeX: EDGE_X, edgeZ: EDGE_Z } = LAKE_LINES;
+  /** The band of the cell from (x, z): 0 off the land (past the edge, or in a corner of the first land beyond both strips). */
   const bandOf = (x: number, z: number) => {
     const X = x + LAND_CELL, Z = z + LAND_CELL;
     if (x < -EDGE_X || X > EDGE_X || z < -EDGE_Z || Z > EDGE_Z) return 0;
+    const mx = Math.abs(x + LAND_CELL / 2), mz = Math.abs(z + LAND_CELL / 2);
+    if (mx > FIRST_X || mz > FIRST_Z) return mx < RING_X && mz < RING_Z ? 4 : 5;
     const ax = Math.min(Math.abs(x), Math.abs(X)), az = Math.min(Math.abs(z), Math.abs(Z));
     if (ax >= OUTER_X && az >= OUTER_Z) return 0;
-    const mx = Math.abs(x + LAND_CELL / 2), mz = Math.abs(z + LAND_CELL / 2);
     return mx < INNER && mz < INNER ? 1 : mx < OUTER_X && mz < OUTER_Z ? 2 : 3;
   };
   const cell = (x: number, z: number): Point[] => [{ x, z }, { x: x + LAND_CELL, z }, { x: x + LAND_CELL, z: z + LAND_CELL }, { x, z: z + LAND_CELL }];
@@ -701,9 +741,10 @@ function lakeSectorLand(world: WorldData, count: number): LandGrid {
   const land: { x: number; z: number; band: number }[] = [];
   for (let x = -EDGE_X; x < EDGE_X; x += LAND_CELL) for (let z = -EDGE_Z; z < EDGE_Z; z += LAND_CELL) {
     const band = bandOf(x, z);
-    if (band && clear(cell(x, z), middle(x, z))) land.push({ x, z, band });
+    if (band && (band <= 3 ? first : clear)(cell(x, z), middle(x, z))) land.push({ x, z, band });
   }
-  const cuts = balancedBorders(land.map(c => Math.atan2(c.z + LAND_CELL / 2, c.x + LAND_CELL / 2)), 90 * DEG, count);
+  const bands = [1, 2, 3, 4, 5].map(band => land.filter(c => c.band === band));
+  const cuts = balancedBorders(bands.slice(0, 3).flat().map(c => Math.atan2(c.z + LAND_CELL / 2, c.x + LAND_CELL / 2)), 90 * DEG, count);
   const reach = Math.hypot(EDGE_X, EDGE_Z) + LAND_CELL;
   const sectors: LandSector[] = cuts.map((from, i) => {
     const next = cuts[(i + 1) % cuts.length];
@@ -716,7 +757,8 @@ function lakeSectorLand(world: WorldData, count: number): LandGrid {
     if (wrap(Math.atan2(m.z, m.x) - s.a0) >= s.a1 - s.a0) return false;
     return Math.min(fx * z - fz * x, fx * Z - fz * x, fx * z - fz * X, fx * Z - fz * X) >= BORDER_GAP && Math.min(x * tz - z * tx, X * tz - z * tx, x * tz - Z * tx, X * tz - Z * tx) >= BORDER_GAP;
   };
-  const b = builder(clear), lattice = (v: number) => Math.round(v / LAND_CELL) * LAND_CELL;
+  // A block keeps only cells of `land`, each of them checked already.
+  const b = builder(() => true), lattice = (v: number) => Math.round(v / LAND_CELL) * LAND_CELL;
   const wide = Math.ceil(CENTRE_WIDTH / LAND_CELL - 1e-9) * LAND_CELL, deep = Math.ceil(CENTRE_DEPTH / LAND_CELL - 1e-9) * LAND_CELL;
   // Each district's centre: in the second band on the middle of its sector, its front to the lake.
   const sites = sectors.map(s => {
@@ -726,18 +768,18 @@ function lakeSectorLand(world: WorldData, count: number): LandGrid {
     for (let r = INNER; r < reach; r += LAND_CELL / 4) {
       const x0 = lattice(side === "x0" ? c * r : side === "x1" ? c * r - w : c * r - w / 2), z0 = lattice(side === "z0" ? sn * r : side === "z1" ? sn * r - d : sn * r - d / 2);
       let free = true;
-      for (let x = x0; x < x0 + w && free; x += LAND_CELL) for (let z = z0; z < z0 + d && free; z += LAND_CELL) free = bandOf(x, z) === 2 && cellWithin(s, x, z) && clear(cell(x, z), middle(x, z));
+      for (let x = x0; x < x0 + w && free; x += LAND_CELL) for (let z = z0; z < z0 + d && free; z += LAND_CELL) free = bandOf(x, z) === 2 && cellWithin(s, x, z) && first(cell(x, z), middle(x, z));
       if (free) return { side, x0, x1: x0 + w, z0, z1: z0 + d };
     }
     return null;
   });
   const onSite = (p: Point) => sites.some(t => t && p.x > t.x0 && p.x < t.x1 && p.z > t.z0 && p.z < t.z1);
   const centres: DistrictCentre[] = [];
-  for (let band = 1; band <= 3; band++) sectors.forEach((s, i) => {
+  for (let band = 1; band <= 5; band++) sectors.forEach((s, i) => {
     const own = new Set<string>();
     let bx0 = Infinity, bx1 = -Infinity, bz0 = Infinity, bz1 = -Infinity;
-    for (const c of land) {
-      if (c.band !== band || onSite(middle(c.x, c.z)) || !cellWithin(s, c.x, c.z)) continue;
+    for (const c of bands[band - 1]) {
+      if (onSite(middle(c.x, c.z)) || !cellWithin(s, c.x, c.z)) continue;
       own.add(`${c.x}:${c.z}`);
       bx0 = Math.min(bx0, c.x); bx1 = Math.max(bx1, c.x + LAND_CELL); bz0 = Math.min(bz0, c.z); bz1 = Math.max(bz1, c.z + LAND_CELL);
     }
@@ -749,5 +791,5 @@ function lakeSectorLand(world: WorldData, count: number): LandGrid {
     if (block && site) centres.push(b.centreAt(block, Math.round((site.x0 - bx0) / LAND_CELL), Math.round((site.z0 - bz0) / LAND_CELL), Math.round((site.x1 - site.x0) / LAND_CELL), Math.round((site.z1 - site.z0) / LAND_CELL), site.side));
   });
   centres.sort((p, q) => p.district - q.district);
-  return { city: "sales", bands: 3, blocks: b.blocks, centres, sectors };
+  return { city: "sales", bands: 5, blocks: b.blocks, centres, sectors };
 }

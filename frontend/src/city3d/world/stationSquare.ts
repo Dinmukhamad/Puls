@@ -165,7 +165,7 @@ function islandSquare(line: RailLine, streets: readonly Road[]): StationSquare {
  * sales: a short street from where the town's bottom street ran past the forecourt, along the station's side
  * (towards -w) to the car park beside it; the park on the station's other side, both between that line and the hills.
  */
-function lakeSquare(line: RailLine): StationSquare {
+export function lakeSquare(line: RailLine): StationSquare {
   const plan = planner(line, 4402), { square } = plan;
   const street = -18, kerb = street + 1.33, edge = -6.5, spur = STATION.near - 2.6;
   plan.street([street, spur], [edge, spur]);

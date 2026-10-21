@@ -35,6 +35,7 @@ import { createPlots, type Plots } from "./systems/plots";
 import { createQuests, type Quests } from "./systems/quests";
 import { createDepartmentWorld, type DepartmentWorld } from "./systems/departmentWorld";
 import { railPoint } from "./world/railway";
+import { SALES_RADIUS } from "./world/sales";
 import type { CityWorld, DepartmentId } from "../api/cityWorld";
 import type { CityBuildView, CityEstateView, CityView, EstateTarget, JourneyPhase } from "./types";
 import "./city3d.css";
@@ -48,6 +49,8 @@ const SHADOW_REST_MS = 250;
  * when both are done, or after SHADER_WARMUP_MS at most, and the renderer builds whatever is left on first use.
  */
 const SHADER_WARMUP_MS = 4000;
+/** How far the lake city's first view stands back from the lake: its land round it out to the second band. */
+const SALES_OVERVIEW = 230;
 
 interface Parts {
   handle: RendererHandle; quality: QualityControl; stats: Stats; loop: Loop; rig: CameraRig; picker: Picker; post: Post;
@@ -105,13 +108,13 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
     const p = parts; if (!p?.departments || next === department) return;
     if (saveView) views[department] = p.rig.currentView();
     p.departments.show(next); department = next; host.dataset.department = next; worldMoved = true;
-    p.rig.animateTo(views[next] ?? { target: [0, 0, 0], distance: next === "sales" ? 160 : 90, azimuth: .7, polar: .82 }, 0);
+    p.rig.animateTo(views[next] ?? { target: [0, 0, 0], distance: next === "sales" ? SALES_OVERVIEW : 90, azimuth: .7, polar: .82 }, 0);
     if (next === "support") p.pools?.update();
   }
   function finishJourney() {
     if (!journey || !parts) return;
     const to = journey.to; journey = null; switchDepartment(to, false);
-    parts.rig.animateTo(views[to] ?? { target: [0, 0, 0], distance: to === "sales" ? 160 : 90, azimuth: .7, polar: .82 }, 0);
+    parts.rig.animateTo(views[to] ?? { target: [0, 0, 0], distance: to === "sales" ? SALES_OVERVIEW : 90, azimuth: .7, polar: .82 }, 0);
     parts.departments?.railway(0); notifyJourney(null); options.onArrival?.(to);
   }
   function focusEstate(target: EstateTarget) {
@@ -184,10 +187,11 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
     const plots = own(createPlots(ctx, { states: plotStates }));
     const quests = own(createQuests(ctx, { states: questStates, onPick: options.onQuest }));
     const labelLayer = own(createLabels(ctx, { anchors: districts.anchors, mascotAnchor: mascotSystem.nameAnchor, onSelect: choose }));
-    // The view may go out to the outer ring road (and the tunnel's portal in the hills); the shadow map follows it there.
+    // The view may go out to the outer ring road (and the tunnel's portal in the hills), and in the lake city to the
+    // corners of its land; the shadow map follows it there.
     const portal = world.railway && railPoint(world.railway, world.railway.length), portalReach = portal ? Math.hypot(portal.x, portal.z) + 8 : 0;
     const rig = own(createCameraRig(camera, {
-      dom: canvas, host, radius: world.radius, ring: world.spec.roadRings[0], reach: Math.max(world.radius + 20, portalReach),
+      dom: canvas, host, radius: world.radius, ring: world.spec.roadRings[0], reach: Math.max(world.radius + 20, portalReach, SALES_RADIUS),
       frame: options.frame, view: options.view, controls, reducedMotion, onView: view => { sky.followView(view.target[0], view.target[2], view.distance); options.onView(view); },
     }));
     const first = rig.currentView(); sky.followView(first.target[0], first.target[2], first.distance); sky.setViewDistance(first.distance);
@@ -227,7 +231,7 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
             journey.swapped = true; switchDepartment(journey.to, false); notifyJourney("arriving");
             const point = parts.departments.railway(0);
             rig.animateTo({ target: [point.x, point.y, point.z], distance: 55, polar: 1.0, azimuth: parts.departments.railView().arrival }, 0);
-            rig.animateTo(views[journey.to] ?? { target: [0, 0, 0], distance: journey.to === "sales" ? 160 : 90, azimuth: .7, polar: .82 }, 1600);
+            rig.animateTo(views[journey.to] ?? { target: [0, 0, 0], distance: journey.to === "sales" ? SALES_OVERVIEW : 90, azimuth: .7, polar: .82 }, 1600);
           } else if (journey.elapsed > 5.2) finishJourney();
         }
         const moved = rig.update(now) || worldMoved || !!journey;
@@ -379,7 +383,7 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
     zoom: factor => when(p => p.rig.zoom(factor)),
     rotate: radians => when(p => p.rig.rotate(radians)),
     tilt: radians => when(p => p.rig.tilt(radians)),
-    reset: () => when(p => { if (department === "sales") p.rig.animateTo({ target: [0, 0, 0], distance: 160, azimuth: .7, polar: .82 }, 500); else p.rig.reset(); }),
+    reset: () => when(p => { if (department === "sales") p.rig.animateTo({ target: [0, 0, 0], distance: SALES_OVERVIEW, azimuth: .7, polar: .82 }, 500); else p.rig.reset(); }),
     setControls(next) { controls = next; when(p => p.rig.setControls(next)); },
     dispose() { disposed = true; requestedEstateFocus = lastEstateFocus = null; pending.length = 0; teardown(); host.replaceChildren(); delete host.dataset.backend; delete host.dataset.timeOfDay; },
   };

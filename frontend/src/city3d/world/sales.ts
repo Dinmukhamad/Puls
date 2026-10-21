@@ -3,6 +3,7 @@ import { WORLD_V1 } from "./worldSpec";
 import { rng } from "./generate";
 import { RAIL_LINES } from "./railway";
 import { addStationSquare } from "./stationSquare";
+import { LAKE_LINES } from "./land";
 import type { Placement, Road, WorldData } from "./types";
 
 export const SALES_CENTERS = Array.from({ length: 10 }, (_, i) => ({
@@ -10,9 +11,13 @@ export const SALES_CENTERS = Array.from({ length: 10 }, (_, i) => ({
 }));
 /**
  * Where the town's streets ran: the inner square round the lake and the outer frame. The team districts' land now
- * covers them (world/land.ts), and the districts' operators lay their own roads; only the station's street is left.
+ * covers them and the two bands that grew round them (world/land.ts LAKE_LINES), and the districts' operators lay their
+ * own roads; only the station's street is left. The flat land reaches a little past the outer band, where the hills
+ * begin; the boulevard from the lake meets the station's forecourt at the edge (world/railway.ts).
  */
-const FORECOURT = 112;
+const WIDTH = 2 * (LAKE_LINES.edgeX + 1), DEPTH = 2 * (LAKE_LINES.edgeZ + 2), FORECOURT = LAKE_LINES.edgeZ - 8;
+/** Radius of everything that is drawn: the corners of the flat land. */
+export const SALES_RADIUS = Math.round(Math.hypot(WIDTH, DEPTH) / 2);
 export function generateSalesWorld(): WorldData {
   const random = rng(20261001), placements: Placement[] = [], streets: Road[] = [];
   const add = (kind: Placement["kind"], x: number, z: number, width = 0, scale = 1, extra: Partial<Placement> = {}) =>
@@ -27,11 +32,11 @@ export function generateSalesWorld(): WorldData {
   }
   for (const p of SALES_CENTERS) surfaces.push({ kind: "plaza", ...p, angle: 0, width: 11, length: 11 });
   // The boulevard's two rows of trees, from the lake's south shore to the station at the town's edge.
-  for (let z = 61; z <= 106; z += 7.5) for (const x of [-3.4, 3.4]) add("tree-round", x, z, 0, 1.15);
+  for (let z = 61; z <= FORECOURT - 6; z += 7.5) for (const x of [-3.4, 3.4]) add("tree-round", x, z, 0, 1.15);
   const world: WorldData = {
-    spec: { ...WORLD_V1, name: "sales", horizon: 190, seed: 20261001, lagoon: 46, promenade: 50, quay: 46, bank: 47, districts: [], mainland: [], roadRings: [66, 132], islet: 4, districtScale: 1 },
-    districts: [], radius: 190,
-    land: { annuli: [], islets: [], rectangle: { width: 284, depth: 244, lake: 46 }, platforms: [{ x: 0, z: 0, width: 38, depth: 76 }, { x: 0, z: 47, width: 4, depth: 20 }] },
+    spec: { ...WORLD_V1, name: "sales", horizon: SALES_RADIUS, seed: 20261001, lagoon: 46, promenade: 50, quay: 46, bank: 47, districts: [], mainland: [], roadRings: [66, 132], islet: 4, districtScale: 1 },
+    districts: [], radius: SALES_RADIUS,
+    land: { annuli: [], islets: [], rectangle: { width: WIDTH, depth: DEPTH, lake: 46 }, platforms: [{ x: 0, z: 0, width: 38, depth: 76 }, { x: 0, z: 47, width: 4, depth: 20 }] },
     water: { annuli: [{ inner: 0, outer: 46 }] },
     roads: { rings: [], streets, bridges: [], crosswalks: [], parking: [] },
     placements, parks: [], complexes: [], alleys: [], surfaces,

@@ -439,6 +439,66 @@ test('a city cut into 2, 4 or 5 districts: equal shares, each with its centre, a
   }
 });
 
+/**
+ * The lake city's first land, as it was before two bands grew round it (2.24.119): every layout's blocks as [district,
+ * block, band, columns, rows, x0, x1, z0, z1, cells for sale]. What the districts built there keeps its address.
+ */
+const FIRST_LAKE_LAND = {
+  3: [
+    [1, 1, 1, 44, 22, -65.6, 65.6, -66, -0.4, 334], [1, 2, 2, 22, 15, -131.6, -66, -111, -66.4, 330], [1, 3, 2, 44, 15, -66, 66, -111, -66, 562], [1, 4, 2, 22, 15, 66, 131.6, -111, -66.4, 330],
+    [1, 5, 3, 88, 3, -132, 132, -120, -111, 264], [2, 1, 1, 22, 22, -66, -0.4, 0.4, 66, 166], [2, 2, 2, 22, 22, -132, -66.4, -65.6, 0, 484], [2, 3, 2, 22, 22, -132, -66, 0, 66, 386],
+    [2, 4, 2, 44, 15, -132, -0.4, 66, 111, 628], [2, 5, 3, 3, 15, -141, -132.4, -111, -66, 45], [2, 6, 3, 3, 59, -141, -132, -66, 111, 177], [2, 7, 3, 44, 3, -132, -0.4, 111, 120, 93],
+    [3, 1, 1, 22, 22, 0.4, 66, 0.4, 66, 159], [3, 2, 2, 22, 22, 66.4, 132, -65.6, 0, 484], [3, 3, 2, 22, 22, 66, 132, 0, 66, 386], [3, 4, 2, 44, 15, 0.4, 132, 66, 111, 621],
+    [3, 5, 3, 3, 15, 132.4, 141, -111, -66, 45], [3, 6, 3, 3, 59, 132, 141, -66, 111, 177], [3, 7, 3, 44, 3, 0.4, 132, 111, 120, 93],
+  ],
+  2: [
+    [1, 1, 1, 21, 44, -66, -3, -66, 66, 330], [2, 1, 1, 21, 44, 3, 66, -66, 66, 323], [1, 2, 2, 43, 74, -132, -3, -111, 111, 2143], [2, 2, 2, 43, 74, 3, 132, -111, 111, 2136],
+    [1, 3, 3, 46, 80, -141, -3, -120, 120, 444], [2, 3, 3, 46, 80, 3, 141, -120, 120, 444],
+  ],
+  4: [
+    [1, 1, 1, 20, 22, -66, -6, 0, 66, 164], [2, 1, 1, 21, 20, -66, -3, -66, -6, 162], [3, 1, 1, 22, 20, 0, 66, -66, -6, 164], [4, 1, 1, 17, 22, 15, 66, 0, 66, 157],
+    [1, 2, 2, 42, 38, -132, -6, -3, 111, 1024], [2, 2, 2, 43, 35, -132, -3, -111, -6, 987], [3, 2, 2, 44, 35, 0, 132, -111, -6, 989], [4, 2, 2, 42, 39, 6, 132, -6, 111, 1029],
+    [1, 3, 3, 34, 41, -141, -39, -3, 120, 207], [2, 3, 3, 46, 38, -141, -3, -120, -6, 233], [3, 3, 3, 47, 37, 0, 141, -120, -9, 234], [4, 3, 3, 34, 42, 39, 141, -6, 120, 210],
+  ],
+  5: [
+    [1, 1, 1, 20, 15, -66, -6, 21, 66, 147], [2, 1, 1, 7, 26, -66, -45, -63, 15, 91], [3, 1, 1, 38, 7, -57, 57, -66, -45, 133], [4, 1, 1, 7, 26, 45, 66, -63, 15, 91],
+    [5, 1, 1, 17, 16, 15, 66, 18, 66, 141], [1, 2, 2, 42, 29, -132, -6, 24, 111, 779], [2, 2, 2, 22, 49, -132, -66, -111, 36, 795], [3, 2, 2, 67, 15, -102, 99, -111, -66, 703],
+    [4, 2, 2, 22, 48, 66, 132, -111, 33, 794], [5, 2, 2, 42, 30, 6, 132, 21, 111, 783], [1, 3, 3, 34, 26, -141, -39, 42, 120, 161], [2, 3, 3, 10, 53, -141, -111, -120, 39, 166],
+    [3, 3, 3, 73, 3, -111, 108, -120, -111, 213], [4, 3, 3, 10, 52, 111, 141, -120, 36, 166], [5, 3, 3, 34, 27, 39, 141, 39, 120, 163],
+  ],
+};
+
+test('the lake city has as much land as the island city: two bands round its first land, whose blocks stay as they were', () => {
+  const { firstX, firstZ, ringX, ringZ, edgeX, edgeZ } = L.LAKE_LINES;
+  for (const n of [2, 3, 4, 5]) {
+    const grid = L.landGrid(SALES, n), cells = L.landCells(grid), island = L.landCells(L.landGrid(SUPPORT, n)).length;
+    assert.ok(Math.abs(cells.length - island) / island < .02, `× ${n}: ${cells.length} cells by the lake, ${island} on the island`);
+    assert.equal(grid.bands, 5);
+    // The first land's blocks keep their number, band, size and place; only where the station stood (in the first
+    // layout, cut along the streets rather than round the station's old place) more of their cells are for sale.
+    const last = {};
+    for (const [district, number, band, cols, rows, x0, x1, z0, z1, sold] of FIRST_LAKE_LAND[n]) {
+      const block = grid.blocks.find(b => b.district === district && b.block === number), name = `× ${n}: block ${district}:${number}`;
+      assert.ok(block, `${name} is gone`);
+      assert.deepEqual([block.band, block.cols, block.rows], [band, cols, rows], name);
+      for (const [now, then] of [[block.shape.x0, x0], [block.shape.x1, x1], [block.shape.z0, z0], [block.shape.z1, z1]]) assert.ok(Math.abs(now - then) < 1e-9, `${name} moved`);
+      const forSale = cols * rows - block.skip.size;
+      assert.ok(n === 3 ? forSale >= sold : forSale === sold, `${name}: ${forSale} cells for sale, ${sold} before`);
+      last[district] = Math.max(last[district] ?? 0, number);
+    }
+    // The new land's blocks come after them, in the first land's corners and the two bands round it.
+    for (const block of grid.blocks.filter(b => b.block > last[b.district])) assert.ok(block.band >= (n === 3 ? 3 : 4), `× ${n}: new block ${block.district}:${block.block} in band ${block.band}`);
+    const outside = (c, x, z) => c.corners.some(p => Math.abs(p.x) > x + 1e-9 || Math.abs(p.z) > z + 1e-9);
+    for (const c of cells) {
+      const where = `× ${n}: cell ${c.district}:${c.block}:${c.col}:${c.row} of band ${c.band}`;
+      assert.ok(!outside(c, edgeX, edgeZ), `${where} past the edge`);
+      if (c.band === 4) assert.ok(outside(c, firstX, firstZ) && !outside(c, ringX, ringZ), `${where} off its band`);
+      if (c.band === 5) assert.ok(outside(c, ringX, ringZ), `${where} off its band`);
+    }
+    for (const band of [4, 5]) for (let d = 1; d <= n; d++) assert.ok(cells.some(c => c.district === d && c.band === band), `× ${n}: district ${d} has no land in band ${band}`);
+  }
+});
+
 test('laying the grid out and finding its borders is quick', () => {
   let best = Infinity;
   for (let k = 0; k < 3; k++) { const t = performance.now(); L.landGrid(SUPPORT); best = Math.min(best, performance.now() - t); }

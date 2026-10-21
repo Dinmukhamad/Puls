@@ -35,7 +35,7 @@ def first_house(district_id, block):
 @pytest.mark.parametrize("city", ["support", "sales"])
 def test_every_district_has_land_in_every_band_and_room_for_a_house(city):
     bands = city_land.bands(city)
-    assert bands == (5 if city == "support" else 3)
+    assert bands == 5
     counts = []
     for number in (1, 2, 3):
         district_id = f"{city}-team-{number}"
@@ -72,3 +72,20 @@ def test_the_island_city_is_cut_into_square_cells_round_each_bands_land():
             assert any(c in b["skip"] for c in corners), f"{district_id}: block {block}"
             assert city_land.area(district_id, block, -1, 0) is None
             assert city_land.area(district_id, block, b["cols"], 0) is None
+
+
+def test_the_lake_city_has_as_much_land_as_the_island_city():
+    """Two bands round its first land (frontend world/land.ts LAKE_LINES), after its blocks."""
+    total = {
+        city: sum(city_land.plot_count(f"{city}-team-{n}") for n in (1, 2, 3))
+        for city in ("support", "sales")
+    }
+    assert abs(total["sales"] - total["support"]) < total["support"] * 0.02, total
+    for number in (1, 2, 3):
+        blocks = city_land.blocks(f"sales-team-{number}")
+        first = 5 if number == 1 else 7
+        # The first land's blocks keep their numbers and bands; the new ones come after them.
+        assert [blocks[k]["band"] for k in range(1, first + 1)] == (
+            [1, 2, 2, 2, 3] if number == 1 else [1, 2, 2, 2, 3, 3, 3]
+        )
+        assert {blocks[k]["band"] for k in blocks if k > first} == {3, 4, 5}

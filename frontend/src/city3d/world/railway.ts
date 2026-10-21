@@ -22,13 +22,13 @@ function ray(degrees: number, from: number, length: number, side: 1 | -1): RailL
 /**
  * Support (x4): beside the avenue that runs out to the hills towards +x, on its south side, the station between
  * them; the face where the hills past the horizon stand about 12 high (58 past it). v1 the same on its smaller
- * map, where the hills stay lower. Sales: south of the frame's bottom street, on the axis of the boulevard from
- * the lake, the face 62 past the town's edge.
+ * map, where the hills stay lower. Sales: at the bottom edge of its land, 8 past it (world/land.ts LAKE_LINES.edgeZ),
+ * on the axis of the boulevard from the lake, the face 62 past the town's edge.
  */
 export const RAIL_LINES = {
   x4: ray(-.73, 290, 88, 1),
   v1: ray(-5.5, 130, 80, 1),
-  sales: { x: 4, z: 128, dx: 0, dz: 1, length: 56, side: 1 },
+  sales: { x: 4, z: 257, dx: 0, dz: 1, length: 56, side: 1 },
 } satisfies Record<string, RailLine>;
 
 /**
