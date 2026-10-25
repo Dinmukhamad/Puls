@@ -10,6 +10,7 @@ import { approach, countdown, DAction, DCancel, DChip, DChoice, DExplain, DInfo,
 import { money } from "./DriverOrders";
 import type { ShiftAct } from "../api/driverShift";
 import "./driver-navigation.css";
+import { FocusDialog } from "../components/FocusDialog";
 
 const DriverRouteMap = lazy(() => import("./DriverRouteMap").then(m => ({ default: m.DriverRouteMap })));
 export const distanceLabel = (meters: number | null | undefined) => meters == null ? "—" : meters >= 1000 ? `${(meters / 1000).toFixed(1).replace(".", ",")} км` : `${Math.round(meters)} м`;
@@ -87,7 +88,9 @@ export function DriverNavigationOrders({ state, location, consent, allowLocation
     const generation = ++reverseGeneration.current, point = label(fix, "Моё местоположение"); setA(point); invalidateRoute();
     void driverNavigation.reverse(pointOf(fix)).then(value => { if (generation === reverseGeneration.current && value.address) { setA({ ...point, label: value.address.label }); invalidateRoute(); } }).catch(() => {});
   }
-  function newOrder() { edit(true); change(false); setHeight(50); setA(fix ? label(fix, "Моё местоположение") : null); setB(null); invalidateRoute(); if (fix) myLocation(); }
+  // Вопрос «Отменить заказ?» относится к одному заказу и его этапу.
+  useEffect(() => { askCancel(false); }, [order?.id, stage]);
+  function newOrder() { edit(true); change(false); askCancel(false); setHeight(50); setA(fix ? label(fix, "Моё местоположение") : null); setB(null); invalidateRoute(); if (fix) myLocation(); }
   useEffect(() => { if (active) { edit(false); setHeight(controlsReady ? 24 : 50); } else if (order?.stage === "complete") setHeight(50); }, [order?.id, active]);
   useEffect(() => { if (editing && !a && fix) myLocation(); }, [!!fix, editing]);
   const pickedPoint = label(picked, picking === "А" ? "Подача на карте" : "Назначение на карте");
@@ -255,6 +258,6 @@ export function DriverNavigationOrders({ state, location, consent, allowLocation
       </>}
       {error instanceof Error && <p role="alert" className="dn-inline-error">{error.message}</p>}
     </DriverOrderSheet>
-    {consent === "ask" && <div className="dn-consent"><section role="dialog" aria-modal="true" aria-labelledby="dn-consent-title"><span aria-hidden="true">◎</span><h1 id="dn-consent-title">Разрешить использование геолокации во время учебной поездки?</h1><p>Геолокация используется только во время активной учебной сессии для отображения вашего положения и проверки прибытия. История перемещений не сохраняется.</p><p className="driver-muted">Для поиска адресов и маршрута выбранные точки передаются картографическим сервисам.</p><DAction label="Разрешить" onClick={allowLocation} /><DCancel onClick={declineLocation}>Продолжить без геолокации</DCancel></section></div>}
+    {consent === "ask" && <div className="dn-consent"><FocusDialog aria-labelledby="dn-consent-title"><span aria-hidden="true">◎</span><h1 id="dn-consent-title">Разрешить использование геолокации во время учебной поездки?</h1><p>Геолокация используется только во время активной учебной сессии для отображения вашего положения и проверки прибытия. История перемещений не сохраняется.</p><p className="driver-muted">Для поиска адресов и маршрута выбранные точки передаются картографическим сервисам.</p><DAction label="Разрешить" onClick={allowLocation} /><DCancel onClick={declineLocation}>Продолжить без геолокации</DCancel></FocusDialog></div>}
   </div>;
 }

@@ -267,7 +267,7 @@ function GpsTab({ d }: { d: FleetDriver }) {
     <p className="fleet-note">Где был исполнитель и сколько проехал: на заказе, без заказа и офлайн.</p>
     <div className="fleet-tiles">{tiles.map(([label, km]) => <div key={label} className="fleet-card"><span>{label}</span><strong>{Math.round(km)} км</strong></div>)}</div>
     <div className="fleet-table-card fleet-scroll"><table className="fleet-table">
-      <thead><tr><th>Статус</th><th>Дата и время</th><th>Время</th><th className="fleet-num">Пробег</th><th /></tr></thead>
+      <thead><tr><th>Статус</th><th>Дата и время</th><th>Время</th><th className="fleet-num">Пробег</th><th><span className="sr-only">Заказ</span></th></tr></thead>
       <tbody>{done.map(o => <tr key={o.id}><td><span className="fleet-status fleet-status--order"><i />На заказе</span></td><td>{shortDate(o.created_at)}</td><td>{duration(o.duration)}</td><td className="fleet-num">{o.distance.toFixed(1).replace(".", ",")} км</td><td>Заказ {o.id}</td></tr>)}</tbody>
     </table>{!done.length && <p className="fleet-empty-hint">{d.gps ? "За период нет поездок" : "Нет сигнала GPS — трек не записывается"}</p>}</div>
   </section>;

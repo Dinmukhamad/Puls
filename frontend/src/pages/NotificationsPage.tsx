@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { AccessLink as Link } from "../components/AccessLink";
 import { progressApi } from "../api/progress";
@@ -8,6 +9,9 @@ import "./workflow.css";
 export function NotificationsPage() {
   const [params, setParams] = useSearchParams(); const page = Math.max(1, Number(params.get("page")) || 1); const unread = params.get("unread") === "1";
   const data = useQuery({ queryKey: ["notifications", page, unread], queryFn: () => progressApi.notifications(page, unread) }); const client = useQueryClient();
+  // Прочитали последнее на странице «Непрочитанные»: возвращаемся на последнюю непустую страницу.
+  const lastPage = data.data ? Math.max(1, Math.ceil(data.data.total / 20)) : page;
+  useEffect(() => { if (page > lastPage) setParams({ page: String(lastPage), unread: unread ? "1" : "0" }, { replace: true }); }, [page, lastPage, unread, setParams]);
   const read = useMutation({ mutationFn: (id?: number) => progressApi.read(id), onSuccess: () => { void client.invalidateQueries({ queryKey: ["notifications"] }); } });
   const today = new Date().toDateString(); const yesterday = new Date(Date.now() - 86400000).toDateString();
   const groups = ["Сегодня", "Вчера", "Ранее"].map((title) => ({ title, items: data.data?.items.filter((n) => { const date = parseTimestamp(n.created_at).toDateString(); return (date === today ? "Сегодня" : date === yesterday ? "Вчера" : "Ранее") === title; }) ?? [] }));

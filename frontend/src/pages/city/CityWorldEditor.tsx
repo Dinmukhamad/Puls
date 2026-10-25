@@ -113,7 +113,7 @@ export function WorldSettingsEditor({ data, isHead = false }: { data: WorldEdito
                   return { value: person.id, label: `${person.name}${occupied ? ` · уже назначен: ${occupied}` : ""}`, disabled: !!occupied };
                 }),
               ];
-              return <section key={district.id} className="city-world-editor__district" aria-labelledby={`world-district-${district.id}`}>
+              return <section key={district.id} className="city-world-editor__district" aria-labelledby={`world-city-${city.id} world-district-${district.id}`}>
                 <div className="city-world-editor__district-head"><h3 id={`world-district-${district.id}`}>Район {index + 1}</h3>{district.supervisor_id === null && <Badge>Свободен</Badge>}</div>
                 <label className="field"><span className="field__label">Название района</span><input className="input" value={district.name} required minLength={2} maxLength={40} onChange={event => edit(city.id, item => { item.districts[index].name = event.target.value; })} /></label>
                 <label className="field"><span className="field__label">Супервайзер района</span><Select aria-label="Супервайзер района" aria-describedby={`world-team-${district.id}`} value={district.supervisor_id ?? ""} options={supervisorOptions} onChange={value => edit(city.id, item => { item.districts[index].supervisor_id = value ? Number(value) : null; })} /></label>

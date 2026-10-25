@@ -62,7 +62,7 @@ test("personal rating explains actual place, participant count and period withou
   assert.match(html, /Ваш результат по неделям/);
   assert.match(html, /Место <strong>4<\/strong> из 48/);
   assert.match(html, /05\.10\.2026 — 11\.10\.2026/);
-  assert.match(html, /До призового результата — <strong>7,5 баллов<\/strong>/);
+  assert.match(html, /До призового результата — <strong>7,5 балла<\/strong>/);
   assert.match(html, /операторы делят место/);
   assert.match(html, /без изменений/);
   assert.match(html, /href="\/race\?week=17">Кого догнать и что подтянуть/);

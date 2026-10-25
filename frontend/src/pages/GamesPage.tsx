@@ -51,6 +51,9 @@ function Wheel() {
     setRequest({ id: crypto.randomUUID(), segment: value.segment });
   } });
 
+  // Ушли со страницы, пока сундук открывался: награда уже начислена, обновляем баланс и попытки без анимации.
+  useEffect(() => () => { if (pending.current) invalidateRewards(client); }, [client]);
+
   function settled() {
     const value = pending.current;
     pending.current = null;
@@ -64,7 +67,8 @@ function Wheel() {
   const left=config.free_left??Math.max(0,config.daily_spins-config.used_today);
   const paidLeft=config.paid_left??0, paid=left===0&&paidLeft>0, done=left===0&&!paid;
   const chest=config.chest??{unlocked:true,answered:0,total:0};
-  const locked=!chest.unlocked;
+  // Выключенный сундук — «на перерыве», а не «сначала задания»: задания его не откроют.
+  const locked=config.enabled&&!chest.unlocked;
   const opening=spin.isPending||animating;
   const state=locked?"locked":opening?"opening":result?"open":!config.enabled?"paused":done?"spent":"ready";
   const rewardSticker=result?prizeSticker(result.reward,segments):undefined;

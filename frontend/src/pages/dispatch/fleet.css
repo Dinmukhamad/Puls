@@ -107,7 +107,7 @@ button.fleet-chip:not(:disabled):hover { background:#faf9f7; }
 .fleet-count .fleet-icon { width:14px; height:14px; }
 .fleet-split { display:grid; grid-template-columns:minmax(0,1fr); gap:14px; align-items:start; }
 .fleet-contractors.has-preview .fleet-split { grid-template-columns:minmax(0,1fr) minmax(320px,400px); }
-.fleet-table-card { background:#fff; border-radius:var(--f-radius); overflow:hidden; margin-bottom:14px; }
+.fleet-table-card { position:relative; background:#fff; border-radius:var(--f-radius); overflow:hidden; margin-bottom:14px; }
 .fleet-scroll { overflow-x:auto; }
 .fleet-table { width:100%; border-collapse:collapse; font-size:13.5px; }
 .fleet-table th { text-align:left; font-weight:400; color:var(--f-muted); font-size:12px; padding:12px 14px; background:var(--f-bg); white-space:nowrap; }

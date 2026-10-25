@@ -102,7 +102,9 @@ export function CoinOperatorPicker({ selected, onChange, allowAll = false, selec
         placeholder="Начните вводить имя или логин"
       />
     </label>
-    {expanded && <div className="wallet-operator-picker__results">
+    {/* Safari и Firefox не переводят фокус на кнопку по клику: без этого поле теряет фокус,
+        список закрывается и «Ещё результаты» или «Повторить» не срабатывают. */}
+    {expanded && <div className="wallet-operator-picker__results" onMouseDown={(event) => event.preventDefault()}>
       {(!searchReady || people.isLoading) && <p className="small secondary" role="status">Поиск операторов…</p>}
       {searchReady && people.isError && <ErrorState error={people.error} onRetry={() => people.refetch()} />}
       <div id={listId} role="listbox" aria-label="Найденные операторы">

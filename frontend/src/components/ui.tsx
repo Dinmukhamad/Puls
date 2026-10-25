@@ -301,10 +301,13 @@ export function EmptyState({
   title,
   hint,
   action,
+  titleAs: Title = "p",
 }: {
   title: string;
   hint?: string;
   action?: ReactNode;
+  /** h1, когда пустое состояние и есть вся страница (нет доступа, не найдено). */
+  titleAs?: "p" | "h1";
 }) {
   return (
     <div className="state">
@@ -313,7 +316,7 @@ export function EmptyState({
         <span />
         <span />
       </div>
-      <p className="state__title">{title}</p>
+      <Title className="state__title">{title}</Title>
       {hint && <p className="state__hint">{hint}</p>}
       {action && <div className="state__action">{action}</div>}
     </div>
@@ -408,7 +411,8 @@ export function Pagination({
   onChange: (page: number) => void;
 }) {
   const pages = Math.max(1, Math.ceil(total / size));
-  if (pages <= 1) return null;
+  // За последней страницей (список сократился, старая ссылка) кнопки остаются, чтобы вернуться.
+  if (pages <= 1 && page <= 1) return null;
 
   const from = (page - 1) * size + 1;
   const to = Math.min(page * size, total);
@@ -416,10 +420,10 @@ export function Pagination({
   return (
     <nav className="pagination" aria-label="Навигация по страницам">
       <span className="pagination__info">
-        {from}–{to} из {total}
+        {from <= to ? `${from}–${to} из ${total}` : `Всего: ${total}`}
       </span>
       <div className="pagination__controls">
-        <Button size="s" disabled={page <= 1} onClick={() => onChange(page - 1)}>Назад</Button>
+        <Button size="s" disabled={page <= 1} onClick={() => onChange(Math.min(page - 1, pages))}>Назад</Button>
         <span className="pagination__page" aria-live="polite">{page} / {pages}</span>
         <Button size="s" disabled={page >= pages} onClick={() => onChange(page + 1)}>Вперёд</Button>
       </div>

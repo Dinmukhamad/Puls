@@ -49,6 +49,7 @@ export function ReportsUpload({ onSaved }: { onSaved?: () => void }) {
   const [month, setMonth] = useState("");
   const [result, setResult] = useState<ReportsResult | null>(null);
   const [saved, setSaved] = useState(false);
+  const [rejected, setRejected] = useState<string[]>([]);
   const generation = useRef(0);
 
   const inspect = useMutation({
@@ -70,6 +71,9 @@ export function ReportsUpload({ onSaved }: { onSaved?: () => void }) {
 
   const choose = (list: File[], chosen = month) => {
     const xlsx = list.filter((file) => file.name.toLowerCase().endsWith(".xlsx"));
+    // Перетаскивание обходит accept: о чужих файлах говорим, а выбранные не сбрасываем.
+    setRejected(list.filter((file) => !xlsx.includes(file)).map((file) => file.name));
+    if (list.length && !xlsx.length) return;
     generation.current += 1;
     setFiles(xlsx); setResult(null); setSaved(false); save.reset();
     if (xlsx.length) inspect.mutate({ list: xlsx, chosen, revision: generation.current });
@@ -84,6 +88,7 @@ export function ReportsUpload({ onSaved }: { onSaved?: () => void }) {
       <FileDrop accept=".xlsx" multiple disabled={busy} files={files} onFiles={list => choose(list)}
         title={files.length ? `Выбрано файлов: ${files.length}` : "Перетащите сюда все файлы за месяц"} busy={inspect.isPending && "Читаем отчёты…"}
         hint="Файлы XLSX из СЗоВ, можно сразу несколько." />
+      {rejected.length > 0 && <p className="field__note" role="alert">Пропущены файлы не в формате XLSX: {rejected.join(", ")}</p>}
       <label className="field reports-upload__month"><span className="field__label">Месяц</span>
         <Select aria-label="Месяц отчётов" value={month} disabled={busy} onChange={changeMonth} options={[{ value: "", label: "Из названий файлов" }, ...monthOptions()]} />
         <span className="field__note">Укажите, если месяца нет в названии файлов.</span></label>

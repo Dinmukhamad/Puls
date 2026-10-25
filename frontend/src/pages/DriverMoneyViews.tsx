@@ -6,6 +6,7 @@ import { dateTime } from "../utils/format";
 import type { LedgerEntry } from "../api/driverShift";
 import "./driver-money.css";
 import { AnimatedNumber } from "./DriverMotion";
+import { useDialogFocus } from "../components/FocusDialog";
 
 /* Строение раздела повторяет приложение парка: сводка за день, отдельный экран баланса
    с круглыми действиями, нижние шторки вместо форм посреди страницы, доход со сравнением
@@ -62,9 +63,11 @@ function Empty({ title, text, page }: { title: string; text: string; page?: bool
 }
 
 function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
-  return <div className="dm-sheet-backdrop" onClick={event => { if (event.target === event.currentTarget) onClose(); }}>
+  // Окно — весь слой вместе с «×»: иначе для чтения с экрана кнопка закрытия оказывается вне окна.
+  const dialog = useDialogFocus<HTMLDivElement>(onClose);
+  return <div ref={dialog} className="dm-sheet-backdrop" role="dialog" aria-modal="true" aria-label={title} tabIndex={-1} onClick={event => { if (event.target === event.currentTarget) onClose(); }}>
     <button className="dm-sheet-close" type="button" aria-label="Закрыть" onClick={onClose}>×</button>
-    <section className="dm-sheet" role="dialog" aria-modal="true" aria-label={title}>
+    <section className="dm-sheet">
       <h2>{title}</h2>
       {children}
     </section>

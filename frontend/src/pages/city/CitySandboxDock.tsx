@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { citySandbox, type CityEstates, type DistrictEstate, type MyEstate, type PlotCatalogue, type PlotFamily, type ProjectCatalogue, type ProjectFamily, type PublicObject, type SandboxResult } from "../../api/cityEstate";
 import type { DepartmentId } from "../../api/cityWorld";
@@ -42,16 +42,21 @@ export function CitySandboxDock({ city, state, mine, build, setBuild, onClose, o
   const activeComplex = land?.landmark?.status === "active";
   const publicMode = build.project || (activeComplex && build.area === "public");
   const plots = new Map((mine?.catalogue ?? []).map(c => [c.family, c])), projects = new Map((mine?.projects ?? []).map(c => [c.family, c]));
+  // The answer may come after the dock was closed or after the next tap on the map: neither is undone by it.
+  const mounted = useRef(true), latest = useRef(build);
+  latest.current = build;
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const act = useMutation({
-    mutationFn: (step: Step) => step.run(),
-    onSuccess: async (result, step) => {
+    mutationFn: ({ step }: { step: Step; from: BuildState }) => step.run(),
+    onSuccess: async (result, { step, from }) => {
       // The dock moves on once the city shows the change, so a new building's card finds it.
       await client.invalidateQueries({ queryKey: ["city-sandbox", city] });
+      if (!mounted.current) return;
       setNotice(step.text(result));
-      if (step.next) setBuild(step.next(result));
+      if (step.next && latest.current === from) setBuild(step.next(result));
     },
   });
-  const run = (step: Step) => { setNotice(null); act.mutate(step); };
+  const run = (step: Step) => { setNotice(null); act.mutate({ step, from: build }); };
   const pending = act.isPending, error = act.error;
   const go = (next: Partial<BuildState>) => { act.reset(); setNotice(null); setBuild({ ...build, ...next }); };
   const area = (square: boolean) => { go({ area: square ? "public" : "plots", project: square, placing: null, spot: null, selected: null, choice: null }); onFocus({ district: build.district, kind: square ? "public" : "district" }); };

@@ -53,6 +53,8 @@
 .race-metric__lost.is-full { color: var(--status-success-text); }
 .race-metric__lost.is-missing { color: var(--text-secondary); font-weight: 500; }
 
+/* Четыре коротких столбца помещаются и на телефоне: «Баллы» и «От вас» не прячутся за прокруткой. */
+.table.race-table { min-width: 0; }
 .race-table td { vertical-align: middle; }
 .race-table__gap td { text-align: center; color: var(--text-secondary); padding-top: 2px; padding-bottom: 2px; }
 .race-table__delta { margin-left: 10px; display: inline-flex; vertical-align: middle; font-size: 12px; }

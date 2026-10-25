@@ -1286,6 +1286,8 @@ select.input {
  * -------------------------------------------------------------------------- */
 
 .table-wrap {
+  /* Скрытые подписи (.sr-only) в шапке таблицы остаются внутри прокрутки, а не растягивают страницу. */
+  position: relative;
   overflow-x: auto;
   margin: 0 calc(var(--sp-6) * -1);
   padding: 0 var(--sp-6);
@@ -1502,6 +1504,7 @@ select.input {
 }
 
 .state__title {
+  font-size: inherit;
   font-weight: 600;
   color: var(--text-primary);
 }

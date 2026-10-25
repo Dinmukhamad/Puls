@@ -122,10 +122,11 @@ export function ShopPage() {
     void queryClient.invalidateQueries({ queryKey: ["coin-progress"] });
   };
 
+  // Товар передаётся в мутацию: к ответу сервера окно уже могло закрыться и chosen стать null.
   const buy = useMutation({
-    mutationFn: () => shop.buy(chosen!.id, comment),
-    onSuccess: () => {
-      toast.success(`Заявка на «${chosen!.title}» отправлена. Коины зарезервированы.`);
+    mutationFn: (item: ShopItemForOperator) => shop.buy(item.id, comment),
+    onSuccess: (_request, item) => {
+      toast.success(`Заявка на «${item.title}» отправлена. Коины зарезервированы.`);
       setChosen(null);
       setComment("");
       refresh();
@@ -188,7 +189,7 @@ export function ShopPage() {
           <span className="shop-wallet__note">{reserved > 0 ? `Ещё ${coins(reserved)} в резерве под заявки` : "Доступно к трате · коины не сгорают"}</span>
         </div>
         <div className="shop-wallet__stat">
-          <strong>{counts.ready}<small> из {data.items.length}</small></strong>
+          <strong>{data.items.filter((item) => shopGroup(item) === "ready").length}<small> из {data.items.length}</small></strong>
           <span>бонусов можно купить сейчас</span>
         </div>
         {goal ? (
@@ -258,7 +259,7 @@ export function ShopPage() {
                     <th className="num">Цена</th>
                     <th>Статус</th>
                     <th>Комментарий решения</th>
-                    <th />
+                    <th><span className="sr-only">Действия</span></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -311,13 +312,13 @@ export function ShopPage() {
       {chosen && (
         <Sheet
           title={chosen.title}
-          subtitle={`${coins(chosen.price)} коинов`}
-          onClose={() => setChosen(null)}
+          subtitle={`${coins(chosen.price)} ${plural(chosen.price, "коин", "коина", "коинов")}`}
+          onClose={() => { if (!buy.isPending) setChosen(null); }}
           size="s"
           footer={
             <>
-              <Button onClick={() => setChosen(null)}>Отмена</Button>
-              <Button variant="primary" disabled={buy.isPending} onClick={() => buy.mutate()}>
+              <Button disabled={buy.isPending} onClick={() => setChosen(null)}>Отмена</Button>
+              <Button variant="primary" disabled={buy.isPending} onClick={() => buy.mutate(chosen)}>
                 {buy.isPending ? "Отправляем…" : `Купить за ${coins(chosen.price)} ◈`}
               </Button>
             </>

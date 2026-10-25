@@ -10,6 +10,8 @@ function syncBackground() {
   const top = sheetStack.at(-1);
   for (const child of Array.from(document.body.children)) {
     if (!(child instanceof HTMLElement) || /^(SCRIPT|STYLE|LINK)$/.test(child.tagName)) continue;
+    // Уведомления (Toast) объявляются и поверх окна.
+    if (child.classList.contains("toasts")) continue;
     if (!backgroundStates.has(child)) {
       backgroundStates.set(child, { inert: child.inert, ariaHidden: child.getAttribute("aria-hidden") });
     }
@@ -91,13 +93,15 @@ export function Sheet({
   const [dragOffset, setDragOffset] = useState(0);
   const dragStart = useRef<number | null>(null);
   const dragDistance = useRef(0);
+  // Кнопку, открывшую окно, запоминаем ещё при отрисовке: к эффекту фокус может
+  // уже стоять на поле с autoFocus внутри окна.
+  const [previousFocus] = useState(() => document.activeElement instanceof HTMLElement ? document.activeElement : null);
 
   useLayoutEffect(() => {
     const dialog = panel.current;
     const layer = overlay.current;
     if (!dialog || !layer) return;
-    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    dialog.focus({ preventScroll: true });
+    if (!dialog.contains(document.activeElement)) dialog.focus({ preventScroll: true });
     const unregister = registerSheet(layer);
     const onKey = (event: KeyboardEvent) => {
       if (sheetStack.at(-1) !== layer) return;
@@ -141,7 +145,7 @@ export function Sheet({
         previousFocus.focus({ preventScroll: true });
       }
     };
-  }, []);
+  }, [previousFocus]);
 
   function onPointerDown(event: React.PointerEvent) {
     // Тянуть можно только за шапку: иначе жест конфликтует с прокруткой тела.

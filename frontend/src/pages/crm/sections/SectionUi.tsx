@@ -72,7 +72,7 @@ export function usePages<T>(rows: T[], size: number) {
 export function Dialog({ title, onClose, children, footer, coach }: { title: string; onClose: () => void; children: ReactNode; footer?: ReactNode; coach?: string }) {
   const id = useId();
   return <div className="sec-modal" role="dialog" aria-modal="true" aria-labelledby={id} onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }} onKeyDown={e => { if (e.key === "Escape") onClose(); }}>
-    <div className="sec-modal-card" data-coach={coach}><div className="sec-modal-head"><h3 id={id}>{title}</h3><button className="sec-close" aria-label="Закрыть" onClick={onClose}>×</button></div>
+    <div className="sec-modal-card" data-coach={coach}><div className="sec-modal-head"><h3 id={id}>{title}</h3><button className="sec-close" autoFocus aria-label="Закрыть" onClick={onClose}>×</button></div>
       <div className="sec-modal-body">{children}</div>{footer && <div className="sec-modal-foot">{footer}</div>}</div>
   </div>;
 }

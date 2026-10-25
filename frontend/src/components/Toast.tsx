@@ -6,6 +6,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 
 import { AlertIcon, CheckIcon, SparkIcon } from "./icons";
 
@@ -54,7 +55,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={api}>
       {children}
-      <div className="toasts" aria-live="polite">
+      {/* Вне #root: пока открыто окно, приложение под ним inert и скрыто от чтения с экрана,
+          а сообщения из самого окна должны быть слышны. */}
+      {createPortal(<div className="toasts" aria-live="polite">
         {toasts.map((toast) => (
           <div key={toast.id} className={`toast glass glass--prominent toast--${toast.tone}`}>
             {/* Значок дублирует цвет: тон сообщения не читается по одному оттенку. */}
@@ -62,7 +65,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             <span>{toast.text}</span>
           </div>
         ))}
-      </div>
+      </div>, document.body)}
     </ToastContext.Provider>
   );
 }

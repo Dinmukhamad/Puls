@@ -44,7 +44,11 @@ function Simulator({ id }: { id: number }) {
       if (generation !== geoGeneration.current) return;
       setPosition({ latitude: value.coords.latitude, longitude: value.coords.longitude, accuracy: value.coords.accuracy });
       if (first) { first = false; setLocating(false); setGeoInfo(false); action.mutate("mode"); }
-    }, (error) => { if (generation !== geoGeneration.current) return; stopLocation(); setGeoError(error.code === 1 ? "Доступ не разрешён. Можно выбрать виртуальную поездку или разрешить геолокацию в настройках браузера." : "Не удалось определить местоположение. Повторите или выберите виртуальный режим."); }, { enableHighAccuracy: false, timeout: 10000, maximumAge: 5000 });
+    }, (error) => {
+      if (generation !== geoGeneration.current) return;
+      // Сигнал пропал в пути (тоннель, здание): GPS вернётся сам. Слежение прекращаем только без разрешения.
+      if (!first && error.code !== 1) return;
+      stopLocation(); setGeoError(error.code === 1 ? "Доступ не разрешён. Можно выбрать виртуальную поездку или разрешить геолокацию в настройках браузера." : "Не удалось определить местоположение. Повторите или выберите виртуальный режим."); }, { enableHighAccuracy: false, timeout: 10000, maximumAge: 5000 });
   }
   if (query.isLoading) return <div className="sim-boot"><RowsSkeleton /></div>;
   if (query.isError) return <div className="sim-boot"><Link to="/training/city">‹ Обучение</Link><ErrorState error={query.error} onRetry={() => query.refetch()} /></div>;

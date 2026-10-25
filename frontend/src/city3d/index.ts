@@ -209,6 +209,15 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
     };
     const observer = new ResizeObserver(resize); startupDisposers.push(() => observer.disconnect()); observer.observe(host); if (options.frame) observer.observe(options.frame);
     quality.onChange(resize);
+    // Окно перетащили на экран с другой плотностью пикселей: размер в CSS тот же, ResizeObserver молчит.
+    let density: MediaQueryList | null = null;
+    const watchDensity = () => {
+      density?.removeEventListener("change", onDensity);
+      density = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+      density.addEventListener("change", onDensity);
+    };
+    function onDensity() { resize(); watchDensity(); }
+    watchDensity(); startupDisposers.push(() => density?.removeEventListener("change", onDensity));
     resize();
 
     let ready = false;

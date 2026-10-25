@@ -11,8 +11,8 @@ export function DRow({ title, value, note, onClick }: { title: string; value?: R
   const contents = <><span><strong>{title}</strong>{note && <small>{note}</small>}</span><span>{value}{onClick && <b aria-hidden="true">›</b>}</span></>;
   return onClick ? <button className="ds-row" onClick={onClick}>{contents}</button> : <div className="ds-row">{contents}</div>;
 }
-export function DToggle({ title, checked, onChange, note, disabled }: { title: string; checked: boolean; onChange: () => void; note?: string; disabled?: boolean }) {
-  return <label className="ds-toggle"><span>{title}{note && <small>{note}</small>}</span><input type="checkbox" checked={checked} onChange={onChange} disabled={disabled} /><i aria-hidden="true" /></label>;
+export function DToggle({ title, checked, onChange, note, disabled, ariaLabel }: { title: string; checked: boolean; onChange: () => void; note?: string; disabled?: boolean; ariaLabel?: string }) {
+  return <label className="ds-toggle"><span>{title}{note && <small>{note}</small>}</span><input type="checkbox" checked={checked} onChange={onChange} disabled={disabled} aria-label={ariaLabel} /><i aria-hidden="true" /></label>;
 }
 export function DRadio({ title, name, value, checked, onChange, note, disabled }: { title: string; name: string; value: string; checked: boolean; onChange: () => void; note?: string; disabled?: boolean }) {
   return <label className="ds-radio"><input type="radio" name={name} value={value} checked={checked} onChange={onChange} disabled={disabled} /><span><strong>{title}</strong>{note && <small>{note}</small>}</span></label>;

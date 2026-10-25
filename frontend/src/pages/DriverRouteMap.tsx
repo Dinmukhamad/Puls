@@ -117,7 +117,7 @@ export function DriverRouteMap({ current, stale, pickup, destination, route, pic
       {route && <button type="button" onClick={fit}>Маршрут</button>}
       <button type="button" className="dn-locate" aria-label="Вернуться к моей позиции" aria-pressed={following} title={following ? "Карта следует за машиной" : "Вернуться к моей позиции"} disabled={!current} onClick={() => { follow(true); if (current) focus(current); }}>◎</button>
     </div>
-    <div className="dn-attribution" style={{ bottom: `calc(${Math.min(sheetHeight, 88)}% + 5px)` }}><a href="https://openfreemap.org" target="_blank" rel="noreferrer">OpenFreeMap</a> · <a href="https://www.openmaptiles.org/" target="_blank" rel="noreferrer">© OpenMapTiles</a> · <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap</a></div>
+    <div className="dn-attribution" style={{ bottom: `calc(max(${Math.min(sheetHeight, 88)}%, ${sheetHeight < 30 ? 190 : 0}px) + 5px)` }}><a href="https://openfreemap.org" target="_blank" rel="noreferrer">OpenFreeMap</a> · <a href="https://www.openmaptiles.org/" target="_blank" rel="noreferrer">© OpenMapTiles</a> · <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap</a></div>
     {tileError && <p className="dn-map-note">Часть карты не загрузилась. Маршрут и положение остаются на экране.</p>}
   </>;
 }

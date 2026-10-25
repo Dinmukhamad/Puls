@@ -28,7 +28,8 @@ export function CrmTicketDetail({ id, userId, onAppeal }: { id: number; userId?:
     request.current = undefined; setUncertain(false); setModal(false); if (draft.ready) await draft.clear().catch(() => {}); opener.current?.focus();
   }, onError: error => { if (request.current && (!("status" in error) || Number(error.status) === 0 || Number(error.status) >= 500)) setUncertain(true); } });
   useEffect(() => { if (query.data) void client.invalidateQueries({ queryKey: crmTrainingKey(userId) }); }, [query.data, client, userId]);
-  useEffect(() => { if (modal) area.current?.focus(); }, [modal]);
+  // Поле включается, когда черновик загрузился: фокус ставим тогда, а не на ещё выключенное поле.
+  useEffect(() => { if (modal && draft.ready) area.current?.focus(); }, [modal, draft.ready]);
   function attach(incoming: File[]) {
     setFileError("");
     if (files.length + draft.attachments.length + incoming.length > 5 || incoming.some(f => f.size > 2 * 1024 * 1024 || !["image/png", "image/jpeg", "image/webp", "application/pdf"].includes(f.type))) { setFileError("До 5 файлов, каждый до 2 МБ: PNG, JPEG, WebP или PDF."); return; }

@@ -6,7 +6,7 @@ import type { BadgeOut } from "../api/types";
 import { progressApi } from "../api/progress";
 import { MedalIcon, SparkIcon } from "../components/icons";
 import { Button, Card, Delta, ErrorState, Progress, RowsSkeleton, Skeleton } from "../components/ui";
-import { coins } from "../utils/format";
+import { coins, coinsWithUnit, plural } from "../utils/format";
 import { WeekMetricsCard } from "./WeekMetricsCard";
 import { RecentTransactions, WalletCard } from "./CabinetWallet";
 import { CabinetLearning } from "./CabinetLearning";
@@ -79,14 +79,14 @@ function ProgressCard({ balance }: {
       {progress.data && <div className="cabinet-progress__content">
         <div className="cabinet-progress__heading">
           <div className="cabinet-progress__level"><span className="cabinet-progress__icon"><SparkIcon size={24} /></span><div><p className="small secondary">{progress.data.current ? `Уровень ${progress.data.level_number}` : "Ваш путь в Puls"}</p><h3>{progress.data.current?.title ?? "Начало пути"}</h3></div></div>
-          <div className="cabinet-progress__earned"><strong>{coins(progress.data.total)}</strong><span>коинов за всё время</span></div>
+          <div className="cabinet-progress__earned"><strong>{coins(progress.data.total)}</strong><span>{plural(progress.data.total, "коин", "коина", "коинов")} за всё время</span></div>
         </div>
         <Progress value={progress.data.progress} tone="accent" label="До следующего уровня" />
-        <p className="level__hint">{progress.data.next ? `${coins(progress.data.remaining)} коинов до уровня «${progress.data.next.title}»` : progress.data.current ? "Высший уровень достигнут" : "Уровни ещё не настроены"}</p>
+        <p className="level__hint">{progress.data.next ? `${coinsWithUnit(progress.data.remaining)} до уровня «${progress.data.next.title}»` : progress.data.current ? "Высший уровень достигнут" : "Уровни ещё не настроены"}</p>
         <p className="small secondary">Покупки не уменьшают уровень. Возвраты не прибавляют прогресс.</p>
       </div>}
       <div className="cabinet-progress__stats">
-        <div><span className="small secondary">Заработано за неделю</span><strong>{coins(balance.earned_this_week ?? 0)} <span className="small secondary">коинов</span></strong></div>
+        <div><span className="small secondary">Заработано за неделю</span><strong>{coins(balance.earned_this_week ?? 0)} <span className="small secondary">{plural(balance.earned_this_week ?? 0, "коин", "коина", "коинов")}</span></strong></div>
         <div>
           <span className="small secondary">Место в недельном рейтинге</span>
           <strong>
@@ -129,7 +129,7 @@ function BadgeItem({ badge }: { badge: BadgeOut }) {
       <div className="badge-card__text">
         <span className="badge-card__title">{badge.title}</span>
         <span className="badge-card__hint">{badge.hint || badge.description}</span>
-        {badge.coins_reward > 0 && <span className="badge-card__hint">{badge.unlocked ? badge.coins_awarded > 0 ? `Начислено: ${badge.coins_awarded} коинов` : "Достижение получено" : `Награда: ${badge.coins_reward} коинов один раз`}</span>}
+        {badge.coins_reward > 0 && <span className="badge-card__hint">{badge.unlocked ? badge.coins_awarded > 0 ? `Начислено: ${coinsWithUnit(badge.coins_awarded)}` : "Достижение получено" : `Награда: ${badge.coins_reward} коинов один раз`}</span>}
         {/* Заблокированный бейдж показывает критерий, а не серую заглушку. */}
         {!badge.unlocked && badge.progress_target > 0 && (
           <Progress value={badge.progress_percent / 100} size="s" label={`Прогресс: ${badge.title}`} />

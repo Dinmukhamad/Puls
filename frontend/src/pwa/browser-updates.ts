@@ -70,6 +70,9 @@ export function browserUpdates(current: Release) {
       const reg = await register();
       const worker = await matching(reg, release.buildId);
       if (!worker) throw new Error("Файлы обновления изменились. Повторите проверку.");
+      // После Shift+Reload страницу загрузила сеть, а не worker: он уже активен,
+      // но управлять этой вкладкой не станет до следующей загрузки. Ждать нечего.
+      if (worker.state === "activated" && !navigator.serviceWorker.controller) return;
       if (worker.state !== "activated") worker.postMessage({ type: "ACTIVATE_UPDATE" });
       const started = Date.now();
       while (Date.now() - started < 10000) {

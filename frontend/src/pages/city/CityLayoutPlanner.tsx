@@ -65,7 +65,7 @@ export function CityLayoutPlanner({ city, data, editable }: { city: WorldCity; d
     : `Сейчас ${districts(current)}. Новое число районов вступит в силу ${when}.`;
   const unchanged = count === current && plan.every((d, i) => d.name === city.districts[i]?.name && d.supervisor_id === (city.districts[i]?.supervisor_id ?? null));
 
-  return <section className="city-layout-planner" aria-labelledby={`layout-${city.id}`}>
+  return <section className="city-layout-planner" aria-labelledby={`world-city-${city.id} layout-${city.id}`}>
     <div className="city-layout-planner__head">
       <h3 id={`layout-${city.id}`}>Районов со следующего сезона</h3>
       {planned && <Badge tone="warning">Запланировано: {districts(planned)}</Badge>}

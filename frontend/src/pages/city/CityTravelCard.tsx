@@ -56,7 +56,7 @@ export function CityTravelCard({ cities, current, ready, onTravel, onVisit, chil
   const destination = cities.find(city => city.id === destinationId && city.id !== current) ?? cities.find(city => city.id !== current);
   const ordered = [...cities].sort((a, b) => Number(b.id === current) - Number(a.id === current));
   return <div className="city-travel">
-    <div className="city-travel-cities" aria-label="Города для поездки">
+    <div className="city-travel-cities" role="group" aria-label="Города для поездки">
       {ordered.map(city => {
         const isCurrent = city.id === current, isSelected = city.id === destination?.id;
         const content = <>

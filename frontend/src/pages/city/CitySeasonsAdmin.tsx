@@ -49,7 +49,7 @@ export function CitySeasonsAdmin() {
     </Card>}
     <Card title="Прошлые сезоны" subtitle={data.history.length ? `Город сбрасывался ${resetsText(data.resets)}` : "Сбросов ещё не было"} padded={false}>
       {data.history.length ? <div className="table-wrap table-wrap--responsive city-admin-table"><table className="table">
-        <thead><tr><th>Сезон</th><th>Даты</th><th className="num">Длился</th><th>Как закончился</th><th>Построено</th><th /></tr></thead>
+        <thead><tr><th>Сезон</th><th>Даты</th><th className="num">Длился</th><th>Как закончился</th><th>Построено</th><th><span className="sr-only">Открыть город</span></th></tr></thead>
         <tbody>{data.history.map(s => <tr key={s.id}>
           <td><strong>Сезон {s.number}</strong></td>
           <td className="nowrap">{seasonDates(s.started_at, s.ended_at)}</td>

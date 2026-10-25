@@ -120,7 +120,7 @@ function RaceTopThree({ data }: { data: RaceOut }) {
         <span className="race-top__medal"><MedalIcon size={18} /> {row.rank}</span>
         <span className="race-top__name">{row.is_me ? <>Вы<span className="tag-me">это вы</span></> : row.name}</span>
         <span className="race-top__points">{points(row.points)}</span>
-        <span className="race-top__gap">{row.is_me || row.gap == null ? "" : row.gap > 0 ? `впереди на ${pointsLabel(row.gap)}` : "вы впереди"}</span>
+        <span className="race-top__gap">{row.is_me || row.gap == null ? "" : row.gap > 0 ? `впереди на ${pointsLabel(row.gap)}` : row.gap === 0 ? "поровну" : "вы впереди"}</span>
       </li>)}
     </ol>
   </Card>;
@@ -206,7 +206,7 @@ function RaceTable({ data }: { data: RaceOut }) {
   const rows = visibleRows(data.standings, all);
   const hidden = data.standings.length > 12;
   return <Card title="Таблица гонки" subtitle={`Все операторы недели · ${data.participants}`} padded={false}>
-    <div className="table-wrap"><table className="table race-table">
+    <div className="table-wrap" tabIndex={0} role="region" aria-label="Таблица гонки"><table className="table race-table">
       <thead><tr><th>Место</th><th>Оператор</th><th className="num">Баллы</th><th className="num">От вас</th></tr></thead>
       <tbody>{rows.map((row, i) => row === "gap"
         ? <tr key={`gap-${i}`} className="race-table__gap"><td colSpan={4}>…</td></tr>

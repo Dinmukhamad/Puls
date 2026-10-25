@@ -7,7 +7,7 @@ import { Sheet } from "../components/Sheet";
 import { AlertIcon } from "../components/icons";
 import { useToast } from "../components/Toast";
 import { Badge, Button, Card, EmptyState, ErrorState, IconButton, RowsSkeleton, Select } from "../components/ui";
-import { coins as formatCoins, dateTime, plural, points } from "../utils/format";
+import { coins as formatCoins, dateTime, parseTimestamp, plural, points } from "../utils/format";
 import { monthlyChestCoins, promisedCoins } from "./wheelPrizes";
 
 export function WheelSettings() {
@@ -43,7 +43,7 @@ function WheelEditor({initial}:{initial:WheelConfig}) {
         сравнить веса между собой — то, ради чего сюда и заходят, — было
         нельзя, потому что рядом они не помещались. */}
     <Card title="Призы" subtitle={`${value.segments.length} из 12 · общий вес ${total}`} padded={false}>
-      <div className="table-wrap">
+      <div className="table-wrap" tabIndex={0} role="region" aria-label="Призы">
         <table className="table prize-table">
           <thead>
             <tr>
@@ -51,7 +51,7 @@ function WheelEditor({initial}:{initial:WheelConfig}) {
               <th className="num">Вес</th>
               <th className="num">Коины</th>
               <th className="num">Шанс</th>
-              <th aria-label="Действия" />
+              <th><span className="sr-only">Действия</span></th>
             </tr>
           </thead>
           <tbody>
@@ -102,5 +102,5 @@ export function Raffles({administrative}:{administrative:boolean}) {
 function RaffleEditor({target,onClose}:{target?:Raffle;onClose:()=>void}) {
   const [value,setValue]=useState<RaffleInput>(()=>target?{title:target.title,description:target.description,prize:target.prize,closes_at:target.closes_at,status:target.status==="published"?"published":"draft",coins_reward:target.coins_reward,entry_cost:target.entry_cost??0}:{title:"",description:"",prize:"",closes_at:"",status:"draft",coins_reward:0,entry_cost:50});
   const client=useQueryClient();const save=useMutation({mutationFn:()=>games.saveRaffle(value,target?.id),onSuccess:()=>{void client.invalidateQueries({queryKey:["raffles"]});onClose();}});
-  return <Sheet title={target?"Изменить розыгрыш":"Новый розыгрыш"} onClose={()=>{if(!save.isPending)onClose();}} footer={<Button form="raffle-editor" type="submit" variant="primary" disabled={save.isPending}>{save.isPending?"Сохраняем…":value.status==="published"?"Опубликовать":"Сохранить черновик"}</Button>}><form id="raffle-editor" className="stack" onSubmit={(e)=>{e.preventDefault();if(!save.isPending)save.mutate();}}><fieldset className="learning-fieldset stack" disabled={save.isPending}>{([{key:"title",label:"Название"},{key:"prize",label:"Приз"}]as const).map((field)=><label className="field" key={field.key}><span>{field.label}</span><input className="input" required maxLength={180} value={value[field.key]} onChange={(e)=>setValue({...value,[field.key]:e.target.value})}/></label>)}<label className="field"><span className="field__label">Описание и условия получения</span><textarea className="input" maxLength={4000} value={value.description} onChange={(e)=>setValue({...value,description:e.target.value})}/></label><label className="field"><span className="field__label">Завершение (UTC)</span><DateTimePicker ariaLabel="Закрытие розыгрыша" value={value.closes_at?new Date(value.closes_at).toISOString().slice(0,16):""} onChange={(next)=>setValue({...value,closes_at:next?`${next}:00Z`:""})} /></label>{([{key:"coins_reward",label:"Коины победителю",max:10000},{key:"entry_cost",label:"Цена билета, коинов (0 — бесплатно)",max:10000}]as const).map((field)=><label className="field" key={field.key}><span>{field.label}</span><input className="input" type="number" min={0} max={field.max} required value={value[field.key]} onChange={(e)=>setValue({...value,[field.key]:Number(e.target.value)})}/></label>)}<label className="field"><span className="field__label">Статус</span><Select aria-label="Статус розыгрыша" value={value.status} options={[{value:"draft",label:"Черновик"},{value:"published",label:"Опубликован"}]} onChange={(status)=>setValue({...value,status:status as RaffleInput["status"]})}/></label><p className="secondary small">Цена билета списывается при входе в розыгрыш и не возвращается. Коины победителю начисляются автоматически; выдачу указанного приза организует руководитель.</p></fieldset>{save.isError&&<ErrorState error={save.error}/>}</form></Sheet>;
+  return <Sheet title={target?"Изменить розыгрыш":"Новый розыгрыш"} onClose={()=>{if(!save.isPending)onClose();}} footer={<Button form="raffle-editor" type="submit" variant="primary" disabled={save.isPending}>{save.isPending?"Сохраняем…":value.status==="published"?"Опубликовать":"Сохранить черновик"}</Button>}><form id="raffle-editor" className="stack" onSubmit={(e)=>{e.preventDefault();if(!save.isPending)save.mutate();}}><fieldset className="learning-fieldset stack" disabled={save.isPending}>{([{key:"title",label:"Название"},{key:"prize",label:"Приз"}]as const).map((field)=><label className="field" key={field.key}><span>{field.label}</span><input className="input" required maxLength={180} value={value[field.key]} onChange={(e)=>setValue({...value,[field.key]:e.target.value})}/></label>)}<label className="field"><span className="field__label">Описание и условия получения</span><textarea className="input" maxLength={4000} value={value.description} onChange={(e)=>setValue({...value,description:e.target.value})}/></label><label className="field"><span className="field__label">Завершение (UTC)</span><DateTimePicker ariaLabel="Закрытие розыгрыша" value={value.closes_at?parseTimestamp(value.closes_at).toISOString().slice(0,16):""} onChange={(next)=>setValue({...value,closes_at:next?`${next}:00Z`:""})} /></label>{([{key:"coins_reward",label:"Коины победителю",max:10000},{key:"entry_cost",label:"Цена билета, коинов (0 — бесплатно)",max:10000}]as const).map((field)=><label className="field" key={field.key}><span>{field.label}</span><input className="input" type="number" min={0} max={field.max} required value={value[field.key]} onChange={(e)=>setValue({...value,[field.key]:Number(e.target.value)})}/></label>)}<label className="field"><span className="field__label">Статус</span><Select aria-label="Статус розыгрыша" value={value.status} options={[{value:"draft",label:"Черновик"},{value:"published",label:"Опубликован"}]} onChange={(status)=>setValue({...value,status:status as RaffleInput["status"]})}/></label><p className="secondary small">Цена билета списывается при входе в розыгрыш и не возвращается. Коины победителю начисляются автоматически; выдачу указанного приза организует руководитель.</p></fieldset>{save.isError&&<ErrorState error={save.error}/>}</form></Sheet>;
 }

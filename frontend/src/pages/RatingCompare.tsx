@@ -131,7 +131,7 @@ export function CompareFilters({ state }: { state: CompareState }) {
 
 /** Places week by week as small chips: the top three in gold, a week without results yet outlined. */
 export function TrailChips({ data, row }: { data: CompareOut; row: CompareRow }) {
-  return <span className="compare-trail" aria-label={`Места по неделям: ${row.trail.map((mark, index) => `${shortWeek(data.weeks[index].starts_on)} — ${mark?.rank ? `${mark.rank}-е` : "нет"}`).join(", ")}`}>
+  return <span className="compare-trail" role="img" aria-label={`Места по неделям: ${row.trail.map((mark, index) => `${shortWeek(data.weeks[index].starts_on)} — ${mark?.rank ? `${mark.rank}-е` : "нет"}`).join(", ")}`}>
     {row.trail.map((mark, index) => <span key={data.weeks[index].id} title={`${weekRange(data.weeks[index])}: ${mark?.rank ? `${mark.rank}-е место · ${pointsLabel(mark.points)}` : "нет результата"}${data.weeks[index].live ? " · итогов ещё нет" : ""}`}
       className={`compare-chip${mark?.rank && mark.rank <= 3 ? " is-top" : ""}${data.weeks[index].live ? " is-live" : ""}${!mark ? " is-empty" : ""}`} aria-hidden="true">{mark?.rank ?? "·"}</span>)}
   </span>;

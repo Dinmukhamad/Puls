@@ -85,9 +85,9 @@ export function App() {
 
   return (
     <Routes>
-      <Route path="/training/work-sites" element={<SectionGuard><Suspense fallback={<div className="boot"><Skeleton height={300} /></div>}><WorkSitesGate><WorkSitesPage /></WorkSitesGate></Suspense></SectionGuard>} />
-      <Route path="/simulator" element={<SectionGuard><DriverSimulator app={<Suspense fallback={<div className="boot"><Skeleton height={44} width={220} /></div>}><DriverAppPage /></Suspense>} /></SectionGuard>} />
-      <Route path="/simulator/attempts/:attemptId" element={<SectionGuard><Suspense fallback={<Skeleton height={300} />}><SimulatorPage /></Suspense></SectionGuard>} />
+      <Route path="/training/work-sites" element={<SectionGuard standalone><Suspense fallback={<div className="boot"><Skeleton height={300} /></div>}><WorkSitesGate><WorkSitesPage /></WorkSitesGate></Suspense></SectionGuard>} />
+      <Route path="/simulator" element={<SectionGuard standalone><DriverSimulator app={<Suspense fallback={<div className="boot"><Skeleton height={44} width={220} /></div>}><DriverAppPage /></Suspense>} /></SectionGuard>} />
+      <Route path="/simulator/attempts/:attemptId" element={<SectionGuard standalone><Suspense fallback={<Skeleton height={300} />}><SimulatorPage /></Suspense></SectionGuard>} />
       <Route element={<AppLayout />}>
         <Route path="/trainee" element={<Suspense fallback={<Skeleton height={400} />}><TraineePage /></Suspense>} />
         <Route path="/training/city" element={user.role === "trainee" ? <Suspense fallback={<div className="city-immersive city-immersive--empty" />}><TraineeCity /></Suspense> : <CityRoute />} />

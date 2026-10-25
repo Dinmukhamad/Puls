@@ -52,16 +52,25 @@ export function useManagementAnalytics() {
     operator_ids: params.get('operators') || undefined,
     channel,
   };
-  const data = useQuery({ queryKey: ['management-analytics', user?.id, filters, user?.role], queryFn: ({ signal }) => analytics.summary(filters, signal), enabled: !!user });
+  const data = useQuery({
+    queryKey: ['management-analytics', user?.id, filters, user?.role], queryFn: ({ signal }) => analytics.summary(filters, signal), enabled: !!user,
+    // Смена показателя или сравниваемых операторов не стирает дашборд скелетоном (прокрутка и фокус остаются);
+    // данные другого периода, группы или направления не показываются.
+    placeholderData: (previous, query) => {
+      const before = query?.queryKey[2] as AnalyticsFilters | undefined;
+      return before && before.grain === filters.grain && before.date_from === filters.date_from && before.date_to === filters.date_to
+        && before.group_id === filters.group_id && before.channel === filters.channel ? previous : undefined;
+    },
+  });
   const groups = useQuery({ queryKey: ['management-groups', user?.id, user?.role], queryFn: lookups.groups, enabled: !!user });
   const weeklyRange = weekWindow(range.date_to);
   const weeklyFilters: AnalyticsFilters = { ...filters, ...weeklyRange, grain: 'week' };
   const weekly = useQuery({ queryKey: ['management-weeks', user?.id, weeklyFilters, user?.role], queryFn: ({ signal }) => analytics.summary(weeklyFilters, signal), enabled: !!user && mode === 'range' });
-  const update = (values: Record<string, string | undefined>) => {
+  const update = (values: Record<string, string | undefined>, replace = false) => {
     const next = new URLSearchParams(params);
     for (const [key, value] of Object.entries(values)) value ? next.set(key, value) : next.delete(key);
     for (const key of ['grain', 'week_id']) next.delete(key);
-    setParams(next);
+    setParams(next, { replace });
   };
   // Old links (the four-week tab, a category as a tab) open their place in the new dashboards.
   const legacy = analyticsDashboard(params).legacy;
@@ -162,7 +171,7 @@ export function ManagementAnalyticsPage() {
 
       {metric && tab === 'operators' && <>
         <div className="analytics-section-heading"><div><h2>{head ? 'Операторы' : 'Операторы моей команды'}</h2><p>{filtered.length} из {people.length} · сначала наиболее сильные отклонения</p></div><SegmentedControl label="Представление операторов" value={matrix ? 'matrix' : 'list'} options={[{ value: 'list', label: 'Причины внимания' }, { value: 'matrix', label: 'Матрица целей' }]} onChange={view => update({ view })} /></div>
-        <div className="analytics-row-filters"><label className="field"><span className="field__label">Найти оператора</span><input className="input" type="search" placeholder="Имя или фамилия" value={search} onChange={e => update({ search: e.target.value, page: undefined })} /></label><label className="field"><span className="field__label">Показать</span><Select aria-label="Состояние операторов" value={status} options={[{ value: 'all', label: 'Всех операторов' }, { value: 'attention', label: 'Требуют внимания' }, { value: 'critical', label: 'Сильное отставание' }, { value: 'ontrack', label: 'Выполняют все цели' }, { value: 'down', label: 'Есть ухудшение' }, { value: 'up', label: 'Есть улучшение' }, { value: 'late', label: 'Есть опоздания' }, { value: 'below', label: 'Не в норме: выбранный показатель' }, { value: 'missing', label: 'Неполные данные' }, { value: 'empty', label: 'Нет показателей' }]} onChange={next => update({ status: next, page: undefined })} /></label>{(search || status !== 'all' || unassigned) && <Button onClick={() => update({ search: undefined, status: undefined, unassigned: undefined, page: undefined })}>Сбросить{unassigned ? ' «Без группы»' : ''}</Button>}</div>
+        <div className="analytics-row-filters"><label className="field"><span className="field__label">Найти оператора</span><input className="input" type="search" placeholder="Имя или фамилия" value={search} onChange={e => update({ search: e.target.value, page: undefined }, true)} /></label><label className="field"><span className="field__label">Показать</span><Select aria-label="Состояние операторов" value={status} options={[{ value: 'all', label: 'Всех операторов' }, { value: 'attention', label: 'Требуют внимания' }, { value: 'watch', label: 'Нужно внимание' }, { value: 'critical', label: 'Сильное отставание' }, { value: 'partial', label: 'Неполные данные (частично)' }, { value: 'ontrack', label: 'Выполняют все цели' }, { value: 'down', label: 'Есть ухудшение' }, { value: 'up', label: 'Есть улучшение' }, { value: 'late', label: 'Есть опоздания' }, { value: 'below', label: 'Не в норме: выбранный показатель' }, { value: 'missing', label: 'Неполные данные' }, { value: 'empty', label: 'Нет показателей' }]} onChange={next => update({ status: next, page: undefined })} /></label>{(search || status !== 'all' || unassigned) && <Button onClick={() => update({ search: undefined, status: undefined, unassigned: undefined, page: undefined })}>Сбросить{unassigned ? ' «Без группы»' : ''}</Button>}</div>
         {!filtered.length ? <EmptyState title="Нет операторов по этим условиям" hint="Измените поиск, группу или состояние." /> : <Card padded={false}>{matrix ? <OperatorMatrix people={filtered.slice((page - 1) * pageSize, page * pageSize)} metrics={value.metrics} onOpen={openPerson} /> : <OperatorList people={filtered.slice((page - 1) * pageSize, page * pageSize)} metric={metric} onOpen={openPerson} />}<Pagination page={page} size={pageSize} total={filtered.length} onChange={next => update({ page: String(next) })} /></Card>}
         <Card title="Сравнение операторов" subtitle="До пяти сотрудников. Выбранный показатель и период общие для всех."><div className="stack"><label className="field"><span className="field__label">Добавить оператора</span><Select aria-label="Добавить оператора в сравнение" value="" disabled={selectedOperators.length >= 5} options={[{ value: '', label: 'Выберите сотрудника' }, ...value.operators.filter(p => !selectedOperators.includes(p.user_id)).map(p => ({ value: p.user_id, label: p.full_name }))]} onChange={id => { if (id) update({ operators: [...selectedOperators, Number(id)].join(',') }); }} /></label><div className="analytics-picks">{selectedOperators.map(id => <Button size="s" key={id} aria-label={`Убрать ${value.operators.find(p => p.user_id === id)?.full_name ?? 'оператора'} из сравнения`} onClick={() => update({ operators: selectedOperators.filter(n => n !== id).join(',') })}>{value.operators.find(p => p.user_id === id)?.full_name ?? 'Оператор'} ×</Button>)}</div>{value.comparisons.length ? <Chart title={`Сравнение · ${metric.title}`} labels={labels(value)} series={value.comparisons.map(p => ({ id: String(p.id), name: p.name, values: p.values }))} target={metric.target} unit={metric.unit} /> : <p className="analytics-muted">Добавьте операторов, чтобы сопоставить их динамику.</p>}</div></Card>
       </>}

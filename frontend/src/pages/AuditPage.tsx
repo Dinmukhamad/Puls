@@ -25,6 +25,9 @@ const time = (iso: string) => parseTimestamp(iso).toLocaleTimeString("ru-RU", { 
 /** One person, one avatar colour: the colour comes from the name, not from the event. */
 const tint = (name: string) => [...name].reduce((sum, letter) => sum + letter.charCodeAt(0), 0);
 
+/** Границы дня берутся по местному времени, а журнал хранит время в UTC: сервер получает их уже в UTC. */
+const utcBound = (local: string) => new Date(local).toISOString().replace("Z", "");
+
 export function AuditPage() {
   const { user } = useAuth();
   const [params, setParams] = useSearchParams();
@@ -35,6 +38,8 @@ export function AuditPage() {
   const action = actions.some(([key]) => key === params.get("action")) ? params.get("action")! : "";
   const actor = params.get("actor") ?? "";
   const [typed, setTyped] = useState(actor);
+  // «Назад» или ссылка меню меняют адрес: поле следует за ним, иначе таймер вернул бы старое имя.
+  useEffect(() => { setTyped(current => current.trim() === actor ? current : actor); }, [actor]);
   // A single day from an older link opens as a one-day period.
   const day = params.get("date") ?? "";
   const chosen = { date_from: params.get("from") ?? day, date_to: params.get("to") ?? day };
@@ -53,7 +58,7 @@ export function AuditPage() {
   });
   const prefixes = AUDIT_GROUPS.find(item => item.key === group)?.prefixes;
   const entries = useQuery({ queryKey: ["audit", page, group, action, actor, period?.date_from, period?.date_to], queryFn: () => systemApi.audit({ page, size: 25, action, actor, prefix: prefixes,
-    date_from: period ? `${period.date_from}T00:00:00` : undefined, date_to: period ? `${period.date_to}T23:59:59.999` : undefined }) });
+    date_from: period ? utcBound(`${period.date_from}T00:00:00`) : undefined, date_to: period ? utcBound(`${period.date_to}T23:59:59.999`) : undefined }) });
   const filtered = Boolean(group || action || actor || period);
   const total = entries.data?.total ?? 0;
   const days: { title: string; items: AuditEntry[] }[] = [];

@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { Link, Outlet, useLocation } from "react-router-dom";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { Link, Outlet, useLocation, useNavigationType } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { useAccess } from "../auth/AccessContext";
 import { useSidebarPeek } from "../hooks/useSidebarPeek";
@@ -20,7 +20,10 @@ function initialCollapsed(): boolean {
 }
 
 export function AppLayout() {
-  const { user, logout } = useAuth(); const location = useLocation();
+  const { user, logout } = useAuth(); const location = useLocation(); const navigationType = useNavigationType();
+  // Новый раздел открывается с начала страницы, а не там, где прокрутили прошлый.
+  // «Назад» (POP) возвращает к прежнему месту сам браузер.
+  useLayoutEffect(() => { if (navigationType !== "POP") window.scrollTo(0, 0); }, [location.pathname]); // eslint-disable-line react-hooks/exhaustive-deps
   const { allowed, isDeveloper } = useAccess();
   // Keep the active subsection visible in the scrollable tab strip on phones.
   useEffect(() => { document.querySelector(".section-navigation__tab.is-active")?.scrollIntoView({ inline: "center", block: "nearest" }); }, [location.pathname]);
@@ -34,6 +37,9 @@ export function AppLayout() {
   const items = user ? visibleNavigation(user.role, allowed, isDeveloper, user.channel) : [];
   const active = user ? currentSection(user.role, location.pathname, location.search, allowed, isDeveloper, user.channel) : undefined;
   const activeTab = active ? currentTab(active, location.pathname, location.search) : undefined;
+  // Вкладка браузера и история называют открытый раздел, а не одно «Puls» на всех страницах.
+  const pageTitle = activeTab?.label ?? active?.label;
+  useEffect(() => { document.title = pageTitle ? `${pageTitle} — Puls` : "Puls"; return () => { document.title = "Puls"; }; }, [pageTitle]);
   const { primary, overflow } = mobileNavigation(items);
   const separateProfile = !items.some((item) => item.id === "profile");
   // «Мой город» занимает весь экран: меню сжимается до плавающих карточек поверх карты. У стажёра это его учебный город.
@@ -56,7 +62,7 @@ export function AppLayout() {
 
   // Pulsar's tour of the site (tour/siteTour.ts) finds the menu by its `data-tour` markers.
   return <SiteTourProvider><div className={`shell${collapsed ? " shell--collapsed" : ""}${peek.open ? " shell--peek" : ""}${immersive ? " shell--immersive" : ""}`} data-sections={items.map((item) => item.id).join(" ")}>
-    <GlassSurface as="aside" variant="regular" className="sidebar" {...peek.handlers}>
+    <GlassSurface as="aside" variant="regular" className="sidebar" aria-label="Боковое меню" {...peek.handlers}>
       <div className="sidebar__brand"><span className="sidebar__mark"><PulsMark /></span><span className="sidebar__name">Puls</span><IconButton label={!collapsed ? "Свернуть меню" : peek.open ? "Закрепить меню" : "Развернуть меню"} className="sidebar__toggle" aria-expanded={!collapsed} onClick={() => { setCollapsed((value) => !value); peek.settle(); }}><ChevronLeftIcon size={18} /></IconButton></div>
       <nav className="sidebar__nav" aria-label="Основные разделы" data-tour="nav">
         {items.map((item) => <Link key={item.id} to={item.to} data-tour={`nav-${item.id}`} className={active?.id === item.id ? "nav-item is-active" : "nav-item"} aria-current={active?.id === item.id ? "page" : undefined} aria-label={collapsed ? item.label : undefined}><span className="nav-item__icon"><item.icon size={20} /></span><span className="nav-item__label">{item.label}</span></Link>)}

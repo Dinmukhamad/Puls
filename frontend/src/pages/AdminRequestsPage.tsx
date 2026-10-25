@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
@@ -20,7 +20,7 @@ import {
   SegmentedControl,
   type Tone,
 } from "../components/ui";
-import { REQUEST_STATUS_LABELS, coins, dateTime } from "../utils/format";
+import { REQUEST_STATUS_LABELS, coins, coinsWithUnit, dateTime } from "../utils/format";
 
 const STATUS_TONE: Record<ShopRequestStatus, Tone> = {
   new: "accent",
@@ -53,6 +53,9 @@ export function AdminRequestsPage() {
     queryKey: ["admin-requests", status, page],
     queryFn: () => admin.shopRequests({ status: status || undefined, page, size }),
   });
+  // Разобрали последнюю заявку на странице: возвращаемся на последнюю страницу, где заявки остались.
+  const lastPage = requests.data ? Math.max(1, Math.ceil(requests.data.total / size)) : page;
+  useEffect(() => { if (page > lastPage) setPage(lastPage); }, [page, lastPage]);
 
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ["admin-requests"] });
@@ -136,7 +139,7 @@ export function AdminRequestsPage() {
                     <th className="num">Коины</th>
                     <th>Статус</th>
                     <th>Комментарий</th>
-                    <th />
+                    <th><span className="sr-only">Действия</span></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -309,7 +312,7 @@ function RejectSheet({
   const mutation = useMutation({
     mutationFn: () => admin.reject(request.id, comment.trim()),
     onSuccess: () => {
-      toast.info(`Заявка отклонена, ${coins(request.price)} коинов вернулись оператору`);
+      toast.info(`Заявка отклонена, оператору возвращено ${coinsWithUnit(request.price)}`);
       onDone();
     },
     onError: (error: unknown) => {
@@ -340,7 +343,7 @@ function RejectSheet({
     >
       <div className="confirm-row">
         <span>Вернётся оператору</span>
-        <strong>{coins(request.price)} коинов</strong>
+        <strong>{coinsWithUnit(request.price)}</strong>
       </div>
 
       <label className="field" style={{ marginTop: "var(--sp-4)" }}>

@@ -6,7 +6,7 @@ import { MedalIcon, SparkIcon } from "../components/icons";
 import { Sheet } from "../components/Sheet";
 import { useToast } from "../components/Toast";
 import { Badge, Button, Card, EmptyState, ErrorState, RowsSkeleton, SegmentedControl, Select } from "../components/ui";
-import { coins, plural, points, pointsWord } from "../utils/format";
+import { coins, coinsWithUnit, plural, points, pointsWord } from "../utils/format";
 import "./race.css";
 
 const MEDALS = ["gold", "silver", "bronze"] as const;
@@ -33,7 +33,7 @@ export function MonthContest() {
   const close = useMutation({ mutationFn: () => economy.close(query.data!.year, query.data!.month), onSuccess: (data) => {
     refresh(data.month); setConfirm(false);
     for (const key of ["wallet", "dashboard", "coin-progress", "notifications"]) void client.invalidateQueries({ queryKey: [key] });
-    toast.success(`Месяц закрыт: начислено ${coins(data.report.coins_awarded)} коинов`);
+    toast.success(`Месяц закрыт: начислено ${coinsWithUnit(data.report.coins_awarded)}`);
   } });
 
   if (query.isLoading) return <RowsSkeleton />;
@@ -78,11 +78,11 @@ export function MonthContest() {
         <span className="podium__medal"><MedalIcon size={14} />{row.rank} место</span>
         <span className="podium__name">{row.name ?? "Оператор"}{row.mine && <span className="tag-me">это вы</span>}</span>
         <span className="podium__group">{points(row.points)} {pointsWord(row.points)}</span>
-        {row.coins_rank_bonus > 0 && <span className="podium__coins">+{coins(row.coins_rank_bonus)} коинов</span>}
+        {row.coins_rank_bonus > 0 && <span className="podium__coins">+{coinsWithUnit(row.coins_rank_bonus)}</span>}
       </li>)}</ol></Card>}
       {nominations.length > 0 && <Card title="Номинации месяца"><ul className="nominations">{nominations.map((n) => <li key={n.nomination_id} className={`nomination${n.user_id === mine?.user_id ? " is-me" : ""}`}>
         <span className="nomination__icon"><SparkIcon size={17} /></span>
-        <div className="nomination__body"><span className="nomination__title">{n.title}</span><span className="nomination__winner">{n.name ?? "Оператор"}{n.user_id === mine?.user_id && <span className="tag-me">это вы</span>}</span>{n.coins > 0 && <span className="nomination__meta">+{coins(n.coins)} коинов</span>}</div>
+        <div className="nomination__body"><span className="nomination__title">{n.title}</span><span className="nomination__winner">{n.name ?? "Оператор"}{n.user_id === mine?.user_id && <span className="tag-me">это вы</span>}</span>{n.coins > 0 && <span className="nomination__meta">+{coinsWithUnit(n.coins)}</span>}</div>
       </li>)}</ul></Card>}
       {operator ? <OperatorStandings standings={standings} channelName={channelName} /> : <Card title="Таблица месяца" padded={false}><div className="table-wrap table-wrap--responsive"><table className="table">
         <thead><tr><th className="num">Место</th><th>Оператор</th><th className="num">Баллы</th><th className="num">Недель</th><th className="num">Приз</th></tr></thead>
@@ -122,7 +122,7 @@ function YourMonth({ mine, standings, closed, won }: { mine: MonthStanding; stan
   else if (below) gaps.push({ tone: "lead", label: "Отрыв от 2-го места", value: `+${points(mine.points - below.points)}`, note: below.name ?? "Оператор" });
   if (rank > 3 && third && third !== above) gaps.push({ tone: "podium", label: "До топ-3", value: `${points(third.points - mine.points)}`, note: `3 место — ${third.name ?? "Оператор"}` });
   if (below && above) gaps.push({ tone: "down", label: `Запас над ${below.rank}-м местом`, value: `${points(mine.points - below.points)}`, note: below.name ?? "Оператор" });
-  if (prize > 0) gaps.push({ tone: "lead", label: closed ? "Начислено" : "Приз сейчас", value: `+${coins(prize)}`, note: "коинов за место и номинации" });
+  if (prize > 0) gaps.push({ tone: "lead", label: closed ? "Начислено" : "Приз сейчас", value: `+${coins(prize)}`, note: `${plural(prize, "коин", "коина", "коинов")} за место и номинации` });
   else if (!closed && lastPaid?.rank && rank > lastPaid.rank) gaps.push({ tone: "podium", label: "До призового места", value: points(lastPaid.points - mine.points), note: `приз платят до ${lastPaid.rank}-го места` });
   return <Card title="Ваш результат месяца">
     <div className="race-hero">

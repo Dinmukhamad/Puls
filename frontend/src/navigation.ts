@@ -127,6 +127,8 @@ export function canVisit(role: Role, to: string, allowed: AccessMap, isDeveloper
   if (role === "trainee" && !["/trainee", "/profile", "/notifications", "/training", "/simulator"].some(p => path === p || path.startsWith(p + "/"))) return false;
   if (role === "trainer" && !["/qr-access", "/profile", "/notifications", "/trainer", "/admin/learning-analytics", "/admin/learning", "/training", "/simulator", "/admin/users"].some(p => path === p || path.startsWith(p + "/"))) return false;
   if (role === "operator" && path.startsWith("/admin/users")) return false;
+  // «Гонка недели» сравнивает оператора с другими: сервер отдаёт её только операторам.
+  if (path === "/race" && role !== "operator") return false;
   // Сценарии Driver Simulator ведёт только тренер, у остальных студии нет.
   if (path === "/admin/learning" && role !== "trainer") return false;
   const permission = routeSection(path, search, role);
@@ -222,6 +224,8 @@ export function currentTab(item: NavItem, pathname: string, search: string): Sec
     if (cityTab) return cityTab;
   }
   const params = new URLSearchParams(search);
+  // Без известной вкладки страница настроек открывает правила расчёта (SettingsPage).
+  if (pathname === "/admin/settings" && !["metrics", "nominations", "badges"].includes(params.get("tab") ?? "")) params.set("tab", "rules");
   const candidates = item.tabs.filter((link) => { const path = link.to.split("?")[0]; return pathname === path || pathname.startsWith(`${path}/`); });
   return candidates.map((link) => {
     const expected = new URLSearchParams(link.to.split("?")[1] ?? "");

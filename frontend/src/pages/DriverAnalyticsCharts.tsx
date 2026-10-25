@@ -14,9 +14,9 @@ export const CHECK_LABELS: Record<string, string> = { new: "Нет данных 
 export const shortDate = (value: string) => new Date(value).toLocaleDateString("ru", { day: "numeric", month: "short", timeZone: "UTC" });
 
 export function SkillDots({ checks }: { checks: DriverCheck[] }) {
-  return <div className="da-skill-dots" aria-label="Этапы текущей или последней смены">{Object.keys(SKILL_LABELS).map(key => {
+  return <div className="da-skill-dots" role="group" aria-label="Этапы текущей или последней смены">{Object.keys(SKILL_LABELS).map(key => {
     const check = checks.find(c => c.key === key), state = checkState(check);
-    return <span key={key} className={`da-cell da-cell--${state}`} title={`${SKILL_LABELS[key]} · ${CHECK_LABELS[state]}`} aria-label={`${SKILL_LABELS[key]} · ${CHECK_LABELS[state]}`}>{state === "done" ? "✓" : state === "optional" ? "—" : "·"}</span>;
+    return <span key={key} className={`da-cell da-cell--${state}`} title={`${SKILL_LABELS[key]} · ${CHECK_LABELS[state]}`} role="img" aria-label={`${SKILL_LABELS[key]} · ${CHECK_LABELS[state]}`}>{state === "done" ? "✓" : state === "optional" ? "—" : "·"}</span>;
   })}</div>;
 }
 

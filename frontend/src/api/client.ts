@@ -108,6 +108,8 @@ interface RequestOptions {
   signal?: AbortSignal;
   /** An optional deadline for the full request, including refresh and the response body. */
   timeoutMs?: number;
+  /** Read the body as a file (Blob) instead of JSON or text. */
+  blob?: boolean;
 }
 
 /** Bound stalled fetch/body promises, and keep caller cancellation separate from shared refresh. */
@@ -199,7 +201,7 @@ async function refreshAccessToken(): Promise<boolean> {
 
 export async function request<T>(
   path: string,
-  { method = "GET", json, form, multipart, auth = true, signal, timeoutMs, headers: customHeaders }: RequestOptions = {},
+  { method = "GET", json, form, multipart, auth = true, signal, timeoutMs, headers: customHeaders, blob = false }: RequestOptions = {},
 ): Promise<T> {
   const scope = requestScope(signal, timeoutMs);
   const version = sessionVersion;
@@ -255,7 +257,7 @@ export async function request<T>(
     if (response.status === 204) return undefined as T;
 
     const contentType = response.headers.get("content-type") ?? "";
-    const result = await scope.wait(contentType.includes("application/json") ? response.json() : response.text());
+    const result = await scope.wait(blob ? response.blob() : contentType.includes("application/json") ? response.json() : response.text());
     ensureSession();
     return result as T;
   } catch (error) {
@@ -269,15 +271,9 @@ export async function request<T>(
 
 /** Скачивание файла: бэкенд отдаёт CSV вложением, а fetch нужен ради заголовка авторизации. */
 export async function downloadFile(path: string, filename: string): Promise<void> {
-  const access = tokenStore.access;
-  const response = await fetch(`${BASE}${path}`, {
-    headers: access ? { Authorization: `Bearer ${access}` } : {},
-  });
-  if (!response.ok) {
-    throw new ApiError(response.status, await parseBody(response));
-  }
-
-  const blob = await response.blob();
+  // Через request: просроченный access-токен обновится, сетевой сбой придёт понятной
+  // ошибкой, а зависший ответ оборвётся по сроку.
+  const blob = await request<Blob>(path, { blob: true, timeoutMs: 120_000 });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
@@ -285,7 +281,8 @@ export async function downloadFile(path: string, filename: string): Promise<void
   document.body.append(link);
   link.click();
   link.remove();
-  URL.revokeObjectURL(url);
+  // Safari обрывает загрузку, если ссылку отозвать сразу после click().
+  window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }
 
 export function buildQuery(params: Record<string, unknown>): string {

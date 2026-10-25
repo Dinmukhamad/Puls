@@ -60,7 +60,8 @@ function DriverPhoneStage() {
     "--phone-top": colors.top, "--phone-top-ink": inkFor(colors.top) === "dark" ? "#0b0b0c" : "#fff",
     "--phone-bottom": colors.bottom, "--phone-home": inkFor(colors.bottom) === "dark" ? "rgb(0 0 0 / .78)" : "rgb(255 255 255 / .85)",
   } as CSSProperties;
-  return <div className="phone-stage" style={style}>
+  return <main className="phone-stage" style={style}>
+    <h1 className="sr-only">Driver Simulator</h1>
     <div className="phone">
       <span className="phone__key phone__key--action" aria-hidden="true" />
       <span className="phone__key phone__key--volume-up" aria-hidden="true" />
@@ -78,10 +79,10 @@ function DriverPhoneStage() {
     </div>
     {coach && <aside className="phone-coach" aria-label="Подсказка оператору">
       <span className="phone-coach__tag">Подсказка оператору</span>
-      <h3>{coach.title}</h3>
+      <h2>{coach.title}</h2>
       {coach.body.map(([label, text]) => <div key={label}><b>{label}</b><p>{text}</p></div>)}
     </aside>}
-  </div>;
+  </main>;
 }
 
 /** Фотоконтроль внутри телефона: подсказка оператору встаёт рядом с телефоном, как раньше рядом с камерой. */

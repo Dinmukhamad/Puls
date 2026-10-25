@@ -221,6 +221,8 @@ function LiveCall({ attemptId, call, speech, sink, onHangUp, caller, folded, fre
   useEffect(() => {
     if (!current || current.state !== "in_progress" || !lastDriver || config.isPending || spoken.current === spokenKey) return;
     spoken.current = spokenKey;
+    // Водитель ответил: значит, ответ, который казался неотправленным, дошёл.
+    setFailed(null);
     if (resumed.current) { resumed.current = false; setPhase(settled(current)); return; }
     const mine = ++generation.current;
     setPhase("driver");
@@ -229,7 +231,8 @@ function LiveCall({ attemptId, call, speech, sink, onHangUp, caller, folded, fre
 
   const send = useCallback(async (text: string, again?: { request_id: string; turn: number }) => {
     if (!current || closing.current) return;
-    const input = again ? { ...again, text } : { request_id: crypto.randomUUID(), turn: current.turn, text };
+    // Сервер не принимает лишних полей: из прошлой попытки берём только её номер и ход.
+    const input = again ? { request_id: again.request_id, turn: again.turn, text } : { request_id: crypto.randomUUID(), turn: current.turn, text };
     setPhase("sending"); setFailed(null);
     try {
       const next = await voiceTraining.answer(current.id, input);
@@ -283,7 +286,9 @@ function LiveCall({ attemptId, call, speech, sink, onHangUp, caller, folded, fre
     setPhase("driver");
     void playDriver(current, lastDriver.turn, lastDriver.text).then(() => { if (generation.current === mine) setPhase(settled(current)); });
   };
-  const mute = () => { heardRef.current = ""; setHeard(""); speech.setMuted(!speech.muted); };
+  // Сначала выключаем микрофон, потом стираем услышанное: выключение само дописывает
+  // недоговорённую фразу, и иначе она ушла бы водителю.
+  const mute = () => { speech.setMuted(!speech.muted); heardRef.current = ""; setHeard(""); };
   const typedAnswer = (event: FormEvent) => { event.preventDefault(); const text = typed.trim(); if (text.length >= 2 && (phase === "listening" || phase === "failed")) void send(text); };
   const compare = async (event: FormEvent) => {
     event.preventDefault();
@@ -321,7 +326,7 @@ function LiveCall({ attemptId, call, speech, sink, onHangUp, caller, folded, fre
     <div className="oktell-call-tools">
       <button type="button" className="oktell-btn" aria-pressed={speech.muted} disabled={textMode || !speech.support.recognition} onClick={mute}><Icon name={speech.muted ? "muted" : "mic"} />{speech.muted ? "Включить микрофон" : "Микрофон"}</button>
       <button type="button" className="oktell-btn" disabled={!lastDriver || phase === "sending" || ending} onClick={repeat}><Icon name="repeat" />Повторить</button>
-      {speech.support.recognition && <button type="button" className="oktell-btn" aria-pressed={textMode} onClick={() => { heardRef.current = ""; setHeard(""); if (!textMode) speech.cancel(); setTextMode(!textMode); }}><Icon name="keyboard" />{textMode ? "Голосом" : "Текстом"}</button>}
+      {speech.support.recognition && <button type="button" className="oktell-btn" aria-pressed={textMode} onClick={() => { if (!textMode) speech.cancel(); heardRef.current = ""; setHeard(""); setTextMode(!textMode); }}><Icon name="keyboard" />{textMode ? "Голосом" : "Текстом"}</button>}
     </div>
     {current && !current.custom && <details className="oktell-call-check" open={current.practice.dispatch && !current.practice.compared || undefined}>
       <summary>Сверка номеров{current.practice.compared ? " ✓" : ""}</summary>

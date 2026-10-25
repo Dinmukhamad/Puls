@@ -45,7 +45,7 @@ function OperatorGate({ children }: { children: ReactNode }) {
   const live = !!payload && seconds > 0, expired = !!payload && !seconds;
   // Once granted every step is done.
   const step = granted ? 4 : live ? 2 : 1;
-  return <div className="qr-gate-page"><Link className="qr-back" to="/training/city">← Обучение</Link>
+  return <main className="qr-gate-page"><Link className="qr-back" to="/training/city">← Обучение</Link>
     <section className="qr-gate glass glass--prominent" aria-labelledby="qr-gate-title">
       <header className="qr-gate__head">
         <span className="qr-badge"><ShieldIcon size={15} />Доступ с подтверждением</span>
@@ -87,5 +87,5 @@ function OperatorGate({ children }: { children: ReactNode }) {
         </>}
       </div>
       <p className="qr-session-note qr-gate__note">Доступ действует до выхода из аккаунта и только в этом браузере или приложении. На другом устройстве понадобится новое подтверждение.</p>
-    </section></div>;
+    </section></main>;
 }

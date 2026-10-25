@@ -108,7 +108,7 @@ function DistrictView({ data, label, district, missionKey, onBack, onMission, er
       </div>
       <div className="skills-district-facts">
         <span><strong>{district.soon ? "Скоро" : progress.total ? `${progress.done} из ${progress.total}` : "—"}</strong><small>{progress.total ? "миссий пройдено" : "миссий"}</small></span>
-        <span aria-label={`Здание ${level} из ${MAX_DISTRICT_LEVEL}: ${DISTRICT_LEVEL_NAMES[level - 1]}`}><strong className="skills-stars">{"★".repeat(level)}<em>{"★".repeat(MAX_DISTRICT_LEVEL - level)}</em></strong><small>Здание «{DISTRICT_LEVEL_NAMES[level - 1]}»</small></span>
+        <span><span className="sr-only">Здание {level} из {MAX_DISTRICT_LEVEL}.</span><strong className="skills-stars" aria-hidden="true">{"★".repeat(level)}<em>{"★".repeat(MAX_DISTRICT_LEVEL - level)}</em></strong><small>Здание «{DISTRICT_LEVEL_NAMES[level - 1]}»</small></span>
       </div>
       {!district.soon && progress.total > 0 && <Meter done={progress.done} total={progress.total} label={`Пройдено миссий района: ${progress.done} из ${progress.total}`} />}
     </header>

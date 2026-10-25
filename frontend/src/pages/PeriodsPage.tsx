@@ -12,7 +12,7 @@ import { weekRange } from "../components/weekCalendar";
 import { DatePicker } from "../components/DateRangePicker";
 import { todayDateKey } from "../components/dateRange";
 import { FileDrop } from "../components/FileDrop";
-import { coins, dateOnly, plural, points, periodLabel, weekStatusLabel } from "../utils/format";
+import { coins, coinsWithUnit, dateOnly, plural, points, periodLabel, weekStatusLabel } from "../utils/format";
 import type { WeekOut } from "../api/types";
 import { ReportsUpload } from "./ReportsUpload";
 import "./workflow.css";
@@ -89,7 +89,7 @@ function PeriodWorkspace() {
   } });
   const publish = useMutation({ mutationFn: () => periods.publish(selected!), onSuccess: (report) => {
     setConfirmPublish(false); refresh();
-    toast.success(report.already_closed ? "Период уже опубликован" : `Опубликовано. Начислено ${coins(report.coins_awarded)} коинов.`);
+    toast.success(report.already_closed ? "Период уже опубликован" : `Опубликовано. Начислено ${coinsWithUnit(report.coins_awarded)}.`);
   } });
   const busy = inspect.isPending || apply.isPending || calculate.isPending || publish.isPending;
   const inspectFile = (file?: File) => {
@@ -189,7 +189,7 @@ function PeriodWorkspace() {
     {confirmPublish && <Sheet title="Опубликовать итоги?" onClose={() => { if (!publish.isPending) setConfirmPublish(false); }} footer={<>
       <Button disabled={publish.isPending} onClick={() => setConfirmPublish(false)}>Отмена</Button>
       <Button variant="primary" disabled={publish.isPending} onClick={() => publish.mutate()}>{publish.isPending ? "Публикуем…" : "Подтвердить публикацию"}</Button></>}>
-      <p>Период {week ? weekRange(week) : ""} будет закрыт. {preview.data?.participants} участникам будут начислены {coins(preview.data?.coins_total ?? 0)} коинов. Изменить показатели закрытой недели нельзя.</p>
+      <p>Период {week ? weekRange(week) : ""} будет закрыт. {preview.data?.participants} {plural(preview.data?.participants ?? 0, "участнику", "участникам", "участникам")} будут начислены {coinsWithUnit(preview.data?.coins_total ?? 0)}. Изменить показатели закрытой недели нельзя.</p>
       {preview.data?.rows.some((row) => row.missing_metrics?.length) && <p className="workflow-error">У части сотрудников не хватает показателей. Вернитесь к проверке, если загрузка ещё не закончена.</p>}
       {publish.isError && <ErrorState error={publish.error} />}
     </Sheet>}

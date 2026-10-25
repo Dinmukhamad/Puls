@@ -9,6 +9,7 @@ import "./driver-profile.css";
 import { AnimatedNumber } from "./DriverMotion";
 import { DriverPhotoControl, PHOTO_STEPS } from "./DriverPhotoControl";
 import { orderActive } from "../api/driver";
+import { useDialogFocus } from "../components/FocusDialog";
 
 /* Строение раздела повторяет приложение парка: карточка водителя с плитками, тарифы с
    вкладками и свёрнутым блоком недоступного, фотоконтроль списком с группами, приоритет
@@ -54,9 +55,11 @@ function Icon({ name }: { name: string }) {
 }
 
 function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
-  return <div className="dp-sheet-backdrop" onClick={event => { if (event.target === event.currentTarget) onClose(); }}>
+  // Окно — весь слой вместе с «×»: иначе для чтения с экрана кнопка закрытия оказывается вне окна.
+  const dialog = useDialogFocus<HTMLDivElement>(onClose);
+  return <div ref={dialog} className="dp-sheet-backdrop" role="dialog" aria-modal="true" aria-label={title} tabIndex={-1} onClick={event => { if (event.target === event.currentTarget) onClose(); }}>
     <button className="dp-round dp-sheet-close" type="button" aria-label="Закрыть" onClick={onClose}>×</button>
-    <section className="dp-sheet" role="dialog" aria-modal="true" aria-label={title}>
+    <section className="dp-sheet">
       <h2>{title}</h2>
       {children}
     </section>
@@ -207,7 +210,7 @@ export function DriverProfileViews(p: ShiftViewProps) {
         <div className="dp-card dp-card--flat">
           {open.map(x => photoDone
             ? <div className="dp-row" key={x.id}><div><strong>{x.name}</strong><small>{x.reason || "Доступен для учебного автомобиля"}</small></div>
-                <DToggle title="" checked={d.tariffs.includes(x.id)} disabled={busy} onChange={() => act("tariff", { id: x.id })} /></div>
+                <DToggle title="" ariaLabel={x.name} checked={d.tariffs.includes(x.id)} disabled={busy} onChange={() => act("tariff", { id: x.id })} /></div>
             : row(x.name, { note: "Пройдите фотоконтроль машины", tone: "danger", onClick: () => go("photo") }))}
         </div>
         <p className="driver-muted">Оставьте включённым хотя бы один тариф. Менять выбор можно между заказами.</p>

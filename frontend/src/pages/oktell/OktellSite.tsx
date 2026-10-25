@@ -123,15 +123,18 @@ export function OktellSite({ screen, go, active = true }: { screen: OktellScreen
     const panel = overlay.current;
     if (!panel) return;
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const controls = () => Array.from(panel.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled),textarea:not(:disabled),[tabindex="0"]')).filter(node => node.getClientRects().length > 0);
+    // Окно входящего звонка живёт вне панели, но тоже должно быть доступно с клавиатуры.
+    const roots = () => [panel, document.querySelector<HTMLElement>(".oktell-call")].filter((root): root is HTMLElement => !!root);
+    const inside = (node: Element | null) => roots().some(root => root.contains(node));
+    const controls = () => roots().flatMap(root => Array.from(root.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled),textarea:not(:disabled),[tabindex="0"]'))).filter(node => node.getClientRects().length > 0);
     (controls()[0] ?? panel).focus({ preventScroll: true });
     const keyboard = (event: KeyboardEvent) => {
       if (event.key === "Escape") { event.preventDefault(); if (statusOpen) setStatusOpen(false); else navigate("cabinet"); }
       if (event.key === "Tab") {
         const list = controls(), first = list[0], last = list.at(-1);
         if (!first || !last) { event.preventDefault(); panel.focus(); }
-        else if (event.shiftKey && (document.activeElement === first || !panel.contains(document.activeElement))) { event.preventDefault(); last.focus(); }
-        else if (!event.shiftKey && (document.activeElement === last || !panel.contains(document.activeElement))) { event.preventDefault(); first.focus(); }
+        else if (event.shiftKey && (document.activeElement === first || !inside(document.activeElement))) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && (document.activeElement === last || !inside(document.activeElement))) { event.preventDefault(); first.focus(); }
       }
     };
     document.addEventListener("keydown", keyboard);

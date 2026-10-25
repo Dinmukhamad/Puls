@@ -215,7 +215,8 @@ function CarEditor({ driver: d, save, open, notify, tariffs }: Shared & { driver
   const strict = replacesCar(d, car), errors = tried ? validateCar(car, strict) : {};
   const set = <K extends keyof TrainingCar>(key: K, value: TrainingCar[K]) => setCar(c => ({ ...c, [key]: value }));
   const switchMode = (next: "current" | "new") => { setMode(next); setTried(false); setCar(next === "new" || !current ? emptyCar() : { ...current }); };
-  const years = Array.from({ length: 2026 - 1994 }, (_, i) => 2026 - i);
+  // Модельный год идёт на год вперёд календарного: список растёт сам, без правки кода.
+  const newest = new Date().getFullYear() + 1, years = Array.from({ length: newest - 1994 }, (_, i) => newest - i);
   async function submit() {
     setTried(true);
     if (Object.keys(validateCar(car, strict)).length) return;

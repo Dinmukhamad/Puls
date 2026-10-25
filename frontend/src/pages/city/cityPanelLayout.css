@@ -74,6 +74,8 @@
 .city-notes:empty { display: none; }
 
 @media (max-width: 767px) {
+  /* На телефоне панель стройки занимает низ экрана: карточки первого визита закрыли бы её вкладки. */
+  .city-immersive[data-building] .city-notes { display: none; }
   .city-immersive, .shell--collapsed .city-immersive {
     --city-peek-bottom: var(--city-dock);
     --city-reserve-right: 0px;

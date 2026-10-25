@@ -347,7 +347,7 @@ function startupFixture(t, overrides = {}) {
   const state = { calls, rig: null, render: null };
   const noop = () => {}, piece = values => new Proxy(values ?? {}, { get: (target, key) => key === 'then' ? undefined : key in target ? target[key] : noop });
   const realTimeout = globalThis.setTimeout;
-  const window = new EventTarget(); window.matchMedia = () => ({ matches: true });
+  const window = new EventTarget(); window.matchMedia = () => ({ matches: true, addEventListener() {}, removeEventListener() {} });
   Object.assign(globalThis, {
     document: { createElement: () => new RuntimeElement(), body: new RuntimeElement(), activeElement: null }, window,
     ResizeObserver: class { observe() {} disconnect() {} }, HTMLElement: RuntimeElement, Node: RuntimeElement,

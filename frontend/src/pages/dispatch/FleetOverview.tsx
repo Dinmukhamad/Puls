@@ -85,7 +85,7 @@ export function RulesPage() {
     <p className="fleet-note">Условия сотрудничества — это комиссии парка. Справа видно, у скольких исполнителей подключено условие.</p>
     <div className="fleet-segmented" role="tablist"><button role="tab" aria-selected={!archive} className={!archive ? "is-on" : ""} onClick={() => setArchive(false)}>Активные</button><button role="tab" aria-selected={archive} className={archive ? "is-on" : ""} onClick={() => setArchive(true)}>Архив</button></div>
     <label className="fleet-inline-search is-small"><Icon name="search" /><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Введите название" aria-label="Название условия" /></label>
-    <div className="fleet-table-card"><table className="fleet-table"><thead><tr><th>Название</th><th /><th className="fleet-num">Количество исполнителей</th></tr></thead>
+    <div className="fleet-table-card"><table className="fleet-table"><thead><tr><th>Название</th><th><span className="sr-only">Признак</span></th><th className="fleet-num">Количество исполнителей</th></tr></thead>
       <tbody>{rules.map(r => <tr key={r.name}><td>{r.name}</td><td className="fleet-muted">{r.default ? "По умолчанию" : ""}</td><td className="fleet-num"><u>{r.count}</u></td></tr>)}</tbody></table>
       {!rules.length && <p className="fleet-empty-hint">{archive ? "В архиве пусто" : "Ничего не нашли"}</p>}</div>
   </div>;

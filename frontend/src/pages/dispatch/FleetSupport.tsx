@@ -61,7 +61,7 @@ function NewTicket({ onClose }: { onClose: () => void }) {
       {subtheme && <label className={`fleet-float is-area${text ? " is-filled" : ""}`} data-coach="support-text"><span>Текст обращения</span><textarea rows={5} value={text} maxLength={2000} onChange={e => setText(e.target.value)} placeholder="ДД! Прошу проверить…" /></label>}
       {subtheme && <div className="fleet-files" data-coach="support-files"><strong>Файлы</strong>
         <label className="fleet-chip"><Icon name="clip" /> Максимум 8 файлов<input type="file" multiple className="fleet-sr" onChange={e => { const names = [...(e.target.files ?? [])].map(f => f.name.slice(0, 120)); setFiles(list => [...list, ...names].slice(0, 8)); e.target.value = ""; }} /></label>
-        {files.map(name => <span key={name} className="fleet-file">{name}<button aria-label={`Убрать ${name}`} onClick={() => setFiles(list => list.filter(n => n !== name))}><Icon name="close" /></button></span>)}
+        {files.map((name, index) => <span key={index} className="fleet-file">{name}<button aria-label={`Убрать ${name}`} onClick={() => setFiles(list => list.filter((_, i) => i !== index))}><Icon name="close" /></button></span>)}
         <small className="fleet-field-hint">В учебной среде уходят только названия файлов.</small></div>}
     </div>
   </Drawer>;

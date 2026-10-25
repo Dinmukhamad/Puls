@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 
+import { auth } from "../api/endpoints";
 import { team, teamError, type TeamGroup, type TeamUserSaved, type TeamUserInput } from "../api/team";
 import type { TelegramInvitation } from "../api/telegram";
 import type { Channel, Gender, Role, UserOut } from "../api/types";
@@ -132,7 +133,7 @@ export function UserStatus({ active }: { active: boolean }) {
 }
 
 export function UserEditor({ target, groups, groupsReady, initialRole = "operator", onClose }: { target?: UserOut; groups: TeamGroup[]; groupsReady: boolean; initialRole?: Role; onClose: () => void }) {
-  const { user: actor } = useAuth();
+  const { user: actor, applyProfile } = useAuth();
   const trainer = actor?.role === "trainer";
   const toast = useToast();
   const queryClient = useQueryClient();
@@ -198,6 +199,8 @@ export function UserEditor({ target, groups, groupsReady, initialRole = "operato
       queryClient.invalidateQueries({ queryKey: ["admin-operators"] });
       queryClient.invalidateQueries({ queryKey: ["admin-summary"] });
       for (const key of ["team-assignment-users", "lookup-groups", "analytics", "city", "city-world", "city-estate", "city-estates"]) void queryClient.invalidateQueries({ queryKey: [key] });
+      // Свои данные показывают профиль и меню аккаунта: обновляем их без перезагрузки.
+      if (ownAccount) void auth.me().then(applyProfile, () => {});
       toast.success(target ? "Данные сотрудника сохранены" : "Пользователь создан");
       setPassword("");
       setShowPassword(false);

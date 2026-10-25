@@ -8,6 +8,7 @@ import {
 import { useAuth } from "../../auth/AuthContext";
 import { Badge, Button, Card, Delta, EmptyState, ErrorState, KPI, KPISkeleton, Progress, RowsSkeleton, SegmentedControl } from "../../components/ui";
 import { Select } from "../../components/Select";
+import { plural } from "../../utils/format";
 import { AI_PLACES, AIMark, VoiceIcon, VoiceResults, VoiceTrainingPage, dateLabel, personaLabel } from "./VoiceTrainingPage";
 import "./voice.css";
 import "./voice-team.css";
@@ -149,7 +150,7 @@ function TeamOperators({ team, onCalls }: { team: VoiceTeam; onCalls: (patch: Re
     {rows.length === 0 ? <div className="card__body"><EmptyState title="Операторов пока нет" hint="Здесь появятся операторы и стажёры ваших групп." /></div> : <>
       <div className="table-wrap table-wrap--responsive">
         <table className="table">
-          <thead><tr><th>Оператор</th><th className="num">Звонков</th><th className="num">Средний балл</th><th>Последний звонок</th><th>Слабое место</th><th aria-label="Звонки оператора" /></tr></thead>
+          <thead><tr><th>Оператор</th><th className="num">Звонков</th><th className="num">Средний балл</th><th>Последний звонок</th><th>Слабое место</th><th><span className="sr-only">Звонки оператора</span></th></tr></thead>
           <tbody>{rows.map(row => <tr key={row.id}>
             <td><div className="voice-team-person"><strong>{row.name}</strong><small>{[row.group_name, row.role === "trainee" ? "стажёр" : null].filter(Boolean).join(" · ") || "Без группы"}</small></div></td>
             <td className="num">{row.calls || <span className="voice-team-muted">—</span>}</td>
@@ -162,7 +163,7 @@ function TeamOperators({ team, onCalls }: { team: VoiceTeam; onCalls: (patch: Re
       </div>
       <ul className="card-list voice-team-cards">{rows.map(row => <li key={row.id} className="list-card">
         <div className="voice-team-card-head"><div className="voice-team-person"><strong>{row.name}</strong><small>{row.group_name ?? "Без группы"}{row.role === "trainee" ? " · стажёр" : ""}</small></div>{row.average === null ? <span className="voice-team-muted">нет оценок</span> : <ScoreBadge score={row.average} />}</div>
-        <p className="voice-team-card-line">{row.calls ? `${row.calls} звонк${row.calls === 1 ? "" : row.calls < 5 ? "а" : "ов"}` : "Не звонил за период"}{row.last ? ` · последний ${dayLabel(row.last.at)}` : ""}{row.weak[0] ? ` · слабое место: ${row.weak[0]}` : ""}</p>
+        <p className="voice-team-card-line">{row.calls ? `${row.calls} ${plural(row.calls, "звонок", "звонка", "звонков")}` : "Не звонил за период"}{row.last ? ` · последний ${dayLabel(row.last.at)}` : ""}{row.weak[0] ? ` · слабое место: ${row.weak[0]}` : ""}</p>
         {row.calls > 0 && <Button size="s" variant="secondary" onClick={() => open(row)}>Звонки оператора</Button>}
       </li>)}</ul>
     </>}
@@ -191,7 +192,7 @@ export function TeamCalls({ team, filter, operator, onFilter, onOperator }: { te
     {calls.length === 0 ? <div className="card__body"><EmptyState title="Звонков нет" hint={filter === "all" && !person && !needle ? `За ${periodWord(team.period.days)} операторы не принимали звонков.` : "Измените фильтр или период."} /></div> : <>
       <div className="table-wrap table-wrap--responsive">
         <table className="table">
-          <thead><tr><th>Когда</th><th>Оператор</th><th>Звонок</th><th className="num">Балл</th><th>Кто оценил</th><th aria-label="Открыть" /></tr></thead>
+          <thead><tr><th>Когда</th><th>Оператор</th><th>Звонок</th><th className="num">Балл</th><th>Кто оценил</th><th><span className="sr-only">Открыть</span></th></tr></thead>
           <tbody>{calls.map(call => <tr key={call.id}>
             <td className="voice-team-nowrap">{dateLabel(call.created_at)}</td>
             <td><div className="voice-team-person"><strong>{call.user_name}</strong><small>{call.group_name ?? "Без группы"}</small></div></td>

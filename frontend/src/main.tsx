@@ -35,7 +35,9 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ThemeProvider>
       <QueryClientProvider client={queryClient}>
-        <BrowserRouter>
+        {/* Флаги заданы явно, чтобы React Router не предупреждал о v7. Переходы остаются
+            синхронными: поля поиска берут значение из адреса и в отложенном рендере теряли бы буквы. */}
+        <BrowserRouter future={{ v7_startTransition: false, v7_relativeSplatPath: true }}>
           <AuthProvider>
             <ToastProvider>
               <PwaProvider>

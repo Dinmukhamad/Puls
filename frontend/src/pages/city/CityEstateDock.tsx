@@ -64,8 +64,11 @@ export function CityEstateDock({ mine, land, build, setBuild, onClose, onFocus, 
   screen?: ScreenWays;
 }) {
   const client = useQueryClient(), keys = useOperationKey();
-  const mounted = useRef(true);
+  const mounted = useRef(true), latest = useRef(build);
+  latest.current = build;
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  /** While the city refreshed after a save, the operator may already have tapped the next cell: that tap wins. */
+  const current = () => mounted.current && latest.current === build;
   const [notice, setNotice] = useState<string | null>(null), [problem, setProblem] = useState<string | null>(null);
   const [tab, setTab] = useState<DockTab>("build");
   // Why the arrows could not move the things chosen holds only for those cells; cells tapped on the map open the shop.
@@ -85,13 +88,13 @@ export function CityEstateDock({ mine, land, build, setBuild, onClose, onFocus, 
     onSuccess: async (result, operation) => {
       if (result.project) {
         await refresh(`Сбор открыт: ${result.project.target_id ? `${result.project.name} → ${result.project.level_name}` : result.project.name}, смета ◈ ${coins(result.project.cost)}. Операторы района увидят его в карточке района.`);
-        if (!mounted.current) return;
+        if (!current()) return;
         setBuild({ ...build, placing: null, spot: null, selected: null });
         return;
       }
       if (operation.action === "move" || operation.action === "turnsmall") {
         await refresh(operation.action === "move" ? `Подвинуто: ${cellsText(result.moved ?? 0)}.` : `Повёрнуто: ${cellsText(result.turned ?? 0)}.`);
-        if (!mounted.current) return;
+        if (!current()) return;
         // The cells chosen go with what moved, so the next arrow moves them on.
         if (operation.next) setBuild({ ...build, choice: build.choice && { ...build.choice, cells: operation.next, at: null } });
         return;
@@ -100,7 +103,7 @@ export function CityEstateDock({ mine, land, build, setBuild, onClose, onFocus, 
         await refresh(operation.action === "decor"
           ? `Построено: ${operation.name?.toLowerCase() ?? "мелкие постройки"} — ${cellsText(result.laid ?? 0)}${result.price ? ` · −${coins(result.price)} коинов` : ""}.`
           : `Убрано: ${cellsText(result.removed ?? 0)}${result.refunded ? ` · вернулось ${coins(result.refunded)} коинов` : ""}.`);
-        if (!mounted.current) return;
+        if (!current()) return;
         setBuild({ ...build, choice: spent(build) });
         return;
       }
@@ -109,7 +112,7 @@ export function CityEstateDock({ mine, land, build, setBuild, onClose, onFocus, 
       const text = result.merged ? obj?.family === "bigpark" ? "Построено: большой парк! Шесть твоих скверов объединились." : "Построено: парк! Четыре твоих сквера объединились."
         : `${action}: ${name ?? "постройка"}${result.price ? ` · −${coins(result.price)} коинов` : ""}.`;
       await refresh(text);
-      if (!mounted.current) return;
+      if (!current()) return;
       setBuild({ ...build, placing: null, spot: null, choice: operation.action === "purchase" ? spent(build) : build.choice, selected: obj && "state" in obj && obj.state === "placed" ? obj.id : build.selected });
       if (obj && "state" in obj && obj.state === "placed" && operation.action !== "turn") onFocus({ district: obj.district_id, kind: "object", object: obj.id });
     },
@@ -280,7 +283,7 @@ function Placing({ build, plots, projects, pending, error, onRotate, onCancel, o
 }
 
 function Stage({ level, total }: { level: number; total: number }) {
-  return <span className="estate-stage" aria-label={`Ступень ${level} из ${total}`}>{Array.from({ length: total }, (_, i) => <i key={i} data-on={i < level || undefined} />)}</span>;
+  return <span className="estate-stage" role="img" aria-label={`Ступень ${level} из ${total}`}>{Array.from({ length: total }, (_, i) => <i key={i} data-on={i < level || undefined} />)}</span>;
 }
 
 function OwnCard({ obj, family, mine, squares, pending, error, onUpgrade, onTurn, onBack }: { obj: OwnObject; family: PlotCatalogue; mine: MyEstate; squares: number; pending: boolean; error: Error | null; onUpgrade: () => void; onTurn: () => void; onBack: () => void }) {

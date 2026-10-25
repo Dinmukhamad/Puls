@@ -87,7 +87,8 @@ export function Modal({ title, onClose, children, wide = false, className = "" }
   const id = useId();
   return <div className="fleet-overlay" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }} onKeyDown={e => { if (e.key === "Escape") onClose(); }}>
     <div className={`fleet-modal${wide ? " is-wide" : ""} ${className}`} role="dialog" aria-modal="true" aria-labelledby={id}>
-      <header><h2 id={id}>{title}</h2><button className="fleet-close" aria-label="Закрыть" onClick={onClose}><Icon name="close" /></button></header>
+      {/* autoFocus переносит фокус в окно, иначе Esc и Tab остаются на странице под ним; поле с autoFocus внутри окна перехватит его. */}
+      <header><h2 id={id}>{title}</h2><button className="fleet-close" autoFocus aria-label="Закрыть" onClick={onClose}><Icon name="close" /></button></header>
       {children}
     </div>
   </div>;

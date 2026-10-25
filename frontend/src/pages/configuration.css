@@ -64,7 +64,7 @@
 .definition-details__facts dt { color: var(--text-secondary); font-size: 13px; }
 .definition-details__facts dd { margin: 0; line-height: 1.6; font-weight: 600; overflow-wrap: anywhere; }
 @media (max-width: 600px) {
-  .configuration-form-grid { grid-template-columns: 1fr; gap: 16px; }
+  .configuration-form-grid { grid-template-columns: minmax(0, 1fr); gap: 16px; }
   .configuration-filters { padding: 12px; gap: 12px; }
   .configuration-search { min-width: min(100%, 200px); }
   .configuration-filters > .field:not(.configuration-search) { min-width: 120px; }

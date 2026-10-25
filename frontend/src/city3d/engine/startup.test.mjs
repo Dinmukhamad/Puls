@@ -55,7 +55,7 @@ function fixture(t, { active = true, forceWebGL = false } = {}) {
     return piece(name);
   } };
   Object.assign(globalThis, {
-    document, window: { matchMedia: () => ({ matches: true }) }, __cityStartup: state,
+    document, window: { matchMedia: () => ({ matches: true, addEventListener() {}, removeEventListener() {} }) }, __cityStartup: state,
     ResizeObserver: class { observe() {} disconnect() { disposals.push('observer'); } }, IntersectionObserver: undefined,
     requestAnimationFrame(callback) { const next = ++id; frames.set(next, callback); return next; }, cancelAnimationFrame(next) { frames.delete(next); },
     setTimeout(callback, delay) { const next = ++id; timers.set(next, { callback, delay }); return next; }, clearTimeout(next) { timers.delete(next); },

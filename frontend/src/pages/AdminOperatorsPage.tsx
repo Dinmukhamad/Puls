@@ -184,7 +184,7 @@ export function AdminOperatorsPage() {
                     <th className="num">Баланс</th>
                     <th className="num">Опоздания</th>
                     <th className="num">Сайты</th>
-                    <th />
+                    <th><span className="sr-only">Действия</span></th>
                   </tr>
                 </thead>
                 <tbody>

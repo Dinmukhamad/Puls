@@ -245,7 +245,7 @@ export function PersonalRatingCard({ data }: { data: RatingOut }) {
       </>}
       {calculated && state === "on_podium" && <p className="rating-personal__podium"><MedalIcon size={16} />Вы на призовом месте</p>}
       {calculated && state === "outside_podium" && data.my_gap_to_podium != null && <div className="rating-personal__gap">
-        <p>До призового результата — <strong>{points(data.my_gap_to_podium)} баллов</strong></p>
+        <p>До призового результата — <strong>{points(data.my_gap_to_podium)} {pointsWord(data.my_gap_to_podium)}</strong></p>
         <p className="secondary small">При равном количестве баллов операторы делят место. Разница рассчитана по выбранной неделе.</p>
       </div>}
       {data.view_mode === "personal" && <p className="rating-personal__race"><Link to={`/race?week=${header.week_id}`}>Кого догнать и что подтянуть — в «Гонке недели» →</Link></p>}

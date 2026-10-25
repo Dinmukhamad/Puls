@@ -40,7 +40,8 @@ export function AccessProvider({ children }: { children: ReactNode }) {
   const role = query.data?.role ?? user?.role ?? "operator";
   const isDeveloper = query.data?.capabilities?.manage_sessions === true;
   const refresh = () => { void query.refetch(); };
-  return <AccessContext.Provider value={{ allowed, isDeveloper, can: (code) => allowed[code] === true, canPath: (to) => canVisit(role, to, allowed, isDeveloper, user?.channel), home: visibleNavigation(role, allowed, isDeveloper, user?.channel).find(item => item.id !== "qr_access")?.to ?? "/profile", loading: !!user && query.isPending, error: query.error, refresh }}>{children}</AccessContext.Provider>;
+  // Неудачная фоновая проверка прав не стирает страницу: остаются права последней удачной.
+  return <AccessContext.Provider value={{ allowed, isDeveloper, can: (code) => allowed[code] === true, canPath: (to) => canVisit(role, to, allowed, isDeveloper, user?.channel), home: visibleNavigation(role, allowed, isDeveloper, user?.channel).find(item => item.id !== "qr_access")?.to ?? "/profile", loading: !!user && query.isPending, error: query.data ? null : query.error, refresh }}>{children}</AccessContext.Provider>;
 }
 
 export const useAccess = () => useContext(AccessContext);

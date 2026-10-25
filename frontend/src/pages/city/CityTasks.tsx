@@ -17,7 +17,7 @@ export function CityTasks({ quests, coins, assigned, onQuest, onStart, starting,
     {quests.length > 0 && <section aria-labelledby="city-tasks-day">
       <div className="city-tasks__head"><h2 id="city-tasks-day">Задания дня</h2><span>{answered} из {quests.length}</span></div>
       <ul className="city-tasks__list">{quests.map(q => <li key={q.slot}>
-        <button type="button" className="city-task" data-done={q.answered || undefined} onClick={() => onQuest(q)} aria-label={`${q.speaker || "Ситуация"}: ${q.answered ? q.correct ? "отвечено верно" : "отвечено" : "ответить"}`}>
+        <button type="button" className="city-task" data-done={q.answered || undefined} onClick={() => onQuest(q)} aria-label={`${q.speaker || "Ситуация"}: ${q.text}. ${q.answered ? q.correct ? "Отвечено верно" : "Отвечено" : "Ответить"}`}>
           <span className="city-task__icon" aria-hidden="true">{speakerIcon(q)}</span>
           <span className="city-task__text"><strong>{q.speaker || "Ситуация"}</strong><small>{q.text}</small></span>
           <span className="city-task__state">{q.answered ? q.correct ? `✓ +${q.coins}` : "Разбор" : "Ответить"}</span>

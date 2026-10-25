@@ -161,10 +161,13 @@ function EmployeeLevel({ id }: { id: number }) {
   </section>;
 }
 
+/** While another page of the same person loads, the list and its pagination stay in place (focus stays on the button). */
+const samePerson = (id: number) => <T,>(previous: T | undefined, query?: { queryKey: readonly unknown[] }) => query?.queryKey[1] === id ? previous : undefined;
+
 /** Training attempts, newest first; shown only when there are any. */
 function EmployeeLearning({ id }: { id: number }) {
   const [page, setPage] = useState(1);
-  const query = useQuery({ queryKey: ["learning-results", id, "simulator", page], queryFn: () => learning.results({ user_id: id, kind: "simulator", page }) });
+  const query = useQuery({ queryKey: ["learning-results", id, "simulator", page], queryFn: () => learning.results({ user_id: id, kind: "simulator", page }), placeholderData: samePerson(id) });
   if (!query.data?.total) return null;
   return <section className="employee__section" aria-labelledby={`employee-learning-${id}`}>
     <h3 id={`employee-learning-${id}`}>Тренажёры <small>· {query.data.total}</small></h3>
@@ -179,7 +182,7 @@ function EmployeeLearning({ id }: { id: number }) {
 /** Purchases with their status: the only place that lists them for one person. */
 function EmployeePurchases({ id }: { id: number }) {
   const [page, setPage] = useState(1);
-  const query = useQuery({ queryKey: ["team-purchases", id, page], queryFn: () => team.purchases(id, page) });
+  const query = useQuery({ queryKey: ["team-purchases", id, page], queryFn: () => team.purchases(id, page), placeholderData: samePerson(id) });
   return <section className="employee__section" aria-labelledby={`employee-purchases-${id}`}>
     <h3 id={`employee-purchases-${id}`}>Покупки{query.data?.total ? <small> · {query.data.total}</small> : null}</h3>
     {query.isPending ? <Skeleton height={56} /> : query.isError ? <ErrorState error={query.error} onRetry={() => query.refetch()} /> : !query.data.total ? <p className="employee__empty">Покупок пока нет.</p> : <>

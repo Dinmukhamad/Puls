@@ -1,4 +1,4 @@
-.work-sites { --crm-blue:#496bff; --crm-ink:#30496e; --crm-line:#dce3ef; color:var(--crm-ink); background:#edf1f8; min-height:100dvh; font:13px/1.5 Arial,Helvetica,sans-serif; color-scheme:light; }
+.work-sites { --crm-blue:#3a5fff; --crm-ink:#30496e; --crm-line:#dce3ef; color:var(--crm-ink); background:#edf1f8; min-height:100dvh; font:13px/1.5 Arial,Helvetica,sans-serif; color-scheme:light; }
 .work-sites * { box-sizing:border-box; }
 .work-sites button,.work-sites input,.work-sites select,.work-sites textarea { font:inherit; }
 .work-sites button { cursor:pointer; }
@@ -8,7 +8,7 @@
 .work-sites-heading h1 { font-size:18px; margin:0; font-weight:650; color:#223452; }
 .work-sites-heading button { border:0; background:none; color:#536686; padding:0; min-height:40px; }
 .work-sites-heading .work-sites-guide-button { margin-left:auto; color:#5365b0; }
-.work-sites-training { font-size:11px; color:#596a88; background:#e0e6f1; border:1px solid #d5ddea; border-radius:20px; padding:3px 10px; }
+.work-sites-training { font-size:11px; color:#566683; background:#e0e6f1; border:1px solid #d5ddea; border-radius:20px; padding:3px 10px; }
 .work-browser { margin:0 18px 18px; border:1px solid #ccd5e5; border-radius:12px; background:white; overflow:hidden; box-shadow:0 8px 32px #334b7010; }
 /* Oktell uses the whole window; its panels scroll within the workspace. */
 .work-sites[data-site=oktell] { display:flex; flex-direction:column; height:100dvh; min-height:0; overflow:hidden; }
@@ -20,17 +20,17 @@
 .work-browser-tabs button { display:flex; align-items:center; gap:10px; padding:10px 16px; min-width:205px; text-align:left; color:#4a5972; border:0; border-radius:9px 9px 0 0; background:transparent; }
 .work-browser-tabs button.is-active { background:white; color:#263b63; }
 .work-browser-tabs small { margin-left:auto; font-size:10px; }
-.crm-favicon { background:#496bff; color:white; border-radius:4px; width:18px; height:18px; text-align:center; font-weight:bold; }
+.crm-favicon { background:var(--crm-blue); color:white; border-radius:4px; width:18px; height:18px; text-align:center; font-weight:bold; }
 .work-tab-dot { display:inline-block; flex-shrink:0; width:6px; height:6px; border-radius:50%; background:#51bc98; margin-left:auto; }
 .work-browser-address { padding:9px 12px; display:flex; gap:6px; align-items:center; border-bottom:1px solid #dce3ed; }
 .work-browser-address>button { width:30px; height:30px; border:0; background:none; color:#65738b; font-size:20px; }
 .work-browser-address>button.is-done { color:#2e9e67; }
 .work-address-text { display:flex; align-items:center; gap:12px; min-width:0; flex:1; padding:6px 14px; border-radius:20px; background:#f0f3f9; font-size:12px; }
 .work-address-text>span:nth-child(2) { text-overflow:ellipsis; overflow:hidden; white-space:nowrap; }
-.work-address-text small { color:#8190a8; margin-left:auto; white-space:nowrap; }
+.work-address-text small { color:#636e81; margin-left:auto; white-space:nowrap; }
 .crm-header { height:53px; padding:0 22px; display:flex; align-items:center; gap:20px; border-bottom:1px solid var(--crm-line); background:white; }
 .crm-logo { color:var(--crm-blue); background:none; border:0; padding:0; font-size:17px!important; font-weight:bold!important; }
-.crm-header>span { font-size:11px; color:#8b98ad; }
+.crm-header>span { font-size:11px; color:#6b7585; }
 .crm-account { margin-left:auto; display:flex; gap:9px; align-items:center; font-size:12px; }
 .crm-account strong { font-weight:400; }
 .crm-avatar { width:29px; height:29px; background:var(--crm-blue); color:white; border-radius:50%; display:grid; place-items:center; font-size:11px; }
@@ -64,9 +64,9 @@
 .crm-ticket-link { font-weight:bold!important; text-decoration:underline; text-underline-offset:3px; }
 .crm-overview { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; margin-bottom:22px; }
 .crm-overview>div { display:flex; flex-direction:column; border:1px solid #dce5f2; border-radius:4px; background:white; padding:17px 20px; }
-.crm-overview span { color:#7385a3; font-size:11px; }
+.crm-overview span { color:#667691; font-size:11px; }
 .crm-overview strong { color:#3c5686; font-weight:400; font-size:28px; line-height:1.3; margin:6px 0; font-variant-numeric:tabular-nums; }
-.crm-overview small { font-size:10px; color:#92a0b6; }
+.crm-overview small { font-size:10px; color:#6a7484; }
 .crm-filters { padding:18px 20px; display:flex; align-items:end; gap:10px; flex-wrap:wrap; }
 .crm-filters label { display:flex; flex-direction:column; gap:5px; font-size:11px; }
 .crm-search { flex:1; min-width:220px; }
@@ -74,7 +74,7 @@
 .work-sites input::placeholder,.work-sites textarea::placeholder { color:#9daecc; }
 .work-sites textarea { resize:vertical; }
 .work-sites input[type=checkbox] { width:17px; height:17px; accent-color:var(--crm-blue); flex-shrink:0; }
-.crm-table-scroll { overflow:auto; }
+.crm-table-scroll { overflow:auto; position:relative; }
 .crm-table { border-collapse:collapse; width:100%; font-size:12px; min-width:800px; }
 .crm-table th { text-align:left; color:#7587a4; background:#f8faff; padding:12px 15px; font-size:11px; font-weight:400; border-block:1px solid #e7edf6; }
 .crm-table td { padding:16px 15px; border-bottom:1px solid #eef2f8; vertical-align:top; }

@@ -37,7 +37,8 @@ export function dateTime(iso: string): string {
 }
 
 export function dateOnly(iso: string): string {
-  return new Date(iso).toLocaleDateString("ru-RU", {
+  // Время без пояса — это UTC сервера (parseTimestamp), а голая дата — календарный день без сдвига.
+  return (/T/.test(iso) ? parseTimestamp(iso) : localDate(iso)).toLocaleDateString("ru-RU", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",

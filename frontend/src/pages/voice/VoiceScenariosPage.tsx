@@ -78,20 +78,22 @@ function ScenarioEditor({ id }: { id: string }) {
     window.addEventListener("beforeunload", leave);
     return () => window.removeEventListener("beforeunload", leave);
   }, [dirty]);
-  const update = (patch: Partial<ScenarioContent>) => { setContent(current => current && { ...current, ...patch }); setDirty(true); };
+  // Правки, сделанные пока сохранение в пути, в него не попали: после ответа они остаются несохранёнными.
+  const edits = useRef(0);
+  const update = (patch: Partial<ScenarioContent>) => { setContent(current => current && { ...current, ...patch }); setDirty(true); edits.current += 1; };
   const stored = (data: ScenarioDetail) => {
     client.setQueryData(scenarioKeys.detail(id), data); void client.invalidateQueries({ queryKey: scenarioKeys.list });
     setVersion(data.draft_version);
   };
   const save = useMutation({
-    mutationFn: async () => voiceScenarios.save(id, version, content!),
-    onSuccess: data => { stored(data); setDirty(false); toast.success("Черновик сохранён"); },
+    mutationFn: async () => { const sent = edits.current; return { data: await voiceScenarios.save(id, version, content!), sent }; },
+    onSuccess: ({ data, sent }) => { stored(data); if (edits.current === sent) setDirty(false); toast.success("Черновик сохранён"); },
     onError: error => toast.error(errorText(error)),
   });
   const publish = useMutation({
     mutationFn: async () => {
       let current = version;
-      if (dirty) { const saved = await voiceScenarios.save(id, version, content!); stored(saved); setDirty(false); current = saved.draft_version; }
+      if (dirty) { const sent = edits.current; const saved = await voiceScenarios.save(id, version, content!); stored(saved); if (edits.current === sent) setDirty(false); current = saved.draft_version; }
       return voiceScenarios.publish(id, current);
     },
     onSuccess: data => { stored(data); toast.success(`Сценарий опубликован, версия ${data.revision}`); },
@@ -110,7 +112,7 @@ function ScenarioEditor({ id }: { id: string }) {
   return <div className="stack vs-page">
     <header className="page-head vs-head">
       <div className="vs-head__titles">
-        <Link className="vs-back" to={LIST}><Back />Все сценарии</Link>
+        <Link className="vs-back" to={LIST} onClick={event => { if (dirty && !window.confirm("Есть несохранённые правки. Уйти без сохранения?")) event.preventDefault(); }}><Back />Все сценарии</Link>
         <h1 className="page-title">{value.title.trim() || "Новый сценарий"}</h1>
         <p className="page-subtitle">{data.published_at ? `Опубликован ${when(data.published_at)}${data.published_by ? `, ${data.published_by}` : ""}` : "Ещё не опубликован: операторы его не видят"}{dirty ? " · есть несохранённые правки" : ""}</p>
       </div>

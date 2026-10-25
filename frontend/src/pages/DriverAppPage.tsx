@@ -4,7 +4,7 @@ import { useDriverNavigation } from "../hooks/useDriverNavigation";
 import { DriverNavigationOrders } from "./DriverNavigationOrders";
 import type { LocationState } from "../utils/driverLocation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { driver, orderActive, type DriverAction, type DriverAuthentication, type DriverPark, type DriverProfile, type DriverState, type OrderAction, type OrderCommand, type OrderCreate } from "../api/driver";
 import { useAuth } from "../auth/AuthContext";
@@ -14,7 +14,7 @@ import { DriverOrders, money } from "./DriverOrders";
 import { ChevronRightIcon, CoinIcon, InboxIcon, SparkIcon, TrophyIcon, UserIcon } from "../components/icons";
 import { ErrorState } from "../components/ui";
 import { DAction, DChoice, DInfo, DLegend } from "./DriverButtons";
-import { dateTime } from "../utils/format";
+import { dateTime, parseTimestamp } from "../utils/format";
 import "./simulator.css";
 import "./driver-app.css";
 import "./driver-orders.css";
@@ -74,10 +74,11 @@ export function DriverAppPage() {
     <Link className="driver-primary dx-cta" to="/training/city?district=driver">Открыть автопарк →</Link>
   </main></div>;
   if (profile.stage === "phone" || profile.stage === "otp") return <div className="driver-app"><DriverHeader /><DriverLogin
-    stage={profile.stage} authentication={query.data!.authentication} parkName={profile.park?.name ?? ""}
+    stage={profile.stage} authentication={query.data!.authentication} serverNow={query.data!.server_now} parkName={profile.park?.name ?? ""}
     phone={phone} onPhone={setPhone} busy={sendCode.isPending || verify.isPending || action.isPending}
     error={verify.error || sendCode.error || action.error}
-    onSend={() => { verify.reset(); sendCode.mutate(phone || user?.phone || ""); }}
+    // На шаге кода поле телефона скрыто, и после перезагрузки в нём лишь «+7»: повторно шлём на номер профиля.
+    onSend={() => { verify.reset(); sendCode.mutate(profile.stage === "otp" && user?.phone ? user.phone : phone || user?.phone || ""); }}
     onVerify={(code) => { sendCode.reset(); verify.mutate(code); }}
     onBack={() => { sendCode.reset(); verify.reset(); mutate({ action: "services" }); }}
     onRefresh={() => query.refetch()}
@@ -115,17 +116,20 @@ export function DriverAppPage() {
 }
 
 interface DriverLoginProps {
-  stage: "phone" | "otp"; authentication: DriverAuthentication; parkName: string;
+  stage: "phone" | "otp"; authentication: DriverAuthentication; serverNow?: string; parkName: string;
   phone: string; onPhone: (value: string) => void; busy: boolean; error?: unknown;
   onSend: () => void; onVerify: (code: string) => void; onBack: () => void; onRefresh: () => void;
 }
-export function DriverLogin({ stage, authentication, parkName, phone, onPhone, busy, error, onSend, onVerify, onBack, onRefresh }: DriverLoginProps) {
+export function DriverLogin({ stage, authentication, serverNow, parkName, phone, onPhone, busy, error, onSend, onVerify, onBack, onRefresh }: DriverLoginProps) {
   const [code, setCode] = useState("");
-  const [now, setNow] = useState(Date.now());
+  // Срок кода и паузу до повтора считаем по часам сервера: часы компьютера могут спешить или отставать.
+  const skew = useMemo(() => serverNow ? parseTimestamp(serverNow).getTime() - Date.now() : 0, [serverNow]);
+  const [clock, setNow] = useState(Date.now());
+  const now = clock + skew;
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(timer); }, []);
   useEffect(() => { setCode(""); }, [authentication.code_expires_at]);
-  const seconds = Math.min(60, Math.max(0, Math.ceil(((authentication.next_send_at ? Date.parse(authentication.next_send_at) : 0) - now) / 1000)));
-  const expired = !!authentication.code_expires_at && Date.parse(authentication.code_expires_at) <= now;
+  const seconds = Math.min(60, Math.max(0, Math.ceil(((authentication.next_send_at ? parseTimestamp(authentication.next_send_at).getTime() : 0) - now) / 1000)));
+  const expired = !!authentication.code_expires_at && parseTimestamp(authentication.code_expires_at).getTime() <= now;
   const ready = authentication.phone_set && authentication.telegram_connected && authentication.telegram_configured;
   const validPhone = /^\+?[\d ()-]+$/.test(phone) && phone.replace(/\D/g, "").length >= 11;
   function submit(event: FormEvent) { event.preventDefault(); if (!busy && ready) { if (stage === "otp") { if (/^\d{6}$/.test(code) && !expired) onVerify(code); } else if (validPhone && seconds === 0) onSend(); } }
