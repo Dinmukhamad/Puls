@@ -61,7 +61,7 @@ export function createStats({ renderer, backend, host, visible, quality, userIdK
   const recent = new Tally(), period = new Tally();
   let began: number | null = null;
   let previous = 0, previousMeasured = true, firstFrame: number | null = null, calls = 0, triangles = 0, disposed = false, active = true;
-  let refreshTimer: number | null = null, reportTimer: number | null = null;
+  let refreshTimer: number | null = null, reportTimer: number | null = null, width = 0, height = 0;
   let overlay: HTMLDivElement | null = null;
   if (visible) {
     overlay = document.createElement("div");
@@ -71,9 +71,15 @@ export function createStats({ renderer, backend, host, visible, quality, userIdK
     host.append(overlay);
   }
 
+  /** A city that is closing or hidden measures 0×0: the report keeps the size it last had on screen. */
+  function measure() {
+    if (host.clientWidth > 0 && host.clientHeight > 0) { width = host.clientWidth; height = host.clientHeight; }
+  }
+
   /** Every second: frame rate of that second ("resting" when the city drew only at its idle pace), 1st percentile since the last report (it needs a hundred frames or more). */
   function refresh() {
     if (!active || disposed) return;
+    measure();
     const s = quality.settings, memory = renderer.info.memory;
     Object.assign(host.dataset, { fps: String(round(recent.fps)), drawCalls: String(calls), triangles: String(triangles), quality: `${s.tier}/${quality.concessions.length}` });
     if (overlay) {
@@ -90,9 +96,11 @@ export function createStats({ renderer, backend, host, visible, quality, userIdK
   }
 
   function report() {
-    if (!userIdKnown || period.frames < MIN_FRAMES) return;
+    measure();
+    // The server takes a size of at least 1×1 and a GPU name of up to 128 characters.
+    if (!userIdKnown || period.frames < MIN_FRAMES || !width || !height) return;
     const body = {
-      backend, gpu: gpu.slice(0, 160), width: host.clientWidth, height: host.clientHeight, dpr: round(renderer.getPixelRatio(), 2),
+      backend, gpu: gpu.slice(0, 128), width, height, dpr: round(renderer.getPixelRatio(), 2),
       tier: quality.settings.tier, fps_avg: round(period.fps), fps_p1: round(period.fpsLow),
       first_frame_ms: firstFrame === null ? null : Math.round(firstFrame), concessions: quality.concessions.slice(0, 12),
     };

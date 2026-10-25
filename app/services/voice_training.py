@@ -59,11 +59,12 @@ def chat_operator(user):
 
 
 def can_call(user):
-    """Drivers call operators and trainees; leaders look at their calls (voice_team), and the
-    administrator may take a call to check the trainer. Chat operators take no calls."""
+    """Drivers call operators and trainees; the trainer and the administrator take calls too, to
+    hear what learners hear. Supervisors and heads look at the calls (voice_team). Chat operators
+    take no calls."""
     return (
         user.is_active
-        and user.role in (Role.TRAINEE, Role.OPERATOR, Role.ADMIN)
+        and user.role in (Role.TRAINEE, Role.OPERATOR, Role.TRAINER, Role.ADMIN)
         and not chat_operator(user)
     )
 

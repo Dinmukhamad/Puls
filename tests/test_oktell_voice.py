@@ -6,10 +6,11 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import func, select
 
+from app.models.enums import Role
 from app.models.oktell import OktellEvent
 from app.models.voice_training import VoiceTrainingAttempt
 from app.services import voice_training
-from tests.conftest import auth, login, login_with_work_sites
+from tests.conftest import auth, login, login_with_work_sites, make_user
 from tests.test_oktell import BASE, accepted, act
 from tests.test_voice_scenarios import EDITOR, support_city, write
 from tests.test_voice_training import EXPLAIN
@@ -103,6 +104,21 @@ async def test_an_answered_call_is_a_voice_attempt_that_hanging_up_finishes(
     assert finished["state"] == "completed" and finished["result"]["score"] is not None
     catalog = (await client.get(VOICE, headers=headers)).json()
     assert catalog["attempts"][0]["channel"] == "oktell"
+
+
+async def test_the_trainer_takes_the_drivers_calls_too(client, session):
+    trainer = await make_user(session, login="oktell-trainer", role=Role.TRAINER)
+    headers = auth(await login_with_work_sites(client, trainer.login))
+    assert (await ready(client, headers, auto_answer=False))["voice_calls"] is True
+    call = (await accepted(client, headers, "ring"))["ringing"]
+    active = (await accepted(client, headers, "answer"))["active_call"]
+    assert active["direction"] == "inbound" and active["id"] == call["id"]
+    attempt = await attempt_of(client, headers, active["voice_attempt_id"])
+    assert attempt["channel"] == "oktell" and attempt["state"] == "in_progress"
+    ended = await accepted(client, headers, "call_end")
+    assert ended["calls"][0]["status"] == "completed"
+    finished = await attempt_of(client, headers, attempt["id"])
+    assert finished["state"] == "completed" and finished["result"]["score"] is not None
 
 
 async def test_an_unanswered_call_is_missed_and_cannot_be_answered(client, operator, session):

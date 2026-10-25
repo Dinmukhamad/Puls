@@ -3,9 +3,10 @@ from datetime import timedelta
 from sqlalchemy import select
 
 from app.db.base import utcnow
+from app.models.enums import Role
 from app.models.telemetry import CityPerfReport
 from app.services import telemetry
-from tests.conftest import auth, login
+from tests.conftest import auth, login, make_user
 
 REPORT = {
     "backend": "webgpu", "gpu": "Apple M1", "width": 1440, "height": 900, "dpr": 2,
@@ -21,6 +22,15 @@ async def test_report_is_stored_for_the_user(client, session, operator):
     assert response.status_code == 204, response.text
     row = await session.scalar(select(CityPerfReport))
     assert (row.user_id, row.backend, row.concessions) == (operator.id, "webgpu", ["ao"])
+
+
+async def test_trainers_and_trainees_report_the_city_they_open(client, session):
+    # Both roles stay within learning, and the operator city they open still sends its report.
+    for role in (Role.TRAINER, Role.TRAINEE):
+        user = await make_user(session, login=f"city-{role.value}", role=role)
+        headers = auth(await login(client, user.login))
+        response = await client.post(URL, json=REPORT, headers=headers)
+        assert response.status_code == 204, response.text
 
 
 async def test_report_is_validated_and_bounded(client, operator):

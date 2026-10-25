@@ -89,6 +89,7 @@ export function CityPage() {
     .then(saved => client.setQueryData<CityData>(["city", "self"], current => current && { ...current, levels_seen: saved.levels_seen }))
     .catch(() => { /* This browser remembers them too; the next visit tells the server again. */ });
   const claim = useMutation({ mutationFn: (key: string) => city.claim(key, query.data!.revision), onSuccess: async result => { setReward(result); await client.invalidateQueries(); }, onError: () => { void query.refetch(); } });
+  const siteTour = useSiteTour();
   // Simulator scenarios a trainer assigned to the operator: only in the operator's own city.
   const navigate = useNavigate();
   const assignments = useQuery({ queryKey: ["learning"], queryFn: learning.catalog, enabled: user?.role === "operator" && operatorId === null, staleTime: 60000, refetchOnWindowFocus: true });
@@ -286,7 +287,6 @@ export function CityPage() {
   }
   const rank = data.level < 2 ? "Новый житель" : data.level < 4 ? "Исследователь" : "Мастер города";
   const actionable = (m: CityMission) => !["locked", "unavailable"].includes(m.state);
-  const siteTour = useSiteTour();
   /** The mission's main button: take the reward, go to the task, practise again, or say why it cannot. */
   function missionAction(m: CityMission, d: CityDistrict) {
     if (d.id === "scenarios") return actionable(m) && !data.inspecting ? <Link className="city-action" to={m.path}>{m.state === "completed" ? "Повторить для практики →" : "Пройти сценарий →"}</Link> : <button className="city-action" disabled>{m.state === "unavailable" ? "Сценарий на паузе" : "Просмотр прогресса"}</button>;

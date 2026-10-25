@@ -259,6 +259,7 @@ def trainer_path_allowed(path: str, method: str) -> bool:
     ) or path in (
         "/me/access",
         "/learning",
+        "/telemetry/city",
     ):
         return True
     if path == "/lookups/users":

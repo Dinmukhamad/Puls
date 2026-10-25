@@ -207,3 +207,21 @@ test('a resting city is shown as resting: its frames, and the step out of them, 
   assert.equal(b.requests[0].json.fps_avg, 50);
   assert.equal(b.requests[0].json.fps_p1, 50, 'no resting gap drags the 1st percentile');
 });
+
+test('a city that closes or hides reports the size it had on screen, with a GPU name the server takes', t => {
+  const b = setup(t, { gpu: 'g'.repeat(200) });
+  b.frames(31, 100); b.advance(1000);
+  b.host.clientWidth = 0; b.host.clientHeight = 0; // Unmounted inside the app, or hidden while cached.
+  b.stats.dispose();
+  assert.equal(b.requests.length, 1);
+  assert.deepEqual([b.requests[0].json.width, b.requests[0].json.height], [1000, 700]);
+  assert.equal(b.requests[0].json.gpu.length, 128);
+});
+
+test('a city never seen on screen sends no report the server would refuse', t => {
+  const b = setup(t);
+  b.host.clientWidth = 0; b.host.clientHeight = 0;
+  b.frames(31, 100); b.advance(1000);
+  b.stats.setActive(false);
+  assert.equal(b.requests.length, 0);
+});

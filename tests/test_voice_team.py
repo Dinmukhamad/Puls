@@ -1,4 +1,5 @@
-"""Leaders see how their operators train calls; drivers call the operators, not the leaders."""
+"""Leaders see how their operators train calls; drivers call the operators and the trainer,
+not the supervisors and heads."""
 
 import pytest
 
@@ -69,9 +70,9 @@ async def test_leaders_see_their_operators_calls_and_scores(client, session, ope
     assert (await client.get(TEAM, headers=mine)).status_code == 403
 
 
-async def test_drivers_call_operators_not_leaders(client, session, supervisor, head):
-    trainer = await make_user(session, login="tr-calls", role=Role.TRAINER)
-    for leader in (supervisor, head, trainer):
+async def test_drivers_call_operators_and_the_trainer_not_leaders(client, session, supervisor,
+                                                                 head):
+    for leader in (supervisor, head):
         headers = auth(await login(client, leader.login))
         refused = await client.post(f"{VOICE}/start", headers=headers,
                                     json={"scenario_key": "phone_change", "persona": "calm"})
@@ -79,8 +80,16 @@ async def test_drivers_call_operators_not_leaders(client, session, supervisor, h
         sites = auth(await login_with_work_sites(client, leader.login))
         assert (await client.get("/api/v1/learning/oktell", headers=sites)).json()[
             "voice_calls"] is False
-    admin = await make_user(session, login="adm-calls", role=Role.ADMIN)
-    assert (await start(client, auth(await login(client, admin.login))))["turn"] == 0
+    # The trainer and the administrator take calls to hear what the learners hear.
+    for login_name, role in (("tr-calls", Role.TRAINER), ("adm-calls", Role.ADMIN)):
+        user = await make_user(session, login=login_name, role=role)
+        headers = auth(await login(client, user.login))
+        assert (await call(client, headers, EXPLAIN, NEXT))["state"] == "completed"
+        sites = auth(await login_with_work_sites(client, user.login))
+        assert (await client.get("/api/v1/learning/oktell", headers=sites)).json()[
+            "voice_calls"] is True
+        # Their own calls stay out of the team's numbers.
+        assert (await client.get(TEAM, headers=headers)).json()["summary"]["calls"] == 0
 
 
 async def test_the_queue_and_a_leaders_ai_review(client, session, operator, supervisor,
