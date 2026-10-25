@@ -33,6 +33,22 @@ async def start(key: str, session: SessionDep, user: CurrentUser):
     return result
 
 
+@router.post("/course/tasks/{key}/restart")
+async def restart(key: str, session: SessionDep, user: CurrentUser):
+    await lock_learner(session, user.id)
+    result = await crm_course.restart(session, user, key)
+    await session.commit()
+    return result
+
+
+@router.post("/course/reset")
+async def reset(session: SessionDep, user: CurrentUser):
+    await lock_learner(session, user.id)
+    result = await crm_course.reset(session, user)
+    await session.commit()
+    return result
+
+
 @router.post("/course/tasks/{key}/actions")
 async def action(key: str, body: CourseAction, session: SessionDep, user: CurrentUser):
     await lock_learner(session, user.id)

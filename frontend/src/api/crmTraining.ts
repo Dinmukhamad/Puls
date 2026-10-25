@@ -22,6 +22,10 @@ export const crmTrainingKey = (userId?: number) => ["crm-training", userId] as c
 export const crmTraining = {
   state: (signal?: AbortSignal) => request<CrmTrainingState>("/api/v1/learning/crm/course", { signal }),
   start: (key: CrmTaskKey) => request<CrmTrainingState>(`/api/v1/learning/crm/course/tasks/${key}/start`, { method: "POST" }),
+  /** An unfinished lesson starts over with a new appeal and ticket where it has them. */
+  restart: (key: CrmTaskKey) => request<CrmTrainingState>(`/api/v1/learning/crm/course/tasks/${key}/restart`, { method: "POST" }),
+  /** Staff take the whole course again from the first lesson. */
+  reset: () => request<CrmTrainingState>("/api/v1/learning/crm/course/reset", { method: "POST" }),
   action: (key: CrmTaskKey, input: { action: "list" | "inspect" | "advice" | "call_form"; driver_id?: string; choices?: string[]; note?: string; call_result?: string }) => request<CrmTrainingState>(`/api/v1/learning/crm/course/tasks/${key}/actions`, { method: "POST", json: input }),
   capture: (key: CrmTaskKey, image: Blob) => { const multipart = new FormData(); multipart.append("file", image, "call.png"); return request<CrmTrainingState>(`/api/v1/learning/crm/course/tasks/${key}/capture`, { method: "POST", multipart }); },
   check: (key: CrmTaskKey, appealId: number, requestId: string) => request<CrmTrainingState>(`/api/v1/learning/crm/training/tasks/${key}/check`, { method: "POST", json: { appeal_id: appealId, request_id: requestId } }),

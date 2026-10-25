@@ -7,7 +7,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 const require = createRequire(import.meta.url);
 const bundle = async file => {
-  const built = await build({ entryPoints: [new URL(file, import.meta.url).pathname], bundle: true, platform: "node", format: "cjs", packages: "external", jsx: "automatic", loader: { ".css": "empty" }, write: false });
+  const built = await build({ entryPoints: [new URL(file, import.meta.url).pathname], bundle: true, platform: "node", format: "cjs", packages: "external", jsx: "automatic", loader: { ".css": "empty" }, define: { "import.meta.env": "{}" }, write: false });
   const module = { exports: {} };
   new Function("require", "module", "exports", built.outputFiles[0].text)(require, module, module.exports);
   return module.exports;
@@ -102,4 +102,55 @@ test("the practice's screenshot waits for the same appeal the server accepts", (
   assert.deepEqual(missing({ ...right, comment: "Новый номер +77756102285" }), ["comment"]);
   assert.deepEqual(missing({ ...right, comment: `Новый номер +77756102285 ${driver.link.replace("park_id=p1", "park_id=other")}` }), ["comment"]);
   assert.deepEqual(missing({ ...right, channel: "Чат" }), ["channel"]);
+});
+
+test("a lesson can start over, and only staff are offered the whole course again", async () => {
+  const { restartQuestion } = await bundle("./CrmCourseDock.tsx");
+  const rework = task("crm_rework_v2", "in_progress", 2, { appeal_id: 58, ticket_id: 9 });
+  const learner = render(course(rework, 3), { location: { place: "ticket", id: 9 }, onRestart() {} });
+  assert.match(learner, /Начать урок заново/);
+  assert.doesNotMatch(learner, /Пройти курс заново/);
+  assert.doesNotMatch(render(course(rework, 3), { location: { place: "ticket", id: 9 } }), /Начать урок заново/);
+  assert.match(render(course(rework, 3), { onRestart() {}, onReset() {} }), /Пройти курс заново/);
+  // Nothing to take again before the first lesson starts.
+  assert.doesNotMatch(render(course(task("crm_intro_v2", "available"), 0), { onReset() {} }), /Пройти курс заново/);
+  assert.match(restartQuestion("crm_rework_v2"), /новое обращение и тикет/);
+  assert.match(restartQuestion("crm_phone_v2"), /Сохранённое обращение останется в истории/);
+  assert.match(restartQuestion("crm_mismatch_v2"), /с того же звонка/);
+});
+
+// The bundled components require the CommonJS build: the same module instance carries their QueryClient context.
+const { QueryClient, QueryClientProvider } = require("@tanstack/react-query");
+const withData = (key, data, element) => {
+  const client = new QueryClient();
+  client.setQueryData(key, data);
+  return renderToStaticMarkup(React.createElement(QueryClientProvider, { client }, element));
+};
+
+test("lesson 4's appeal points to the returned ticket and offers no copy of itself", async () => {
+  const { CrmAppealDetail } = await bundle("./CrmAppealDetail.tsx");
+  const appeal = { id: 58, author_id: 4, author_name: "Учебный оператор", category_labels: ["Водитель"], channel: "Звонок", phone: driver.phone, license_number: driver.license, driver_id: driver.id, contacted_at: "2026-10-23T06:57:23Z", park: "iTaxi", city: "Караганда", details: {}, comment: "Прошу снять лимит с аккаунта водителя.", is_ticket: true, status: "new", created_at: "2026-10-23T06:57:23Z", attachments: [], ticket_id: 9, training_task: "crm_rework_v2" };
+  const page = lesson => withData(["crm-appeal", 58], appeal, React.createElement(CrmAppealDetail, { id: 58, editor: true, onDuplicate() {}, onTicket() {}, lesson }));
+  const inLesson = page(task("crm_rework_v2", "in_progress", 1, { appeal_id: 58, ticket_id: 9 }));
+  assert.match(inLesson, /ООЗ вернул тикет №9 на доработку/);
+  assert.match(inLesson, /Открыть тикет №9/);
+  assert.doesNotMatch(inLesson, /Создать на основе обращения/);
+  // Another learner's appeal, or the same one after the lesson, reads as before.
+  const after = page(task("crm_rework_v2", "passed", 5, { appeal_id: 58, ticket_id: 9 }));
+  assert.doesNotMatch(after, /ООЗ вернул тикет/);
+  assert.match(after, /Создать на основе обращения/);
+  assert.match(page(task("crm_rework_v2", "in_progress", 1, { appeal_id: 60, ticket_id: 10 })), /Создать на основе обращения/);
+});
+
+test("a ticket left behind when its lesson started over takes no lesson actions", async () => {
+  const { CrmTicketDetail } = await bundle("./CrmTicketDetail.tsx");
+  const ticket = { id: 9, appeal_id: 58, status: "moderation", revision: 2, created_at: "2026-10-23T06:57:23Z", phone: driver.phone, author_name: "Учебный оператор", events: [{ id: 5, action: "ooz_review", author: "Отдел обработки запросов", comment: "Добавьте ссылку.", created_at: "2026-10-23T06:57:23Z", attachments: [] }] };
+  const page = data => withData(["crm-ticket", 9], data, React.createElement(CrmTicketDetail, { id: 9, onAppeal() {} }));
+  const current = page({ ...ticket, in_lesson: true });
+  assert.match(current, /Вернуть на доработку/);
+  assert.doesNotMatch(current, /больше не относится к уроку/);
+  const left = page({ ...ticket, in_lesson: false });
+  assert.doesNotMatch(left, /Вернуть на доработку/);
+  assert.match(left, /больше не относится к уроку/);
+  assert.match(left, /data-course="comment" disabled=""/);
 });

@@ -43,6 +43,7 @@
 .crm-training-dock .crm-training-verdict { margin-bottom: 4px; }
 .crm-training-mode { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 0 0 14px; padding: 10px 14px; border: 1px solid #dfe5ef; border-radius: 10px; background: #f6f8fc; color: #4a5568; font-size: 12px; line-height: 1.5; }
 .crm-training-mode button { border: 0; background: none; padding: 0; color: #3e63dd; font: inherit; font-weight: 600; cursor: pointer; text-decoration: underline; }
+.crm-training-mode--warn { border-color: #f0dfb4; background: #fff8e8; color: #5b4a1f; }
 .crm-training-dock .pulsar-dock-footer { justify-content: center; }
 .crm-training-start { max-width: 720px; padding: 28px; color: #303b50; }
 .crm-training-start h2 { font-size: 22px; line-height: 1.35; margin: 0 0 14px; }
@@ -91,6 +92,14 @@
 .crm-course-done ul { margin-bottom: 18px; font-size: 14px; line-height: 1.6; }
 .crm-course-done .crm-course-example { margin-bottom: 20px; }
 .crm-course-more { display: grid; gap: 10px; padding-top: 4px; border-top: 1px solid #edf1f6; }
+/* Starting a lesson or the course over asks once more in place. */
+.work-sites .crm-course-again { justify-self: start; }
+.crm-course-confirm { display: grid; gap: 10px; padding: 12px 14px; border-radius: 10px; background: #fff8e8; border: 1px solid #f0dfb4; color: #5b4a1f; }
+.crm-course-confirm > div { display: flex; flex-wrap: wrap; gap: 8px; }
+/* Lesson 4: the appeal says where the work is — the ticket ООЗ returned. */
+.crm-course-returned { display: grid; gap: 8px; justify-items: start; margin: 20px 24px 0; padding: 14px 16px; border-radius: 10px; background: #f0f5ff; border: 1px solid #d5e2ff; color: #2f3e57; font-size: 13px; line-height: 1.55; }
+.crm-course-returned strong { color: #1f3462; font-size: 14px; }
+.crm-ticket-left { margin: 20px 24px 0; padding: 12px 14px; border-radius: 10px; background: #fff8e8; border: 1px solid #f0dfb4; color: #5b4a1f; font-size: 13px; line-height: 1.55; }
 .crm-course-dock details > summary { cursor: pointer; font-size: 12px; color: #53677f; }
 .crm-course-dock details > p, .crm-course-dock details > dl, .crm-course-dock details > ul, .crm-course-dock details > ol { margin-top: 8px; }
 .crm-course-rules, .crm-course-checklist ol { padding-left: 18px; display: grid; gap: 6px; }

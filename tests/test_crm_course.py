@@ -6,11 +6,12 @@ import zlib
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.models.city import CityAward
 from app.models.crm import CrmTicketEvent
 from app.models.crm_training import CrmTrainingAttempt
+from app.models.enums import Role
 from app.services.crm_catalog import category_id
 from app.services.crm_course import KEYS
 from tests.conftest import auth, login, login_with_work_sites, make_user
@@ -316,6 +317,64 @@ async def test_rework_uses_ticket_number_real_actions_comment_and_idempotency(cl
     assert practice["driver"]["new_phone"] in practice["speech"] and phone not in practice["speech"]
     state = (await client.get(COURSE, headers=h)).json()
     assert state["completed"] == 5 and state["active_task"] is None
+
+
+async def test_a_lost_learner_starts_the_lesson_over_with_a_new_ticket(client, session):
+    user, h = await headers(client, session)
+    await finish_intro(client, h)
+    await finish_phone(client, h)
+    await finish_mismatch(client, h)
+    first = await start(client, h, KEYS[3])
+    await client.get(f"{BASE}/appeals/{first['appeal_id']}", headers=h)
+    ticket = (await client.get(f"{BASE}/tickets/{first['ticket_id']}", headers=h)).json()
+    assert ticket["in_lesson"] is True
+    assert (await ticket_action(client, h, ticket, "moderate")).status_code == 200
+    # A passed lesson stays passed; a lesson never started has nothing to start over.
+    for key in (KEYS[2], KEYS[4]):
+        assert (await client.post(f"{COURSE}/tasks/{key}/restart", headers=h)).status_code == 409
+    r = await client.post(f"{COURSE}/tasks/{KEYS[3]}/restart", headers=h)
+    assert r.status_code == 200, r.text
+    again = task(r.json(), KEYS[3])
+    assert again["state"] == "in_progress" and again["appeal_id"] != first["appeal_id"]
+    assert again["ticket_id"] != first["ticket_id"]
+    assert [s["status"] for s in again["steps"]] == ["pending"] * 5
+    # The old appeal stays in the shared history as an ordinary one: its ticket is no lesson's.
+    old = (await client.get(f"{BASE}/appeals/{first['appeal_id']}", headers=h)).json()
+    assert old["training_task"] is None
+    stale = (await client.get(f"{BASE}/tickets/{first['ticket_id']}", headers=h)).json()
+    assert stale["in_lesson"] is False
+    assert (await ticket_action(client, h, stale, "rework")).status_code == 404
+    await client.get(f"{BASE}/appeals/{again['appeal_id']}", headers=h)
+    fresh = (await client.get(f"{BASE}/tickets/{again['ticket_id']}", headers=h)).json()
+    assert fresh["in_lesson"] is True and fresh["status"] == "awaiting_reply"
+    assert (await ticket_action(client, h, fresh, "moderate")).status_code == 200
+    attempts = select(func.count()).select_from(CrmTrainingAttempt).where(
+        CrmTrainingAttempt.user_id == user.id, CrmTrainingAttempt.task_key == KEYS[3]
+    )
+    assert await session.scalar(attempts) == 1
+
+
+async def test_staff_take_the_course_again_and_learners_keep_their_lessons(client, session):
+    trainer = await make_user(session, login="course-trainer", role=Role.TRAINER)
+    h = auth(await login_with_work_sites(client, trainer.login))
+    await finish_intro(client, h)
+    t = await start(client, h, KEYS[1])
+    await capture(client, h, t)
+    r = await client.post(f"{COURSE}/reset", headers=h)
+    assert r.status_code == 200, r.text
+    state = r.json()
+    assert state["completed"] == 0 and state["active_task"] is None
+    assert task(state, KEYS[0])["state"] == "available"
+    assert task(state, KEYS[1])["state"] == "locked" and task(state, KEYS[1])["capture"] is None
+    count = select(func.count()).select_from(CrmTrainingAttempt).where(
+        CrmTrainingAttempt.user_id == trainer.id
+    )
+    assert await session.scalar(count) == 0
+    assert (await start(client, h, KEYS[0]))["state"] == "in_progress"
+    _, learner = await headers(client, session, "course-learner")
+    await finish_intro(client, learner)
+    assert (await client.post(f"{COURSE}/reset", headers=learner)).status_code == 403
+    assert task((await client.get(COURSE, headers=learner)).json(), KEYS[0])["state"] == "passed"
 
 
 async def test_practice_ends_at_saved_appeal_and_stays_fixable(client, session):

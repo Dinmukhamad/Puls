@@ -10,7 +10,7 @@ import struct
 from uuid import uuid4
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import undefer
 
 from app.db.base import utcnow
@@ -22,6 +22,7 @@ from app.models.crm import (
     CrmTicketEvent,
 )
 from app.models.crm_training import CrmTrainingAttempt
+from app.models.enums import LEARNER_ROLES
 from app.services import crm_draft, crm_training
 from app.services.crm_catalog import category_id
 
@@ -187,6 +188,48 @@ async def start(session, user, key):
         await session.flush()
         if key in (KEYS[0], KEYS[3]):
             await seed_appeal(session, user, attempt)
+    return await state(session, user)
+
+
+async def forget(session, user, attempts):
+    """Lets attempts go with their call snapshots. Their appeals stay in the shared history as
+    ordinary ones, so an old ticket no longer answers to a lesson."""
+    keys = [a.task_key for a in attempts]
+    if not keys:
+        return
+    for row in await session.scalars(
+        select(CrmAppeal).where(CrmAppeal.author_id == user.id, CrmAppeal.training_task.in_(keys))
+    ):
+        row.training_task = None
+    await session.execute(
+        delete(CrmCourseCapture).where(
+            CrmCourseCapture.user_id == user.id, CrmCourseCapture.task_key.in_(keys)
+        )
+    )
+    for attempt in attempts:
+        await session.delete(attempt)
+    # The new attempt is inserted by a later flush: the old row must be gone first.
+    await session.flush()
+
+
+async def restart(session, user, key):
+    """A learner who got lost starts an unfinished lesson over: a new attempt and, where the lesson
+    brings one, a new appeal and ticket. A passed lesson stays passed."""
+    attempt = await own_attempt(session, user, key)
+    if attempt.phase == "passed":
+        raise HTTPException(409, "Этот урок уже пройден. Открой следующий урок.")
+    await forget(session, user, [attempt])
+    return await start(session, user, key)
+
+
+async def reset(session, user):
+    """Staff take the course again from the first lesson. A learner's passed lessons are their city
+    progress and stay; a lesson they got lost in starts over with `restart`."""
+    if user.role in LEARNER_ROLES:
+        raise HTTPException(
+            403, "Курс заново проходят сотрудники. Урок, в котором запутался, начни заново."
+        )
+    await forget(session, user, list((await records(session, user)).values()))
     return await state(session, user)
 
 
@@ -476,6 +519,7 @@ async def describe_ticket(session, user, ticket):
     row = await session.get(CrmAppeal, ticket.appeal_id)
     if row is None or row.author_id != user.id:
         raise HTTPException(404, "Учебный тикет не найден")
+    lesson = (await records(session, user)).get(KEYS[3]) if row.training_task == KEYS[3] else None
     events = list(
         await session.scalars(
             select(CrmTicketEvent)
@@ -509,6 +553,8 @@ async def describe_ticket(session, user, ticket):
         "phone": row.phone,
         "author_name": row.author_name,
         "events": comments,
+        # Moderation, rework and the comment belong to the unfinished lesson 4 of this ticket only.
+        "in_lesson": bool(lesson and lesson.phase != "passed" and lesson.appeal_id == row.id),
     }
 
 

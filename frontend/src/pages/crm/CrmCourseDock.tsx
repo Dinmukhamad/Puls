@@ -11,10 +11,12 @@ export interface CourseLocation { place: CoursePlace; id?: number }
  * The course beside the work sites, written as the agreed instruction: the lesson, the step it waits for with
  * where to click and what to check, every check that failed, and a confirmation once a lesson passed.
  */
-export function CrmCourseDock({ data, loading, error, busy, actionError, location, passed, onReload, onStart, onShow, onInstructions, onCity, onDismissPassed }: {
+export function CrmCourseDock({ data, loading, error, busy, actionError, location, passed, onReload, onStart, onRestart, onReset, onShow, onInstructions, onCity, onDismissPassed }: {
   data?: CrmTrainingState; loading: boolean; error: unknown; busy: boolean; actionError: unknown;
   location?: CourseLocation | null; passed?: CrmTrainingTask | null;
   onReload: () => void; onStart: (key: CrmTaskKey) => void; onShow: (task: CrmTrainingTask, place: CoursePlace) => void;
+  /** Starts the unfinished lesson over; `onReset`, for staff only, the whole course. */
+  onRestart?: (key: CrmTaskKey) => void; onReset?: () => void;
   onInstructions: () => void; onCity: () => void; onDismissPassed?: () => void;
 }) {
   const [expanded, setExpanded] = useState(true);
@@ -36,7 +38,7 @@ export function CrmCourseDock({ data, loading, error, busy, actionError, locatio
           <div className="crm-course-lesson"><small>Урок {number(task.key)} из {total}</small><h2>{task.title}</h2><p>{COURSE_GUIDE[task.key]?.lead ?? task.goal}</p>
             {COURSE_GUIDE[task.key]?.terms && <dl className="crm-course-terms">{COURSE_GUIDE[task.key]!.terms!.map(([term, text]) => <div key={term}><dt>{term}</dt><dd>{text}</dd></div>)}</dl>}</div>
           {task.state === "available" ? <button className="crm-primary" disabled={busy} onClick={() => onStart(task.key)}>{busy ? "Открываем…" : `Начать урок ${number(task.key)}`}</button>
-            : <Current task={task} location={location} onShow={onShow} />}
+            : <Current task={task} location={location} busy={busy} onShow={onShow} onRestart={onRestart} />}
         </> : <div role="status"><h2>Обучение пройдено</h2><p>Все пять уроков подтверждены системой, результаты сохранены.</p><button className="crm-primary" onClick={onCity}>Вернуться в город</button></div>}
         {!!actionError && <p role="alert" className="crm-course-feedback">{actionError instanceof Error ? actionError.message : "Не удалось открыть урок. Повтори попытку."}</p>}
         <div className="crm-course-more">
@@ -46,13 +48,14 @@ export function CrmCourseDock({ data, loading, error, busy, actionError, locatio
           <details><summary>Программа обучения</summary><ol className="crm-course-program">{data.tasks.map(t => <li key={t.key} data-state={t.state}><span aria-hidden="true">{t.state === "passed" ? "✓" : t.state === "locked" ? "○" : "→"}</span>{t.title}</li>)}</ol></details>
         </div>
       </>}
+      {onReset && !!data && (data.completed > 0 || !!data.active_task) && <Confirmed label="Пройти курс заново" question="Все уроки начнутся с первого. Прежние обращения и тикеты останутся в истории." confirm="Сбросить курс" busy={busy} onConfirm={onReset} />}
       <button className="pulsar-text-button" onClick={onInstructions}>Открыть справку CRM</button>
     </div>}
   </aside>;
 }
 
 /** The step the lesson waits for: what to do and where, any failed checks, and the way to the step's screen. */
-function Current({ task, location, onShow }: { task: CrmTrainingTask; location?: CourseLocation | null; onShow: (task: CrmTrainingTask, place: CoursePlace) => void }) {
+function Current({ task, location, busy, onShow, onRestart }: { task: CrmTrainingTask; location?: CourseLocation | null; busy: boolean; onShow: (task: CrmTrainingTask, place: CoursePlace) => void; onRestart?: (key: CrmTaskKey) => void }) {
   const lesson = COURSE_GUIDE[task.key];
   const current = courseStep(task);
   const practice = task.key === "crm_practice_v2";
@@ -76,7 +79,22 @@ function Current({ task, location, onShow }: { task: CrmTrainingTask; location?:
     {practice && <CoursePracticeTask task={task} />}
     {practice ? <details className="crm-course-checklist" open><summary>Как пройти урок</summary><ol>{PRACTICE_CHECKLIST.map(item => <li key={item}>{item}</li>)}</ol></details>
       : <details><summary>Все шаги урока</summary><ol className="crm-course-step-list">{task.steps.map(s => <li key={s.key} data-done={s.status === "passed"}>{s.status === "passed" ? "✓ " : ""}{s.label}</li>)}</ol></details>}
+    {onRestart && <Confirmed label="Начать урок заново" question={restartQuestion(task.key)} confirm="Начать заново" busy={busy} onConfirm={() => onRestart(task.key)} />}
   </>;
+}
+
+/** What starting a lesson over does: the lessons with a prepared appeal get a new appeal and ticket. */
+export function restartQuestion(key: CrmTaskKey) {
+  if (key === "crm_intro_v2" || key === "crm_rework_v2") return "Урок начнётся сначала: будут новое обращение и тикет. Прежние останутся в истории.";
+  if (key === "crm_mismatch_v2") return "Урок начнётся сначала с того же звонка: шаги сбросятся.";
+  return "Урок начнётся сначала: шаги и снимок сбросятся. Сохранённое обращение останется в истории.";
+}
+
+/** A button that asks once more in place: the first click says what will happen. */
+function Confirmed({ label, question, confirm, busy, onConfirm }: { label: string; question: string; confirm: string; busy: boolean; onConfirm: () => void }) {
+  const [asking, setAsking] = useState(false);
+  if (!asking) return <button className="crm-secondary crm-course-again" disabled={busy} onClick={() => setAsking(true)}>{label}</button>;
+  return <div className="crm-course-confirm" role="group" aria-label={label}><p>{question}</p><div><button className="crm-primary" disabled={busy} onClick={() => { setAsking(false); onConfirm(); }}>{confirm}</button><button className="crm-secondary" disabled={busy} onClick={() => setAsking(false)}>Отмена</button></div></div>;
 }
 
 function Example({ title, text }: { title: string; text: string }) {

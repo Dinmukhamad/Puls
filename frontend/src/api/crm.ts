@@ -21,7 +21,8 @@ export interface CrmAppeal extends Omit<CrmInput, "request_id"> {
   ticket_id?: number | null;
 }
 export interface CrmTicketEvent { id: number; action: string; author: string; comment: string; created_at: string; attachments: { id: number; name: string; size: number }[] }
-export interface CrmTicket { id: number; appeal_id: number; status: string; revision: number; created_at: string; phone: string; author_name: string; events: CrmTicketEvent[] }
+/** `in_lesson`: moderation, rework and the comment belong to the unfinished lesson 4 of this ticket. */
+export interface CrmTicket { id: number; appeal_id: number; status: string; revision: number; created_at: string; phone: string; author_name: string; events: CrmTicketEvent[]; in_lesson?: boolean }
 export const CRM_STATUS: Record<string, string> = { recorded: "Зафиксировано", new: "Новый тикет", in_progress: "В работе", closed: "Закрыт" };
 export const CRM_FIELDS: Record<string, string> = { company: "Название компании", callback: "Номер для обратного звонка", service: "Предлагаемая услуга", employee: "Имя сотрудника", transaction: "Транзакция / РРН", conditions: "Условия работы", error_description: "Описание ошибки" };
 const SCENARIO_CHECK_LABELS: Record<string, string> = { classifier: "Проверка автомобиля и допуска", activation: "Этапы подключения", standards: "Дресс-код и автомобиль", commission: "Условия комиссий", diagnostics: "Диагностика и следующий шаг" };

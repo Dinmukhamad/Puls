@@ -416,7 +416,9 @@ def empty_facts():
     }
 
 
-async def evidence(session, user_ids):
+async def evidence(session, user_ids, *, previews=False):
+    """What each user did for the missions. `previews` also counts staff's preview scenarios and
+    driver shifts: a staff preview shows what its viewer tried, never anything to claim."""
     result = {uid: empty_facts() for uid in user_ids}
     if not result:
         return result
@@ -432,7 +434,7 @@ async def evidence(session, user_ids):
             ScenarioAttempt.user_id.in_(user_ids),
             ScenarioAttempt.scenario_key == "business_park",
             ScenarioAttempt.state == "passed",
-            ScenarioAttempt.is_preview.is_(False),
+            *(() if previews else (ScenarioAttempt.is_preview.is_(False),)),
         )
         .group_by(ScenarioAttempt.user_id)
     )
@@ -469,7 +471,11 @@ async def evidence(session, user_ids):
         .outerjoin(DriverShift, DriverShift.id == DriverOrder.shift_id)
         .where(
             DriverOrder.user_id.in_(user_ids),
-            or_(DriverOrder.shift_id.is_(None), DriverShift.is_preview.is_(False)),
+            *(
+                ()
+                if previews
+                else (or_(DriverOrder.shift_id.is_(None), DriverShift.is_preview.is_(False)),)
+            ),
         )
         .group_by(DriverOrder.user_id)
     )
@@ -521,14 +527,21 @@ async def evidence(session, user_ids):
     return result
 
 
-def mission_rows(config, facts, awards):
+def mission_rows(config, facts, awards, *, preview=False):
+    """A staff `preview` locks nothing: staff claim no awards, so a prerequisite would never open.
+    A mission whose condition they met reads as passed, with nothing to claim."""
     rows = []
     for key, (district, condition, path, objective) in TEMPLATES.items():
         definition = config["missions"][key]
         award = awards.get(key)
         shown = award.snapshot if award else definition
         parent = definition["prerequisite"]
-        locked = bool(parent and config["missions"][parent]["enabled"] and parent not in awards)
+        locked = bool(
+            not preview
+            and parent
+            and config["missions"][parent]["enabled"]
+            and parent not in awards
+        )
         count = shown["target"] if award else min(facts[condition], shown["target"])
         activity_key = {
             "orders": "active_orders",
@@ -544,6 +557,8 @@ def mission_rows(config, facts, awards):
             if not definition["enabled"]
             else "locked"
             if locked
+            else "completed"
+            if preview and count >= shown["target"]
             else "ready"
             if count >= shown["target"]
             else "in_progress"
@@ -582,7 +597,7 @@ async def dashboard(session, user, *, inspecting=False):
     )
     # Resolve department ownership once for both scenario visibility and construction.
     department_config = await department_settings(session) if operator else None
-    facts = (await evidence(session, [user.id]))[user.id] if operator else empty_facts()
+    facts = (await evidence(session, [user.id], previews=not operator))[user.id]
     awards = (
         {
             a.mission_key: a
@@ -591,7 +606,7 @@ async def dashboard(session, user, *, inspecting=False):
         if operator
         else {}
     )
-    rows = mission_rows(config, facts, awards)
+    rows = mission_rows(config, facts, awards, preview=not operator)
     # «Как устроен Puls» walks the operator's sections (cabinet, rewards, building): a trainee has
     # none of them, so the tour is not on their way.
     if trainee:

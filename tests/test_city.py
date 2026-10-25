@@ -9,6 +9,7 @@ from app.models.access import AccessRule
 from app.models.city import CityAward, CitySettings, CityWorld
 from app.models.coin import CoinTransaction
 from app.models.crm import CrmAppeal
+from app.models.crm_training import CrmTrainingAttempt
 from app.models.driver import DriverOrder, DriverProfile
 from app.models.driver_shift import DriverShift
 from app.models.enums import Role
@@ -364,6 +365,40 @@ async def test_staff_preview_reporting_and_editing_roles(client, session, operat
     config = {"revision": 0, "missions": default_missions()}
     result = await client.put(ADMIN + "/settings", headers=headers, json=config)
     assert result.status_code == (403 if role == Role.SUPERVISOR else 200), result.text
+
+
+async def test_a_staff_preview_opens_every_mission_and_marks_what_its_viewer_did(
+    client, session, operator
+):
+    trainer = await make_user(session, login="preview-trainer", role=Role.TRAINER)
+    headers = auth(await login(client, trainer.login))
+
+    async def missions(headers):
+        data = (await client.get(BASE, headers=headers)).json()
+        return {m["key"]: m for m in data["missions"]}
+
+    # Staff claim nothing, so a prerequisite would never open: nothing waits behind one.
+    shown = await missions(headers)
+    assert [key for key, m in shown.items() if m["state"] == "locked"] == []
+    assert shown["crm_first"]["state"] == "available"
+    session.add(
+        CrmTrainingAttempt(
+            user_id=trainer.id,
+            task_key="crm_intro_v2",
+            revision=2,
+            snapshot={},
+            phase="passed",
+            checks=[],
+        )
+    )
+    await session.commit()
+    # What the trainer did reads as passed, with nothing to claim.
+    passed = (await missions(headers))["crm_first"]
+    assert passed["state"] == "completed" and passed["claimed_at"] is None
+    assert (await claim(client, headers, "crm_first")).status_code == 403
+    # An operator's own city still opens its missions one after another.
+    own = await missions(auth(await login(client, operator.login)))
+    assert own["crm_first"]["state"] == "locked"
 
 
 async def test_settings_revision_cycles_disabled_missions_and_award_snapshot(
