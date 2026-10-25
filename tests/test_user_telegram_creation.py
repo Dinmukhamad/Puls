@@ -90,8 +90,8 @@ async def assert_no_created_account(session, login_name):
 @pytest.mark.parametrize(
     "creator_role,allowed_roles",
     [
-        (Role.TRAINER, (Role.OPERATOR,)),
-        (Role.HEAD, (Role.OPERATOR, Role.TRAINER, Role.SUPERVISOR)),
+        (Role.TRAINER, (Role.TRAINEE, Role.OPERATOR)),
+        (Role.HEAD, (Role.TRAINEE, Role.OPERATOR, Role.TRAINER, Role.SUPERVISOR)),
         (Role.ADMIN, tuple(Role)),
     ],
 )
