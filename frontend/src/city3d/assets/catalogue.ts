@@ -1,9 +1,10 @@
 /**
- * The model catalogue: which model, at which detail level and with which transform, stands for every
- * Placement of the world (TZ §5.3). Kenney models (CC0) are reused from the old city with its lists;
- * plain blocks, trees, lamps and the port are procedural. LOD1/LOD2 models called "<scene>__lod1" and
- * "<scene>__lod2" are used when a loaded file has them; otherwise LOD1 is LOD0 and LOD2 is a box proxy in
- * the model's own colours. All proxies share two parts, so every far building together is two draw calls.
+ * The model catalogue: which model, with which transform, stands for every Placement of the world (TZ §5.3). Every
+ * model has one level of detail (docs/CITY_V4.md): near and far a copy is the same mesh, and its finer detail
+ * (windows, tiles, mullions) is drawn and averaged by its material, so nothing turns into a box in the distance.
+ * The pools (render/instances.ts) keep their three level slots, all holding that one level. Kenney models (CC0) are
+ * reused from the old city with its lists; the shop's ready houses and office towers are built in code
+ * (assets/readyBuildings.ts); plain blocks, trees, lamps and the port are procedural.
  * At night the windows of every building light up (TZ §6.7): emissive nodes scaled by the night level, in
  * the same materials and draw calls, nothing drawn or computed on the CPU per frame.
  */
@@ -17,17 +18,19 @@ import { catalogueFiles } from "./modelFiles";
 import { furnitureGeometry, gableGeometry, officeGeometry, SECTION_PART, SECTION_PARTS, sectionGeometry, treeKindGeometry, type FurnitureKind } from "./courtyard";
 import { OFFICE_FLOOR, OFFICE_FLOORS, SECTION_FLOORS, SECTION_WIDTH } from "../world/complexes";
 import { FINISHES, HOUSE_SCALE, READY_HOUSES, houseModelName } from "../world/familyHouses";
-import { OFFICE_BUILDINGS, OFFICE_SCALE, officeModelName, officeVariant } from "../world/officeBuildings";
+import { OFFICE_BUILDINGS, OFFICE_SCALE, officeModelName, officeVariant, type OfficeBuilding } from "../world/officeBuildings";
+import { facadeMaterial } from "./facade";
+import { READY_HOUSE_VARIANTS, officeTowerGeometry, readyHouseGeometry } from "./readyBuildings";
 import { LANDMARK_LEVELS, LANDMARK_SIDE, landmarkLevel } from "../world/districtLandmark";
 import { LANDMARK_GLOW, landmarkGeometry } from "./districtLandmark";
 
-/** One detail level. `matrix` places it inside the model and `colors` tint its parts (the proxy box). */
+/** A model's mesh. `matrix` places it inside the model and `colors` tint its parts. */
 export interface LodLevel { parts: ModelPart[]; matrix?: THREE.Matrix4; colors?: THREE.Color[] }
 export interface CatalogueModel {
   id: string;
-  /** LOD0, LOD1, LOD2; null = not drawn at that distance. Levels may share parts: pools draw them once. */
+  /** The pools' three level slots (render/instances.ts); every model fills all three with its one level. */
   lods: [LodLevel, LodLevel | null, LodLevel | null];
-  /** LOD0 bounds in model space. */
+  /** Bounds in model space. */
   bounds: THREE.Box3;
   /** Moves the model onto its footprint: centred in x/z, standing on y = 0. */
   base: THREE.Matrix4;
@@ -71,10 +74,7 @@ const SECTION_FLOOR = .75, SECTION_PANE = SECTION_WIDTH / 3;
 /** Office glass: white, cool, warm and green-grey tints over the glass colours of officeFacade. */
 const OFFICE_TINTS = ["#ffffff", "#eef3f8", "#f5f2ec", "#e9f1ee"];
 const FURNITURE: FurnitureKind[] = ["bench", "slide", "swings", "climber", "sandbox", "goal", "hoop", "gazebo", "flowerbed", "bush", "hedge", "planter", "fountain"];
-/** Proxy colours when a model's texture cannot be read: [walls, roof]. */
-const FALLBACK: Record<string, [string, string]> = { s: ["#eadccb", "#b86b52"], c: ["#cfd6de", "#8e99a6"], i: ["#cdc8bd", "#8b8f95"], car: ["#d9cf6a", "#5b6068"] };
 
-/** Generated kits include LOD0: prefer them over downloading and decoding the source kit again. */
 /**
  * `kits: false` leaves out the building kit (houses, offices, industry): only the five-island map places
  * those, and the city spares its 1.1 MB download and decoding. A placement that asks for one anyway becomes
@@ -117,8 +117,6 @@ export function createCatalogue(models: Map<string, Model>, night: Night = creat
   }
 
   const nightLevel = night.level as unknown as Node;
-  // Far buildings get a window grid on their proxy walls; parked cars keep plain boxes (same geometries).
-  const proxy = proxyParts(own, proxyGlow(nightLevel)), plainProxy = proxy.map(part => ({ ...part, material: proxy[1].material }));
   const pixels = new Map<unknown, ImageData | null>();
   const catalogueModels: CatalogueModel[] = [];
   const add = (model: CatalogueModel) => { catalogueModels.push(model); return model; };
@@ -136,58 +134,31 @@ export function createCatalogue(models: Map<string, Model>, night: Night = creat
     }
   }
 
-  // The office collection paints its panes in repeating facade textures. Its file marks the upright facades;
-  // a texture mask selects the dark glass within them, and a grid gives each pane its own night pattern.
-  const litOffices = new Map<THREE.Material, THREE.MeshStandardNodeMaterial>();
-  function lightOfficeWindows(parts: ModelPart[]) {
-    for (const part of parts) {
-      const kit = part.material as THREE.MeshStandardMaterial;
-      const seeds = part.geometry.getAttribute("_windowseed");
-      if (seeds) { part.geometry.setAttribute(WINDOW, seeds); part.geometry.deleteAttribute("_windowseed"); }
-      else if (!part.geometry.hasAttribute(WINDOW)) part.geometry.setAttribute(WINDOW, new THREE.Float32BufferAttribute(new Float32Array(part.geometry.getAttribute("position").count).fill(1), 1));
-      if ((kit as unknown as THREE.NodeMaterial).isNodeMaterial || !kit.isMeshStandardMaterial) continue;
-      let lit = litOffices.get(kit);
-      if (!lit) { lit = own(nodeCopy(kit)); lit.emissiveNode = officeGlow(kit.map, nightLevel); litOffices.set(kit, lit); }
-      part.material = lit;
-    }
-  }
-
-  /** A loaded model with its LOD files, or the fallbacks; a name listed twice is one model drawn twice as often. */
+  /** A loaded kit model at its one level of detail; a name listed twice is one model drawn twice as often. */
   const byName = new Map<string, CatalogueModel | null>();
-  function kenney(name: string, colours: [string, string], windows = true, office = false) {
+  const one = (level: LodLevel): CatalogueModel["lods"] => [level, level, level];
+  function kenney(name: string, windows = true) {
     if (byName.has(name)) return byName.get(name)!;
     const source = models.get(name);
     byName.set(name, null);
     if (!source?.parts.length) return null;
-    const lod1 = models.get(`${name}__lod1`), lod2 = models.get(`${name}__lod2`);
-    const level0: LodLevel = { parts: source.parts };
-    // A generated LOD2 that is only the bounding box (12 triangles) takes one texel's colour, often a dark
-    // window; the proxy here averages the walls and the roof, so far buildings keep their real colours.
-    const boxOnly = !lod2?.parts.length || lod2.parts.every(part => (part.geometry.index?.count ?? part.geometry.attributes.position.count) <= 36);
-    if (windows) for (const model of [source, lod1, boxOnly ? null : lod2]) if (model) {
-      if (office) lightOfficeWindows(model.parts); else lightWindows(model.parts);
-    }
-    const level2: LodLevel = boxOnly ? { parts: windows ? proxy : plainProxy, ...proxyLevel(source, colours, pixels) } : { parts: lod2!.parts };
-    const model = add({ id: name, lods: [level0, lod1?.parts.length ? { parts: lod1.parts } : level0, level2], bounds: source.bounds.clone(), base: footprint(source.bounds) });
+    if (windows) lightWindows(source.parts);
+    const model = add({ id: name, lods: one({ parts: source.parts }), bounds: source.bounds.clone(), base: footprint(source.bounds) });
     byName.set(name, model);
     return model;
   }
-  const list = (names: string[], colours: [string, string]) => names.map(name => kenney(name, colours)).filter((m): m is CatalogueModel => !!m);
-  const houses = list(HOUSES, FALLBACK.s), offices = list(LIGHT_OFFICES, FALLBACK.c), industry = list(INDUSTRY, FALLBACK.i);
+  const list = (names: string[]) => names.map(name => kenney(name)).filter((m): m is CatalogueModel => !!m);
+  const houses = list(HOUSES), offices = list(LIGHT_OFFICES), industry = list(INDUSTRY);
   const cars = new Map<string, CatalogueModel>();
-  for (const name of new Set(PARKED.flat())) { const car = kenney(name, FALLBACK.car, false); if (car) cars.set(name, car); }
-  // The districts' ready houses (world/familyHouses.ts), every model in every finish. Their file marks the windows
-  // (glTF _WINDOWSEED), so they light at night like the kits' houses, and far away they are proxies in their colours.
-  const readyHouses = Array.from({ length: Object.keys(READY_HOUSES).length * FINISHES.length }, (_, variant) => {
-    const name = houseModelName(variant);
-    for (const part of models.get(name)?.parts ?? []) {
-      const seeds = part.geometry.getAttribute("_windowseed");
-      if (seeds && !part.geometry.hasAttribute(WINDOW)) { part.geometry.setAttribute(WINDOW, seeds); part.geometry.deleteAttribute("_windowseed"); }
-    }
-    return kenney(name, FALLBACK.s);
-  });
-  const officeBuildings = Object.values(OFFICE_BUILDINGS);
-  const readyOffices = officeBuildings.map(model => kenney(officeModelName(model.model - 1), FALLBACK.c, true, true));
+  for (const name of new Set(PARKED.flat())) { const car = kenney(name, false); if (car) cars.set(name, car); }
+  // The districts' ready houses and office towers (world/familyHouses.ts, world/officeBuildings.ts): built in code
+  // (assets/readyBuildings.ts), every house in both finishes, with one facade material that lights their windows.
+  const facade = own(facadeMaterial(nightLevel as never));
+  const builtModel = (id: string, geometry: THREE.BufferGeometry) => add(procedural(id, one({ parts: [{ geometry: own(geometry), material: facade, castShadow: true }] })));
+  const readyHouses = READY_HOUSE_VARIANTS.map(({ family, finish }, variant) => builtModel(houseModelName(variant), readyHouseGeometry(family, finish)));
+  const officeFamilies = (Object.entries(OFFICE_BUILDINGS) as [OfficeBuilding, typeof OFFICE_BUILDINGS[OfficeBuilding]][]).sort((a, b) => a[1].model - b[1].model);
+  const officeBuildings = officeFamilies.map(([, model]) => model);
+  const readyOffices = officeFamilies.map(([family, model]) => builtModel(officeModelName(model.model - 1), officeTowerGeometry(family)));
 
   const blocks = BLOCKS.map((kind, index) => {
     const geometry = own(blockGeometry(kind.floors));
@@ -201,31 +172,28 @@ export function createCatalogue(models: Map<string, Model>, night: Night = creat
   const treeMaterial = own(new THREE.MeshStandardNodeMaterial({ vertexColors: true, roughness: .85, flatShading: true }));
   const tree = (round: boolean) => {
     const near: LodLevel = { parts: [{ geometry: own(treeGeometry(round, false)), material: treeMaterial, castShadow: true }] };
-    const far: LodLevel = { parts: [{ geometry: own(treeGeometry(round, true)), material: treeMaterial, castShadow: true }] };
-    return add(procedural(`tree-${round ? "round" : "cone"}`, [near, near, far], { tints: TREE_TINTS.map(c => new THREE.Color(c)), tintStep: 7 }));
+    return add(procedural(`tree-${round ? "round" : "cone"}`, one(near), { tints: TREE_TINTS.map(c => new THREE.Color(c)), tintStep: 7 }));
   };
   const trees = { cone: tree(false), round: tree(true) };
   const moreTrees = Object.fromEntries((["birch", "oak"] as const).map(kind => {
     const near: LodLevel = { parts: [{ geometry: own(treeKindGeometry(kind, false)), material: treeMaterial, castShadow: true }] };
-    const far: LodLevel = { parts: [{ geometry: own(treeKindGeometry(kind, true)), material: treeMaterial, castShadow: true }] };
-    return [kind, add(procedural(`tree-${kind}`, [near, near, far], { tints: TREE_TINTS.map(c => new THREE.Color(c)), tintStep: 3 }))];
+    return [kind, add(procedural(`tree-${kind}`, one(near), { tints: TREE_TINTS.map(c => new THREE.Color(c)), tintStep: 3 }))];
   })) as Record<"birch" | "oak", CatalogueModel>;
 
-  // Residential sections, one model per height: balconies and roof houses near, the roof house farther, a plain box
-  // far away, shared by every height; all drawn with a facade in world units (sectionFacade).
+  // Residential sections, one model per height with its balconies and roof house, drawn with a facade in world units
+  // (sectionFacade); the plain box is the cottages' and the arches'.
   const sectionMaterial = own(new THREE.MeshStandardNodeMaterial({ roughness: .8, metalness: 0 }));
   sectionFacade(sectionMaterial, nightLevel);
   const sectionTints = SECTION_TINTS.map(c => new THREE.Color(c)), unitBox = new THREE.Box3(new THREE.Vector3(-.5, 0, -.5), new THREE.Vector3(.5, 1, .5));
   const sectionPart = (geometry: THREE.BufferGeometry): LodLevel => ({ parts: [{ geometry: own(geometry), material: sectionMaterial, castShadow: true }] });
   const plainSection = sectionPart(sectionGeometry(1, 0));
-  const sections = SECTION_FLOORS.map(floors => add({ id: `section-${floors}`, lods: [sectionPart(sectionGeometry(floors, 2)), sectionPart(sectionGeometry(floors, 1)), plainSection], bounds: unitBox.clone(), base: new THREE.Matrix4(), tints: sectionTints, tintStep: 5 }));
+  const sections = SECTION_FLOORS.map(floors => add({ id: `section-${floors}`, lods: one(sectionPart(sectionGeometry(floors, 2))), bounds: unitBox.clone(), base: new THREE.Matrix4(), tints: sectionTints, tintStep: 5 }));
   // Office towers and podiums of the business quarters: glass curtain walls (officeFacade), one model per height.
   const officeMaterial = own(new THREE.MeshStandardNodeMaterial({ roughness: .5, metalness: 0 }));
   officeFacade(officeMaterial, nightLevel);
   const officeTints = OFFICE_TINTS.map(c => new THREE.Color(c)), officePart = (geometry: THREE.BufferGeometry): LodLevel => ({ parts: [{ geometry: own(geometry), material: officeMaterial, castShadow: true }] });
-  const plainOffice = officePart(officeGeometry(1, 0));
-  const glassTowers = OFFICE_FLOORS.map(floors => add({ id: `office-${floors}`, lods: [officePart(officeGeometry(floors, 2)), officePart(officeGeometry(floors, 1)), plainOffice], bounds: unitBox.clone(), base: new THREE.Matrix4(), tints: officeTints, tintStep: 3 }));
-  // One model per community-centre level. All distances retain its wings and stepped crown; each level has only two parts.
+  const glassTowers = OFFICE_FLOORS.map(floors => add({ id: `office-${floors}`, lods: one(officePart(officeGeometry(floors, 2))), bounds: unitBox.clone(), base: new THREE.Matrix4(), tints: officeTints, tintStep: 3 }));
+  // One model per community-centre level, its wings and stepped crown, in two parts.
   const landmarkShell = own(new THREE.MeshStandardNodeMaterial({ vertexColors: true, roughness: .72, metalness: .04 }));
   // The windows of its walls light one by one at night, most of them; everything else stays dark.
   const landmarkGlow = attribute(LANDMARK_GLOW, "float");
@@ -235,27 +203,21 @@ export function createCatalogue(models: Map<string, Model>, night: Night = creat
     return { parts: [{ geometry: own(geometry.shell), material: landmarkShell, castShadow: true },
       { geometry: own(geometry.glass), material: officeMaterial, castShadow: true }] };
   };
-  const landmarks = Array.from({ length: LANDMARK_LEVELS }, (_, index) => add(procedural(`district-landmark-${index + 1}`,
-    [landmarkPart(index + 1, 2), landmarkPart(index + 1, 1), landmarkPart(index + 1, 0)])));
+  const landmarks = Array.from({ length: LANDMARK_LEVELS }, (_, index) => add(procedural(`district-landmark-${index + 1}`, one(landmarkPart(index + 1, 2)))));
   // Cottages of the garden suburb: the plain section box (one pool with every far section) under a gabled roof.
-  const cottage = add({ id: "cottage", lods: [plainSection, plainSection, plainSection], bounds: unitBox.clone(), base: new THREE.Matrix4(), tints: sectionTints, tintStep: 5 });
+  const cottage = add({ id: "cottage", lods: one(plainSection), bounds: unitBox.clone(), base: new THREE.Matrix4(), tints: sectionTints, tintStep: 5 });
   // Gabled townhouse roofs: one prism, its ridge along the depth so the gable faces the street.
   const roofMaterial = own(new THREE.MeshStandardNodeMaterial({ roughness: .8, metalness: 0 }));
   const roofLevel: LodLevel = { parts: [{ geometry: own(gableGeometry()), material: roofMaterial, castShadow: true }] };
-  const roof = add({ id: "roof", lods: [roofLevel, roofLevel, roofLevel], bounds: unitBox.clone(), base: new THREE.Matrix4(), tints: ROOF_TINTS.map(c => new THREE.Color(c)), tintStep: 2 });
+  const roof = add({ id: "roof", lods: one(roofLevel), bounds: unitBox.clone(), base: new THREE.Matrix4(), tints: ROOF_TINTS.map(c => new THREE.Color(c)), tintStep: 2 });
   // The floors over an arch: a plain box raised over the opening.
-  const arch = add({ id: "section-arch", lods: [plainSection, plainSection, plainSection], bounds: unitBox.clone(), base: new THREE.Matrix4(), tints: sectionTints, tintStep: 5 });
-  // Courtyard furniture: one material, one pool each; small pieces are not drawn beyond LOD1.
+  const arch = add({ id: "section-arch", lods: one(plainSection), bounds: unitBox.clone(), base: new THREE.Matrix4(), tints: sectionTints, tintStep: 5 });
+  // Courtyard furniture: one material, one pool each.
   const furnitureMaterial = own(new THREE.MeshStandardNodeMaterial({ vertexColors: true, roughness: .78, metalness: .05 }));
   const furniture = Object.fromEntries(FURNITURE.map(kind => {
-    const [nearGeometry, farGeometry] = furnitureGeometry(kind);
+    const [nearGeometry] = furnitureGeometry(kind);
     const near: LodLevel = { parts: [{ geometry: own(nearGeometry), material: (kind === "bush" || kind === "hedge") ? treeMaterial : furnitureMaterial, castShadow: true }] };
-    const far: LodLevel | null = farGeometry ? { parts: [{ geometry: own(farGeometry), material: (kind === "bush" || kind === "hedge") ? treeMaterial : furnitureMaterial, castShadow: true }] } : null;
-    const model = add(procedural(kind, [near, near, far], (kind === "bush" || kind === "hedge") ? { tints: TREE_TINTS.map(c => new THREE.Color(c)), tintStep: 2 } : {}));
-    // Pieces too small for a far version of their own become a box in their own colours, drawn with the far buildings,
-    // so a yard never empties when the camera moves away.
-    if (!far) model.lods[2] = { parts: plainProxy, ...vertexColourProxy(nearGeometry) };
-    return [kind, model];
+    return [kind, add(procedural(kind, one(near), (kind === "bush" || kind === "hedge") ? { tints: TREE_TINTS.map(c => new THREE.Color(c)), tintStep: 2 } : {}))];
   })) as Record<FurnitureKind, CatalogueModel>;
 
   const poleMaterial = own(new THREE.MeshStandardNodeMaterial({ color: "#5f6678", roughness: .72, metalness: .04 }));
@@ -263,19 +225,16 @@ export function createCatalogue(models: Map<string, Model>, night: Night = creat
   const bulbMaterial = own(new THREE.MeshStandardNodeMaterial({ name: "lamp-bulb", color: "#dfe4ea", roughness: .3, metalness: .05 }));
   bulbMaterial.emissiveNode = color("#ffcf85").mul(nightLevel).mul(3.2);
   // Pole and conical shade are one geometry (one draw call); the bulb hangs under the shade, its centre 1.35
-  // above the foot (render/lampLights.ts puts the halos there). About 120 triangles near, 46 at LOD1.
+  // above the foot (render/lampLights.ts puts the halos there). About 120 triangles.
   const lampLevel = (detail: boolean): LodLevel => ({ parts: [
     { geometry: own(merge([new THREE.CylinderGeometry(.035, .05, 1.45, detail ? 6 : 4).translate(0, .725, 0), new THREE.ConeGeometry(.17, .12, detail ? 8 : 5, 1, true).translate(0, 1.44, 0)])), material: poleMaterial, castShadow: true },
     { geometry: own(detail ? new THREE.SphereGeometry(.09, 8, 6).translate(0, 1.35, 0) : new THREE.IcosahedronGeometry(.09, 0).translate(0, 1.35, 0)), material: bulbMaterial, castShadow: false },
   ] });
-  // Lamps are thinner than a pixel beyond the LOD1 distance.
-  // Far away a lamp is a slim grey box, drawn with every other far proxy.
-  const lamp = add(procedural("lamp", [lampLevel(true), lampLevel(false), null]));
-  lamp.lods[2] = { parts: plainProxy, matrix: new THREE.Matrix4().compose(new THREE.Vector3(0, 0, 0), new THREE.Quaternion(), new THREE.Vector3(.12, 1.45, .12)), colors: [new THREE.Color("#5f6678"), new THREE.Color("#dfe4ea")] };
+  const lamp = add(procedural("lamp", one(lampLevel(true))));
 
   const portMaterial = own(new THREE.MeshStandardNodeMaterial({ vertexColors: true, roughness: .8, metalness: .08 }));
   portMaterial.emissiveNode = portGlow(nightLevel);
-  const port = PORT.map((build, index) => { const level: LodLevel = { parts: [{ geometry: own(build(index)), material: portMaterial, castShadow: true }] }; return add(procedural(`port-${index}`, [level, level, level])); });
+  const port = PORT.map((build, index) => add(procedural(`port-${index}`, one({ parts: [{ geometry: own(build(index)), material: portMaterial, castShadow: true }] }))));
 
   const place = new THREE.Vector3(), turn = new THREE.Quaternion(), size = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0), extent = new THREE.Vector3();
   /** Fitted like the old modelParts(fit): the longer side fills `width`, at most 2.8 times its size. */
@@ -365,7 +324,7 @@ export function createCatalogue(models: Map<string, Model>, night: Night = creat
     return null;
   }
 
-  // Proxy colours are read; the pixel copies are no longer needed.
+  // The windows are marked; the pixel copies are no longer needed.
   pixels.clear();
   return {
     models: catalogueModels,
@@ -391,74 +350,9 @@ function footprint(bounds: THREE.Box3) {
   return new THREE.Matrix4().makeTranslation(-center.x, -bounds.min.y, -center.z);
 }
 
-/** Walls and roof of a unit box (x, z in ±0.5, y in 0…1), shared by every proxy with per-copy colours; the walls glow with `glow`. */
-function proxyParts(own: <T extends THREE.BufferGeometry | THREE.Material>(item: T) => T, glow: Node): ModelPart[] {
-  const material = own(new THREE.MeshStandardNodeMaterial({ roughness: .85, metalness: 0 }));
-  const walls = own(new THREE.MeshStandardNodeMaterial({ roughness: .85, metalness: 0 }));
-  walls.emissiveNode = glow;
-  const box = new THREE.BoxGeometry(1, 1, 1).translate(0, .5, 0), index = box.index!.array;
-  // BoxGeometry faces: +x, -x, +y, -y, +z, -z, six indices each; the bottom is never seen.
-  const faces = (list: number[]) => { const g = box.clone(); g.setIndex(list.flatMap(f => Array.from(index.slice(f * 6, f * 6 + 6)))); g.clearGroups(); g.deleteAttribute("uv"); return own(g); };
-  const parts = [{ geometry: faces([0, 1, 4, 5]), material: walls, castShadow: true }, { geometry: faces([2]), material, castShadow: true }];
-  box.dispose();
-  return parts;
-}
 
-/** The proxy box of a model, 5% inside its bounds, in the average colours of its walls and its roof. */
-function proxyLevel(model: Model, fallback: [string, string], cache: Map<unknown, ImageData | null>): Pick<LodLevel, "matrix" | "colors"> {
-  const center = model.bounds.getCenter(new THREE.Vector3()), size = model.bounds.getSize(new THREE.Vector3()).multiplyScalar(.95);
-  const matrix = new THREE.Matrix4().compose(new THREE.Vector3(center.x, model.bounds.min.y, center.z), new THREE.Quaternion(), size);
-  return { matrix, colors: averageColours(model, cache) ?? fallback.map(c => new THREE.Color(c)) };
-}
 
-/** A far proxy for a painted procedural model: its bounds, 5% in, and the area-weighted vertex colours of its sides and top. */
-function vertexColourProxy(geometry: THREE.BufferGeometry): Pick<LodLevel, "matrix" | "colors"> {
-  geometry.computeBoundingBox();
-  const bounds = geometry.boundingBox!, center = bounds.getCenter(new THREE.Vector3()), size = bounds.getSize(new THREE.Vector3()).multiplyScalar(.95);
-  const position = geometry.getAttribute("position"), colour = geometry.getAttribute("color"), sums = [[0, 0, 0, 0], [0, 0, 0, 0]];
-  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), count = geometry.index ? geometry.index.count : position.count, at = (k: number) => geometry.index ? geometry.index.getX(k) : k;
-  for (let k = 0; colour && k + 2 < count; k += 3) {
-    const i = at(k), j = at(k + 1), l = at(k + 2);
-    a.fromBufferAttribute(position, i); b.fromBufferAttribute(position, j); c.fromBufferAttribute(position, l);
-    const normal = b.sub(a).cross(c.sub(a)), area = normal.length() / 2;
-    if (!area) continue;
-    const sum = sums[normal.y > area ? 1 : 0];
-    sum[0] += colour.getX(i) * area; sum[1] += colour.getY(i) * area; sum[2] += colour.getZ(i) * area; sum[3] += area;
-  }
-  const colors = sums.map(([r, g, bl, w]) => w ? new THREE.Color(r / w, g / w, bl / w) : new THREE.Color("#8a8f96"));
-  return { matrix: new THREE.Matrix4().compose(new THREE.Vector3(center.x, bounds.min.y, center.z), new THREE.Quaternion(), size), colors };
-}
 
-/** Area-weighted texture colour of the up-facing (roof) and other (wall) triangles; null without pixels. */
-function averageColours(model: Model, cache: Map<unknown, ImageData | null>): THREE.Color[] | null {
-  const sums = [[0, 0, 0, 0], [0, 0, 0, 0]], a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), uv = new THREE.Vector2(), texel = new THREE.Color(), sample = new THREE.Color();
-  for (const { geometry, material } of model.parts) {
-    const { map, color } = material as THREE.MeshStandardMaterial, position = geometry.getAttribute("position"), uvs = geometry.getAttribute("uv");
-    const image = map && uvs ? texturePixels(map, cache) : null;
-    if (map) map.updateMatrix();
-    // A few hundred triangles per part give the average; every triangle would cost tens of milliseconds.
-    const count = geometry.index ? geometry.index.count : position.count, at = (k: number) => geometry.index ? geometry.index.getX(k) : k;
-    const stride = 3 * Math.max(1, Math.floor(count / 3 / 400));
-    for (let k = 0; k + 2 < count; k += stride) {
-      const i = at(k), j = at(k + 1), l = at(k + 2);
-      a.fromBufferAttribute(position, i); b.fromBufferAttribute(position, j); c.fromBufferAttribute(position, l);
-      const normal = b.sub(a).cross(c.sub(a)), area = normal.length() / 2;
-      if (!area) continue;
-      texel.copy(color ?? texel.setRGB(1, 1, 1));
-      if (image && map && uvs) {
-        uv.set((uvs.getX(i) + uvs.getX(j) + uvs.getX(l)) / 3, (uvs.getY(i) + uvs.getY(j) + uvs.getY(l)) / 3);
-        map.transformUv(uv);
-        const x = Math.min(image.width - 1, Math.floor(uv.x * image.width)), y = Math.min(image.height - 1, Math.floor(uv.y * image.height)), o = (y * image.width + x) * 4;
-        texel.multiply(sample.setRGB(image.data[o] / 255, image.data[o + 1] / 255, image.data[o + 2] / 255, THREE.SRGBColorSpace));
-      } else if (map) return null;
-      const sum = sums[normal.y / (2 * area) > .6 ? 1 : 0];
-      sum[0] += texel.r * area; sum[1] += texel.g * area; sum[2] += texel.b * area; sum[3] += area;
-    }
-  }
-  if (!sums[0][3] && !sums[1][3]) return null;
-  const mean = ([r, g, bl, w]: number[], other: number[]) => w ? new THREE.Color(r / w, g / w, bl / w) : new THREE.Color(other[0] / other[3], other[1] / other[3], other[2] / other[3]);
-  return [mean(sums[0], sums[1]), mean(sums[1], sums[0])];
-}
 
 /** The texture's pixels via a small canvas (browsers only); cached per image. */
 function texturePixels(texture: THREE.Texture, cache: Map<unknown, ImageData | null>): ImageData | null {
@@ -566,12 +460,6 @@ const WINDOW = "windowSeed";
 const LIT_SHARE: [number, number] = [.4, .85];
 /** Warm shades of lit windows; brighter than white, so the bloom picks them up when it is on. */
 const WARM_LOW = "#ffd48a", WARM_HIGH = "#fff1c9", WINDOW_GLOW = 1.2;
-/**
- * Far proxies: the window grid in world units, the part of a cell a window takes (across, up) and the lit share
- * against a near building. Tuned so a box gives off about as much light as the Kenney model it replaces (houses
- * have few windows): a grid of 0.7 × 0.62 made buildings about 5 times brighter when they turned into boxes.
- */
-const FLOOR_HEIGHT = .95, COLUMN_WIDTH = 1.3, PANE_U: [number, number] = [.36, .64], PANE_V: [number, number] = [.35, .65], PROXY_LIT = .55;
 
 /** Hash without sine (D. Hoskins): 0…1 from a vec2, the same on every GPU and both backends. */
 function hash(p: Node): Node {
@@ -625,19 +513,6 @@ function kenneyGlow(level: Node): Node {
   const h = hash(vec2(w.mul(97.3).add(building.mul(419.1)), w.mul(41.9).add(building.mul(263.7))));
   return varying(windowLight(h, litShare(building)).mul(step(1e-3, w)).mul(stagger(h, level)));
 }
-/** Textured office panes keep their source appearance by day; only dark glass on upright facades glows. */
-function officeGlow(map: THREE.Texture | null, level: Node): Node {
-  const n = normalWorld.normalize(), dir = n.xz.div(max(n.xz.length(), 1e-6));
-  const u = dot(positionWorld.xz, vec2(dir.y.negate(), dir.x)).div(.55), v = positionWorld.y.sub(GROUND).div(.7);
-  const wall = wallSeed(), h = hash(floor(vec2(u, v)).add(vec2(wall.mul(17.3), wall.mul(5.1))));
-  let glass: Node = pulse(u, .15, .85).mul(pulse(v, .2, .8));
-  if (map) {
-    const texel = texture(map, uv()), luminance = dot(texel.rgb, vec3(.2126, .7152, .0722));
-    glass = float(1).sub(smoothstep(.12, .32, luminance)).mul(step(texel.r.sub(.04), texel.b));
-  }
-  const mask = glass.mul(step(n.y.abs(), .5)).mul(step(1e-3, attribute(WINDOW, "float")));
-  return windowLight(h, litShare(hash(vec2(wall, 91.7)))).mul(mask).mul(stagger(h, level));
-}
 /** Block facades: the painted panes (three a floor, see facadeTexture) glow, at random per wall and pane. */
 function blockGlow(map: THREE.Texture, floors: number, level: Node): Node {
   const texel = texture(map, uv());
@@ -646,15 +521,6 @@ function blockGlow(map: THREE.Texture, floors: number, level: Node): Node {
   const wall = wallSeed(), pane = floor(vec2(uv().x.mul(64).sub(3.5).div(19), uv().y.mul(floors + 1)));
   const h = hash(pane.add(vec2(wall.mul(17.3), wall.mul(5.1))));
   return windowLight(h, litShare(hash(vec2(wall, 91.7)))).mul(glass).mul(stagger(h, level));
-}
-/** Far proxies: a window grid in world units on the walls (the roof is another material). */
-function proxyGlow(level: Node): Node {
-  const wall = wallSeed(), dir = varying(normalLocal.xz.div(max(normalLocal.xz.length(), 1e-6)));
-  const u = dot(positionWorld.xz, vec2(dir.y.negate(), dir.x)).div(COLUMN_WIDTH), v = positionWorld.y.sub(GROUND).div(FLOOR_HEIGHT);
-  const h = hash(floor(vec2(u, v)).add(vec2(wall.mul(17.3), wall.mul(5.1)))), share = litShare(hash(vec2(wall, 91.7))).mul(PROXY_LIT);
-  // Where a pixel spans several windows it shows their average light, not one window's.
-  const light = mix(windowLight(h, share).mul(stagger(h, level)), color(WARM_LOW).mul(share.mul(WINDOW_GLOW * .8)).mul(level), clamp(max(fwidth(u), fwidth(v)).sub(.5), 0, 1));
-  return light.mul(pulse(u, ...PANE_U)).mul(pulse(v, ...PANE_V));
 }
 /**
  * Residential sections: the facade is drawn in world units, so every section of a wing shows one continuous

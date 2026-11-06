@@ -1,7 +1,7 @@
 /**
  * The pictures of the district shop (src/pages/city/CityShop.tsx): every thing it sells, rendered from the city's own
  * models and layouts (world/landLayouts.ts, world/decor.ts, assets/catalogue.ts) on a tile of grass, in a headless
- * browser, and written to public/city/shop/v1 as small WebP files the shop loads only when it shows them. Run it
+ * browser, and written to public/city/shop/v2 as small WebP files the shop loads only when it shows them. Run it
  * again when a model or a layout changes (and bump the folder's version, so browsers take the new pictures):
  *
  *   cd frontend && node scripts/shop-pictures.mjs
@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 import { createServer } from "vite";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
-const OUT = fileURLToPath(new URL("../public/city/shop/v1/", import.meta.url));
+const OUT = fileURLToPath(new URL("../public/city/shop/v2/", import.meta.url));
 const { chromium } = await import(process.env.PLAYWRIGHT ?? "playwright").catch(() => {
   throw new Error("Playwright is needed: npm i -D playwright, or PLAYWRIGHT=<path to playwright/index.mjs>");
 });
@@ -26,6 +26,7 @@ import { createCatalogue, loadCatalogueModels } from "/src/city3d/assets/catalog
 import { lodFiles } from "/src/city3d/assets/modelFiles.ts";
 import { createInstancePools } from "/src/city3d/render/instances.ts";
 import { createPatches } from "/src/city3d/render/terrain.ts";
+import { groundMaterial, surfaceOf } from "/src/city3d/render/ground.ts";
 import { areaFrame } from "/src/city3d/world/land.ts";
 import { plotLayout } from "/src/city3d/world/landLayouts.ts";
 import { decorLayout, decorMap } from "/src/city3d/world/decor.ts";
@@ -42,11 +43,11 @@ const rectBlock = (cols, rows) => ({ district: 1, block: 1, band: 1, cols, rows,
 
 /** The paving of roads and footpaths: flat quads of one mesh. */
 function paving(quads) {
-  const positions = [], colours = [], index = [], c = new THREE.Color();
+  const positions = [], colours = [], surfaces = [], index = [], c = new THREE.Color();
   for (const q of quads) {
-    const base = positions.length / 3, [a, b, d] = q.points;
+    const base = positions.length / 3, [a, b, d] = q.points, surface = surfaceOf(q.colour);
     c.set(q.colour);
-    for (const p of q.points) { positions.push(p.x, q.y, p.z); colours.push(c.r, c.g, c.b); }
+    for (const p of q.points) { positions.push(p.x, q.y, p.z); colours.push(c.r, c.g, c.b); surfaces.push(surface); }
     const up = (b.z - a.z) * (d.x - a.x) - (b.x - a.x) * (d.z - a.z) > 0;
     index.push(...(up ? [base, base + 1, base + 2, base, base + 2, base + 3] : [base, base + 2, base + 1, base, base + 3, base + 2]));
   }
@@ -54,8 +55,9 @@ function paving(quads) {
   geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
   geometry.setAttribute("normal", new THREE.Float32BufferAttribute(positions.map((_, i) => i % 3 === 1 ? 1 : 0), 3));
   geometry.setAttribute("color", new THREE.Float32BufferAttribute(colours, 3));
+  geometry.setAttribute("surface", new THREE.Float32BufferAttribute(surfaces, 1));
   geometry.setIndex(index);
-  const mesh = new THREE.Mesh(geometry, new THREE.MeshStandardNodeMaterial({ vertexColors: true, roughness: .82, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }));
+  const mesh = new THREE.Mesh(geometry, groundMaterial({ polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }));
   mesh.receiveShadow = true;
   return mesh;
 }

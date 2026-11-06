@@ -138,7 +138,7 @@ test('generated full kits load once with their base models and named LODs; sourc
   };
   const models = await loadCatalogueModels(['/preferred/city-models.glb', '/preferred/vehicles.glb']);
   for (const name of ['building', 'taxi']) for (const suffix of ['', '__lod1', '__lod2']) assert.ok(models.has(`${name}${suffix}`), `${name}${suffix} survives generated kit loading`);
-  assert.equal(f.downloads.length, 4, 'only two full kits, houses and offices are downloaded');
+  assert.equal(f.downloads.length, 2, 'only the two full kits are downloaded: the ready houses and offices are built in code');
   assert.equal(f.downloads.some(download => /\/pages\/city\/models\/(?:city-models|vehicles)\.glb$/.test(download.url)), false);
   disposeModels(models);
 });

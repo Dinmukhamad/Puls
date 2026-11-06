@@ -25,7 +25,6 @@ export function CityWorldPanel({ world, current, selected, onPick, onClose, onTr
         onTravel={id => { onTravel(id); onClose(); }} onVisit={id => { onVisit(id); onClose(); }}>
         <details className="city-travel-credits"><summary tabIndex={0}>Авторы моделей</summary>
         <p className="secondary small city-world-credit">Здание вокзала — «Gare de BlenderVille», автор loran17 (<a href="https://www.blendswap.com/blend/27438" target="_blank" rel="noreferrer">Blend Swap</a>), лицензия <a href="https://creativecommons.org/licenses/by/3.0/deed.ru" target="_blank" rel="noreferrer">CC BY</a>; упрощено и перекрашено для Puls.</p>
-        <p className="secondary small city-world-credit">Офисные здания — «High Rise Office Buildings», автор Phoenixdraws (<a href="https://www.blendswap.com/blends/view/74984" target="_blank" rel="noreferrer">Blend Swap</a>), лицензия <a href="https://creativecommons.org/licenses/by/3.0/deed.ru" target="_blank" rel="noreferrer">CC BY 3.0</a>; разделены на модели и адаптированы для Puls.</p>
         </details>
       </CityTravelCard>}
     </Sheet>}

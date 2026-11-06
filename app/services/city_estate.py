@@ -82,9 +82,9 @@ OFFICE_TOWERS = {
 #: What operators build on the land. Size is in cells (columns × rows, unturned): a house 3 × 3,
 #: a square or an office tower 2 × 2 (frontend world/estateGrid.ts PLOT_SIZE); a park is never
 #: bought, it gathers itself from `squares` of the operator's own squares (a big park also from a
-#: park and two squares) and stands on their cells. The `ready` houses are models of the CC0
-#: "Family House Collection" (frontend world/familyHouses.ts); ready office towers follow from the
-#: supplied collection. Both are bought finished, cheapest first within each collection.
+#: park and two squares) and stands on their cells. The `ready` houses and office towers are the
+#: frontend's tables (world/familyHouses.ts, world/officeBuildings.ts), drawn in code by the city
+#: (assets/readyBuildings.ts). Both are bought finished, cheapest first within each collection.
 PLOT_FAMILIES = {
     "square": {
         "name": "Сквер",

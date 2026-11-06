@@ -182,47 +182,6 @@ test('all nine offices are finished purchases on 2 × 2 cells and fit them anywh
   }
 });
 
-test('office GLB contains all nine source bodies, matching bounds and facade markers, with repeating textures and attribution', async () => {
-  const { NodeIO } = await import('@gltf-transform/core');
-  const { ALL_EXTENSIONS } = await import('@gltf-transform/extensions');
-  const { getBounds } = await import('@gltf-transform/functions');
-  const { MeshoptDecoder } = await import('meshoptimizer');
-  await MeshoptDecoder.ready;
-  const bytes = readFileSync(new URL('../../pages/city/models/high-rise-offices.glb', import.meta.url));
-  assert.ok(bytes.length < 1024 * 1024, `high-rise-offices.glb is ${bytes.length} bytes`);
-  const doc = await new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({ 'meshopt.decoder': MeshoptDecoder }).readBinary(new Uint8Array(bytes));
-  const scenes = new Map(doc.getRoot().listScenes().map(s => [s.getName(), s]));
-  assert.deepEqual([...scenes.keys()], Array.from({ length: 9 }, (_, v) => E.officeModelName(v)));
-  for (const [family, model] of Object.entries(E.OFFICE_BUILDINGS)) {
-    const scene = scenes.get(E.officeModelName(model.model - 1)), { min, max } = getBounds(scene);
-    assert.ok(Math.abs(min[1]) < .01 && Math.abs(min[0] + max[0]) < .01 && Math.abs(min[2] + max[2]) < .01, `${family} is grounded and centred`);
-    for (const [k, size] of [[0, model.width], [1, model.height], [2, model.depth]]) assert.ok(Math.abs(max[k] - min[k] - size) < .01, `${family} bounds match metadata`);
-    const primitives = [];
-    scene.traverse(node => { if (node.getMesh()) primitives.push(...node.getMesh().listPrimitives()); });
-    assert.ok(primitives.length > 0);
-    let marked = 0, dark = 0, triangles = 0;
-    for (const primitive of primitives) {
-      const seeds = primitive.getAttribute('_WINDOWSEED');
-      assert.ok(seeds, `${family} facade mask exported`);
-      for (let i = 0; i < seeds.getCount(); i++) {
-        const value = seeds.getElement(i, [])[0];
-        assert.ok(value >= 0 && value <= 1.0001);
-        if (value > 0) marked++; else dark++;
-      }
-      triangles += primitive.getIndices().getCount() / 3;
-    }
-    assert.ok(marked > 0 && dark > 0, `${family} facades marked; roofs and trim dark`);
-    assert.ok(triangles < 300, `${family} keeps its low-poly source geometry`);
-  }
-  assert.equal(doc.getRoot().listTextures().length, 6);
-  for (const material of doc.getRoot().listMaterials()) if (material.getBaseColorTexture()) {
-    const info = material.getBaseColorTextureInfo();
-    assert.equal(info.getWrapS(), 10497); assert.equal(info.getWrapT(), 10497);
-  }
-  const license = readFileSync(new URL('../../pages/city/models/LICENSE-high-rise-offices.txt', import.meta.url), 'utf8');
-  assert.match(license, /Phoenixdraws/); assert.match(license, /CC BY 3\.0/); assert.match(license, /blendswap\.com\/blends\/view\/74984/);
-});
-
 /** A layout's pieces in the plot's own axes: `u` across its width, `w` towards its front (the street). */
 const local = (frame, p) => {
   const s = Math.sin(frame.rotation), c = Math.cos(frame.rotation), dx = p.x - frame.x, dz = p.z - frame.z;
@@ -272,36 +231,6 @@ test('ready houses: the server sells exactly these, finished, and each stands in
       assert.equal(finishes.size, 2, `${family} comes in brick and in stone`);
     }
   }
-});
-
-test('the ready houses\' model: every house in both finishes, of the table\'s size, its windows marked, light, CC0', async () => {
-  const { NodeIO } = await import('@gltf-transform/core');
-  const { ALL_EXTENSIONS } = await import('@gltf-transform/extensions');
-  const { getBounds } = await import('@gltf-transform/functions');
-  const { MeshoptDecoder } = await import('meshoptimizer');
-  await MeshoptDecoder.ready;
-  const bytes = readFileSync(new URL('../../pages/city/models/family-houses.glb', import.meta.url));
-  assert.ok(bytes.length < 600 * 1024, `family-houses.glb is ${bytes.length} bytes`);
-  const doc = await new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({ 'meshopt.decoder': MeshoptDecoder }).readBinary(new Uint8Array(bytes));
-  const scenes = Object.fromEntries(doc.getRoot().listScenes().map(s => [s.getName(), s]));
-  assert.deepEqual(Object.keys(scenes).sort(), Array.from({ length: 12 }, (_, v) => E.houseModelName(v)).sort());
-  for (const m of Object.values(E.READY_HOUSES)) for (const finish of E.FINISHES) {
-    const scene = scenes[`family-house-${m.model}-${finish}`], { min, max } = getBounds(scene);
-    // The middle of the footprint on the ground, the table's width, depth and height.
-    assert.ok(Math.abs(min[1]) < .01 && Math.abs(min[0] + max[0]) < .01 && Math.abs(min[2] + max[2]) < .01, `house ${m.model} ${finish} centred`);
-    for (const [k, size] of [[0, m.width], [1, m.height], [2, m.depth]]) assert.ok(Math.abs(max[k] - min[k] - size) < .01, `house ${m.model} ${finish}: ${(max[k] - min[k]).toFixed(3)} for ${size}`);
-    const primitives = scene.listChildren().flatMap(n => [n, ...n.listChildren()]).map(n => n.getMesh()).filter(Boolean).flatMap(mesh => mesh.listPrimitives());
-    assert.equal(primitives.length, 1, 'one mesh, one material');
-    const seeds = primitives[0].getAttribute('_WINDOWSEED');
-    assert.ok(seeds, 'its windows are marked');
-    const values = Array.from({ length: seeds.getCount() }, (_, i) => seeds.getElement(i, [])[0]);
-    assert.ok(values.some(v => v > 0) && values.some(v => v === 0) && values.every(v => v >= 0 && v <= 1.0001));
-    assert.ok(primitives[0].getIndices().getCount() / 3 < 1500, `house ${m.model}: ${primitives[0].getIndices().getCount() / 3} triangles`);
-    assert.equal(primitives[0].getMaterial().getName(), `family-house-${finish}`);
-  }
-  assert.equal(doc.getRoot().listTextures().length, 2, 'the brick and the stone trim sheet');
-  const license = readFileSync(new URL('../../pages/city/models/LICENSE-family-houses.txt', import.meta.url), 'utf8');
-  assert.match(license, /CC0/); assert.match(license, /blendswap\.com\/blends\/view\/92125/); assert.match(license, /Family House Collection/);
 });
 
 test('the public square: cells map to the ground and back, shared buildings stay in their cells', () => {

@@ -1,10 +1,10 @@
 /**
- * The districts' ready houses (docs/CITY_ESTATES.md, «Готовые дома»): six models of the CC0 Blend Swap "Family
- * House Collection", each in brick and in stone (scripts/prepare_family_houses.py → pages/city/models/
- * family-houses.glb, one scene per house and finish: family-house-<model>-<finish>). Operators buy them finished,
- * on one plot, at the price of their size (the server's PLOT_FAMILIES and PLOT_PRICES).
+ * The districts' ready houses (docs/CITY_ESTATES.md, «Готовые дома»): six houses, each in brick and in stone, drawn in
+ * code by assets/readyBuildings.ts (docs/CITY_V4.md; the scene of house <model> in <finish> is
+ * family-house-<model>-<finish>). Operators buy them finished, on one plot, at the price of their size (the server's
+ * PLOT_FAMILIES and PLOT_PRICES).
  *
- * Sizes are in the models' own units (about 4 m), the front, with the entrance and the garage, towards +z; the city
+ * Sizes are in model units (about 4 m), the front, with the entrance and the garage, towards +z; the city
  * draws them HOUSE_SCALE times bigger, so they stand as large as the district's growing houses. `door` and `garage`
  * say where the entrance and the garage (or the carport) are: across the front from the middle, and how far back
  * from the front wall, so the path and the driveway lead to them (world/landLayouts.ts). Pure data.

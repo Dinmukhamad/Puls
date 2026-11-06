@@ -7,8 +7,6 @@
  */
 import modelsUrl from "../../pages/city/models/city-models.glb?url";
 import vehiclesUrl from "../../pages/city/models/vehicles.glb?url";
-import familyHousesUrl from "../../pages/city/models/family-houses.glb?url";
-import highRiseOfficesUrl from "../../pages/city/models/high-rise-offices.glb?url";
 
 /** Generated kits with their LOD levels (public/city/v1), preferred over the sources bundled with the code. */
 export const lodFiles = () => ["city/v1/city-models.glb", "city/v1/vehicles.glb"].map(path => `${import.meta.env.BASE_URL}${path}`);
@@ -23,7 +21,7 @@ export function catalogueFiles(lodUrls: readonly string[] = [], kits = true) {
   const fallbacks = new Map<string, string>();
   if (preferredModels && preferredModels !== modelsUrl) fallbacks.set(preferredModels, modelsUrl);
   if (preferredVehicles && preferredVehicles !== vehiclesUrl) fallbacks.set(preferredVehicles, vehiclesUrl);
-  const urls = [...new Set([...(kits ? [preferredModels ?? modelsUrl] : []), preferredVehicles ?? vehiclesUrl, familyHousesUrl, highRiseOfficesUrl, ...lodUrls.filter(url => kits || url !== preferredModels)])];
+  const urls = [...new Set([...(kits ? [preferredModels ?? modelsUrl] : []), preferredVehicles ?? vehiclesUrl, ...lodUrls.filter(url => kits || url !== preferredModels)])];
   return { urls, fallbacks };
 }
 

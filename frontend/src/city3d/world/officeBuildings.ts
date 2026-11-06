@@ -1,7 +1,7 @@
 /**
- * Ready office towers for district plots: the nine bodies in the High Rise Office Buildings collection.
- * Each scene in high-rise-offices.glb is centred on x/z, grounded on y = 0 and faces +z. Dimensions are in
- * source units; the city keeps their proportions and shrinks them uniformly only when a plot is narrower.
+ * Ready office towers for district plots: nine towers drawn in code by assets/readyBuildings.ts (docs/CITY_V4.md),
+ * each centred on x/z, grounded on y = 0 and facing +z. Dimensions are in model units; the city keeps their
+ * proportions and shrinks them uniformly only when a plot is narrower.
  */
 export type OfficeBuilding = "officea" | "officeb" | "officec" | "officed" | "officee" | "officef" | "officeg" | "officeh" | "officei";
 export interface OfficeBuildingModel { model: number; name: string; width: number; depth: number; height: number }
