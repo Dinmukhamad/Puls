@@ -5,16 +5,20 @@
  * lights up on hover and pulses while selected; invisible cylinders take the picking rays; a district that
  * levelled up grows in under a burst of confetti.
  *
+ * The landmarks are drawn in the city's v4 style (docs/CITY_V4.md): one facade material for all of them
+ * (assets/facade.ts), whose windows setNight() switches on and off; only the signs have materials of their own.
+ *
  * At night (TZ §6.7) the windows light up, warm floodlights on every island wash its building from below
  * and a ring of small lights circles the plaza's pedestal. The light is faked, as for the street lamps:
  * glowing fixtures and additive pools on the ground (two instanced draw calls, hidden in the day) and an
- * uplight in the landmarks' own emissive, all scaled by ctx.night.level.
+ * uplight in the landmarks' own emissive, scaled by ctx.night.level.
  */
 import * as THREE from "three/webgpu";
-import { color, exp, float, normalWorld, positionWorld, rangeFogFactor, smoothstep, uv, vertexColor, type ShaderNodeObject } from "three/tsl";
+import { color, exp, float, normalWorld, positionWorld, rangeFogFactor, smoothstep, uniform, uv, vertexColor, type ShaderNodeObject } from "three/tsl";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import type { DistrictId } from "../../api/city";
 import { createArchitecture } from "../assets/landmarks";
+import { facadeMaterial } from "../assets/facade";
 import { districtLevel } from "../../pages/city/cityLevels";
 import type { CityContext } from "../engine/context";
 import { DISTRICT_FACING } from "../engine/camera";
@@ -28,9 +32,8 @@ const RING_COLOR = "#e9bf69", RING_Y = .45;
 /** Growth starts half a second after startGrowth() and takes 1.3 s; confetti bursts at 1.3 s and falls for 3.2 s. */
 const GROW_DELAY = 500, GROW_TIME = 1300, CONFETTI_DELAY = 1300, CONFETTI_LIFE = 3.2, CONFETTI_COUNT = 160;
 const CONFETTI_COLORS = ["#ffcf4d", "#ff6b9a", "#7b5cff", "#5bd6ff", "#6be38a"];
-/** Warm occupied windows; emissive surfaces add no lights or extra shadow passes. */
-const WINDOW_EMISSION = "#ffd9a0", WINDOW_INTENSITY = .85;
-type GlazingMaterial = THREE.MeshStandardMaterial | THREE.MeshStandardNodeMaterial;
+/** The share of a landmark's windows lit at night: public buildings, busier than the homes round them. */
+const WINDOWS_LIT = .62;
 type Level = CityContext["night"]["level"];
 
 /** Floodlights in a landmark's frame, world units from its centre (+z is its front, the plot is ±5 × ±4.6): two flank the entrance, one lights each side. */
@@ -40,12 +43,6 @@ const FLOOD = "#ffc88a", FIXTURE_GLOW = 2.4, POOL_STRENGTH = .6;
 const WASH = "#ffcf96", WASH_STRENGTH = .42, WASH_HEIGHT = 2.2;
 /** The pedestal of systems/mascot.ts (radius 0.86, its dark band 0.37…0.6 high) on the plaza paving (0.31). */
 const PEDESTAL_R = .88, PEDESTAL_Y = .48, PEDESTAL_LIGHTS = 16, PLAZA_Y = .31, PLAZA_LIGHTS = 24;
-
-/** The architecture kit reserves this finish for glazing; opaque roofs use its matte finish. */
-function isLandmarkGlass(material: THREE.MeshStandardMaterial) {
-  return !material.map && (material.userData.districtGlass === true ||
-    Math.abs(material.metalness - .35) < 1e-6 && Math.abs(material.roughness - .24) < 1e-6);
-}
 
 /** Islands reserved for districts the server does not have yet ("Скоро"): not selectable. */
 export const isFutureDistrict = (id: string) => id.startsWith("future-");
@@ -64,7 +61,7 @@ export interface Districts {
   anchors: Map<string, THREE.Vector3>;
   select(id: string): void;
   hover(id: string | null): void;
-  /** Toggles only the landmarks' glazing, including buildings that are still growing. */
+  /** Switches the landmarks' windows on or off, including buildings that are still growing. */
   setNight(night: boolean): void;
   /** Refreshes changed building stages; requested growth waits for startGrowth(). */
   setLevels(levels: Record<string, number>, grown?: string[]): void;
@@ -73,7 +70,7 @@ export interface Districts {
   dispose(): void;
 }
 
-/** Frees every geometry, material and texture under `root`. */
+/** Frees every geometry, material and texture under `root`; returns the materials it freed. */
 export function disposeTree(root: THREE.Object3D) {
   const geometries = new Set<THREE.BufferGeometry>(), materials = new Set<THREE.Material>(), textures = new Set<THREE.Texture>();
   root.traverse(o => {
@@ -87,22 +84,20 @@ export function disposeTree(root: THREE.Object3D) {
     if ((mesh as THREE.InstancedMesh).isInstancedMesh) (mesh as THREE.InstancedMesh).dispose();
   });
   textures.forEach(t => t.dispose()); geometries.forEach(g => g.dispose()); materials.forEach(m => m.dispose());
+  return materials;
 }
 
 export function createDistricts(ctx: CityContext, { levels, grown = [] }: DistrictsOptions): Districts {
   const { spec } = ctx.world, scale = spec.districtScale;
   const root = new THREE.Group(); root.name = "city-districts"; ctx.scene.add(root);
-  const architecture = createArchitecture();
-  const glazing = new Set<GlazingMaterial>();
-  let night = false;
-  function registerGlazing(material: GlazingMaterial) {
-    material.name = "city-district-glass"; material.userData.districtGlass = true;
-    material.emissive.set(WINDOW_EMISSION); material.emissiveIntensity = night ? WINDOW_INTENSITY : 0;
-    glazing.add(material);
-  }
-  // Opaque landmark finishes get the floodlights' uplight; it is 0 in the day.
-  const wash = uplight(ctx.night.level);
-  const finish = (material: THREE.MeshStandardNodeMaterial) => { material.emissiveNode = wash; };
+  // Every landmark, growing or merged, and the construction sites share one facade material: its windows light
+  // with `windows` (setNight), its walls take the floodlights' uplight (0 in the day). The window pattern is fixed
+  // per building (assets/landmarks.ts shifts every wall's), so the material needs no seed from a copy.
+  const windows = uniform(0);
+  const shell = facadeMaterial(windows as unknown as Parameters<typeof facadeMaterial>[0], { seed: float(0), lit: WINDOWS_LIT });
+  shell.emissiveNode = (shell.emissiveNode as ShaderNodeObject<THREE.Node>).add(uplight(ctx.night.level));
+  shell.name = "city-district-landmarks"; shell.userData.districtNight = windows;
+  const architecture = createArchitecture(shell);
   const pickables: THREE.Object3D[] = [], anchors = new Map<string, THREE.Vector3>();
   const landmarks = new Map<string, THREE.Group>(), rings = new Map<string, THREE.Mesh>();
   const stages = new Map<string, number>(), hits = new Map<string, THREE.Mesh>();
@@ -110,7 +105,7 @@ export function createDistricts(ctx: CityContext, { levels, grown = [] }: Distri
   const initialGrowth = new Set(ctx.reducedMotion ? [] : grown);
   const growth: { id: string; group: THREE.Group; start: number }[] = [];
   const confetti: Confetti[] = [];
-  const batches = createLandmarkBatches(root, registerGlazing, material => glazing.delete(material), finish);
+  const batches = createLandmarkBatches(root);
   let disposed = false;
   const ringGeometry = new THREE.TorusGeometry(spec.islet - .19, .11, 8, 96);
   const hitGeometry = new THREE.CylinderGeometry(1, 1, 1, 12), hitMaterial = new THREE.MeshBasicNodeMaterial();
@@ -118,13 +113,6 @@ export function createDistricts(ctx: CityContext, { levels, grown = [] }: Distri
 
   function buildLandmark(d: District, stage: number, waitForGrowth: boolean) {
     const { group, height } = architecture.landmark(d.id as DistrictId, stage, d.soon);
-    // Growing buildings retain the kit's material until they join the shared batches.
-    group.traverse(object => {
-      const mesh = object as THREE.Mesh;
-      if (!mesh.isMesh || Array.isArray(mesh.material)) return;
-      const material = mesh.material as THREE.MeshStandardMaterial;
-      if (isLandmarkGlass(material)) registerGlazing(material);
-    });
     group.position.set(d.x, GROUND, d.z); group.scale.setScalar(scale); group.rotation.y = DISTRICT_FACING;
     group.userData.district = d.id; root.add(group); landmarks.set(d.id, group); stages.set(d.id, stage);
     const top = height * scale, hit = hits.get(d.id)!;
@@ -135,7 +123,7 @@ export function createDistricts(ctx: CityContext, { levels, grown = [] }: Distri
     else batches.add(d.id, group);
   }
 
-  /** Unmerged geometry/signs belong to this district; cached kit materials belong to architecture. */
+  /** Unmerged geometry and signs belong to this district; the shared facade material belongs to the districts. */
   function releaseGrowingGroup(group: THREE.Group | undefined) {
     if (!group) return;
     const geometry = new Set<THREE.BufferGeometry>(), signs = new Set<THREE.Material>();
@@ -150,9 +138,9 @@ export function createDistricts(ctx: CityContext, { levels, grown = [] }: Distri
   }
 
   const futures = ctx.world.districts.filter(d => isFutureDistrict(d.id));
-  const site = futures.length ? constructionSite(futures.map(d => new THREE.Matrix4().compose(
+  const site = futures.length ? constructionSite(architecture.site(), shell, futures.map(d => new THREE.Matrix4().compose(
     new THREE.Vector3(d.x, GROUND, d.z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), DISTRICT_FACING), new THREE.Vector3(scale, scale, scale)))) : null;
-  if (site) { finish(site.mesh.material as THREE.MeshStandardNodeMaterial); root.add(site.mesh); }
+  if (site) root.add(site.mesh);
 
   for (const d of ctx.world.districts) {
     if (isFutureDistrict(d.id)) { anchors.set(d.id, new THREE.Vector3(d.x, GROUND + site!.height * scale + LABEL_LIFT, d.z)); continue; }
@@ -193,11 +181,7 @@ export function createDistricts(ctx: CityContext, { levels, grown = [] }: Distri
     pickables, anchors,
     select(id) { selected = id; },
     hover(id) { hovered = id; },
-    setNight(value) {
-      if (night === value) return;
-      night = value;
-      glazing.forEach(material => { material.emissiveIntensity = night ? WINDOW_INTENSITY : 0; });
-    },
+    setNight(value) { windows.value = value ? 1 : 0; },
     setLevels(next, grown = []) {
       if (disposed) return;
       const animate = new Set(ctx.reducedMotion ? [] : grown);
@@ -229,7 +213,8 @@ export function createDistricts(ctx: CityContext, { levels, grown = [] }: Distri
       landmarks.forEach(releaseGrowingGroup); batches.dispose(); pendingGrowth.clear(); growth.length = 0;
       root.removeFromParent();
       // Landmarks hold their own sign textures and merged geometries; the kit frees only what it cached.
-      disposeTree(root); architecture.dispose(); glazing.clear();
+      if (!disposeTree(root).has(shell)) shell.dispose();
+      architecture.dispose();
     },
   };
 }
@@ -243,11 +228,11 @@ export function paintGeometry(geometry: THREE.BufferGeometry, color: THREE.Color
 }
 
 /**
- * Bakes landmark groups into a few meshes under `parent` and drops the groups: kit colours become vertex
- * colours, so parts differ only by finish (matte, glass, metal) or by a painted sign. All districts
- * together take about ten draw calls instead of a dozen each.
+ * Bakes landmark groups into a few meshes under `parent` and drops the groups: their facade meshes merge into one
+ * (they share one material), each sign keeps its own. All districts together take a few draw calls instead of a
+ * dozen each.
  */
-function createLandmarkBatches(parent: THREE.Object3D, registerGlazing: (material: GlazingMaterial) => void, unregisterGlazing: (material: GlazingMaterial) => void, finish: (material: THREE.MeshStandardNodeMaterial) => void) {
+function createLandmarkBatches(parent: THREE.Object3D) {
   interface Bucket { material: THREE.Material; parts: Map<string, THREE.BufferGeometry[]>; meshes: THREE.Mesh[] }
   const buckets = new Map<string, Bucket>(), owned = new Map<string, Set<string>>(), dirty = new Set<string>();
   const local = new THREE.Matrix4();
@@ -268,31 +253,28 @@ function createLandmarkBatches(parent: THREE.Object3D, registerGlazing: (materia
       remove(id); parent.updateMatrixWorld(true);
       const inverse = parent.matrixWorld.clone().invert(), keys = new Set<string>();
       group.traverse(object => {
-        const mesh = object as THREE.Mesh, source = mesh.material as THREE.MeshStandardMaterial;
+        const mesh = object as THREE.Mesh, material = mesh.material as THREE.Material;
         if (!mesh.isMesh || Array.isArray(mesh.material)) return;
         const geometry = mesh.geometry.clone().applyMatrix4(local.multiplyMatrices(inverse, mesh.matrixWorld));
         mesh.geometry.dispose();
-        const glass = isLandmarkGlass(source);
-        const key = source.map ? source.uuid : `${glass ? "glass:" : ""}${source.metalness}:${source.roughness}`;
+        const key = material.uuid;
         let bucket = buckets.get(key);
-        if (!bucket) {
-          const material = source.map ? source : new THREE.MeshStandardNodeMaterial({ vertexColors: true, metalness: source.metalness, roughness: source.roughness });
-          if (glass) registerGlazing(material); else if (!source.map) finish(material as THREE.MeshStandardNodeMaterial);
-          bucket = { material, parts: new Map(), meshes: [] }; buckets.set(key, bucket);
-        }
+        if (!bucket) { bucket = { material, parts: new Map(), meshes: [] }; buckets.set(key, bucket); }
         if (!bucket.parts.has(id)) bucket.parts.set(id, []);
-        bucket.parts.get(id)!.push(source.map ? geometry : paintGeometry(geometry, source.color));
+        bucket.parts.get(id)!.push(geometry);
         keys.add(key); dirty.add(key);
       });
       owned.set(id, keys); group.removeFromParent(); group.clear();
     },
     flush() {
-      // No work on ordinary frames. Only changed finish buffers are rebuilt from cached district parts.
+      // No work on ordinary frames. Only changed buckets are rebuilt from cached district parts.
       for (const key of dirty) {
         const bucket = buckets.get(key)!; releaseMeshes(bucket);
         const parts = [...bucket.parts.values()].flat();
         if (!parts.length) {
-          unregisterGlazing(bucket.material as GlazingMaterial); disposeMaterial(bucket.material); buckets.delete(key); continue;
+          // A sign's material goes with its last geometry; the shared facade material stays with the districts.
+          if ((bucket.material as THREE.MeshStandardMaterial).map) disposeMaterial(bucket.material);
+          buckets.delete(key); continue;
         }
         const merged = parts.length > 1 ? mergeGeometries(parts) : null;
         // CPU parts stay owned by districts; rendered geometry has its own disposal lifetime.
@@ -307,7 +289,7 @@ function createLandmarkBatches(parent: THREE.Object3D, registerGlazing: (materia
     dispose() {
       for (const bucket of buckets.values()) {
         releaseMeshes(bucket); bucket.parts.forEach(parts => parts.forEach(geometry => geometry.dispose()));
-        unregisterGlazing(bucket.material as GlazingMaterial); disposeMaterial(bucket.material);
+        if ((bucket.material as THREE.MeshStandardMaterial).map) disposeMaterial(bucket.material);
       }
       buckets.clear(); owned.clear(); dirty.clear();
     },
@@ -392,35 +374,14 @@ function nightLights(ctx: CityContext, islands: readonly { x: number; z: number 
 }
 
 /**
- * The "Скоро" construction site on the landmarks' 5.7 × 5.3 plot: a plinth, the first floor going up in
- * scaffolding, a tower crane and a barrier. Vertex colours make it one InstancedMesh for every reserved island.
+ * The "Скоро" construction site (assets/landmarks.ts site()) on every reserved island: one InstancedMesh in the
+ * landmarks' facade material.
  */
-function constructionSite(matrices: THREE.Matrix4[]) {
-  const parts: THREE.BufferGeometry[] = [];
-  const box = (w: number, h: number, d: number, color: string, x: number, y: number, z: number) => { parts.push(paintGeometry(new THREE.BoxGeometry(w, h, d).translate(x, y, z), new THREE.Color(color))); };
-  const STONE = "#e8ddc5", CONCRETE = "#cfc7b8", STEEL = "#8a8f96", CRANE = "#e0a936", INK = "#253841", WOOD = "#926b45";
-  box(5.7, .23, 5.3, "#9d9c91", 0, .02, 0); box(5.55, .15, 5.15, STONE, 0, .2, 0);
-  box(3, 1.2, 2.2, CONCRETE, 0, .88, -.3); box(3.2, .12, 2.4, "#b9b1a2", 0, 1.54, -.3); box(1.3, .7, 1, CONCRETE, -.7, 1.95, -.6);
-  for (const x of [-1.7, -.57, .57, 1.7]) for (const z of [-1.6, 1]) box(.06, 2.5, .06, STEEL, x, 1.52, z);
-  for (const y of [.95, 1.65, 2.45]) {
-    for (const z of [-1.6, 1]) box(3.46, .05, .05, STEEL, 0, y, z);
-    for (const x of [-1.7, 1.7]) box(.05, .05, 2.66, STEEL, x, y, -.3);
-  }
-  for (const y of [.98, 1.68]) box(3.4, .04, .42, WOOD, 0, y, 1.2);
-  // Tower crane behind the building; its jib reaches back over it.
-  const cx = 1.95, cz = -1.95;
-  box(.6, .14, .6, INK, cx, .34, cz); box(.22, 4.4, .22, CRANE, cx, 2.6, cz); box(.34, .3, .34, INK, cx, 4.62, cz + .2);
-  box(3.9, .14, .18, CRANE, cx - 1.75, 4.88, cz); box(1.2, .14, .18, CRANE, cx + .75, 4.88, cz); box(.4, .34, .3, INK, cx + 1.15, 4.66, cz);
-  box(.025, 1.5, .025, INK, cx - 2.6, 4.07, cz); box(.16, .12, .16, INK, cx - 2.6, 3.26, cz); box(1, .1, .14, STEEL, cx - 2.6, 3.12, cz);
-  // A striped barrier along the front: the district is not open yet.
-  for (const x of [-1.2, 1.2]) box(.07, .5, .07, INK, x, .52, 2.35);
-  for (let i = 0; i < 8; i++) box(.3, .08, .04, i % 2 ? INK : CRANE, -1.05 + i * .3, .66, 2.35);
-
-  const geometry = mergeGeometries(parts)!; parts.forEach(g => g.dispose());
-  const mesh = new THREE.InstancedMesh(geometry, new THREE.MeshStandardNodeMaterial({ vertexColors: true, roughness: .7 }), matrices.length);
+function constructionSite(site: { geometry: THREE.BufferGeometry; height: number }, material: THREE.Material, matrices: THREE.Matrix4[]) {
+  const mesh = new THREE.InstancedMesh(site.geometry, material, matrices.length);
   matrices.forEach((m, i) => mesh.setMatrixAt(i, m));
   mesh.castShadow = mesh.receiveShadow = true; mesh.name = "city-construction-sites";
-  return { mesh, height: 4.95 };
+  return { mesh, height: site.height };
 }
 
 interface Confetti { step(dt: number, now: number): boolean; dispose(): void }

@@ -34,9 +34,11 @@ test('every landmark level is a building of its own, taller than the last, on it
       let below=0;const shapes=new Set();
       for(let level=1;level<=5;level++){
         const {group,height}=kit.landmark(id,level,id==='oktell');
-        let meshes=0,triangles=0,reach=0;
+        let meshes=0,triangles=0,reach=0,top=0;
         group.traverse(o=>{if(!o.isMesh)return;meshes++;const p=o.geometry.getAttribute('position');triangles+=p.count/3;assert.ok([...p.array].every(Number.isFinite));
-          for(let i=0;i<p.count;i++)reach=Math.max(reach,Math.hypot(p.getX(i),p.getZ(i)));});
+          for(let i=0;i<p.count;i++){reach=Math.max(reach,Math.hypot(p.getX(i),p.getZ(i)));top=Math.max(top,p.getY(i)+o.position.y);}});
+        // The label and the picking stand at the height the islands always had: the building reaches it, and no higher.
+        assert.ok(top<=height+.005&&top>height-.12,`${id} ${level}: the model's top ${top.toFixed(3)} for the label height ${height}`);
         assert.ok(height>below,`${id} ${level}: ${height} is not taller than the level below (${below})`);below=height;
         assert.ok(height>1.5&&height<10,`${id} ${level}: ${height} high`);
         assert.ok(reach<ISLAND,`${id} ${level}: reaches ${reach.toFixed(2)} from the middle, past the island's edge`);

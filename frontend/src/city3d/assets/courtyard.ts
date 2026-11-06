@@ -1,6 +1,6 @@
 /**
- * Procedural models for the residential complexes (world/complexes.ts): the courtyard furniture, two more
- * kinds of tree and the section box. Every model is painted boxes and cylinders merged into one geometry
+ * Procedural models for the residential complexes (world/complexes.ts): the courtyard furniture and two more
+ * kinds of tree (the buildings are assets/residential.ts). Every model is painted boxes and cylinders merged into one geometry
  * with vertex colours and no uvs, so one material draws them all and each model is one pool (one draw
  * call) however many yards there are. Sizes go with the walkers (about 1.2 tall): a bench seat is 0.3 high,
  * a slide platform 0.9, a football goal 0.8. Every model's front is +z.
@@ -188,90 +188,3 @@ export function furnitureGeometry(kind: FurnitureKind): [THREE.BufferGeometry, T
   }
 }
 export function treeKindGeometry(kind: "birch" | "oak", far: boolean) { return kind === "birch" ? birch(far) : oak(far); }
-
-/** The vertex attribute that tells the section material what a face is (SECTION_PARTS). */
-export const SECTION_PART = "sectionPart";
-/** Section faces: the facade with windows, white trim (balcony slabs, parapet, canopy), roof, balcony glass, plain walls. */
-export const SECTION_PARTS = { facade: 0, trim: 1, roof: 2, glass: 3, plain: 4 } as const;
-
-/** A box standing on y (its bottom), every face one part except its top and bottom, which may have their own. */
-function partBox(w: number, h: number, d: number, x: number, y: number, z: number, part: number, top = part, bottom = part) {
-  const g = new THREE.BoxGeometry(w, h, d).translate(x, y + h / 2, z).toNonIndexed();
-  g.deleteAttribute("uv");
-  // BoxGeometry faces: +x, -x, +y, -y, +z, -z, six vertices each once unindexed.
-  const parts = new Float32Array(36).map((_, i) => { const face = Math.floor(i / 6); return face === 2 ? top : face === 3 ? bottom : part; });
-  g.setAttribute(SECTION_PART, new THREE.BufferAttribute(parts, 1));
-  return g;
-}
-
-/**
- * A section of `floors` in unit space (x and z in ±0.5, y 0…1); copies are scaled to their width, depth and
- * floors × 0.75. Detail 2: a balcony on every floor of both long fronts (a white slab, a glass rail), a
- * canopy over the ground floor, a parapet and a stair and lift house on the roof. Detail 1: the same with
- * bare slabs, no rails. Detail 0: the plain box, the same for every height. Sizes are in world units at a width of
- * 3.2 and a depth of 2.4; the bottom is closed, so a section over an arch is solid from below.
- */
-export function sectionGeometry(floors: number, detail: 0 | 1 | 2) {
-  const P = SECTION_PARTS, height = floors * .75, y = (units: number) => units / height, z = (units: number) => units / 2.4, x = (units: number) => units / 3.2;
-  const parts = [partBox(1, 1, 1, 0, 0, 0, P.facade, P.roof, P.plain)];
-  if (detail >= 1) {
-    const rim = y(.28), thick = z(.08);
-    parts.push(partBox(1, rim, thick, 0, 1, .5 - thick / 2, P.trim), partBox(1, rim, thick, 0, 1, -.5 + thick / 2, P.trim));
-    parts.push(partBox(x(.08), rim, 1 - 2 * thick, .5 - x(.04), 1, 0, P.trim), partBox(x(.08), rim, 1 - 2 * thick, -.5 + x(.04), 1, 0, P.trim));
-    parts.push(partBox(x(.75), y(.7), z(.9), x(.35), 1, 0, P.plain, P.roof));
-  }
-  if (detail >= 1) {
-    const slab = y(.06), rail = y(.26), out = z(.15), glass = z(.02);
-    for (const side of [-1, 1]) {
-      // The canopy over the doors, a little deeper than the balconies.
-      parts.push(partBox(1, slab, z(.26), 0, 1 / floors - slab, side * (.5 + z(.13)), P.trim));
-      for (let k = 1; k < floors; k++) {
-        const base = k / floors;
-        parts.push(partBox(.98, slab, out, 0, base, side * (.5 + out / 2), P.trim));
-        if (detail === 2) parts.push(partBox(.98, rail, glass, 0, base + slab, side * (.5 + out - glass / 2), P.glass));
-      }
-    }
-  }
-  const merged = mergeGeometries(parts)!; parts.forEach(g => g.dispose());
-  return merged;
-}
-
-/**
- * An office tower (or podium) of `floors` in unit space, scaled to its width, depth and floors × 0.9 like a
- * section. Detail 2: slim fins up the four corners, a glass crown band under a parapet, a canopy over the
- * lobby on both long fronts and plant on the roof. Detail 1: parapet and roof plant. Detail 0: the plain box.
- * Sizes are in world units at a nominal 9 × 7 footprint.
- */
-export function officeGeometry(floors: number, detail: 0 | 1 | 2) {
-  const P = SECTION_PARTS, height = floors * .9, y = (units: number) => units / height, z = (units: number) => units / 7, x = (units: number) => units / 9;
-  const parts = [partBox(1, 1, 1, 0, 0, 0, P.facade, P.roof, P.plain)];
-  if (detail >= 1) {
-    const rim = y(.45), tz = z(.12), tx = x(.12);
-    parts.push(partBox(1, rim, tz, 0, 1, .5 - tz / 2, P.trim), partBox(1, rim, tz, 0, 1, -.5 + tz / 2, P.trim));
-    parts.push(partBox(tx, rim, 1 - 2 * tz, .5 - tx / 2, 1, 0, P.trim), partBox(tx, rim, 1 - 2 * tz, -.5 + tx / 2, 1, 0, P.trim));
-    parts.push(partBox(x(3), y(1.1), z(2.6), x(-1.2), 1, z(.4), P.plain, P.roof), partBox(x(1.6), y(.7), z(1.6), x(2.4), 1, z(-1), P.plain, P.roof));
-  }
-  if (detail === 2) {
-    const fin = x(.22), finZ = z(.22);
-    for (const sx of [-1, 1]) for (const sz of [-1, 1]) parts.push(partBox(fin, 1, finZ, sx * (.5 + fin / 2 - x(.05)), 0, sz * (.5 + finZ / 2 - z(.05)), P.trim));
-    if (floors > 4) for (const side of [-1, 1]) parts.push(partBox(1.01, y(.22), z(.08), 0, 1 - y(.9), side * (.5 + z(.04)), P.trim));
-    for (const side of [-1, 1]) parts.push(partBox(.5, y(.1), z(1.1), 0, 1 / floors, side * (.5 + z(.55)), P.trim));
-  }
-  const merged = mergeGeometries(parts)!; parts.forEach(g => g.dispose());
-  return merged;
-}
-
-/**
- * A gabled roof in unit space: x ±0.5 (the eaves), z ±0.5 (the ridge runs along z, so the gables face ±z), y 0…1
- * (the ridge); copies are scaled to the house's width, depth and roof height. Slopes and gables, no bottom.
- */
-export function gableGeometry() {
-  const p = [-.5, 0, -.5, .5, 0, -.5, 0, 1, -.5, -.5, 0, .5, .5, 0, .5, 0, 1, .5];
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute("position", new THREE.Float32BufferAttribute(p, 3));
-  // Gables (front and back) and the two slopes.
-  geometry.setIndex([0, 2, 1, 3, 4, 5, 0, 3, 5, 0, 5, 2, 1, 2, 5, 1, 5, 4]);
-  const flat = geometry.toNonIndexed(); geometry.dispose();
-  flat.computeVertexNormals();
-  return flat;
-}

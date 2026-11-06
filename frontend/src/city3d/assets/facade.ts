@@ -1,23 +1,37 @@
 /**
- * Procedural buildings of city v4 (docs/CITY_V4.md, stage 2): a mesh builder for chamfered boxes, gable roofs and
- * parapets, ambient occlusion baked into the vertices, and the facade material that draws the detail polygons would
- * otherwise carry: windows with frames and sills, curtain walls with mullions, roof tiles, gravel decks.
+ * Procedural buildings of city v4 (docs/CITY_V4.md, stage 2): a mesh builder for chamfered boxes, gable, hip and
+ * pyramid roofs, parapets, cylinders, cones, domes, spheres, tori and arches, ambient occlusion baked into the
+ * vertices, and the facade material that draws the detail polygons would otherwise carry: windows with frames and
+ * sills, curtain walls with mullions, roof tiles, gravel decks, foliage.
  *
  * Every vertex carries `aSurf` (u and v in metres along its wall, the surface kind, baked occlusion) and `aWin` (bay
  * width and floor height in metres, window width and height as shares of them). A model exists once, at one level of
  * detail: where a bay shrinks to a few pixels the material fades its windows into their average, so a building looks
  * the same near and far, without a far copy and without a moiré.
+ *
+ * Two kinds of model: those drawn in metres and placed at one scale (the ready houses, the landmarks), and unit models
+ * stretched to every copy's size (sections, cottages, office towers): those are drawn at a nominal size and keep, per
+ * vertex, which way their wall coordinates run (`aUnitU`, `aUnitV`), so the material measures them in metres on the
+ * stretched copy and fits a whole number of bays into every wall, whatever its width.
  */
 import * as THREE from "three/webgpu";
-import { abs, attribute, float, floor, fract, fwidth, hash, max, min, mix, positionWorld, smoothstep, step, texture, vec2, vec3, vec4, vertexColor } from "three/tsl";
+import { abs, attribute, float, floor, fract, fwidth, hash, max, min, mix, positionWorld, round, smoothstep, step, texture, varying, varyingProperty, vec2, vec3, vec4, vertexColor } from "three/tsl";
 import { groundNoise } from "../render/ground";
 
 /** Surface kinds, kept in aSurf.z. */
-export const FACE = { window: 0, wall: 1, roof: 2, deck: 3, trim: 4, curtain: 5, light: 6, glass: 8 } as const;
-type Face = typeof FACE[keyof typeof FACE];
+/**
+ * Surface kinds, kept in aSurf.z. `pane` is a single piece of glass (an arched window, a glass vault or dome) that is
+ * lit at night or not by its own number in aWin.x (0…1, a step of 1/16), so it never flickers.
+ */
+export const FACE = { window: 0, wall: 1, roof: 2, deck: 3, trim: 4, curtain: 5, light: 6, metal: 7, glass: 8, leaf: 9, pane: 10 } as const;
+export type Face = typeof FACE[keyof typeof FACE];
 export type V3 = [number, number, number];
 /** A colour as linear RGB, from an sRGB hex. */
 export const rgb = (hex: string): V3 => { const c = new THREE.Color(hex); return [c.r, c.g, c.b]; };
+/** Metres in one world unit: a section floor (0.75) is 3 m, a ready house's table unit times its scale is 5.4 m. */
+export const WORLD_METRES = 4;
+/** The top of the land the copies stand on (assets/catalogue.ts GROUND): floors are counted from it. */
+const WORLD_GROUND = .2;
 const WHITE: V3 = [1, 1, 1];
 const NO_WINDOWS: [number, number, number, number] = [99, 99, 0, 0];
 
@@ -26,44 +40,144 @@ const cross = (a: V3, b: V3): V3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[
 const length = (a: V3) => Math.hypot(a[0], a[1], a[2]);
 const unit = (a: V3): V3 => { const l = length(a) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
 
-export interface FaceOptions { kind: Face; col?: V3; n?: V3; ns?: V3[]; uv?: [number, number][]; u0?: number; win?: [number, number, number, number] }
+/** `u0` and `v0` shift the wall coordinates (a whole number of bays leaves the windows where they are, but lights others). */
+export interface FaceOptions {
+  kind: Face; col?: V3; n?: V3; ns?: V3[]; uv?: [number, number][]; u0?: number; v0?: number; win?: [number, number, number, number];
+  /** Unit models: a door in the middle bay of this wall's ground floor; shop windows along its ground floor. */
+  door?: boolean; shops?: boolean;
+}
+
+/**
+ * How far a point moves for one unit of u and one of v over a triangle (its tangent and bitangent, not normalised):
+ * the wall coordinates are metres, so for a face drawn true to size both are a metre long. A unit model keeps them
+ * (in unit space) for the material to measure u and v on a stretched copy.
+ */
+function gradients(p0: V3, p1: V3, p2: V3, t0: [number, number], t1: [number, number], t2: [number, number]): [V3, V3] {
+  const e1 = sub(p1, p0), e2 = sub(p2, p0), du1 = t1[0] - t0[0], dv1 = t1[1] - t0[1], du2 = t2[0] - t0[0], dv2 = t2[1] - t0[1];
+  const det = du1 * dv2 - du2 * dv1;
+  if (Math.abs(det) < 1e-9) return [unit(e1), unit(e2)];
+  const r = 1 / det;
+  return [[(e1[0] * dv2 - e2[0] * dv1) * r, (e1[1] * dv2 - e2[1] * dv1) * r, (e1[2] * dv2 - e2[2] * dv1) * r],
+    [(e2[0] * du1 - e1[0] * du2) * r, (e2[1] * du1 - e1[1] * du2) * r, (e2[2] * du1 - e1[2] * du2) * r]];
+}
 
 export class MeshBuilder {
   readonly p: number[] = []; readonly n: number[] = []; readonly c: number[] = []; readonly s: number[] = []; readonly w: number[] = []; readonly i: number[] = [];
+  /** Per vertex, for unit models: the direction u runs along and its wall's run, the direction v runs along and whether v is the height. */
+  readonly d: number[] = [];
   /** Boxes that shade the vertices near them (bakeOcclusion). */
   readonly occluders: [number, number, number, number, number, number][] = [];
+  /** Per vertex: 1 where bakeOcclusion traces the volumes round it, 0 on small parts (only the ground shades them). */
+  readonly fine: number[] = [];
+  private small = 0;
+  /** The frame parts are drawn in (frame()), and its normal matrix; null for the model's own frame. */
+  private m: THREE.Matrix4 | null = null; private nm = new THREE.Matrix3();
+  private readonly frames: (THREE.Matrix4 | null)[] = [];
   get count() { return this.p.length / 3; }
-  private vertex(p: V3, n: V3, col: V3, kind: number, u: number, v: number, win: readonly number[]) {
-    this.p.push(...p); this.n.push(...n); this.c.push(...col); this.s.push(u, v, kind, 1); this.w.push(win[0], win[1], win[2], win[3]);
+  private vertex(p: V3, n: V3, col: V3, kind: number, u: number, v: number, win: readonly number[], du: V3, run: number, dv: V3, ground = 0) {
+    let px = p[0], py = p[1], pz = p[2], nx = n[0], ny = n[1], nz = n[2], ax = du[0], ay = du[1], az = du[2], bx = dv[0], by = dv[1], bz = dv[2];
+    if (this.m) {
+      const e = this.m.elements, t = this.nm.elements;
+      const qx = e[0] * px + e[4] * py + e[8] * pz + e[12], qy = e[1] * px + e[5] * py + e[9] * pz + e[13], qz = e[2] * px + e[6] * py + e[10] * pz + e[14];
+      const mx = t[0] * nx + t[3] * ny + t[6] * nz, my = t[1] * nx + t[4] * ny + t[7] * nz, mz = t[2] * nx + t[5] * ny + t[8] * nz;
+      const ux = e[0] * ax + e[4] * ay + e[8] * az, uy = e[1] * ax + e[5] * ay + e[9] * az, uz = e[2] * ax + e[6] * ay + e[10] * az;
+      const wx = e[0] * bx + e[4] * by + e[8] * bz, wy = e[1] * bx + e[5] * by + e[9] * bz, wz = e[2] * bx + e[6] * by + e[10] * bz;
+      const ln = Math.sqrt(mx * mx + my * my + mz * mz) || 1;
+      px = qx; py = qy; pz = qz; nx = mx / ln; ny = my / ln; nz = mz / ln; ax = ux; ay = uy; az = uz; bx = wx; by = wy; bz = wz;
+    }
+    this.p.push(px, py, pz); this.n.push(nx, ny, nz); this.c.push(col[0], col[1], col[2]); this.s.push(u, v, kind, 1); this.w.push(win[0], win[1], win[2], win[3]); this.fine.push(this.small ? 0 : 1);
+    // Walls count v from the ground (floors line up on a stretched copy); roofs and decks measure it on themselves.
+    const upright = Math.abs(ny) < .5 && kind !== FACE.roof && kind !== FACE.deck;
+    this.d.push(ax, ay, az, run, bx, by, bz, upright ? 1 + ground : 0);
     return this.count - 1;
+  }
+  /**
+   * Draws `draw` in another frame: its origin and its x, y and z axes in the current one (unit vectors turn, longer
+   * ones scale). Occluders boxes drawn there add their bounds in the model's frame.
+   */
+  frame(origin: V3, x: V3, y: V3, z: V3, draw: () => void) {
+    const local = new THREE.Matrix4().set(x[0], y[0], z[0], origin[0], x[1], y[1], z[1], origin[1], x[2], y[2], z[2], origin[2], 0, 0, 0, 1);
+    this.frames.push(this.m);
+    this.m = this.m ? this.m.clone().multiply(local) : local;
+    this.nm.getNormalMatrix(this.m);
+    try { draw(); } finally {
+      this.m = this.frames.pop() ?? null;
+      if (this.m) this.nm.getNormalMatrix(this.m);
+    }
+  }
+  /** Draws small parts (rods, rails, flags, lamps): occlusion leaves their surroundings out, which saves most of its time. */
+  detail(draw: () => void) { this.small++; try { draw(); } finally { this.small--; } }
+  /** Draws `draw` turned by `angle` about the vertical through (x, z). */
+  turned(x: number, z: number, angle: number, draw: () => void) {
+    const c = Math.cos(angle), s = Math.sin(angle);
+    this.frame([x, 0, z], [c, 0, -s], [0, 1, 0], [s, 0, c], draw);
+  }
+  /** Adds an occluder, in the model's frame when a frame is current. */
+  occlude(b: [number, number, number, number, number, number]) {
+    if (!this.m) { this.occluders.push(b); return; }
+    const box = new THREE.Box3(), v = new THREE.Vector3();
+    for (const x of [b[0], b[3]]) for (const y of [b[1], b[4]]) for (const z of [b[2], b[5]]) box.expandByPoint(v.set(x, y, z).applyMatrix4(this.m));
+    this.occluders.push([box.min.x, box.min.y, box.min.z, box.max.x, box.max.y, box.max.z]);
   }
   /** A quad, corners counter-clockwise seen from outside; u runs along the first edge, v is the height. */
   quad(points: V3[], o: FaceOptions) {
     const normal = o.n ?? unit(cross(sub(points[1], points[0]), sub(points[3], points[0])));
-    const normals = o.ns ?? [normal, normal, normal, normal], run = length(sub(points[1], points[0])), u0 = o.u0 ?? 0;
-    const uv = o.uv ?? [[u0, points[0][1]], [u0 + run, points[1][1]], [u0 + run, points[2][1]], [u0, points[3][1]]];
-    const id = points.map((p, k) => this.vertex(p, normals[k], o.col ?? WHITE, o.kind, uv[k][0], uv[k][1], o.win ?? NO_WINDOWS));
+    const normals = o.ns ?? [normal, normal, normal, normal], run = length(sub(points[1], points[0])), u0 = o.u0 ?? 0, v0 = o.v0 ?? 0;
+    const uv = o.uv ?? [[u0, points[0][1] + v0], [u0 + run, points[1][1] + v0], [u0 + run, points[2][1] + v0], [u0, points[3][1] + v0]];
+    const [du, dv] = gradients(points[0], points[1], points[3], uv[0], uv[1], uv[3]);
+    const ground = (o.door ? 1 : 0) + (o.shops ? 2 : 0);
+    const id = points.map((p, k) => this.vertex(p, normals[k], o.col ?? WHITE, o.kind, uv[k][0], uv[k][1], o.win ?? NO_WINDOWS, du, run, dv, ground));
     this.i.push(id[0], id[1], id[2], id[0], id[2], id[3]);
   }
   tri(points: V3[], o: FaceOptions) {
     const normal = o.n ?? unit(cross(sub(points[1], points[0]), sub(points[2], points[0])));
     const normals = o.ns ?? [normal, normal, normal], uv = o.uv ?? [[0, points[0][1]], [1, points[1][1]], [.5, points[2][1]]];
-    const id = points.map((p, k) => this.vertex(p, normals[k], o.col ?? WHITE, o.kind, uv[k][0], uv[k][1], o.win ?? NO_WINDOWS));
+    const [du, dv] = gradients(points[0], points[1], points[2], uv[0], uv[1], uv[2]), run = length(sub(points[1], points[0]));
+    const id = points.map((p, k) => this.vertex(p, normals[k], o.col ?? WHITE, o.kind, uv[k][0], uv[k][1], o.win ?? NO_WINDOWS, du, run, dv));
     this.i.push(id[0], id[1], id[2]);
   }
   /**
    * The geometry in the model's units: metres times `unitsPerMetre`, in the frame it was drawn in (centred on its
    * footprint, standing on y = 0, facing +z). The wall coordinates stay in metres, so windows keep their size.
+   *
+   * With `unit` [width, height, depth] in metres, a unit model: x and z in ±0.5 and y in 0…1 (the model drawn
+   * centred on that box, from y = 0), its wall coordinates still in nominal metres, and `aUnitU`/`aUnitV` for the
+   * material to measure them on a stretched copy (facadeMaterial `unit`).
    */
-  build(unitsPerMetre: number): THREE.BufferGeometry {
-    const positions = new Float32Array(this.p.map(v => v * unitsPerMetre)), normals = new Float32Array(this.n);
-    const g = new THREE.BufferGeometry();
-    g.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-    g.setAttribute("normal", new THREE.BufferAttribute(normals, 3));
-    g.setAttribute("color", new THREE.Float32BufferAttribute(this.c, 3));
-    g.setAttribute("aSurf", new THREE.Float32BufferAttribute(this.s, 4));
-    g.setAttribute("aWin", new THREE.Float32BufferAttribute(this.w, 4));
-    g.setIndex(this.count > 65535 ? new THREE.Uint32BufferAttribute(this.i, 1) : new THREE.Uint16BufferAttribute(this.i, 1));
+  build(unitsPerMetre: number | { unit: V3 }): THREE.BufferGeometry {
+    const g = new THREE.BufferGeometry(), count = this.count;
+    const scale: V3 = typeof unitsPerMetre === "number" ? [unitsPerMetre, unitsPerMetre, unitsPerMetre] : [1 / unitsPerMetre.unit[0], 1 / unitsPerMetre.unit[1], 1 / unitsPerMetre.unit[2]];
+    const positions = new Float32Array(count * 3), normals = new Float32Array(count * 3);
+    for (let v = 0; v < count; v++) for (let a = 0; a < 3; a++) positions[v * 3 + a] = this.p[v * 3 + a] * scale[a];
+    for (let v = 0; v < count; v++) {
+      // Normals of a stretched model lean the other way: divided by the stretch.
+      const n = unit([this.n[v * 3] / scale[0], this.n[v * 3 + 1] / scale[1], this.n[v * 3 + 2] / scale[2]]);
+      normals.set(n, v * 3);
+    }
+    if (typeof unitsPerMetre === "number") {
+      g.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+      g.setAttribute("normal", new THREE.BufferAttribute(normals, 3));
+      g.setAttribute("color", new THREE.Float32BufferAttribute(this.c, 3));
+      g.setAttribute("aSurf", new THREE.Float32BufferAttribute(this.s, 4));
+      g.setAttribute("aWin", new THREE.Float32BufferAttribute(this.w, 4));
+    } else {
+      // A unit model is drawn as copies, whose matrices and tints take two vertex buffers more: its seven attributes
+      // go in one interleaved buffer, so a copy binds three (WebGPU allows eight). The step of one unit of u (and v),
+      // in nominal metres, is kept in unit space; the copy's matrix tells how long it is in the world.
+      const STRIDE = 25, data = new Float32Array(count * STRIDE);
+      for (let v = 0; v < count; v++) {
+        const o = v * STRIDE, d = this.d;
+        data.set(positions.subarray(v * 3, v * 3 + 3), o); data.set(normals.subarray(v * 3, v * 3 + 3), o + 3);
+        data[o + 6] = this.c[v * 3]; data[o + 7] = this.c[v * 3 + 1]; data[o + 8] = this.c[v * 3 + 2];
+        for (let k = 0; k < 4; k++) { data[o + 9 + k] = this.s[v * 4 + k]; data[o + 13 + k] = this.w[v * 4 + k]; }
+        data[o + 17] = d[v * 8] * scale[0]; data[o + 18] = d[v * 8 + 1] * scale[1]; data[o + 19] = d[v * 8 + 2] * scale[2]; data[o + 20] = d[v * 8 + 3];
+        data[o + 21] = d[v * 8 + 4] * scale[0]; data[o + 22] = d[v * 8 + 5] * scale[1]; data[o + 23] = d[v * 8 + 6] * scale[2]; data[o + 24] = d[v * 8 + 7];
+      }
+      const buffer = new THREE.InterleavedBuffer(data, STRIDE);
+      for (const [name, size, offset] of [["position", 3, 0], ["normal", 3, 3], ["color", 3, 6], ["aSurf", 4, 9], ["aWin", 4, 13], ["aUnitU", 4, 17], ["aUnitV", 4, 21]] as const)
+        g.setAttribute(name, new THREE.InterleavedBufferAttribute(buffer, size, offset));
+    }
+    g.setIndex(count > 65535 ? new THREE.Uint32BufferAttribute(this.i, 1) : new THREE.Uint16BufferAttribute(this.i, 1));
     g.computeBoundingBox(); g.computeBoundingSphere();
     return g;
   }
@@ -78,6 +192,14 @@ export interface BoxOptions {
   even?: ("+z" | "-z" | "+x" | "-x")[];
   faces?: ("+z" | "-z" | "+x" | "-x")[];
   noTop?: boolean; occlude?: boolean;
+  /** Also closes the bottom (a box seen from below: a canopy, a bridge, a raised floor). */
+  bottom?: boolean;
+  /** Shifts every wall's windows by whole bays (wall k by shift × (k + 1)), so walls of one building light differently. */
+  shift?: number;
+  /** Added to the walls' v, metres: moves the floors' grid up or down (a ribbon of glass with no spandrel in it). */
+  v0?: number;
+  /** Unit models: walls with a door in the middle of their ground floor, walls with shop windows along it. */
+  door?: ("+z" | "-z" | "+x" | "-x")[]; shops?: ("+z" | "-z" | "+x" | "-x")[];
 }
 /**
  * A box with its vertical and top edges chamfered. The walls keep flat normals; the chamfer strips blend the normals
@@ -93,8 +215,21 @@ export function box(mb: MeshBuilder, [x0, y0, z0, x1, y1, z1]: [number, number, 
     if (o.even?.includes(key as "+z") && n % 2) n += run / target > n ? 1 : -1;
     return run / Math.max(1, n);
   };
+  // Without a chamfer, a plain box: 10 or 12 triangles for the small parts (rods, rails, slats).
+  if (c <= 1e-4) {
+    const wall = (key: string, run: number, n: V3, k: number): FaceOptions => ({ kind, col, n, win: [bays(run, key), floorH, ww, wh], u0: (o.shift ?? 0) * (k + 1) * bays(run, key), v0: o.v0, door: o.door?.includes(key as "+z"), shops: o.shops?.includes(key as "+z") });
+    if (faces.includes("+z")) mb.quad([[x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]], wall("+z", x1 - x0, [0, 0, 1], 0));
+    if (faces.includes("-z")) mb.quad([[x1, y0, z0], [x0, y0, z0], [x0, y1, z0], [x1, y1, z0]], wall("-z", x1 - x0, [0, 0, -1], 1));
+    if (faces.includes("+x")) mb.quad([[x1, y0, z1], [x1, y0, z0], [x1, y1, z0], [x1, y1, z1]], wall("+x", z1 - z0, [1, 0, 0], 2));
+    if (faces.includes("-x")) mb.quad([[x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0]], wall("-x", z1 - z0, [-1, 0, 0], 3));
+    if (!o.noTop) mb.quad([[x0, y1, z1], [x1, y1, z1], [x1, y1, z0], [x0, y1, z0]], { kind: o.top ?? FACE.deck, col: o.topCol ?? col, n: [0, 1, 0], uv: [[x0, z1], [x1, z1], [x1, z0], [x0, z0]] });
+    if (o.bottom) mb.quad([[x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1]], { kind: edgeKind, col: edgeCol, n: [0, -1, 0], uv: [[x0, z0], [x1, z0], [x1, z1], [x0, z1]] });
+    if (o.occlude !== false) mb.occlude([x0, y0, z0, x1, y1, z1]);
+    return;
+  }
   const xi0 = x0 + c, xi1 = x1 - c, zi0 = z0 + c, zi1 = z1 - c, yt = y1 - c;
-  const wall = (key: string, run: number, n: V3): FaceOptions => ({ kind, col, n, win: [bays(run, key), floorH, ww, wh] });
+  const order = ["+z", "-z", "+x", "-x"];
+  const wall = (key: string, run: number, n: V3): FaceOptions => ({ kind, col, n, win: [bays(run, key), floorH, ww, wh], u0: (o.shift ?? 0) * (order.indexOf(key) + 1) * bays(run, key), v0: o.v0, door: o.door?.includes(key as "+z"), shops: o.shops?.includes(key as "+z") });
   if (faces.includes("+z")) mb.quad([[xi0, y0, z1], [xi1, y0, z1], [xi1, yt, z1], [xi0, yt, z1]], wall("+z", xi1 - xi0, [0, 0, 1]));
   if (faces.includes("-z")) mb.quad([[xi1, y0, z0], [xi0, y0, z0], [xi0, yt, z0], [xi1, yt, z0]], wall("-z", xi1 - xi0, [0, 0, -1]));
   if (faces.includes("+x")) mb.quad([[x1, y0, zi1], [x1, y0, zi0], [x1, yt, zi0], [x1, yt, zi1]], wall("+x", zi1 - zi0, [1, 0, 0]));
@@ -114,7 +249,8 @@ export function box(mb: MeshBuilder, [x0, y0, z0, x1, y1, z1]: [number, number, 
   mb.tri([[x1, yt, zi0], [xi1, yt, z0], [xi1, y1, zi0]], { ...e, ns: [px, nz, py] });
   mb.tri([[xi0, yt, z0], [x0, yt, zi0], [xi0, y1, zi0]], { ...e, ns: [nz, nx, py] });
   if (!o.noTop) mb.quad([[xi0, y1, zi1], [xi1, y1, zi1], [xi1, y1, zi0], [xi0, y1, zi0]], { kind: o.top ?? FACE.deck, col: o.topCol ?? col, n: py, uv: [[xi0, zi1], [xi1, zi1], [xi1, zi0], [xi0, zi0]] });
-  if (o.occlude !== false) mb.occluders.push([x0, y0, z0, x1, y1, z1]);
+  if (o.bottom) mb.quad([[x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1]], { kind: edgeKind, col: edgeCol, n: [0, -1, 0], uv: [[x0, z0], [x1, z0], [x1, z1], [x0, z1]] });
+  if (o.occlude !== false) mb.occlude([x0, y0, z0, x1, y1, z1]);
 }
 
 export interface RoofOptions { a0: number; a1: number; b0: number; b1: number; y: number; pitch: number; overhang?: number; axis?: "x" | "z"; roof: V3; wall: V3; soffit?: V3 }
@@ -173,39 +309,204 @@ export function parapet(mb: MeshBuilder, x0: number, z0: number, x1: number, z1:
   box(mb, [x1 - t, y, z0 + t, x1, y + h, z1 - t], o);
 }
 
+// ---- round and pitched shapes -------------------------------------------------------------------------------
+/** A point on an elliptic circle of radius r about (x, z): angle 0 is the front (+z), growing towards +x. */
+const around = (x: number, z: number, r: number, a: number, sx: number, sz: number, y: number): V3 => [x + r * Math.sin(a) * sx, y, z + r * Math.cos(a) * sz];
+
+export interface CylinderOptions {
+  x: number; z: number; y0: number; y1: number;
+  /** Radius at the bottom, and at the top (a cone or a frustum; 0 for a point). */
+  r: number; r1?: number;
+  /** An elliptic plan: the radius times sx along x and sz along z. */
+  sx?: number; sz?: number;
+  seg?: number; kind?: Face; col?: V3;
+  /** The top's kind, or null for an open top; the bottom is closed only with `bottom`. */
+  top?: Face | null; topCol?: V3; bottom?: boolean;
+  /** Windows round it, as on a box: a whole number of bays fits the circumference. */
+  bay?: number; floor?: number; winW?: number; winH?: number;
+  /** A part of the circle, radians (0 is the front, π/2 the right). */
+  a0?: number; a1?: number;
+  occlude?: boolean;
+}
+/**
+ * A cylinder, a frustum or a cone standing on y0, smooth round its side. Walls take u round the circumference and v
+ * the height, so windows wrap seamlessly; roofs take v up the slope, so tiles run in rows from the eaves.
+ */
+export function cylinder(mb: MeshBuilder, o: CylinderOptions) {
+  const seg = o.seg ?? 16, r0 = o.r, r1 = o.r1 ?? o.r, sx = o.sx ?? 1, sz = o.sz ?? 1, { x, z, y0, y1 } = o;
+  const a0 = o.a0 ?? 0, a1 = o.a1 ?? Math.PI * 2, kind = o.kind ?? FACE.wall, col = o.col ?? WHITE;
+  const h = y1 - y0, lean = (r0 - r1) / Math.max(h, 1e-6), mean = (sx + sz) / 2;
+  const circumference = (r0 + r1) / 2 * mean * (a1 - a0), slope = Math.hypot(h, (r0 - r1) * mean);
+  const bays = Math.max(1, Math.round(circumference / (o.bay ?? 2.8)));
+  const win: [number, number, number, number] = kind === FACE.window || kind === FACE.curtain ? [circumference / bays, o.floor ?? 2.9, o.winW ?? .44, o.winH ?? .48] : NO_WINDOWS;
+  const normal = (a: number): V3 => unit([Math.sin(a) / sx, lean / mean, Math.cos(a) / sz]);
+  // Roofs: v up the slope and tiles narrowing to the top; walls: v the height and bays straight up.
+  const pitched = kind === FACE.roof, taper = pitched ? r1 / r0 : 1;
+  const vb = pitched ? 0 : y0, vt = pitched ? slope : y1;
+  for (let i = 0; i < seg; i++) {
+    const t0 = a0 + (a1 - a0) * i / seg, t1 = a0 + (a1 - a0) * (i + 1) / seg, u0 = circumference * i / seg, u1 = circumference * (i + 1) / seg;
+    if (r1 > 1e-6) mb.quad([around(x, z, r0, t0, sx, sz, y0), around(x, z, r0, t1, sx, sz, y0), around(x, z, r1, t1, sx, sz, y1), around(x, z, r1, t0, sx, sz, y1)],
+      { kind, col, win, ns: [normal(t0), normal(t1), normal(t1), normal(t0)], uv: [[u0, vb], [u1, vb], [u1 * taper, vt], [u0 * taper, vt]] });
+    else mb.tri([around(x, z, r0, t0, sx, sz, y0), around(x, z, r0, t1, sx, sz, y0), [x, y1, z]],
+      { kind, col, win, ns: [normal(t0), normal(t1), normal((t0 + t1) / 2)], uv: [[u0, vb], [u1, vb], [(u0 + u1) / 2, vt]] });
+  }
+  const cap = (y: number, r: number, up: boolean, capKind: Face, capCol: V3) => {
+    for (let i = 0; i < seg; i++) {
+      const t0 = a0 + (a1 - a0) * i / seg, t1 = a0 + (a1 - a0) * (i + 1) / seg, p = around(x, z, r, t0, sx, sz, y), q = around(x, z, r, t1, sx, sz, y), c: V3 = [x, y, z];
+      const uv: [number, number][] = up ? [[x, z], [p[0], p[2]], [q[0], q[2]]] : [[x, z], [q[0], q[2]], [p[0], p[2]]];
+      mb.tri(up ? [c, p, q] : [c, q, p], { kind: capKind, col: capCol, n: [0, up ? 1 : -1, 0], uv });
+    }
+  };
+  if (o.top !== null && r1 > 1e-6) cap(y1, r1, true, o.top ?? FACE.deck, o.topCol ?? col);
+  if (o.bottom) cap(y0, r0, false, kind === FACE.window || kind === FACE.curtain ? FACE.wall : kind, col);
+  if (o.occlude !== false && h > .05) { const r = Math.max(r0, r1) * .8; mb.occlude([x - r * sx, y0, z - r * sz, x + r * sx, y1, z + r * sz]); }
+}
+
+export interface DomeOptions { x: number; z: number; y0: number; r: number; rise?: number; sx?: number; sz?: number; seg?: number; rings?: number; kind?: Face; col?: V3; from?: number; occlude?: boolean }
+/**
+ * A dome on y0: an upper half ellipsoid r across and `rise` high, smooth, in rings from the base (latitude `from`,
+ * radians, 0 at the base) to the crown. Its u runs round each ring, v up the meridian, for ribs and tiles.
+ */
+export function dome(mb: MeshBuilder, o: DomeOptions) {
+  const seg = o.seg ?? 20, rings = o.rings ?? 6, rise = o.rise ?? o.r, sx = o.sx ?? 1, sz = o.sz ?? 1, { x, z, y0, r } = o;
+  const kind = o.kind ?? FACE.roof, col = o.col ?? WHITE, from = o.from ?? 0;
+  const at = (a: number, t: number) => around(x, z, r * Math.cos(t), a, sx, sz, y0 + rise * Math.sin(t));
+  const normal = (a: number, t: number): V3 => unit([Math.cos(t) * Math.sin(a) / (r * sx), Math.sin(t) / rise, Math.cos(t) * Math.cos(a) / (r * sz)]);
+  const meridian = (t: number) => t * (r + rise) / 2, ring = (t: number) => r * Math.cos(t) * (sx + sz) / 2;
+  for (let j = 0; j < rings; j++) {
+    const ta = from + (Math.PI / 2 - from) * j / rings, tb = from + (Math.PI / 2 - from) * (j + 1) / rings;
+    for (let i = 0; i < seg; i++) {
+      const a0 = Math.PI * 2 * i / seg, a1 = Math.PI * 2 * (i + 1) / seg;
+      if (j < rings - 1) mb.quad([at(a0, ta), at(a1, ta), at(a1, tb), at(a0, tb)], { kind, col, ns: [normal(a0, ta), normal(a1, ta), normal(a1, tb), normal(a0, tb)],
+        uv: [[ring(ta) * a0, meridian(ta)], [ring(ta) * a1, meridian(ta)], [ring(tb) * a1, meridian(tb)], [ring(tb) * a0, meridian(tb)]] });
+      else mb.tri([at(a0, ta), at(a1, ta), [x, y0 + rise, z]], { kind, col, ns: [normal(a0, ta), normal(a1, ta), [0, 1, 0]],
+        uv: [[ring(ta) * a0, meridian(ta)], [ring(ta) * a1, meridian(ta)], [ring(ta) * (a0 + a1) / 2, meridian(Math.PI / 2)]] });
+    }
+  }
+  if (o.occlude !== false) { const k = .7; mb.occlude([x - r * sx * k, y0, z - r * sz * k, x + r * sx * k, y0 + rise * k, z + r * sz * k]); }
+}
+
+/** A ball (an ellipsoid r across and `rise` half high) about (x, y, z). */
+export function sphere(mb: MeshBuilder, o: { x: number; y: number; z: number; r: number; rise?: number; sx?: number; sz?: number; seg?: number; rings?: number; kind?: Face; col?: V3; occlude?: boolean }) {
+  const rise = o.rise ?? o.r, seg = o.seg ?? 12, rings = o.rings ?? 4;
+  dome(mb, { ...o, y0: o.y, rise, seg, rings, occlude: false });
+  // The lower half: the dome drawn upside down in a mirrored frame, its triangles turned back outwards.
+  mb.frame([0, 2 * o.y, 0], [1, 0, 0], [0, -1, 0], [0, 0, 1], () => {
+    const start = mb.i.length;
+    dome(mb, { ...o, y0: o.y, rise, seg, rings, occlude: false });
+    for (let k = start; k < mb.i.length; k += 3) { const t = mb.i[k + 1]; mb.i[k + 1] = mb.i[k + 2]; mb.i[k + 2] = t; }
+  });
+  if (o.occlude) mb.occlude([o.x - o.r * .7, o.y - rise * .7, o.z - o.r * .7, o.x + o.r * .7, o.y + rise * .7, o.z + o.r * .7]);
+}
+
+/** A torus about (x, y, z) in the horizontal plane: R to the middle of the tube, r the tube; `arc` < 2π for a part of it. */
+export function torus(mb: MeshBuilder, o: { x: number; y: number; z: number; R: number; r: number; seg?: number; tube?: number; arc?: number; start?: number; kind?: Face; col?: V3 }) {
+  const seg = o.seg ?? 24, tube = o.tube ?? 6, arc = o.arc ?? Math.PI * 2, start = o.start ?? 0, kind = o.kind ?? FACE.trim, col = o.col ?? WHITE;
+  const at = (a: number, b: number): V3 => [o.x + (o.R + o.r * Math.cos(b)) * Math.sin(a), o.y + o.r * Math.sin(b), o.z + (o.R + o.r * Math.cos(b)) * Math.cos(a)];
+  const normal = (a: number, b: number): V3 => [Math.cos(b) * Math.sin(a), Math.sin(b), Math.cos(b) * Math.cos(a)];
+  for (let i = 0; i < seg; i++) for (let j = 0; j < tube; j++) {
+    const a0 = start + arc * i / seg, a1 = start + arc * (i + 1) / seg, b0 = Math.PI * 2 * j / tube, b1 = Math.PI * 2 * (j + 1) / tube;
+    mb.quad([at(a0, b0), at(a1, b0), at(a1, b1), at(a0, b1)], { kind, col, ns: [normal(a0, b0), normal(a1, b0), normal(a1, b1), normal(a0, b1)], uv: [[o.R * a0, b0 * o.r], [o.R * a1, b0 * o.r], [o.R * a1, b1 * o.r], [o.R * a0, b1 * o.r]] });
+  }
+}
+
+/** A four-sided pyramid roof over x0…x1 × z0…z1 from y, its apex h higher; eaves `overhang` out with a soffit. */
+export function pyramid(mb: MeshBuilder, o: { x0: number; x1: number; z0: number; z1: number; y: number; h: number; overhang?: number; roof: V3; kind?: Face; soffit?: V3 }) {
+  const ov = o.overhang ?? 0, X0 = o.x0 - ov, X1 = o.x1 + ov, Z0 = o.z0 - ov, Z1 = o.z1 + ov, low = o.y - (ov ? ov * o.h / Math.max(.01, Math.min(o.x1 - o.x0, o.z1 - o.z0) / 2) : 0);
+  const apex: V3 = [(X0 + X1) / 2, o.y + o.h, (Z0 + Z1) / 2], kind = o.kind ?? FACE.roof;
+  const face = (a: V3, b: V3) => { const run = length(sub(b, a)), mid: V3 = [(a[0] + b[0]) / 2, a[1], (a[2] + b[2]) / 2], slope = length(sub(apex, mid)); mb.tri([a, b, apex], { kind, col: o.roof, uv: [[0, 0], [run, 0], [run / 2, slope]] }); };
+  face([X0, low, Z1], [X1, low, Z1]); face([X1, low, Z1], [X1, low, Z0]); face([X1, low, Z0], [X0, low, Z0]); face([X0, low, Z0], [X0, low, Z1]);
+  if (ov) mb.quad([[X0, low - .03, Z0], [X1, low - .03, Z0], [X1, low - .03, Z1], [X0, low - .03, Z1]], { kind: FACE.trim, col: o.soffit ?? rgb("#d6d0c4"), n: [0, -1, 0] });
+}
+
+/** A pediment or a short gable: a triangular prism over x0…x1 from y, `rise` high, from z0 to z1, its gable to the front. */
+export function prism(mb: MeshBuilder, o: { x0: number; x1: number; z0: number; z1: number; y: number; rise: number; col: V3; roof?: V3; kind?: Face }) {
+  const { x0, x1, z0, z1, y, rise } = o, xm = (x0 + x1) / 2, top = y + rise, kind = o.kind ?? FACE.wall, slope = Math.hypot((x1 - x0) / 2, rise);
+  mb.tri([[x0, y, z1], [x1, y, z1], [xm, top, z1]], { kind, col: o.col });
+  mb.tri([[x1, y, z0], [x0, y, z0], [xm, top, z0]], { kind, col: o.col });
+  const cover = { kind: o.roof ? FACE.roof : kind, col: o.roof ?? o.col };
+  mb.quad([[x0, y, z0], [x0, y, z1], [xm, top, z1], [xm, top, z0]], { ...cover, uv: [[0, 0], [z1 - z0, 0], [z1 - z0, slope], [0, slope]] });
+  mb.quad([[x1, y, z1], [x1, y, z0], [xm, top, z0], [xm, top, z1]], { ...cover, uv: [[0, 0], [z1 - z0, 0], [z1 - z0, slope], [0, slope]] });
+}
+
+/** An arched panel facing +z: w wide, h to the crown (a half circle on top), `depth` thick, from (x, y, z) at its foot. */
+export function arch(mb: MeshBuilder, o: { x: number; y: number; z: number; w: number; h: number; depth: number; kind?: Face; col?: V3; seg?: number; win?: [number, number, number, number]; edge?: V3 }) {
+  const seg = o.seg ?? 10, r = o.w / 2, spring = o.y + Math.max(0, o.h - r), kind = o.kind ?? FACE.glass, col = o.col ?? WHITE, zf = o.z + o.depth / 2, zb = o.z - o.depth / 2, win = o.win;
+  const outline: [number, number][] = [[o.x + r, o.y], [o.x + r, spring]];
+  for (let i = 1; i < seg; i++) { const a = Math.PI * i / seg; outline.push([o.x + r * Math.cos(a), spring + r * Math.sin(a)]); }
+  outline.push([o.x - r, spring], [o.x - r, o.y]);
+  // Front and back as fans from the foot's middle; the edge strip all round.
+  const centre: [number, number] = [o.x, o.y];
+  for (let i = 0; i + 1 < outline.length; i++) {
+    const [a, b] = [outline[i], outline[i + 1]];
+    mb.tri([[centre[0], centre[1], zf], [a[0], a[1], zf], [b[0], b[1], zf]], { kind, col, win, n: [0, 0, 1], uv: [[centre[0], centre[1]], [a[0], a[1]], [b[0], b[1]]] });
+    mb.tri([[centre[0], centre[1], zb], [b[0], b[1], zb], [a[0], a[1], zb]], { kind, col, win, n: [0, 0, -1], uv: [[centre[0], centre[1]], [b[0], b[1]], [a[0], a[1]]] });
+    const glassy = kind === FACE.glass || kind === FACE.pane || kind === FACE.curtain;
+    mb.quad([[a[0], a[1], zb], [b[0], b[1], zb], [b[0], b[1], zf], [a[0], a[1], zf]], { kind: glassy ? FACE.trim : kind, col: glassy ? o.edge ?? rgb("#e9e4d8") : col });
+  }
+}
+
+/** A bar of square section t from a to b (a rod, a brace, a leg). */
+export function rod(mb: MeshBuilder, a: V3, b: V3, t: number, o: { kind?: Face; col?: V3 } = {}) {
+  const along = sub(b, a), len = length(along), y = unit(along), helper: V3 = Math.abs(y[1]) > .9 ? [1, 0, 0] : [0, 1, 0];
+  const x = unit(cross(helper, y)), z = cross(x, y);
+  mb.frame(a, x, y, z, () => box(mb, [-t / 2, 0, -t / 2, t / 2, len, t / 2], { c: t * .2, kind: o.kind ?? FACE.metal, col: o.col, top: o.kind ?? FACE.metal, occlude: false }));
+}
+
 // ---- baked occlusion ---------------------------------------------------------------------------------------
-const RAYS: V3[] = Array.from({ length: 28 }, (_, i) => {
-  const u = (i + .5) / 28, phi = i * 2.399963, r = Math.sqrt(u);
+/** Rays over the hemisphere, cosine-weighted, in a golden spiral. */
+const hemisphere = (count: number): V3[] => Array.from({ length: count }, (_, i) => {
+  const u = (i + .5) / count, phi = i * 2.399963, r = Math.sqrt(u);
   return [r * Math.cos(phi), r * Math.sin(phi), Math.sqrt(1 - u)];
 });
-function rayBox(o: V3, d: V3, b: readonly number[]) {
-  let near = 0, far = Infinity;
-  for (let a = 0; a < 3; a++) {
-    if (Math.abs(d[a]) < 1e-8) { if (o[a] < b[a] || o[a] > b[a + 3]) return -1; continue; }
-    let t0 = (b[a] - o[a]) / d[a], t1 = (b[a + 3] - o[a]) / d[a];
-    if (t0 > t1) [t0, t1] = [t1, t0];
-    near = Math.max(near, t0); far = Math.min(far, t1);
-    if (near > far) return -1;
-  }
-  return near;
+const RAYS = { 28: hemisphere(28), 16: hemisphere(16) };
+/** The ray's entry and exit along one axis, folded into [near, far]; false when it misses. */
+const span = { near: 0, far: Infinity };
+function slab(o: number, d: number, lo: number, hi: number) {
+  if (Math.abs(d) < 1e-8) return o >= lo && o <= hi;
+  let t0 = (lo - o) / d, t1 = (hi - o) / d;
+  if (t0 > t1) { const t = t0; t0 = t1; t1 = t; }
+  if (t0 > span.near) span.near = t0;
+  if (t1 < span.far) span.far = t1;
+  return span.near <= span.far;
+}
+/** Distance along the ray from (ox, oy, oz) in direction (dx, dy, dz) to the box, or -1 if it misses. */
+function rayBox(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, b: readonly number[]) {
+  span.near = 0; span.far = Infinity;
+  return slab(ox, dx, b[0], b[3]) && slab(oy, dy, b[1], b[4]) && slab(oz, dz, b[2], b[5]) ? span.near : -1;
 }
 /**
  * Occlusion of every vertex by the building's own volumes and the ground within a few metres, into aSurf.w: dark
  * at the foot of the walls, under the eaves and in the corners, as a sky would leave them. Done once per model.
+ * `floor` is the height of the ground round it; `rays` how many directions each vertex looks in. Small parts
+ * (MeshBuilder.detail) see only the ground.
  */
-export function bakeOcclusion(mb: MeshBuilder, { reach = 3.6, ground = 3.2, strength = .95 } = {}) {
+export function bakeOcclusion(mb: MeshBuilder, { reach = 3.6, ground = 3.2, strength = .95, floor = 0, rays = 28 as 28 | 16 } = {}) {
+  const near: (readonly number[])[] = [], set = RAYS[rays], p = mb.p, n = mb.n;
   for (let v = 0; v < mb.count; v++) {
-    const n = unit([mb.n[v * 3], mb.n[v * 3 + 1], mb.n[v * 3 + 2]]), o: V3 = [mb.p[v * 3] + n[0] * .05, mb.p[v * 3 + 1] + n[1] * .05, mb.p[v * 3 + 2] + n[2] * .05];
-    const tangent = unit(cross(Math.abs(n[1]) > .9 ? [1, 0, 0] : [0, 1, 0], n)), bitangent = cross(n, tangent);
+    let nx = n[v * 3], ny = n[v * 3 + 1], nz = n[v * 3 + 2];
+    const l = Math.hypot(nx, ny, nz) || 1; nx /= l; ny /= l; nz /= l;
+    const ox = p[v * 3] + nx * .05, oy = p[v * 3 + 1] + ny * .05, oz = p[v * 3 + 2] + nz * .05;
+    // A tangent frame round the normal.
+    const [hx, hy, hz] = Math.abs(ny) > .9 ? [1, 0, 0] : [0, 1, 0];
+    let tx = hy * nz - hz * ny, ty = hz * nx - hx * nz, tz = hx * ny - hy * nx;
+    const tl = Math.hypot(tx, ty, tz) || 1; tx /= tl; ty /= tl; tz /= tl;
+    const bx = ny * tz - nz * ty, by = nz * tx - nx * tz, bz = nx * ty - ny * tx;
+    // Only the volumes within reach can shade it (a big building has hundreds of parts, most of them far away).
+    near.length = 0;
+    if (mb.fine[v]) for (const b of mb.occluders) {
+      const dx = Math.max(b[0] - ox, 0, ox - b[3]), dy = Math.max(b[1] - oy, 0, oy - b[4]), dz = Math.max(b[2] - oz, 0, oz - b[5]);
+      if (dx * dx + dy * dy + dz * dz < reach * reach) near.push(b);
+    }
     let hidden = 0;
-    for (const r of RAYS) {
-      const d: V3 = [tangent[0] * r[0] + bitangent[0] * r[1] + n[0] * r[2], tangent[1] * r[0] + bitangent[1] * r[1] + n[1] * r[2], tangent[2] * r[0] + bitangent[2] * r[1] + n[2] * r[2]];
+    for (const r of set) {
+      const dx = tx * r[0] + bx * r[1] + nx * r[2], dy = ty * r[0] + by * r[1] + ny * r[2], dz = tz * r[0] + bz * r[1] + nz * r[2];
       let hit = 0;
-      for (const b of mb.occluders) { const t = rayBox(o, d, b); if (t >= 0 && t < reach) hit = Math.max(hit, 1 - t / reach); }
-      if (d[1] < -1e-4 && o[1] > 0) { const t = -o[1] / d[1]; if (t < ground) hit = Math.max(hit, 1 - t / ground); }
+      for (const b of near) { const t = rayBox(ox, oy, oz, dx, dy, dz, b); if (t >= 0 && t < reach) hit = Math.max(hit, 1 - t / reach); }
+      if (dy < -1e-4 && oy > floor) { const t = (floor - oy) / dy; if (t < ground) hit = Math.max(hit, 1 - t / ground); }
       hidden += hit;
     }
-    mb.s[v * 4 + 3] = Math.min(1, Math.max(.22, 1 - strength * hidden / RAYS.length));
+    mb.s[v * 4 + 3] = Math.min(1, Math.max(.22, 1 - strength * hidden / set.length));
   }
 }
 
@@ -214,37 +515,83 @@ type Node = ReturnType<typeof float>;
 /** sRGB to linear for a colour written as 0…1 numbers. */
 const lin = (r: number, g: number, b: number) => vec3(...new THREE.Color(r, g, b).convertSRGBToLinear().toArray() as V3);
 
+export interface FacadeOptions {
+  /**
+   * A whole number per building, for which windows are lit and which have a blind; by default from the copy's place
+   * (render/copies.ts copyMatrix3). Meshes that are not copies pass their own.
+   */
+  seed?: Node;
+  /** Unit models stretched per copy (MeshBuilder.build({ unit })): wall coordinates measured on the copy, in metres. */
+  unit?: boolean;
+  /** The share of windows lit at night (homes and offices about 0.42; public buildings more). */
+  lit?: number;
+}
+
 /**
  * The facade material of every procedural building, for the instance pools (render/copies.ts): its colour comes from
  * the vertices (walls in their finish, roofs, trim), its detail from aSurf/aWin, its windows light up with `night`.
  * Which windows are lit, have a blind or a lighter pane is fixed per building by its position, so a building keeps
  * its pattern and its neighbour has another; the hash only ever sees whole numbers, so the pattern never sparkles.
  */
-export function facadeMaterial(night: Node): THREE.MeshStandardNodeMaterial {
+export function facadeMaterial(night: Node, options: FacadeOptions = {}): THREE.MeshStandardNodeMaterial {
   const material = new THREE.MeshStandardNodeMaterial({ roughness: .85, metalness: 0 });
   const surf = attribute("aSurf", "vec4"), win = attribute("aWin", "vec4"), base = vertexColor().xyz;
   const kind = surf.z, occlusion = surf.w;
   const is = (k: number) => float(1).sub(kind.sub(k).abs()).clamp(0, 1);
-  // Per building: its place (the copy's translation), cut to whole numbers.
+  // Per building: its place (the copy's translation), cut to a whole number in the vertex stage and rounded again in
+  // the fragment stage, so the interpolation can never tip it to the next one.
   const place = attribute("copyMatrix3", "vec4");
-  const seed = floor(fract(place.x.mul(.0173).add(place.z.mul(.0291)).add(.5)).mul(997));
+  const seed = options.seed ?? floor(varying(floor(fract(place.x.mul(.0173).add(place.z.mul(.0291)).add(.5)).mul(997))).add(.5));
   const pick = (a: Node, b: Node, salt: number) => hash(a.mul(37).add(b.mul(113)).add(seed.mul(7)).add(salt));
 
+  // Where the wall coordinates are, in metres, and the bay and floor of its windows.
+  let at: Node = surf.xy, grid: Node = win.xy, shares: Node = win.zw;
+  // Unit models: the ground floor's door and shops, the plinth and the cornice band (all in metres on the copy).
+  let doorCell: Node = float(0), shopFloor: Node = float(0), plinth: Node = float(0), cornice: Node = float(0), upright: Node = float(0);
+  if (options.unit) {
+    // Measured in the vertex stage on the copy: a nominal metre along u (v) is |M · aUnitU| world units long. Walls
+    // count their floors from the ground, so a section raised over an arch keeps the floors of its wing, and every
+    // wall takes a whole number of bays of about its nominal width (an odd number where a door is in the middle).
+    const columns = [0, 1, 2].map(k => attribute(`copyMatrix${k}`, "vec4").xyz);
+    const stretch = (d: Node) => columns[0].mul(d.x).add(columns[1].mul(d.y)).add(columns[2].mul(d.z)).length().mul(WORLD_METRES);
+    const U = attribute("aUnitU", "vec4"), V = attribute("aUnitV", "vec4"), ku = stretch(U.xyz), kv = stretch(V.xyz);
+    const wall = step(.5, V.w), door = step(1.5, V.w).mul(step(V.w, 2.5)).add(step(3.5, V.w)), shops = step(2.5, V.w);
+    const run = U.w.mul(ku), even = max(1, round(run.div(win.x))), odd = max(1, round(run.div(win.x).sub(1).mul(.5)).mul(2).add(1));
+    const count = mix(even, odd, door), bay = run.div(count);
+    const height = positionWorld.y.sub(WORLD_GROUND).mul(WORLD_METRES), top = place.y.add(columns[1].length()).sub(WORLD_GROUND).mul(WORLD_METRES);
+    at = varying(vec2(surf.x.mul(ku), mix(surf.y.mul(kv), height, wall)));
+    // Bay, floor and the copy's top in one varying, the door and shop flags in another: WebGPU has few to spare.
+    const measures = varying(vec3(bay, win.y, top));
+    grid = measures.xy;
+    const flags = varying(vec4(door, shops, wall, count.sub(1).mul(.5)));
+    const ground = step(at.y, grid.y), middle = step(abs(floor(at.x.div(grid.x)).sub(flags.w)), .5);
+    doorCell = flags.x.mul(ground).mul(middle); shopFloor = flags.y.mul(ground); upright = flags.z;
+    plinth = upright.mul(step(at.y, .45)); cornice = upright.mul(step(measures.z.sub(.32), at.y));
+    // Window widths vary a little from building to building; shops are wide and tall.
+    const jitter = hash(seed.add(71)).mul(.24).add(.88);
+    shares = mix(vec2(win.z.mul(jitter).min(.9), win.w), vec2(.8, .66), shopFloor);
+  }
+
   // Windows in a wall: the grid of bays and floors, frame, sill, glass, lit at night.
-  const q = surf.xy.div(win.xy), cell = floor(q), f = fract(q);
+  const q = at.div(grid), cell = floor(q), f = fract(q);
   const aa = max(fwidth(q.x), fwidth(q.y));
-  const half = win.zw.mul(.5), d = abs(f.sub(vec2(.5, .57))).sub(half), sd = max(d.x, d.y), soft = aa.mul(1.2);
-  const above = smoothstep(.35, .55, surf.y);
+  const half = shares.mul(.5), d = abs(f.sub(vec2(.5, .57))).sub(half), sd = max(d.x, d.y), soft = aa.mul(1.2);
+  const above = smoothstep(.35, .55, at.y).mul(doorCell.oneMinus());
   const pane = smoothstep(soft.negate(), soft, sd).oneMinus().mul(above);
   const frame = smoothstep(soft.negate(), soft, sd.sub(.05)).oneMinus().mul(above).sub(pane).max(0);
   const sill = smoothstep(soft.negate(), soft, max(abs(f.x.sub(.5)).sub(half.x).sub(.05), abs(f.y.sub(float(.545).sub(half.y))).sub(.022))).oneMinus().mul(above);
   const blind = step(.8, pick(cell.x, cell.y, 3));
   const sky = smoothstep(0, 1, f.y.sub(float(.57).sub(half.y)).div(half.y.mul(2)));
   const glass = mix(mix(lin(.16, .22, .29), lin(.05, .07, .09), pick(cell.x, cell.y, 1).mul(.8)).add(lin(.45, .58, .72).mul(sky.mul(.22))), lin(.78, .74, .66), blind.mul(.75));
-  const lit = step(.58, pick(cell.x, cell.y, 5)), warm = mix(vec3(1, .66, .3), vec3(.78, .86, 1), step(.82, pick(cell.x, cell.y, 9)));
-  const far = smoothstep(.2, .6, aa), cover = win.z.mul(win.w);
+  const share = 1 - (options.lit ?? .42);
+  const lit = step(share, pick(cell.x, cell.y, 5)), warm = mix(vec3(1, .66, .3), vec3(.78, .86, 1), step(.82, pick(cell.x, cell.y, 9)));
+  const far = smoothstep(.2, .6, aa), cover = shares.x.mul(shares.y);
   const windowWall = mix(mix(mix(base, glass, pane), lin(.95, .95, .93), frame.mul(.95)), lin(.82, .8, .76), sill.mul(pane.oneMinus()));
-  const windowColour = mix(windowWall, mix(base, lin(.12, .16, .2), cover.mul(1.15)), far);
+  // A door in its cell: a panelled leaf 2.3 m high in a light frame, a glazed top light.
+  const doorLeaf = doorCell.mul(step(abs(f.x.sub(.5)), .22)).mul(step(at.y, 2.3)), doorFrame = doorCell.mul(step(abs(f.x.sub(.5)), .27)).mul(step(at.y, 2.42)).sub(doorLeaf).max(0);
+  const doorColour = mix(lin(.3, .22, .16), lin(.2, .26, .3), step(1.75, at.y));
+  const withDoor = mix(mix(windowWall, lin(.9, .89, .86), doorFrame), doorColour, doorLeaf);
+  const windowColour = mix(withDoor, mix(base, lin(.12, .16, .2), cover.mul(1.15)), far);
   const windowGlow = mix(warm.mul(lit).mul(pane).mul(blind.mul(.5).oneMinus()), vec3(1, .7, .36).mul(cover.mul(.42)), far).mul(night).mul(.62);
   const windowRough = mix(mix(.88, .14, pane), .6, far);
 
@@ -256,23 +603,47 @@ export function facadeMaterial(night: Node): THREE.MeshStandardNodeMaterial {
   // The city lights glass without an environment map (TZ §6.3): the tint and a sky gradient up each pane stand in for it.
   const tinted = base.mul(mix(.55, 1, shade)).mul(.6).add(lin(.55, .66, .78).mul(smoothstep(.15, 1, f.y).mul(.16)));
   const curtainColour = mix(mix(tinted, lin(.62, .64, .66).mul(.85), solid), mix(tinted, lin(.62, .64, .66).mul(.85), .3), far);
-  const curtainGlow = mix(vec3(1, .74, .42).mul(step(.6, pick(cell.x, cell.y, 13))).mul(solid.oneMinus()), vec3(1, .74, .42).mul(.28), far).mul(night).mul(.6);
+  const curtainGlow = mix(vec3(1, .74, .42).mul(step(share + .02, pick(cell.x, cell.y, 13))).mul(solid.oneMinus()), vec3(1, .74, .42).mul(.28), far).mul(night).mul(.6);
   const glazed = mix(solid.oneMinus(), .7, far);
 
   // Roof tiles in rows along the slope; flat decks in gravel.
-  const row = surf.y.div(.45), tile = hash(floor(surf.x.div(.32).add(floor(row).mul(.5))).add(floor(row).mul(57)).add(seed));
-  const seam = smoothstep(0, fwidth(row).mul(1.4).add(.07), fract(row)).oneMinus().mul(smoothstep(.05, .35, fwidth(surf.y)).oneMinus());
+  const row = at.y.div(.45), tile = hash(floor(at.x.div(.32).add(floor(row).mul(.5))).add(floor(row).mul(57)).add(seed));
+  const seam = smoothstep(0, fwidth(row).mul(1.4).add(.07), fract(row)).oneMinus().mul(smoothstep(.05, .35, fwidth(at.y)).oneMinus());
   const roof = base.mul(mix(.86, 1.06, tile)).mul(seam.mul(.28).oneMinus());
-  const grit = texture(groundNoise(), positionWorld.xz.div(3)).z;
-  const deck = lin(.34, .35, .36).mul(mix(.8, 1.15, grit));
+  const noise = texture(groundNoise(), positionWorld.xz.div(3));
+  const deck = lin(.34, .35, .36).mul(mix(.8, 1.15, noise.z));
+  // Foliage: clumps of light and shade over the crown, from the noise in world space (it averages out far away).
+  const clumps = texture(groundNoise(), positionWorld.xz.add(positionWorld.y.mul(.7)).mul(.9)), leaf = base.mul(mix(.62, 1.18, clumps.y.mul(.6).add(clumps.z.mul(.4))));
+
+  // A single pane: the tint of its glass with a sheen up it, lit at night by its own number.
+  const sheet = base.mul(.55).add(lin(.5, .62, .74).mul(smoothstep(0, 1, fract(at.y.div(3))).mul(.18)));
+  const sheetGlow = vec3(1, .72, .4).mul(step(share, win.x)).mul(night).mul(.55);
 
   const colour = windowColour.mul(is(FACE.window)).add(base.mul(is(FACE.wall))).add(roof.mul(is(FACE.roof))).add(deck.mul(is(FACE.deck)))
-    .add(base.mul(is(FACE.trim))).add(curtainColour.mul(is(FACE.curtain))).add(base.mul(is(FACE.light))).add(lin(.05, .07, .09).mul(is(FACE.glass)));
-  material.colorNode = vec4(colour.mul(mix(1, occlusion, .32)), 1);
-  material.emissiveNode = windowGlow.mul(is(FACE.window)).add(curtainGlow.mul(is(FACE.curtain))).add(base.mul(night.mul(1.6).add(.4)).mul(is(FACE.light)));
+    .add(base.mul(is(FACE.trim))).add(curtainColour.mul(is(FACE.curtain))).add(base.mul(is(FACE.light))).add(base.mul(is(FACE.metal)))
+    .add(lin(.05, .07, .09).mul(is(FACE.glass))).add(leaf.mul(is(FACE.leaf))).add(sheet.mul(is(FACE.pane)));
+  let shaded: Node = colour;
+  if (options.unit) {
+    // The plinth a shade darker and the cornice band lighter; the copy's tint (render/copies.ts) is for the walls and
+    // the roofs, so glass, frames, doors and trim are divided by it here, before the copy multiplies it back in.
+    shaded = mix(mix(colour, colour.mul(.72), plinth.mul(is(FACE.window).add(is(FACE.wall)))), colour.mul(1.1), cornice.mul(is(FACE.window).add(is(FACE.wall))).mul(.8));
+    const tint = varyingProperty("vec3", "vInstanceColor");
+    // Copies in the two green shades (assets/catalogue.ts SECTION_TINTS) plant their balconies: the glass of their
+    // balustrades turns to clipped shrubs.
+    const green = step(.035, tint.y.sub(max(tint.x, tint.z))), planted = mix(lin(.33, .5, .27), lin(.5, .66, .36), clumps.y.mul(.7).add(clumps.z.mul(.3)));
+    shaded = mix(shaded, planted, is(FACE.glass).mul(green));
+    const keep = shaded.div(max(tint, vec3(.04)));
+    const wallShare = is(FACE.wall).add(is(FACE.roof)).add(is(FACE.curtain)).add(is(FACE.window).mul(pane.add(frame).add(sill).add(doorLeaf).add(doorFrame).min(1).oneMinus().mul(far.oneMinus()).add(far.mul(cover.oneMinus()))));
+    shaded = mix(keep, shaded, wallShare.min(1));
+  }
+  material.colorNode = vec4(shaded.mul(mix(1, occlusion, .32)), 1);
+  material.emissiveNode = windowGlow.mul(is(FACE.window)).add(curtainGlow.mul(is(FACE.curtain))).add(base.mul(night.mul(1.6).add(.4)).mul(is(FACE.light)))
+    .add(sheetGlow.mul(is(FACE.pane)));
   material.roughnessNode = windowRough.mul(is(FACE.window)).add(float(.88).mul(is(FACE.wall))).add(float(.82).mul(is(FACE.roof))).add(float(.95).mul(is(FACE.deck)))
-    .add(float(.7).mul(is(FACE.trim))).add(mix(.55, .22, glazed).mul(is(FACE.curtain))).add(float(.5).mul(is(FACE.light))).add(float(.08).mul(is(FACE.glass)));
-  material.metalnessNode = mix(.05, .15, glazed).mul(is(FACE.curtain)).add(float(.5).mul(is(FACE.glass))).add(pane.mul(.2).mul(far.oneMinus()).mul(is(FACE.window)));
+    .add(float(.7).mul(is(FACE.trim))).add(mix(.55, .22, glazed).mul(is(FACE.curtain))).add(float(.5).mul(is(FACE.light))).add(float(.34).mul(is(FACE.metal)))
+    .add(float(.08).mul(is(FACE.glass))).add(float(.92).mul(is(FACE.leaf))).add(float(.18).mul(is(FACE.pane)));
+  material.metalnessNode = mix(.05, .15, glazed).mul(is(FACE.curtain)).add(float(.5).mul(is(FACE.glass))).add(pane.mul(.2).mul(far.oneMinus()).mul(is(FACE.window)))
+    .add(float(.55).mul(is(FACE.metal))).add(float(.25).mul(is(FACE.pane)));
   material.aoNode = occlusion;
   return material;
 }

@@ -77,11 +77,12 @@ test('blocks, towers and port sheds light their windows at night; trees, lamp po
   for (const kind of ['tree-cone', 'tree-round']) assert.equal(at(kind).lods[0].parts[0].material.emissiveNode, null);
   assert.equal(at('lamp').lods[0].parts[0].material.emissiveNode, null);
 
-  const sheds = [0, 1, 2, 3, 4].map(v => at('port', v)), marks = sheds.map(m => [...m.lods[0].parts[0].geometry.getAttribute('windowSeed').array]);
-  assert.ok(sheds.every(m => m.lods[0].parts[0].material.emissiveNode));
-  assert.ok(marks[0].includes(1) && marks[4].includes(1), 'the two sheds have window walls');
-  assert.ok(marks[0].includes(0), 'their roofs and doors do not');
-  assert.ok(marks[2].every(v => v === 0) && marks[3].every(v => v === 0), 'container yards stay dark');
+  const sheds = [0, 1, 2, 3, 4].map(v => at('port', v)), windows = sheds.map(m => surfaceVertices(m.lods[0].parts[0].geometry, city.FACE.window).length);
+  assert.ok(sheds.every(m => m.lods[0].parts[0].material.emissiveNode && m.lods.every(level => level === m.lods[0])), 'one lit facade model at every distance');
+  assert.ok(windows[0] > 0 && windows[4] > 0, 'the two sheds have window walls');
+  assert.ok(surfaceVertices(sheds[0].lods[0].parts[0].geometry, city.FACE.roof).length > 0, 'and roofs that do not light');
+  assert.ok(windows[2] === 0 && windows[3] === 0, 'container yards stay dark');
+  for (const variant of [0, 1, 2, 3]) assert.ok(at('block', variant).lods[0].parts[0].geometry.getAttribute('aUnitU'), 'blocks are stretched unit models of the facade builder');
   catalogue.dispose();
 });
 
@@ -96,18 +97,22 @@ test('community centre levels resolve cached lit models and retain actual steppe
     assert.equal(at(i), model, 'refreshes resolve the same cached geometry');
     assert.ok(model.bounds.min.x > -9 && model.bounds.max.x < 9 && model.bounds.min.z > -9 && model.bounds.max.z < 9);
     if (i) assert.ok(model.bounds.max.y > levels[i - 1].bounds.max.y);
-    for (const detail of model.lods) {
-      assert.equal(detail.parts.length, 2, 'opaque architecture and glass each use one pooled part');
-      const [shell, glass] = detail.parts;
-      assert.ok(shell.geometry.hasAttribute('color') && glass.geometry.hasAttribute('sectionPart'));
-      assert.ok(glass.material.emissiveNode, 'the facade uses the city night-window shader');
-    }
+    assert.ok(model.lods.every(level => level === model.lods[0]), 'one model near and far');
+    assert.equal(model.lods[0].parts.length, 1, 'walls, roofs, glass and windows in one pooled part');
+    const [part] = model.lods[0].parts;
+    assert.ok(part.geometry.hasAttribute('color') && part.geometry.hasAttribute('aSurf') && part.geometry.hasAttribute('aWin'), 'built with the facade builder');
+    assert.ok(part.material.emissiveNode && part.material.colorNode, 'the facade material: its windows light at night');
+    if (i < 4) assert.ok(surfaceVertices(part.geometry, city.FACE.window).length > 0, 'window cells on its walls');
+    if (i >= 3) assert.ok(surfaceVertices(part.geometry, city.FACE.curtain).length > 0, 'the upper levels have curtain walls');
+    assert.ok(part.geometry.index.count / 3 < 9000, `level ${i + 1}: ${part.geometry.index.count / 3} triangles`);
   }
   assert.equal(at(-2), levels[0]); assert.equal(at(99), levels[4]);
   at(4, { width: 9, depth: 12 });
   const position = new THREE.Vector3(), size = new THREE.Vector3(); matrix.decompose(position, new THREE.Quaternion(), size);
   assert.deepEqual(position.toArray(), [11, .2, -9]);
   assert.ok(Math.abs(size.x - .5) < 1e-8 && Math.abs(size.y - .5) < 1e-8 && Math.abs(size.z - 2 / 3) < 1e-8);
+  const material = levels[0].lods[0].parts[0].material;
+  assert.ok(levels.every(model => model.lods[0].parts[0].material === material), 'every level shares the facade material');
   let disposed = 0; levels[4].lods[0].parts[0].geometry.addEventListener('dispose', () => disposed++);
   catalogue.dispose(); assert.equal(disposed, 1, 'catalogue owns and disposes the centre models');
 });
@@ -122,7 +127,9 @@ test('residential sections: a model per height with its balconies at every dista
   const count = (level) => level.parts[0].geometry.getAttribute('position').count;
   for (const { model } of heights) {
     assert.ok(model.lods.every(level => level === model.lods[0]) && count(model.lods[0]) > 24, 'balconies and the roof house at every distance');
-    assert.ok(model.lods[0].parts[0].geometry.getAttribute('sectionPart'), 'faces are marked facade, trim, roof, glass or plain');
+    const geometry = model.lods[0].parts[0].geometry;
+    assert.ok(geometry.getAttribute('aUnitU') && geometry.getAttribute('aUnitV') && surfaceVertices(geometry, city.FACE.window).length > 0, 'a unit model with windowed walls, measured on the copy');
+    assert.ok(Math.abs(geometry.boundingBox.min.x + .5) < .02 && Math.abs(geometry.boundingBox.max.x - .5) < .02 && Math.abs(geometry.boundingBox.min.y) < 1e-6, 'in the unit box');
   }
   const section = heights[0].model, material = section.lods[0].parts[0].material;
   assert.ok(material.emissiveNode && material.colorNode && section.tints.length >= 12, 'a painted facade with night windows, in shades');
@@ -132,7 +139,16 @@ test('residential sections: a model per height with its balconies at every dista
   matrix.decompose(place, new THREE.Quaternion(), size);
   assert.ok(arch !== heights[1].model && Math.abs(place.y - (.2 + 1.5)) < 1e-6 && Math.abs(place.y + size.y - (.2 + 4 * .75)) < 1e-6, 'the arch floors meet the roof of the wing');
   const gable = at('roof', { width: 2.6, depth: 2.4, scale: 1.2, lift: 3 }); matrix.decompose(place, new THREE.Quaternion(), size);
-  assert.ok(gable && gable.lods[0].parts[0].geometry.getAttribute('position').count === 18 && Math.abs(place.y - 3.2) < 1e-6 && Math.abs(size.y - 1.2) < 1e-6, 'a gabled roof sits on its house');
+  assert.ok(gable && surfaceVertices(gable.lods[0].parts[0].geometry, city.FACE.roof).length > 0 && Math.abs(place.y - 3.2) < 1e-6 && Math.abs(size.y - 1.2) < 1e-6, 'a tiled gabled roof sits on its house');
+  const roofBox = gable.lods[0].parts[0].geometry.boundingBox;
+  assert.ok(Math.abs(roofBox.max.y - 1) < .02 && Math.abs(roofBox.min.x + .5) < .02 && Math.abs(roofBox.max.z - .5) < .02, 'the ridge at the top of its unit box, the eaves at its sides');
+  // Cottages: one model whatever their floors; a garage (the houses' graphite shade) has a garage door instead of windows.
+  const house = at('cottage', { variant: 1, width: 3.5, depth: 2.6, tint: 3 }), garage = at('cottage', { variant: 0, width: 1.9, depth: 2.4, tint: 8 });
+  assert.ok(house.id === 'cottage' && garage.id === 'cottage-garage' && garage !== house);
+  assert.ok(surfaceVertices(house.lods[0].parts[0].geometry, city.FACE.window).length > 0 && surfaceVertices(garage.lods[0].parts[0].geometry, city.FACE.window).length === 0);
+  const flags = house.lods[0].parts[0].geometry.getAttribute('aUnitV'), normal = house.lods[0].parts[0].geometry.getAttribute('normal');
+  let doors = 0; for (let i = 0; i < flags.count; i++) if (flags.getW(i) === 2 && normal.getZ(i) > .9) doors++;
+  assert.ok(doors > 0, 'the cottage\'s door is in its front wall');
   for (const kind of ['bench', 'slide', 'swings', 'climber', 'sandbox', 'goal', 'hoop', 'gazebo', 'flowerbed', 'bush', 'hedge', 'planter', 'fountain', 'tree-birch', 'tree-oak']) {
     const model = at(kind);
     assert.ok(model, kind);
@@ -145,8 +161,8 @@ test('residential sections: a model per height with its balconies at every dista
   // Offices: a lit glass model per height, podiums and towers alike, raised onto their podium by `lift`.
   const towers = [0, 1, 2, 3, 4, 5].map(variant => at('glass-tower', { variant, width: 8, depth: 6 }));
   assert.equal(new Set(towers).size, 6);
-  assert.ok(towers.every(model => model.lods[0].parts[0].material.emissiveNode && model.lods[0].parts[0].geometry.getAttribute('sectionPart')));
-  assert.ok(towers[0].lods[0].parts[0].material !== section.lods[0].parts[0].material, 'offices have a glass facade of their own');
+  assert.ok(towers.every(model => model.lods[0].parts[0].material.emissiveNode && surfaceVertices(model.lods[0].parts[0].geometry, city.FACE.curtain).length > 0), 'curtain walls that light at night');
+  assert.ok(surfaceVertices(section.lods[0].parts[0].geometry, city.FACE.curtain).length === 0, 'sections have windows, offices glass: one stretched-facade material draws both');
   const raised = new THREE.Vector3(); at('glass-tower', { variant: 4, width: 8, depth: 6, lift: 2.7 }); matrix.decompose(raised, new THREE.Quaternion(), size);
   assert.ok(Math.abs(raised.y - 2.9) < 1e-6 && Math.abs(raised.y + size.y - (.2 + 26 * .9)) < 1e-6, 'a tower on its podium reaches its own height');
   assert.ok(at('tree-oak').lods[2] === at('tree-oak').lods[0], 'trees too');

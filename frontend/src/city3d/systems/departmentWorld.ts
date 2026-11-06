@@ -1,5 +1,6 @@
 /** Two departmental roots share the renderer, sky, camera and catalogue. Only the active root ticks. */
 import * as THREE from "three/webgpu";
+import { float, uniform } from "three/tsl";
 import type { CityWorld, DepartmentId } from "../../api/cityWorld";
 import type { CityContext } from "../engine/context";
 import type { Catalogue } from "../assets/catalogue";
@@ -16,6 +17,7 @@ import { createWater } from "../render/water";
 import { createTraffic } from "./traffic";
 import { createCrowd } from "./crowd";
 import { disposeTree } from "./districts";
+import { FACE, MeshBuilder, WORLD_METRES, bakeOcclusion, box, facadeMaterial, rgb, sphere, type BoxOptions } from "../assets/facade";
 import { mergeStatic } from "../assets/landmarks";
 import { generateSalesWorld, SALES_CENTERS } from "../world/sales";
 import { landGrid, type LandGrid } from "../world/land";
@@ -48,16 +50,24 @@ function builder(root: THREE.Object3D) {
     mesh.position.set(x, y, z); mesh.castShadow = mesh.receiveShadow = true; root.add(mesh); return mesh;
   };
 }
-function offices(root: THREE.Object3D, x: number, z: number, index: number) {
-  const b = builder(root), h = 3.4 + (index % 3) * .7;
-  b(10, .3, 10, x, .35, z, "#d4cabb"); b(7.6, h, 6, x, .5 + h / 2, z, WALL);
-  b(6.8, h - .8, .12, x, .9 + (h - .8) / 2, z + 3.03, GLASS);
-  b(6.8, h - .8, .12, x, .9 + (h - .8) / 2, z - 3.03, GLASS);
-  for (const dx of [-3.5, -1.2, 1.2, 3.5]) b(.2, h, 6.3, x + dx, .5 + h / 2, z, index % 2 ? GOLD : WALL);
-  for (let y = 1; y < h; y += 1.25) b(7.6, .13, 6.3, x, .5 + y, z, WALL);
-  b(8.2, .35, 6.6, x, h + .6, z, DARK); b(5.6, .3, 4, x, h + .85, z, GREEN);
-  b(3.1, .2, 1.9, x, 1.8, z + 3.5, GOLD); b(2, 1.4, .15, x, 1.15, z + 3.2, DARK);
-  for (const dx of [-3.2, 3.2]) { b(1.2, .5, 1.2, x + dx, .7, z + 3.8, WALL); b(1, .65, 1, x + dx, 1.1, z + 3.8, GREEN); }
+/**
+ * The lake city's campus office in the city's v4 style (assets/facade.ts), in world units on its 10 × 10 plaza: a
+ * white body with windows all round and curtain glass on its fronts between pilasters (gold on every other one), a
+ * floor band every 1.25, a dark cornice under a green roof, a gold canopy over the doors, planters either side.
+ */
+function campusOffice(mb: MeshBuilder, x: number, z: number, index: number) {
+  const S = (v: number) => v * WORLD_METRES, h = 3.4 + (index % 3) * .7, wall = rgb(WALL), pilaster = rgb(index % 2 ? GOLD : WALL);
+  const b = (w: number, hh: number, d: number, cx: number, y0: number, cz: number, o: BoxOptions) => box(mb, [S(cx - w / 2), S(y0), S(cz - d / 2), S(cx + w / 2), S(y0 + hh), S(cz + d / 2)], o);
+  b(10, .3, 10, x, .2, z, { c: .2, kind: FACE.trim, col: rgb("#d4cabb"), top: FACE.trim });
+  b(7.6, h, 6, x, .5, z, { c: .25, kind: FACE.window, col: wall, top: FACE.deck, bay: 3, floor: S(1.25), winW: .5, winH: .5, shift: index });
+  for (const side of [-1, 1]) b(6.8, h - .8, .12, x, .9, z + side * 3.03, { c: 0, kind: FACE.curtain, col: rgb("#6f98a6"), top: FACE.deck, bay: 1.5, floor: S(1.25), v0: -S(.9), shift: index + side, occlude: false });
+  for (const dx of [-3.5, -1.2, 1.2, 3.5]) b(.2, h, 6.3, x + dx, .5, z, { c: .04, kind: index % 2 ? FACE.metal : FACE.trim, col: pilaster, top: FACE.trim, occlude: false });
+  mb.detail(() => { for (let y = 1; y < h; y += 1.25) b(7.6, .13, 6.3, x, .5 + y - .065, z, { c: 0, kind: FACE.trim, col: wall, top: FACE.trim, occlude: false }); });
+  b(8.2, .35, 6.6, x, h + .425, z, { c: .06, kind: FACE.trim, col: rgb(DARK), top: FACE.deck });
+  b(5.6, .3, 4, x, h + .7, z, { c: .05, kind: FACE.leaf, col: rgb(GREEN), top: FACE.leaf });
+  b(3.1, .2, 1.9, x, 1.7, z + 3.5, { c: .03, kind: FACE.metal, col: rgb(GOLD), top: FACE.metal, bottom: true, occlude: false });
+  b(2, 1.4, .15, x, .45, z + 3.2, { c: 0, kind: FACE.curtain, col: rgb("#3c5660"), top: FACE.trim, bay: 1, floor: S(1.4), occlude: false });
+  for (const dx of [-3.2, 3.2]) { b(1.2, .5, 1.2, x + dx, .45, z + 3.8, { c: .04, kind: FACE.wall, col: wall, top: FACE.trim }); sphere(mb, { x: S(x + dx), y: S(1.15), z: S(z + 3.8), r: S(.55), rise: S(.42), seg: 10, rings: 3, kind: FACE.leaf, col: rgb(GREEN) }); }
 }
 const STONE = "#a29c8f", STONE_DARK = "#7f7a70", TUNNEL = "#20282b", PULS = "#6b55c8", GROUND_Y = .2;
 /** Lamps that shine day and night: the tunnel's lights, the signal, the buffer stop's lamp. */
@@ -300,6 +310,8 @@ export function createDepartmentWorld(ctx: CityContext, catalogue: Catalogue, mo
   const anchors = { support: new Map<string, THREE.Vector3>(), sales: new Map<string, THREE.Vector3>() };
   const elements = { support: new Map<string, HTMLElement>(), sales: new Map<string, HTMLElement>() };
   let night = false, traffic = true;
+  // The lake city's campus offices share one facade material; setNight lights their windows.
+  const campusNight = uniform(0), campusMaterial = facadeMaterial(campusNight as unknown as Parameters<typeof facadeMaterial>[0], { seed: float(0), lit: .55 });
   function illuminate(root: THREE.Object3D) {
     root.traverse(object => {
       if (!(object instanceof THREE.Mesh)) return;
@@ -321,8 +333,12 @@ export function createDepartmentWorld(ctx: CityContext, catalogue: Catalogue, mo
     const cars = createTraffic(context); cars.setVehicles(models); cars.setEnabled(traffic);
     const crowd = createCrowd(context); crowd.setEnabled(traffic); water.setNight(night);
     const campus = new THREE.Group(), teams = new THREE.Group(); scene.add(campus, teams);
-    SALES_CENTERS.forEach((p, i) => offices(campus, p.x, p.z, i));
-    batch(campus);
+    // The campus offices: one facade mesh, its windows lit at night with campusNight.
+    const offices = new MeshBuilder();
+    SALES_CENTERS.forEach((p, i) => campusOffice(offices, p.x, p.z, i));
+    bakeOcclusion(offices, { rays: 16, reach: 5 });
+    const campusMesh = new THREE.Mesh(offices.build(1 / WORLD_METRES), campusMaterial);
+    campusMesh.castShadow = campusMesh.receiveShadow = true; campusMesh.name = "sales-campus"; campus.add(campusMesh);
     // The hills round the lake city, out as far as the island city's, so the fog hides their edge the same way.
     const hills = createMountains(context, { end: ctx.world.radius * RELIEF_END });
     const rail = station(world.railway ?? RAIL_LINES.sales, "sales"); scene.add(rail.root);
@@ -334,10 +350,6 @@ export function createDepartmentWorld(ctx: CityContext, catalogue: Catalogue, mo
     return { scene, frames, moves, terrain, water, hills, pools, cars, crowd, campus, teams, rail, land3d, context, world, line: world.railway ?? RAIL_LINES.sales };
   }
   const cityOf = (district: string): DepartmentId => district.startsWith("sales-") ? "sales" : "support";
-  function batch(root: THREE.Group) {
-    const originals = new Set<THREE.BufferGeometry>(); root.traverse(o => { if (o instanceof THREE.Mesh) originals.add(o.geometry); });
-    mergeStatic(root); originals.forEach(g => g.dispose());
-  }
   /** A label over a place of the city; a team district's in the district's own colour (world/estateGrid.ts). */
   function label(city: DepartmentId, id: string, name: string, status: string, icon: string, colour?: string) {
     let el = elements[city].get(id);
@@ -411,14 +423,16 @@ export function createDepartmentWorld(ctx: CityContext, catalogue: Catalogue, mo
       // Leaving: behind the train on the side away from the station. Arriving: from the hills, over the station to the town.
       return { departure: back - line.side * 1.05, arrival: back + Math.PI + line.side * .45 };
     },
-    setNight(value) { night = value; sales?.water.setNight(value); [supportTeams, supportRail.root, sales?.campus, sales?.teams, sales?.rail.root].forEach(root => { if (root) illuminate(root); }); },
+    setNight(value) { night = value; campusNight.value = value ? 1 : 0; sales?.water.setNight(value); [supportTeams, supportRail.root, sales?.campus, sales?.teams, sales?.rail.root].forEach(root => { if (root) illuminate(root); }); },
     setTraffic(value) { traffic = value; sales?.cars.setEnabled(value); sales?.crowd.setEnabled(value); },
     dispose() {
+      let campusFreed = false;
       disposed = true; assetController.abort();
       estates.support?.dispose(); estates.sales?.dispose(); supportLand3d.removeFromParent();
       [...supportRoot.children].forEach(n => ctx.scene.add(n)); supportRoot.removeFromParent();
       supportLabels.remove(); salesLabels.remove(); supportRail.root.removeFromParent(); supportTeams.removeFromParent(); disposeTree(supportRail.root); disposeTree(supportTeams);
-      if (sales) { sales.crowd.dispose(); sales.cars.dispose(); sales.pools.dispose(); sales.water.dispose(); sales.terrain.dispose(); sales.hills.dispose(); disposeTree(sales.campus); disposeTree(sales.teams); disposeTree(sales.rail.root); sales.scene.removeFromParent(); }
+      if (sales) { sales.crowd.dispose(); sales.cars.dispose(); sales.pools.dispose(); sales.water.dispose(); sales.terrain.dispose(); sales.hills.dispose(); if (disposeTree(sales.campus).has(campusMaterial)) campusFreed = true; disposeTree(sales.teams); disposeTree(sales.rail.root); sales.scene.removeFromParent(); }
+      if (!campusFreed) campusMaterial.dispose();
     },
   };
 }

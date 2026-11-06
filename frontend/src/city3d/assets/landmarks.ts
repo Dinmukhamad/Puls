@@ -1,50 +1,121 @@
-import * as THREE from 'three';
+import * as THREE from 'three/webgpu';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { DistrictId } from '../../api/city';
-import { C, createKit } from './landmarkKit';
+import { MeshBuilder, bakeOcclusion } from './facade';
+import { C, KIT_METRES, PLINTH, createKit, type LandmarkKit, type Sign } from './landmarkKit';
 import { LANDMARK_MODELS } from './landmarkModels';
 
-type Part = THREE.Object3D;
+/**
+ * The tops of the district landmarks (levels 1–5), as the islands always had them: the labels float over them and the
+ * picking cylinders reach them (systems/districts.ts). The models are drawn to the same tops; a test keeps them so.
+ */
+export const LANDMARK_TOPS: Record<DistrictId, readonly number[]> = {
+  academy: [3.255, 4.11, 5.265, 5.455, 8.295],
+  driver: [1.85, 2.475, 3.075, 4.445, 5.755],
+  crm: [2.737, 3.365, 6.105, 6.785, 8.845],
+  dispatch: [3.415, 4.515, 6.295, 7.295, 8.845],
+  oktell: [2.495, 2.805, 4.225, 5.315, 6.215],
+  scenarios: [2.072, 2.48, 3.725, 4.125, 4.825],
+  voice: [2.535, 3.726, 4.35, 6.055, 7.09],
+};
 
-/** The district landmarks on their islands (assets/landmarkModels.ts), each merged by material. */
-export function createArchitecture() {
-  const kit=createKit(),{box,cyl,torus,shrub,lamp,mesh,cached}=kit;
-  /** The island plinth: a 5.7 × 5.3 terrace with front steps, lamps and shrubs either side, a gold gem per level. */
-  function base(p:Part,stage:number,soon:boolean) {
-    box(p,5.7,.23,5.3,'#9d9c91',0,.02,0,.15);box(p,5.55,.15,5.15,C.ivory,0,.2,0,.15);
-    for(let i=0;i<3;i++)box(p,2.05,.095,1-i*.18,C.stone,0,.13+i*.085,2.5-i*.13);
-    for(const side of [-1,1]){shrub(p,side*2.25,1.9);lamp(p,side*2.55,2.1);}
-    for(let i=0;i<stage;i++){const gem=mesh(p,cached('award',()=>new THREE.OctahedronGeometry(.11)),C.gold,-.5+i*.25,.38,2.38,.5,.25);gem.rotation.z=.3;}
-    if(soon){for(const x of [-.9,.9])cyl(p,.05,.55,C.gold,x,.53,2.35);box(p,1.8,.025,.03,C.ink,0,.74,2.35);}
+/** A whole number for a district, so every island lights its windows in a pattern of its own. */
+const seedOf = (id: string) => [...id].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 9973, 7);
+
+/**
+ * The island plinth: a 5.7 × 5.3 terrace of granite under a paved top (its top in a grid, so the occlusion shows round
+ * the building), front steps, lamps and shrubs either side, a gold gem per level; a barrier while the district is soon.
+ */
+function base(k: LandmarkKit, stage: number, soon: boolean) {
+  k.block(5.7, .23, 5.3, '#9d9c91', 0, -.095, 0, { r: .12, top: 'none' });
+  // The paved top fills the terrace inside its chamfer (.06, under the .068 a .15 high box allows).
+  k.block(5.55, .15, 5.15, C.ivory, 0, .125, 0, { r: .06, top: 'none' });
+  k.slab(5.55 - .12, 5.15 - .12, PLINTH, C.ivory, 12);
+  for (let i = 0; i < 3; i++) k.block(2.05, .095, 1 - i * .18, C.stone, 0, .13 + i * .085 - .0475, 2.5 - i * .13, { r: .015 });
+  for (const side of [-1, 1]) { k.shrub(side * 2.25, 1.9); k.lamp(side * 2.55, 2.1); }
+  for (let i = 0; i < stage; i++) k.ball(.11, C.gold, -.5 + i * .25, .38, 2.38, 4);
+  if (soon) { for (const x of [-.9, .9]) k.post(.05, .55, C.gold, x, .255, 2.35); k.block(1.8, .025, .03, C.ink, 0, .727, 2.35, { r: 0 }); }
+}
+
+/** The district landmarks on their islands (assets/landmarkModels.ts): one facade mesh each, and its signs. */
+export function createArchitecture(material: THREE.Material) {
+  const kit = createKit();
+  const built = new Map<string, { geometry: THREE.BufferGeometry; signs: Sign[]; height: number }>();
+  function build(id: DistrictId, level: number, soon: boolean) {
+    const key = `${id}:${level}:${soon}`;
+    let entry = built.get(key);
+    if (!entry) {
+      const mb = new MeshBuilder(), signs: Sign[] = [];
+      kit.begin(mb, signs, seedOf(id) + level * 13);
+      base(kit, level, soon);
+      LANDMARK_MODELS[id]?.(kit, level);
+      bakeOcclusion(mb, { reach: 3.6, ground: 2.4, strength: .9, rays: 16 });
+      entry = { geometry: mb.build(1 / KIT_METRES), signs, height: LANDMARK_TOPS[id]?.[level - 1] ?? 3 };
+      built.set(key, entry);
+    }
+    return entry;
   }
   /** A district's building at its level (1–5) on the plinth; `height` is its top, for the label and the picking. */
-  function landmark(id:DistrictId,stage:number,soon:boolean) {
-    const group=new THREE.Group(),level=Math.min(5,Math.max(1,Math.round(stage)));base(group,level,soon);
-    LANDMARK_MODELS[id]?.(kit,group,level);
-    const height=new THREE.Box3().setFromObject(group).max.y;
-    mergeStatic(group);return {group,height};
+  function landmark(id: DistrictId, stage: number, soon: boolean) {
+    const level = Math.min(5, Math.max(1, Math.round(stage))), entry = build(id, level, soon), group = new THREE.Group();
+    const mesh = new THREE.Mesh(entry.geometry.clone(), material);
+    mesh.castShadow = mesh.receiveShadow = true; group.add(mesh);
+    for (const sign of entry.signs) group.add(signMesh(sign));
+    return { group, height: entry.height };
   }
-  function car(p:Part,x:number,z:number,color:string,angle=0) {
-    const g=new THREE.Group();g.position.set(x,.22,z);g.rotation.y=angle;p.add(g);
-    box(g,.64,.26,1.2,color,0,.26,0,.12);box(g,.55,.26,.65,C.ink,0,.49,-.08,.09);box(g,.56,.045,.49,color,0,.63,-.09);
-    box(g,.57,.045,.045,C.gold,0,.27,.61);box(g,.5,.09,.035,'#dcecf1',0,.32,.61);
-    for(const side of [-1,1])for(const iz of [-.37,.38]){const tire=cyl(g,.14,.09,'#253039',side*.32,.19,iz);tire.rotation.z=Math.PI/2;const rim=cyl(g,.075,.095,'#c9cfd0',side*.32,.19,iz);rim.rotation.z=Math.PI/2;}
-    box(g,.2,.075,.13,C.gold,0,.7,-.05);return g;
-  }
-  function plaza(parent:Part) {
-    const g=new THREE.Group();parent.add(g);
-    const border=torus(g,4.35,.08,C.trim,0,.36,0);border.rotation.x=Math.PI/2;
-    const inner=torus(g,2.45,.04,C.gold,0,.38,0);inner.rotation.x=Math.PI/2;
-    for(let i=0;i<56;i++){const a=i*Math.PI*2/56;const paver=box(g,.4,.03,.18,C.stone,Math.sin(a)*4,.34,Math.cos(a)*4,.02);paver.rotation.y=a;}
-    for(const a of [.35,2.35,4.25]) {
-      const seat=new THREE.Group();seat.position.set(Math.sin(a)*3.35,.28,Math.cos(a)*3.35);seat.rotation.y=a;g.add(seat);
-      for(let i=0;i<4;i++)box(seat,1.1,.07,.1,C.wood,0,.34,-.18+i*.12,.02);
-      for(let i=0;i<3;i++)box(seat,1.1,.07,.08,C.wood,0,.51+i*.12,-.22,.02);
-      for(const x of [-.4,.4]){box(seat,.065,.35,.43,C.ink,x,.15,0);box(seat,.065,.7,.065,C.ink,x,.4,-.23);}
+  /**
+   * The "Скоро" construction site on the landmarks' 5.7 × 5.3 plot: the plinth, the first floor going up in
+   * scaffolding, a tower crane and a barrier; one geometry for every reserved island, `height` its top.
+   */
+  function site() {
+    const mb = new MeshBuilder(), k = kit, CRANE = '#e0a936', STEEL = C.steel, WOOD = C.wood, INK = C.ink;
+    k.begin(mb, [], 3);
+    k.block(5.7, .23, 5.3, '#9d9c91', 0, -.095, 0, { r: .12, top: 'none' });
+    k.block(5.55, .15, 5.15, C.stone, 0, .125, 0, { r: .06, top: 'none' });
+    k.slab(5.43, 5.03, PLINTH, C.stone, 10);
+    // The ground floor in bare concrete, the next one begun.
+    k.block(3, 1.2, 2.2, C.concrete, 0, .28, -.3, { r: .02 }); k.block(3.2, .12, 2.4, '#b9b1a2', 0, 1.48, -.3, { r: 0, bottom: true }); k.block(1.3, .7, 1, C.concrete, -.7, 1.6, -.6, { r: .02 });
+    for (const x of [-1.05, 0, 1.05]) k.block(.5, .6, .04, INK, x, .5, .82, { r: 0 });
+    // Scaffolding: poles, ledgers and planks.
+    for (const x of [-1.7, -.57, .57, 1.7]) for (const z of [-1.6, 1]) k.block(.06, 2.5, .06, STEEL, x, .27, z, { r: 0 });
+    for (const y of [.95, 1.65, 2.45]) {
+      for (const z of [-1.6, 1]) k.block(3.46, .05, .05, STEEL, 0, y - .025, z, { r: 0 });
+      for (const x of [-1.7, 1.7]) k.block(.05, .05, 2.66, STEEL, x, y - .025, -.3, { r: 0 });
     }
-    mergeStatic(g);
+    for (const y of [.98, 1.68]) k.block(3.4, .04, .42, WOOD, 0, y - .02, 1.2, { r: 0 });
+    for (const x of [-1.15, 0, 1.15]) k.rod([x - .5, .98, 1.0], [x + .5, 1.65, 1.0], .03, STEEL);
+    // The tower crane behind the building, its jib reaching back over it.
+    const cx = 1.95, cz = -1.95, top = 4.81, w = .22;
+    k.block(.6, .14, .6, INK, cx, .27, cz, { r: .02 });
+    for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) k.block(.04, top - .41, .04, CRANE, cx + sx * w / 2, .41, cz + sz * w / 2, { r: 0 });
+    for (let y = .41, i = 0; y < top - .3; y += .44, i++) for (const face of [-1, 1]) {
+      const flip = i % 2 ? 1 : -1;
+      k.rod([cx - w / 2 * flip, y, cz + face * w / 2], [cx + w / 2 * flip, y + .44, cz + face * w / 2], .02, CRANE);
+      k.rod([cx + face * w / 2, y, cz - w / 2 * flip], [cx + face * w / 2, y + .44, cz + w / 2 * flip], .02, CRANE);
+    }
+    k.box(.34, .3, .34, INK, cx, 4.62, cz + .2, { r: .02 });
+    k.box(3.9, .14, .18, CRANE, cx - 1.75, 4.88, cz, { r: 0 }); k.box(1.2, .14, .18, CRANE, cx + .75, 4.88, cz, { r: 0 }); k.box(.4, .34, .3, INK, cx + 1.15, 4.66, cz, { r: .02 });
+    k.box(.025, 1.5, .025, INK, cx - 2.6, 4.07, cz, { r: 0 }); k.box(.16, .12, .16, INK, cx - 2.6, 3.26, cz, { r: 0 }); k.box(1, .1, .14, STEEL, cx - 2.6, 3.12, cz, { r: 0 });
+    // A striped barrier along the front: the district is not open yet.
+    for (const x of [-1.2, 1.2]) k.box(.07, .5, .07, INK, x, .52, 2.35, { r: 0 });
+    for (let i = 0; i < 8; i++) k.box(.3, .08, .04, i % 2 ? INK : CRANE, -1.05 + i * .3, .66, 2.35, { r: 0 });
+    bakeOcclusion(mb, { reach: 3.6, ground: 2.4, strength: .9, rays: 16 });
+    return { geometry: mb.build(1 / KIT_METRES), height: 4.95 };
   }
-  return {landmark,car,plaza,dispose:kit.dispose};
+  return { landmark, site, dispose() { built.forEach(entry => entry.geometry.dispose()); built.clear(); } };
+}
+
+/** A sign's text on a canvas, on a plane over its board. */
+function signMesh({ text, x, y, z, w, color }: Sign) {
+  const canvas = document.createElement('canvas'); canvas.width = 512; canvas.height = 128;
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = 'rgba(255,245,220,.4)'; ctx.fillRect(0, 0, 512, 128);
+  ctx.fillStyle = color; ctx.fillRect(8, 8, 496, 112);
+  ctx.fillStyle = '#fff5dc'; ctx.font = '700 65px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(text, 256, 68, 460);
+  const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace; texture.anisotropy = 4;
+  const material = new THREE.MeshStandardMaterial({ map: texture, roughness: .6 });
+  const plane = new THREE.Mesh(new THREE.PlaneGeometry(w, w / 4), material); plane.position.set(x, y, z);
+  return plane;
 }
 
 /** Preserve local transforms while batching static detail by material. */

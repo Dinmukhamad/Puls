@@ -42,7 +42,7 @@ test("the shop goes what → where → buy: seven tabs of pictures first, then t
   const tabs = html.match(/<div class="estate-shop__tabs" role="tablist"[^>]*>(.*?)<\/div>/s)?.[1] ?? "";
   assert.deepEqual([...tabs.matchAll(/<\/span>([^<]+)<\/button>/g)].map(m => m[1]), ["Дома", "Офисы", "Скверы", "Дороги", "Деревья", "Фонари и скамейки", "Кусты и клумбы"]);
   assert.match(tabs, /aria-selected="true"><span aria-hidden="true">🏡<\/span>Дома/);
-  assert.match(html, /<img src="\/city\/shop\/v2\/house\.webp" alt="" loading="lazy" decoding="async" width="160" height="120"\/><strong>Дом<\/strong><small>3 × 3 клетки · от\s◈\s1\s020<\/small><small>растёт до 2 ступеней<\/small>/);
+  assert.match(html, /<img src="\/city\/shop\/v3\/house\.webp" alt="" loading="lazy" decoding="async" width="160" height="120"\/><strong>Дом<\/strong><small>3 × 3 клетки · от\s◈\s1\s020<\/small><small>растёт до 2 ступеней<\/small>/);
   // Nothing about the map, shapes, keys or buying until something is chosen.
   assert.doesNotMatch(html, /Где поставить|Как выбирать клетки|Ctrl|estate-choose-free|Убрать своё|Выбрано:|class="city-action"|Показать весь район/);
   // A house chosen: what is built, where it goes, and the purchase waiting for the place.

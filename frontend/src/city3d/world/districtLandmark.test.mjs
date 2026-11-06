@@ -95,22 +95,18 @@ test('actual bounds and picking rotate and scale with the supplied footprint', (
   assert.ok(Math.abs(L.landmarkHeight(5, 9, 12) - L.landmarkHeight(5) / 2) < 1e-8);
 });
 
-test('all model details retain the full silhouette and their geometry bounds exactly match picking', () => {
+test('every level is one facade geometry, the same near and far, whose bounds exactly match picking', () => {
   for (let level = 1; level <= 5; level++) {
-    const box = L.landmarkBounds({ ...frame, x: 0, z: 0 }, level), details = [];
-    for (const detail of [2, 1, 0]) {
-      const geometry = L.landmarkGeometry(level, detail), bounds = new L.THREE.Box3();
-      for (const g of Object.values(geometry)) { g.computeBoundingBox(); bounds.union(g.boundingBox); }
-      assert.ok(Math.abs(bounds.min.y + .2 - box.bottom) < 1e-5);
-      assert.ok(Math.abs(bounds.max.y - bounds.min.y - box.height) < 1e-5);
-      assert.ok(Math.abs(bounds.max.x - bounds.min.x - box.width) < 1e-5);
-      assert.ok(Math.abs(bounds.max.z - bounds.min.z - box.depth) < 1e-5);
-      assert.ok(geometry.shell.hasAttribute('color'), 'opaque surfaces preserve their architectural finishes');
-      assert.ok(geometry.glass.hasAttribute('sectionPart'), 'night window shader knows which faces are glass');
-      details.push(geometry.shell.getAttribute('position').count + geometry.glass.getAttribute('position').count);
-      geometry.shell.dispose(); geometry.glass.dispose();
-    }
-    assert.ok(details[0] > details[1] && details[1] > details[2], 'mullions, floor bands and columns leave the simpler details');
-    assert.ok(details[0] < 12000, 'even the last centre remains suitable for mobile');
+    const box = L.landmarkBounds({ ...frame, x: 0, z: 0 }, level), geometry = L.landmarkGeometry(level);
+    geometry.computeBoundingBox();
+    const bounds = geometry.boundingBox;
+    assert.ok(Math.abs(bounds.min.y + .2 - box.bottom) < 1e-5);
+    assert.ok(Math.abs(bounds.max.y - bounds.min.y - box.height) < 1e-5);
+    assert.ok(Math.abs(bounds.max.x - bounds.min.x - box.width) < 1e-5);
+    assert.ok(Math.abs(bounds.max.z - bounds.min.z - box.depth) < 1e-5);
+    assert.ok(geometry.hasAttribute('color') && geometry.hasAttribute('aSurf') && geometry.hasAttribute('aWin'), 'walls, windows and roofs for the facade material');
+    const triangles = geometry.index.count / 3;
+    assert.ok(triangles < 6000, `level ${level}: ${triangles} triangles, suitable for phones`);
+    geometry.dispose();
   }
 });

@@ -28,7 +28,9 @@ function materials(root) {
   root.traverse(object => { if (object.isMesh) for (const material of [object.material].flat()) result.add(material); });
   return [...result];
 }
-const windows = root => materials(root).filter(material => material.userData.districtGlass);
+/** The landmarks' facade material: every landmark, growing or merged, and the construction sites are drawn in it. */
+const shells = root => materials(root).filter(material => material.userData.districtNight);
+const lit = material => material.userData.districtNight.value;
 const geometryCount = root => { let total = 0; root.traverse(object => { if (object.isMesh) total++; }); return total; };
 const levels = { academy: 5, driver: 5, crm: 5, dispatch: 5, oktell: 5 };
 
@@ -45,32 +47,33 @@ test('the scenario pavilion is selectable, grows and follows shared lighting and
   districts.setLevels({scenarios:4},['scenarios']);
   assert.ok(districts.anchors.get('scenarios').y > lowerAnchor);
   districts.setNight(true); districts.startGrowth(); ctx.frame(performance.now()+2200);
-  assert.ok(windows(root).every(material => material.emissiveIntensity > 0));
+  assert.ok(shells(root).length === 1 && shells(root).every(material => lit(material) === 1));
   districts.dispose(); assert.equal(ctx.listeners,0); assert.equal(ctx.scene.children.length,0);
 });
 
-test('setNight lights landmark glazing only: opaque surfaces and construction sites keep their emissive', () => {
+test('setNight switches the landmarks\' windows only: one shared facade material, no scene walk, no geometry, no lights', () => {
   const ctx = context(), districts = createDistricts(ctx, { levels });
-  const glass = windows(ctx.scene);
-  assert.equal(glass.length, 1, 'completed landmarks keep a shared glass draw-call bucket');
-  assert.equal(glass[0].isMeshStandardNodeMaterial, true);
-  assert.equal(glass[0].emissiveIntensity, 0, 'daytime glazing does not glow');
-  const others = materials(ctx.scene).filter(material => !material.userData.districtGlass);
+  const found = shells(ctx.scene);
+  assert.equal(found.length, 1, 'completed landmarks and the construction sites share one facade material');
+  const [shell] = found;
+  assert.equal(shell.isMeshStandardNodeMaterial, true);
+  assert.ok(shell.colorNode && shell.emissiveNode && shell.aoNode, 'walls, windows and their light drawn by the facade material');
+  assert.equal(lit(shell), 0, 'daytime windows do not glow');
+  const others = materials(ctx.scene).filter(material => material !== shell);
   const original = others.map(material => ({ material, emissive: material.emissive?.getHex(), intensity: material.emissiveIntensity }));
-  const before = geometryCount(ctx.scene), daylightColor = glass[0].color.getHex();
+  const before = geometryCount(ctx.scene);
   const site = ctx.scene.getObjectByName('city-construction-sites');
-  assert.ok(site, 'reserved islands include the actual crane/construction material');
-  const opaqueFinish = others.filter(material => material.isMeshStandardNodeMaterial && !material.map);
-  assert.ok(opaqueFinish.length >= 2, 'stone/roof and metal finishes are included');
+  assert.ok(site, 'reserved islands include the actual crane/construction model');
+  assert.equal(site.material, shell, 'the construction sites are drawn in the landmarks\' material');
+  assert.ok(site.geometry.getAttribute('aSurf') && site.geometry.getAttribute('aWin'), 'in the city v4 style');
+  assert.ok(others.some(material => material.map), 'signs keep their own canvas materials');
 
-  // A toggle must use its material registry, not traverse a scene or add lights.
+  // A toggle must set the material's light, not traverse a scene or add lights.
   const originalTraverse = ctx.scene.traverse;
   ctx.scene.traverse = () => { throw new Error('setNight should not walk the scene'); };
   districts.setNight(true); districts.setNight(true);
   ctx.scene.traverse = originalTraverse;
-  assert.ok(glass[0].emissiveIntensity > .8 && glass[0].emissiveIntensity < 1.5, 'bright enough for the night bloom, not blown out');
-  assert.ok(glass[0].emissive.r > glass[0].emissive.g && glass[0].emissive.g > glass[0].emissive.b, 'warm window light');
-  assert.equal(glass[0].color.getHex(), daylightColor, 'surface colour survives the toggle');
+  assert.equal(lit(shell), 1, 'windows lit at night');
   assert.equal(geometryCount(ctx.scene), before, 'night adds no geometry');
   let lights = 0; ctx.scene.traverse(object => { if (object.isLight) lights++; });
   assert.equal(lights, 0, 'windows create no point lights');
@@ -79,40 +82,35 @@ test('setNight lights landmark glazing only: opaque surfaces and construction si
     assert.equal(snapshot.material.emissiveIntensity, snapshot.intensity);
   }
   districts.setNight(false);
-  assert.equal(glass[0].emissiveIntensity, 0, 'day restores non-emissive glazing');
+  assert.equal(lit(shell), 0, 'day switches the windows off');
   assert.equal(site.material.emissive.getHex(), 0, 'the crane never glows');
   districts.dispose(); assert.equal(ctx.listeners, 0); assert.equal(ctx.scene.children.length, 0);
 });
 
-test('growing windows follow night/day and the completed merge preserves the current lighting', () => {
+test('growing landmarks are drawn in the shared material: their windows follow night and day, and merging keeps the light', () => {
   const ctx = context(), districts = createDistricts(ctx, { levels, grown: ['crm', 'academy'] });
   const root = ctx.scene.getObjectByName('city-districts');
   const waiting = root.children.filter(object => object.isGroup && object.userData.district);
   assert.equal(waiting.length, 2);
-  const originalGlass = windows(waiting[0])[0];
-  assert.ok(originalGlass?.isMeshStandardMaterial, 'growing models retain the kit material');
-  assert.equal(windows(ctx.scene).length, 2, 'one shared kit glass plus one completed-landmark bucket');
+  const [shell] = shells(ctx.scene);
+  assert.ok(waiting.every(group => materials(group).includes(shell)), 'growing models use the shared facade material');
+  assert.equal(shells(ctx.scene).length, 1, 'one landmark material for the growing and the completed');
   districts.setNight(true);
-  for (const material of windows(ctx.scene)) assert.ok(material.emissiveIntensity > 0);
-  const nightIntensity = originalGlass.emissiveIntensity;
+  assert.equal(lit(shell), 1);
   const started = performance.now(); assert.ok(districts.startGrowth());
   ctx.frame(started + 1100);
   assert.ok(waiting.every(group => group.parent === root && group.scale.y > ctx.world.spec.districtScale * .02), 'windows light during the growth animation');
   districts.setNight(false);
-  for (const material of windows(ctx.scene)) assert.equal(material.emissiveIntensity, 0);
+  assert.equal(lit(shell), 0);
   districts.setNight(true);
   ctx.frame(started + 2200);
   assert.ok(waiting.every(group => !group.parent), 'completed models entered the existing merge path');
-  const mergedGlass = windows(ctx.scene);
-  assert.equal(mergedGlass.length, 1, 'completed growth rejoins the shared glass bucket');
-  for (const material of mergedGlass) {
-    assert.equal(material.isMeshStandardNodeMaterial, true);
-    assert.equal(material.emissiveIntensity, nightIntensity, 'new merged windows inherit night immediately');
-  }
+  assert.deepEqual(shells(ctx.scene), [shell], 'completed growth rejoins the shared material');
+  assert.equal(lit(shell), 1, 'merged windows keep the night');
   districts.setNight(false);
-  for (const material of mergedGlass) assert.equal(material.emissiveIntensity, 0);
-  const disposed = new Set(); mergedGlass.forEach(material => material.addEventListener('dispose', () => disposed.add(material)));
-  districts.dispose(); assert.equal(disposed.size, mergedGlass.length); assert.equal(ctx.listeners, 0);
+  assert.equal(lit(shell), 0);
+  let disposed = 0; shell.addEventListener('dispose', () => disposed++);
+  districts.dispose(); assert.equal(disposed, 1); assert.equal(ctx.listeners, 0);
 });
 
 test('at night floodlights wash every island and a ring of lights circles the plaza: instanced, additive, none by day', () => {
@@ -135,10 +133,10 @@ test('at night floodlights wash every island and a ring of lights circles the pl
     const d = ctx.world.districts[Math.floor(i / 4)], r = Math.hypot(p.setFromMatrixPosition((fixtures.getMatrixAt(i, matrix), matrix)).x - d.x, p.z - d.z);
     assert.ok(r > 5 && r < ctx.world.spec.islet - .5, `floodlight ${i} stands on its island, off the plot`);
   }
-  // The uplight rides on the opaque finishes' emissive node; glass keeps the switched emissive colour.
-  const opaque = materials(ctx.scene).filter(material => material.isMeshStandardNodeMaterial && !material.userData.districtGlass && !material.map);
-  assert.ok(opaque.length >= 2 && opaque.every(material => material.emissiveNode), 'walls get the floodlights\' wash');
-  assert.ok(windows(ctx.scene).every(material => !material.emissiveNode));
+  // The uplight rides on the landmarks' facade material, with its windows; the signs keep their plain finish.
+  const [shell] = shells(ctx.scene);
+  assert.ok(shell.emissiveNode, 'walls get the floodlights\' wash');
+  assert.ok(materials(ctx.scene).filter(material => material.map).every(material => !material.emissiveNode), 'signs take no wash');
   let lights = 0; ctx.scene.traverse(object => { if (object.isLight) lights++; });
   assert.equal(lights, 0, 'no light sources');
   ctx.night.set(false, true); ctx.frame(32);
@@ -170,7 +168,7 @@ test('setLevels refreshes one changed district and retains city resources, ancho
   const lightsGeometry = fixtures.geometry, siteGeometry = site.geometry;
   const pickables = districts.pickables, crmHit = pickables.find(hit => hit.userData.district === 'crm');
   const anchors = districts.anchors, crmAnchor = anchors.get('crm'), previousHeight = crmAnchor.y;
-  const glass = windows(root)[0], glassDisposed = watch(glass);
+  const shell = shells(root)[0], shellDisposed = watch(shell);
   districts.select('crm'); districts.hover('academy'); districts.setNight(true); ctx.frame(0);
   const rings = root.children.filter(mesh => mesh.geometry?.type === 'TorusGeometry');
   const activeRings = rings.filter(mesh => mesh.visible);
@@ -193,7 +191,7 @@ test('setLevels refreshes one changed district and retains city resources, ancho
   assert.equal(districts.pickables, pickables); assert.equal(pickables.find(hit => hit.userData.district === 'crm'), crmHit);
   assert.ok(Math.abs(crmHit.position.y + crmHit.scale.y / 2 + .7 - crmAnchor.y) < 1e-9);
   assert.equal(fixtures.geometry, lightsGeometry); assert.equal(site.geometry, siteGeometry); assert.equal(outside.parent, ctx.scene);
-  assert.equal(windows(root)[0], glass); assert.equal(glassDisposed(), 0); assert.ok(glass.emissiveIntensity > 0);
+  assert.equal(shells(root)[0], shell); assert.equal(shellDisposed(), 0); assert.equal(lit(shell), 1);
   ctx.frame(16); assert.deepEqual(rings.filter(mesh => mesh.visible), activeRings, 'selection and hover survive');
   assert.equal(districts.startGrowth(), null, 'no requested growth is manufactured');
   districts.dispose(); outside.removeFromParent(); assert.equal(ctx.scene.children.length, 0);
@@ -230,13 +228,13 @@ test('successive updates grow again, replace an in-flight district safely and ke
   const second = currentGrowth('crm'); assert.ok(second && second !== first);
   assert.equal(districts.startGrowth(), 'crm'); ctx.frame(performance.now() + 2200);
   assert.equal(second.parent, null); assert.ok(!currentGrowth('crm'));
-  assert.equal(windows(root).length, 1); assert.ok(windows(root)[0].emissiveIntensity > 0);
+  assert.equal(shells(root).length, 1); assert.equal(lit(shells(root)[0]), 1);
   districts.setLevels({ crm: 3, academy: 1 }, ['crm', 'academy']);
   assert.equal(districts.startGrowth(), 'academy');
   const waiting = ['crm', 'academy'].map(currentGrowth); assert.ok(waiting.every(Boolean));
   ctx.frame(performance.now() + 2400); assert.ok(waiting.every(group => !group.parent));
-  assert.ok(windows(root)[0].emissiveIntensity > 0);
-  districts.setNight(false); assert.equal(windows(root)[0].emissiveIntensity, 0);
+  assert.equal(lit(shells(root)[0]), 1);
+  districts.setNight(false); assert.equal(lit(shells(root)[0]), 0);
   districts.dispose(); assert.equal(ctx.listeners, 0); assert.equal(ctx.scene.children.length, 0);
 });
 

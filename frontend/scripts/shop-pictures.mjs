@@ -1,7 +1,7 @@
 /**
  * The pictures of the district shop (src/pages/city/CityShop.tsx): every thing it sells, rendered from the city's own
  * models and layouts (world/landLayouts.ts, world/decor.ts, assets/catalogue.ts) on a tile of grass, in a headless
- * browser, and written to public/city/shop/v2 as small WebP files the shop loads only when it shows them. Run it
+ * browser, and written to public/city/shop/v3 as small WebP files the shop loads only when it shows them. Run it
  * again when a model or a layout changes (and bump the folder's version, so browsers take the new pictures):
  *
  *   cd frontend && node scripts/shop-pictures.mjs
@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 import { createServer } from "vite";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
-const OUT = fileURLToPath(new URL("../public/city/shop/v2/", import.meta.url));
+const OUT = fileURLToPath(new URL("../public/city/shop/v3/", import.meta.url));
 const { chromium } = await import(process.env.PLAYWRIGHT ?? "playwright").catch(() => {
   throw new Error("Playwright is needed: npm i -D playwright, or PLAYWRIGHT=<path to playwright/index.mjs>");
 });
