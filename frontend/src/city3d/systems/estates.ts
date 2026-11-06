@@ -18,6 +18,7 @@ import type { CityContext } from "../engine/context";
 import type { Catalogue } from "../assets/catalogue";
 import { createInstancePools, type InstancePools } from "../render/instances";
 import { createPatches } from "../render/terrain";
+import { groundMaterial, surfaceOf, surfacesOfColours } from "../render/ground";
 import { createLampLights, type LampLights } from "../render/lampLights";
 import { TAP_DISTANCE, TAP_TIME } from "../engine/input";
 import { CELL, MODULE_CELLS, cellPoint, footprintAt, itemFootprint, moduleGround, objectLayout, pointCell, siteLayout, squareProblem, plotFootprint, projectFootprint, type ProjectFamily } from "../world/estates";
@@ -86,10 +87,10 @@ function inset(corners: { x: number; z: number }[], by = INSET) {
 
 /** Flat quads into one indexed mesh, each facing up whichever way round its corners go. */
 function flatMesh(quads: { points: { x: number; z: number }[]; y: number; colour: THREE.Color }[], material: THREE.Material, name: string) {
-  const positions: number[] = [], colours: number[] = [], index: number[] = [];
+  const positions: number[] = [], colours: number[] = [], surfaces: number[] = [], index: number[] = [];
   for (const q of quads) {
-    const base = positions.length / 3, [a, b, c] = q.points;
-    for (const p of q.points) { positions.push(p.x, q.y, p.z); colours.push(q.colour.r, q.colour.g, q.colour.b); }
+    const base = positions.length / 3, [a, b, c] = q.points, surface = surfaceOf(q.colour);
+    for (const p of q.points) { positions.push(p.x, q.y, p.z); colours.push(q.colour.r, q.colour.g, q.colour.b); surfaces.push(surface); }
     const up = (b.z - a.z) * (c.x - a.x) - (b.x - a.x) * (c.z - a.z) > 0;
     index.push(...(up ? [base, base + 1, base + 2, base, base + 2, base + 3] : [base, base + 2, base + 1, base, base + 3, base + 2]));
   }
@@ -97,6 +98,7 @@ function flatMesh(quads: { points: { x: number; z: number }[]; y: number; colour
   geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
   geometry.setAttribute("normal", new THREE.Float32BufferAttribute(positions.map((_, i) => i % 3 === 1 ? 1 : 0), 3));
   geometry.setAttribute("color", new THREE.Float32BufferAttribute(colours, 3));
+  geometry.setAttribute("surface", new THREE.Float32BufferAttribute(surfaces, 1));
   geometry.setIndex(positions.length / 3 > 65535 ? new THREE.Uint32BufferAttribute(index, 1) : new THREE.Uint16BufferAttribute(index, 1));
   geometry.computeBoundingSphere();
   const mesh = new THREE.Mesh(geometry, material);
@@ -154,6 +156,7 @@ function plotGround(grid: LandGrid, gardens: readonly Garden[]) {
     geometry.setAttribute("position", new THREE.Float32BufferAttribute(parts.positions, 3));
     geometry.setAttribute("normal", new THREE.Float32BufferAttribute(parts.positions.map((_, i) => i % 3 === 1 ? 1 : 0), 3));
     geometry.setAttribute("color", new THREE.Float32BufferAttribute(parts.colours, 4));
+    geometry.setAttribute("surface", new THREE.Float32BufferAttribute(surfacesOfColours(parts.colours, 4), 1));
     geometry.setAttribute("cellUv", new THREE.Float32BufferAttribute(parts.uvs, 2));
     geometry.setIndex(parts.positions.length / 3 > 65535 ? new THREE.Uint32BufferAttribute(parts.index, 1) : new THREE.Uint16BufferAttribute(parts.index, 1));
     return geometry;
@@ -166,7 +169,7 @@ function plotGround(grid: LandGrid, gardens: readonly Garden[]) {
   const mesh = new THREE.Mesh(geometryOf(plots), gridMaterial());
   mesh.matrixAutoUpdate = false; mesh.name = "district-plots"; mesh.visible = false;
   // The gardens' paving is ground like the rest of the land: lit, and in the shadows of what stands on it.
-  const centreMesh = new THREE.Mesh(geometryOf(paving), new THREE.MeshStandardNodeMaterial({ vertexColors: true, roughness: .85, metalness: .02, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+  const centreMesh = new THREE.Mesh(geometryOf(paving), groundMaterial({ polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
   centreMesh.receiveShadow = true; centreMesh.matrixAutoUpdate = false; centreMesh.name = "district-centres";
   return { mesh, centreMesh, slots, show(district: number) {
     const range = ranges.get(district);
@@ -222,7 +225,7 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
 
   // ---- buildings and small things ----
   let pools: InstancePools | null = null, patches: THREE.Mesh | null = null, paving: THREE.Mesh | null = null, lights: LampLights | null = null, builtKey = "";
-  const pavingMaterial = new THREE.MeshStandardNodeMaterial({ vertexColors: true, roughness: .82, metalness: .03, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
+  const pavingMaterial = groundMaterial({ polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
   // The same catalogue transforms that draw houses also define their selectable bodies.
   // Gardens, trees and paving stay out of these volumes so adjacent free cells remain selectable.
   const houseBodies: { pick: EstatePick; bounds: THREE.Box3; matrix: THREE.Matrix4; inverse: THREE.Matrix4 }[] = [];

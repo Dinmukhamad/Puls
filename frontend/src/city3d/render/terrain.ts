@@ -3,12 +3,13 @@
  * with stone quay walls and beige rims, the ground out to the fog, the lagoon and canal floor, ring roads
  * with lane marks, streets, lagoon bridges with railings trimmed to the curved shore and piers, stone arch
  * bridges over the canal, zebra crossings and car parks. Everything is painted with vertex colours and
- * merged into two meshes with one material: flat ground that only receives shadows, and the structures
+ * merged into two meshes with one material (render/ground.ts gives each colour's surface its texture): flat ground that only receives shadows, and the structures
  * (quay walls, bridges) that also cast them. The whole terrain is two draw calls.
  */
 import * as THREE from "three/webgpu";
 import type { CityContext } from "../engine/context";
 import type { Road, Surface, SurfaceKind, WorldData } from "../world/types";
+import { groundMaterial, surfaceOf } from "./ground";
 
 const GRASS = "#8ba67a", GROUND = "#86a174", STONE = "#d4cab6", RIM = "#eadfc8", ROAD = "#6d7385", KERB = "#e5dfcf", MARK = "#f7f3e8";
 const DECK = "#dcd3c1", RAIL = "#e8e1d2", PIER = "#cfc5b1", PAD = "#7c8292", PLAZA = "#efe7d6", FLOOR = "#56766f", PARK = "#7f9f6a";
@@ -29,11 +30,12 @@ export interface Terrain { group: THREE.Group; dispose(): void }
 
 /** Collects painted triangles into one indexed geometry. */
 class Mesher {
-  private positions: number[] = []; private normals: number[] = []; private colors: number[] = []; private indices: number[] = [];
-  private count = 0; private paint = new THREE.Color();
-  color(hex: string) { this.paint.set(hex); return this; }
+  private positions: number[] = []; private normals: number[] = []; private colors: number[] = []; private surfaces: number[] = []; private indices: number[] = [];
+  private count = 0; private paint = new THREE.Color(); private surface = 0;
+  /** The paint of what follows; its surface (render/ground.ts) gives the ground material its texture. */
+  color(hex: string) { this.paint.set(hex); this.surface = surfaceOf(hex); return this; }
   vertex(x: number, y: number, z: number, nx: number, ny: number, nz: number) {
-    this.positions.push(x, y, z); this.normals.push(nx, ny, nz); this.colors.push(this.paint.r, this.paint.g, this.paint.b);
+    this.positions.push(x, y, z); this.normals.push(nx, ny, nz); this.colors.push(this.paint.r, this.paint.g, this.paint.b); this.surfaces.push(this.surface);
     return this.count++;
   }
   quad(a: number, b: number, c: number, d: number) { this.indices.push(a, b, c, a, c, d); }
@@ -50,6 +52,7 @@ class Mesher {
     g.setAttribute("position", new THREE.Float32BufferAttribute(this.positions, 3));
     g.setAttribute("normal", new THREE.Float32BufferAttribute(this.normals, 3));
     g.setAttribute("color", new THREE.Float32BufferAttribute(this.colors, 3));
+    g.setAttribute("surface", new THREE.Float32BufferAttribute(this.surfaces, 1));
     g.setIndex(this.count > 65535 ? new THREE.Uint32BufferAttribute(this.indices, 1) : new THREE.Uint16BufferAttribute(this.indices, 1));
     g.computeBoundingSphere();
     return g;
@@ -101,7 +104,7 @@ export function createTerrain(ctx: CityContext): Terrain {
   land(world, flat, solid);
   roads(world, flat, solid);
   yards(world, flat);
-  const material = new THREE.MeshStandardNodeMaterial({ vertexColors: true, roughness: .8, metalness: .04 });
+  const material = groundMaterial();
   const group = new THREE.Group(); group.name = "city-terrain";
   const ground = new THREE.Mesh(flat.build(), material), structures = new THREE.Mesh(solid.build(), material);
   ground.receiveShadow = true; structures.castShadow = structures.receiveShadow = true;
@@ -166,7 +169,7 @@ function land(world: WorldData, flat: Mesher, solid: Mesher) {
 export function createPatches(surfaces: readonly Surface[]): THREE.Mesh {
   const flat = new Mesher();
   paint(surfaces, flat);
-  const mesh = new THREE.Mesh(flat.build(), new THREE.MeshStandardNodeMaterial({ vertexColors: true, roughness: .8, metalness: .04 }));
+  const mesh = new THREE.Mesh(flat.build(), groundMaterial());
   mesh.receiveShadow = true; mesh.matrixAutoUpdate = false; mesh.name = "city-patches";
   return mesh;
 }
