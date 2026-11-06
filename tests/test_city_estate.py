@@ -64,6 +64,7 @@ OFFICES = {
     "officeg": 1440,
     "officeh": 1560,
     "officei": 1700,
+    "officej": 1860,
 }
 FAMILIES = {"square", "house", *READY, *OFFICES, "park", "bigpark"}
 

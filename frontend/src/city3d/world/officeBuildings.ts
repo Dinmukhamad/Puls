@@ -1,9 +1,9 @@
 /**
- * Ready office towers for district plots: nine towers drawn in code by assets/readyBuildings.ts (docs/CITY_V4.md),
+ * Ready office towers for district plots: ten towers drawn in code by assets/readyBuildings.ts (docs/CITY_V4.md),
  * each centred on x/z, grounded on y = 0 and facing +z. Dimensions are in model units; the city keeps their
  * proportions and shrinks them uniformly only when a plot is narrower.
  */
-export type OfficeBuilding = "officea" | "officeb" | "officec" | "officed" | "officee" | "officef" | "officeg" | "officeh" | "officei";
+export type OfficeBuilding = "officea" | "officeb" | "officec" | "officed" | "officee" | "officef" | "officeg" | "officeh" | "officei" | "officej";
 export interface OfficeBuildingModel { model: number; name: string; width: number; depth: number; height: number }
 
 export const OFFICE_SCALE = 2;
@@ -19,6 +19,8 @@ export const OFFICE_BUILDINGS: Record<OfficeBuilding, OfficeBuildingModel> = {
   officeg: { model: 7, name: "Офисная башня G", width: 2.160, depth: 2.344, height: 6.513 },
   officeh: { model: 8, name: "Офисная башня H", width: 2.245, depth: 2.757, height: 6.700 },
   officei: { model: 9, name: "Офисная башня I", width: 2.160, depth: 2.160, height: 6.471 },
+  // Drawn after the glass business complex of the owner's photographs (assets/readyBuildings.ts, pyramidTower).
+  officej: { model: 10, name: "Башня с пирамидой", width: 2.3, depth: 2.3, height: 6.8 },
 };
 
 export const isOfficeBuilding = (family: string): family is OfficeBuilding => Object.prototype.hasOwnProperty.call(OFFICE_BUILDINGS, family);

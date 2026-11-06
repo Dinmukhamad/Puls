@@ -41,12 +41,12 @@ const shelf = (tab, price = () => "цена") => renderToStaticMarkup(React.crea
 const tab = (html, title) => html.match(new RegExp(`<ul class="estate-shop__items" role="tabpanel" aria-label="${title}">(.*?)</ul>`, "s"))?.[1] ?? assert.fail(`Missing the ${title} tab`);
 
 test("catalogue separates every office from ready houses and excludes gathered parks", () => {
-  assert.equal(officeFamilies.length, 9);
+  assert.equal(officeFamilies.length, 10);
   const grouped = splitPlotCatalogue(catalogue);
   assert.deepEqual(grouped.options.map(c => c.family), ["square", "house"]);
   assert.deepEqual(grouped.houses.map(c => c.family), ["carport"]);
   assert.deepEqual(grouped.offices.map(c => c.family), officeFamilies);
-  assert.equal(new Set([...grouped.options, ...grouped.houses, ...grouped.offices].map(c => c.family)).size, 12);
+  assert.equal(new Set([...grouped.options, ...grouped.houses, ...grouped.offices].map(c => c.family)).size, 13);
   assert.deepEqual(splitPlotCatalogue([]), { options: [], houses: [], offices: [] });
 });
 

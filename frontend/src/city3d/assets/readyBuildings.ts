@@ -9,7 +9,7 @@
  * to them; eaves may reach a little past the walls, as on a real house.
  */
 import type * as THREE from "three/webgpu";
-import { FACE, MeshBuilder, bakeOcclusion, box, gableRoof, hipRoof, parapet, rgb, type V3 } from "./facade";
+import { FACE, MeshBuilder, bakeOcclusion, box, gableRoof, hipRoof, parapet, pyramid, rgb, type V3 } from "./facade";
 import { FINISHES, READY_HOUSES, type ReadyHouse, type ReadyHouseModel } from "../world/familyHouses";
 import { OFFICE_BUILDINGS, type OfficeBuilding } from "../world/officeBuildings";
 
@@ -183,7 +183,7 @@ interface Tower {
   tiers: [number, number, "glass" | "stone"][];
   chamfer?: number; ring?: boolean;
 }
-const TOWERS: Record<OfficeBuilding, Tower> = {
+const TOWERS: Record<Exclude<OfficeBuilding, "officej">, Tower> = {
   officea: { glass: rgb("#7da7c2"), stone: rgb("#d9d4cb"), tiers: [[0, .16, "stone"], [1, 1, "glass"]] },
   officeb: { glass: rgb("#9cb4c4"), stone: rgb("#cfc6b8"), tiers: [[0, .86, "stone"], [1.4, 1, "stone"]] },
   officec: { glass: rgb("#86a9b8"), stone: rgb("#d5d0c6"), tiers: [[0, .55, "glass"], [1.6, .8, "glass"], [3.2, 1, "glass"]] },
@@ -195,8 +195,66 @@ const TOWERS: Record<OfficeBuilding, Tower> = {
   officei: { glass: rgb("#6f97ac"), stone: rgb("#e0dbd1"), tiers: [[0, .1, "stone"], [.6, 1, "glass"]], chamfer: .9, ring: true },
 };
 
+/**
+ * «Башня с пирамидой», after the glass business complex of the owner's photographs: volumes of mirror glass with cut
+ * corners step down from a core under a steep pyramid, small pinnacles stand on the shoulders, a dark granite podium
+ * of two floors carries bronze shop windows, and a glass lobby under a canopy has a little glass pyramid of its own.
+ * Like the other towers it stands back by its canopy, so the canopy ends at the footprint's front.
+ */
+function pyramidTower(): THREE.BufferGeometry {
+  const model = OFFICE_BUILDINGS.officej, k = OFFICE_METRES;
+  const W = model.width * k, D = model.depth * k, top = model.height * k, hw = W / 2;
+  const FLOOR = 3.6, PODIUM = 2 * FLOOR, back = -D / 2, front = D / 2 - 1.6;
+  const GRANITE = rgb("#765a4a"), BRONZE = rgb("#8c7a5e"), STEEL = rgb("#46535e");
+  const mb = new MeshBuilder();
+  /** Mirror-glass floors from the podium up on a rectangle of the plan, three rows of panes to a floor; returns the roof's height. */
+  const tier = (x0: number, x1: number, z0: number, z1: number, floors: number, tint: string, c = .9) => {
+    const roof = PODIUM + floors * FLOOR;
+    box(mb, [x0, PODIUM, z0, x1, roof, z1], { c, kind: FACE.mirror, col: rgb(tint), top: FACE.deck, bay: 1.1, floor: FLOOR / 3, crisp: true });
+    return roof;
+  };
+  box(mb, [-hw, 0, back, hw, PODIUM, front], { c: .3, kind: FACE.wall, col: GRANITE, top: FACE.deck });
+  // The plan is three rows of three: the core in the middle, the volumes stepping down by a floor or two round it and
+  // by more to the front and the corners, so the mass stays broad and its top edge is notched.
+  const xi = 4.6, zf = 2.8, zb = -6.4;
+  const core = tier(-xi, xi, zb, zf, 10, "#a3c2d6", 2.2);
+  const block = tier(-xi, xi, zf, front, 6, "#aac6d8");
+  const west = tier(-hw, -xi, zb, zf, 8, "#93b3c9", 1.2);
+  const east = tier(xi, hw, zb, zf, 9, "#88a8c0", 1.2);
+  tier(-hw, -xi, zf, front - 1.2, 4, "#9dbad0");
+  tier(xi, hw, zf, front - .6, 5, "#9dbad0");
+  tier(-xi, xi, back, zb, 8, "#829fb6", 1.2);
+  tier(-hw, -xi, back, zb, 6, "#8fadc3");
+  tier(xi, hw, back, zb, 7, "#8fadc3");
+  // The crown: a collar of dark steel, the pyramid, a mast with its red light, and a pinnacle on each shoulder.
+  const zc = (zb + zf) / 2, collar = core + 1.4;
+  box(mb, [-3.5, core - .8, zc - 3.5, 3.5, collar, zc + 3.5], { c: .25, kind: FACE.trim, col: STEEL, top: FACE.trim, topCol: rgb("#3a444d") });
+  const apex = collar + 7.4;
+  pyramid(mb, { x0: -3.2, x1: 3.2, z0: zc - 3.2, z1: zc + 3.2, y: collar, h: apex - collar, roof: rgb("#a3bccf"), kind: FACE.spire, win: [1.2, 1.2, 0, 0] });
+  box(mb, [-.14, apex - .4, zc - .14, .14, top - .5, zc + .14], { c: .03, kind: FACE.trim, col: rgb("#aab0b5"), top: FACE.trim, occlude: false });
+  box(mb, [-.25, top - .5, zc - .25, .25, top, zc + .25], { c: .04, kind: FACE.light, col: rgb("#ff3a2a"), top: FACE.light, occlude: false });
+  for (const [side, roof] of [[-1, west], [1, east]] as const) {
+    const x = side * 6.9;
+    pyramid(mb, { x0: x - 1.2, x1: x + 1.2, z0: -.6, z1: 1.8, y: roof, h: 2.6, roof: rgb("#a3bccf"), kind: FACE.spire, win: [.9, .9, 0, 0] });
+  }
+  // A glass pyramid over the stair on the roof of the block in front of the core.
+  pyramid(mb, { x0: -1.4, x1: 1.4, z0: 3.9, z1: 6.5, y: block, h: 1.8, roof: rgb("#a3bccf"), kind: FACE.spire, win: [.8, .8, 0, 0] });
+  // Shop windows in bronze between the piers of the podium's four walls.
+  const shop = (box6: [number, number, number, number, number, number]) => box(mb, box6, { c: .02, kind: FACE.curtain, col: BRONZE, top: FACE.trim, bay: 1.4, floor: 2.9, occlude: false });
+  for (const [x0, x1] of [[-8.4, -5], [5, 8.4]]) shop([x0, .5, front, x1, 6.3, front + .14]);
+  for (const [x0, x1] of [[-8.4, -1], [1, 8.4]]) shop([x0, .5, back - .14, x1, 6.3, back]);
+  for (const [z0, z1] of [[back + 1, -1], [.4, front - 1]]) { shop([-hw - .14, .5, z0, -hw, 6.3, z1]); shop([hw, .5, z0, hw + .14, 6.3, z1]); }
+  // The entrance: a glass lobby, a canopy over it, and a little glass pyramid on the canopy.
+  box(mb, [-3.2, 0, front - .1, 3.2, 4.2, front + .15], { c: .03, kind: FACE.glass, top: FACE.glass, occlude: false });
+  box(mb, [-4, 4.3, front - .1, 4, 4.6, D / 2], { c: .05, kind: FACE.trim, col: DARK, top: FACE.trim });
+  pyramid(mb, { x0: -1.3, x1: 1.3, z0: front + .1, z1: D / 2 - .1, y: 4.6, h: 1.7, roof: rgb("#8fb0c6"), kind: FACE.spire, win: [.7, .7, 0, 0] });
+  bakeOcclusion(mb, { reach: 5 });
+  return mb.build(1 / k);
+}
+
 /** An office tower, in model units: tiers of curtain wall or stone, a glass lobby and canopy at the front, a crown. */
 export function officeTowerGeometry(family: OfficeBuilding): THREE.BufferGeometry {
+  if (family === "officej") return pyramidTower();
   const model = OFFICE_BUILDINGS[family], t = TOWERS[family], k = OFFICE_METRES;
   const W = model.width * k, D = model.depth * k, H = model.height * k * .9, top = model.height * k;
   // The tower stands back by its canopy, so the canopy over the entrance ends at the footprint's front.
