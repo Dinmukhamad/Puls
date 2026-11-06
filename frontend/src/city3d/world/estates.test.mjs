@@ -152,13 +152,14 @@ test('a house grows at every stage: one storey, two, a wing, a garage, a three-s
   assert.ok(E.plotLayout(on('park'), 'park', 2, 3).placements.some(p => p.kind === 'fountain'), 'a fountain in the park\'s second stage');
 });
 
-test('all ten offices are finished purchases on 2 × 2 cells and fit them anywhere, facing any side, with an entrance plaza', () => {
+test('all eleven offices are finished purchases on 2 × 2 cells and fit them anywhere, facing any side, with an entrance plaza', () => {
   assert.deepEqual(Object.keys(SERVER_OFFICES), Object.keys(E.OFFICE_BUILDINGS));
-  assert.equal(Object.keys(SERVER_OFFICES).length, 10);
+  assert.equal(Object.keys(SERVER_OFFICES).length, 11);
   assert.ok(!E.isOfficeBuilding('house') && !E.isOfficeBuilding('toString'));
-  assert.equal(new Set(Array.from({ length: 10 }, (_, v) => E.officeModelName(v))).size, 10);
+  assert.equal(new Set(Array.from({ length: 11 }, (_, v) => E.officeModelName(v))).size, 11);
   assert.equal(E.officeModelName(8), 'office-building-9');
   assert.equal(E.officeModelName(9), 'office-building-10');
+  assert.equal(E.officeModelName(10), 'office-building-11');
   const costs = Object.values(SERVER_OFFICES).map(m => m.price);
   assert.ok(costs.every((price, i) => price > 0 && (i === 0 || price > costs[i - 1])));
   assert.match(server, /\*\*\{key: \[price\] for key, \(_name, price\) in OFFICE_TOWERS\.items\(\)\}/);

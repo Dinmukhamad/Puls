@@ -188,6 +188,37 @@ export function pyramid(mb: MeshBuilder, r: PyramidOptions): number {
   return apex;
 }
 
+export interface PrismOptions {
+  x?: number; z?: number;
+  /** Apothem (centre to the middle of a wall) at the foot and, for a frustum, at the top. */
+  r: number; top?: number;
+  y0: number; y1: number; sides?: number; kind?: Face; col?: V3;
+  /** What its flat roof is (null for none) and in what colour. */
+  roof?: Face | null; roofCol?: V3;
+  bay?: number; floor?: number; winW?: number; winH?: number; occlude?: boolean;
+}
+/**
+ * A prism of `sides` flat walls round a vertical axis, walls facing ±x and ±z among them, or a frustum when `top` is
+ * smaller than `r`, with a flat roof. The wall coordinates run round it in metres, so a grid of windows or panes goes on
+ * from wall to wall. Returns the roof's height.
+ */
+export function prism(mb: MeshBuilder, o: PrismOptions): number {
+  const n = o.sides ?? 8, x = o.x ?? 0, z = o.z ?? 0, kind = o.kind ?? FACE.wall, col = o.col ?? WHITE, half = Math.PI / n;
+  const corner = (k: number, apothem: number, y: number): V3 => {
+    const a = (2 * k - 1) * half, r = apothem / Math.cos(half);
+    return [x + Math.sin(a) * r, y, z + Math.cos(a) * r];
+  };
+  const top = o.top ?? o.r, side = 2 * o.r * Math.tan(half), bays = Math.max(1, Math.round(side / (o.bay ?? 2.8)));
+  const win: [number, number, number, number] = [side / bays, o.floor ?? 2.9, o.winW ?? .44, o.winH ?? .48];
+  for (let k = 0; k < n; k++) mb.quad([corner(k, o.r, o.y0), corner(k + 1, o.r, o.y0), corner(k + 1, top, o.y1), corner(k, top, o.y1)], { kind, col, u0: k * side, win });
+  if (o.roof !== null) for (let k = 0; k < n; k++) {
+    const a = corner(k, top, o.y1), b = corner(k + 1, top, o.y1);
+    mb.tri([[x, o.y1, z], a, b], { kind: o.roof ?? FACE.deck, col: o.roofCol ?? col, n: [0, 1, 0], uv: [[x, z], [a[0], a[2]], [b[0], b[2]]] });
+  }
+  if (o.occlude !== false) { const r = o.r / Math.cos(half); mb.occluders.push([x - r, o.y0, z - r, x + r, o.y1, z + r]); }
+  return o.y1;
+}
+
 /** A low wall round a flat roof. */
 export function parapet(mb: MeshBuilder, x0: number, z0: number, x1: number, z1: number, y: number, h: number, t: number, col: V3) {
   const o: BoxOptions = { c: .04, kind: FACE.wall, col, top: FACE.trim, topCol: rgb("#d9d6cf") };
