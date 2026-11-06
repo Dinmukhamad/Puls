@@ -65,6 +65,7 @@ OFFICES = {
     "officeh": 1560,
     "officei": 1700,
     "officej": 1860,
+    "officek": 2040,
 }
 FAMILIES = {"square", "house", *READY, *OFFICES, "park", "bigpark"}
 
@@ -337,7 +338,7 @@ async def test_ready_houses_are_bought_finished_at_the_price_of_their_size(
 
 async def test_all_supplied_office_towers_are_bought_finished_on_four_cells(client, session, team):
     me = auth(await login(client, team.login))
-    await fund(session, team.id, 12_000)
+    await fund(session, team.id, sum(SMALL_LAND + price for price in OFFICES.values()))
     catalogue = {c["family"]: c for c in (await estate(client, me))["catalogue"]}
     assert [f for f, c in catalogue.items() if c["ready"]] == [*READY, *OFFICES]
     plots = [(col, row) for row in (0, 1) for col in range(6)]

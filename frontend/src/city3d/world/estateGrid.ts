@@ -45,11 +45,11 @@ export const preparedLand = (id: string) => LAYOUT_ID.test(id) && districtNumber
 /** Columns × rows of cells (unturned) and levels of what operators build, as the server's PLOT_FAMILIES. */
 export const PLOT_SIZE: Record<PlotFamily, [number, number]> = {
   square: [2, 2], house: [3, 3], carport: [3, 3], bungalow: [3, 3], attic: [3, 3], modern: [3, 3], bayhouse: [3, 3], terrace: [3, 3], park: [4, 4], bigpark: [6, 4],
-  officea: [2, 2], officeb: [2, 2], officec: [2, 2], officed: [2, 2], officee: [2, 2], officef: [2, 2], officeg: [2, 2], officeh: [2, 2], officei: [2, 2], officej: [2, 2],
+  officea: [2, 2], officeb: [2, 2], officec: [2, 2], officed: [2, 2], officee: [2, 2], officef: [2, 2], officeg: [2, 2], officeh: [2, 2], officei: [2, 2], officej: [2, 2], officek: [2, 2],
 };
 export const PLOT_LEVELS: Record<PlotFamily, number> = {
   square: 1, house: 5, carport: 1, bungalow: 1, attic: 1, modern: 1, bayhouse: 1, terrace: 1, park: 2, bigpark: 3,
-  officea: 1, officeb: 1, officec: 1, officed: 1, officee: 1, officef: 1, officeg: 1, officeh: 1, officei: 1, officej: 1,
+  officea: 1, officeb: 1, officec: 1, officed: 1, officee: 1, officef: 1, officeg: 1, officeh: 1, officei: 1, officej: 1, officek: 1,
 };
 /** How many of an operator's own squares gather into each park. */
 export const PARK_SQUARES: Partial<Record<PlotFamily, number>> = { park: 4, bigpark: 6 };

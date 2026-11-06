@@ -209,7 +209,7 @@ test('ready houses: each house in each finish its own model, built in code on th
   catalogue.dispose(); assert.equal(disposed, 1, 'the catalogue owns the built houses');
 });
 
-test('all ten ready offices are built in code at the table\'s proportions, grounded and centred in their plot, with one lit facade', () => {
+test('all eleven ready offices are built in code at the table\'s proportions, grounded and centred in their plot, with one lit facade', () => {
   const catalogue = city.createCatalogue(new Map(), city.createNight()), matrix = new THREE.Matrix4();
   const position = new THREE.Vector3(), rotation = new THREE.Quaternion(), scale = new THREE.Vector3();
   const resolved = Object.values(city.OFFICE_BUILDINGS).map(definition => {
@@ -227,8 +227,8 @@ test('all ten ready offices are built in code at the table\'s proportions, groun
     assert.ok(part.material.emissiveNode, 'lit at night');
     return model;
   });
-  assert.equal(new Set(resolved.map(model => model.lods[0].parts[0].material)).size, 1, 'one facade material for all ten');
-  assert.equal(new Set(resolved.map(model => model.lods[0].parts[0].geometry)).size, 10, 'ten towers');
+  assert.equal(new Set(resolved.map(model => model.lods[0].parts[0].material)).size, 1, 'one facade material for all eleven');
+  assert.equal(new Set(resolved.map(model => model.lods[0].parts[0].geometry)).size, 11, 'eleven towers');
   const counts = { lit: 0, geometry: 0 };
   resolved[0].lods[0].parts[0].material.addEventListener('dispose', () => counts.lit++);
   resolved[0].lods[0].parts[0].geometry.addEventListener('dispose', () => counts.geometry++);

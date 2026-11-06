@@ -9,7 +9,7 @@
  * to them; eaves may reach a little past the walls, as on a real house.
  */
 import type * as THREE from "three/webgpu";
-import { FACE, MeshBuilder, bakeOcclusion, box, gableRoof, hipRoof, parapet, pyramid, rgb, type V3 } from "./facade";
+import { FACE, MeshBuilder, bakeOcclusion, box, cylinder, gableRoof, hipRoof, parapet, pyramid, rgb, type V3 } from "./facade";
 import { FINISHES, READY_HOUSES, type ReadyHouse, type ReadyHouseModel } from "../world/familyHouses";
 import { OFFICE_BUILDINGS, type OfficeBuilding } from "../world/officeBuildings";
 
@@ -183,7 +183,7 @@ interface Tower {
   tiers: [number, number, "glass" | "stone"][];
   chamfer?: number; ring?: boolean;
 }
-const TOWERS: Record<Exclude<OfficeBuilding, "officej">, Tower> = {
+const TOWERS: Record<Exclude<OfficeBuilding, "officej" | "officek">, Tower> = {
   officea: { glass: rgb("#7da7c2"), stone: rgb("#d9d4cb"), tiers: [[0, .16, "stone"], [1, 1, "glass"]] },
   officeb: { glass: rgb("#9cb4c4"), stone: rgb("#cfc6b8"), tiers: [[0, .86, "stone"], [1.4, 1, "stone"]] },
   officec: { glass: rgb("#86a9b8"), stone: rgb("#d5d0c6"), tiers: [[0, .55, "glass"], [1.6, .8, "glass"], [3.2, 1, "glass"]] },
@@ -252,9 +252,66 @@ function pyramidTower(): THREE.BufferGeometry {
   return mb.build(1 / k);
 }
 
+/**
+ * The Empire State Building (world/officeBuildings.ts officek), after the owner's model of it: drawn in its own metres
+ * (130 m along the street) from the setbacks, the mast and the antenna measured in that model, and handed over in model
+ * units. Limestone with windows drawn by the facade material (lit at night), a plinth of five floors with bronze shop
+ * fronts and an entrance on each long side, three setbacks to the 21st floor, the shaft, five steps of the crown, the
+ * octagonal mooring mast with its observatory and a lit ring, the antenna and its red light.
+ */
+function empireState(): THREE.BufferGeometry {
+  const model = OFFICE_BUILDINGS.officek, M = 130.4 / model.width, top = model.height * M;
+  const STONE = rgb("#dcd4c2"), CROWN = rgb("#e2dbca"), ALUMINIUM = rgb("#687272"), BRONZE = rgb("#76664a"), STEEL = rgb("#7d8786");
+  const mb = new MeshBuilder();
+  /** A limestone volume with its windows: half its width and depth, from y0 to y1. */
+  const stone = (hx: number, hz: number, y0: number, y1: number, col = STONE) =>
+    box(mb, [-hx, y0, -hz, hx, y1, hz], { c: .8, kind: FACE.window, col, top: FACE.deck, bay: 2.4, floor: 3.8, winW: .4, winH: .84, crisp: true });
+  stone(65.2, 29.2, 0, 21.5);
+  stone(58.7, 26.2, 21.5, 35.5);
+  stone(51.2, 24.2, 35.5, 58);
+  stone(41.7, 21.7, 58, 84);
+  stone(30.2, 19, 84, 270);
+  stone(27.2, 17.3, 270, 285);
+  stone(23.2, 15.6, 285, 299);
+  stone(18.7, 13.7, 299, 311);
+  stone(15.2, 12.2, 311, 320);
+  stone(11.2, 9.5, 320, 330.2, CROWN);
+  // The mooring mast: octagons of limestone and of aluminium ribs over glass, the observatory, a ring lit at night.
+  // Octagons with walls facing the street and the sides: eight segments turned by half of one, their radius to a corner.
+  const OCTAGON = { x: 0, z: 0, seg: 8, a0: Math.PI / 8, a1: Math.PI / 8 + Math.PI * 2 };
+  const mast = (r: number, y0: number, y1: number, kind: typeof FACE.window | typeof FACE.curtain | typeof FACE.trim | typeof FACE.light, col: V3, top?: number) =>
+    cylinder(mb, { ...OCTAGON, r: r / Math.cos(Math.PI / 8), r1: top && top / Math.cos(Math.PI / 8), y0, y1, kind, col, top: FACE.trim, topCol: CROWN, bay: 1.6, floor: 3.8, winW: .4, winH: .7 });
+  mast(8.8, 330.2, 336.4, FACE.window, CROWN);
+  mast(7.7, 336.4, 352.2, FACE.curtain, ALUMINIUM);
+  mast(7.35, 352.2, 354.3, FACE.trim, CROWN);
+  mast(6.75, 354.3, 369, FACE.curtain, ALUMINIUM);
+  mast(6, 369, 370, FACE.light, rgb("#fff1d6"));
+  mast(5.65, 370, 376.7, FACE.curtain, rgb("#4a5c5c"));
+  mast(5.5, 376.7, 377.4, FACE.trim, STEEL);
+  mast(5.3, 377.4, 380.8, FACE.trim, CROWN);
+  mast(2, 380.8, 381.1, FACE.trim, STEEL);
+  // The antenna: a tapering lattice, thinner masts, and the red light on its tip.
+  cylinder(mb, { x: 0, z: 0, seg: 4, a0: Math.PI / 4, a1: Math.PI * 2.25, r: 1.5 * Math.SQRT2, r1: .9 * Math.SQRT2, y0: 381.1, y1: 408, kind: FACE.trim, col: STEEL, top: FACE.trim, occlude: false });
+  for (const [r, y0, y1] of [[.8, 408, 416], [.6, 416, 431], [.4, 431, 440], [.2, 440, top - 1.2]]) cylinder(mb, { ...OCTAGON, r, y0, y1, kind: FACE.trim, col: STEEL, top: FACE.trim, occlude: false });
+  box(mb, [-.5, top - 1.2, -.5, .5, top, .5], { c: .1, kind: FACE.light, col: rgb("#ff3a2a"), top: FACE.light, occlude: false });
+  // Bronze shop fronts round the plinth, and an entrance with a canopy on each long side.
+  const shop = (b: [number, number, number, number, number, number]) => box(mb, b, { c: .05, kind: FACE.curtain, col: BRONZE, top: FACE.trim, bay: 2.2, floor: 5.8, occlude: false });
+  for (const side of [-1, 1]) {
+    const z = side * 29.2, out = side * .4;
+    for (const [x0, x1] of [[-62, -10], [10, 62]]) shop([x0, .6, Math.min(z, z + out), x1, 6.4, Math.max(z, z + out)]);
+    shop([side * 65.2 + (side > 0 ? 0 : -.4), .6, -25, side * 65.2 + (side > 0 ? .4 : 0), 6.4, 25]);
+    box(mb, [-8, 0, Math.min(z, side * 30), 8, 11.7, Math.max(z, side * 30)], { c: .2, kind: FACE.trim, col: BRONZE, top: FACE.trim });
+    box(mb, [-5, 0, Math.min(z, side * 30.2), 5, 7.5, Math.max(z, side * 30.2)], { c: .05, kind: FACE.glass, top: FACE.glass, occlude: false });
+    box(mb, [-9.5, 9, Math.min(z, side * 33), 9.5, 10.2, Math.max(z, side * 33)], { c: .15, kind: FACE.trim, col: BRONZE, top: FACE.trim });
+  }
+  bakeOcclusion(mb, { reach: 12, ground: 8 });
+  return mb.build(1 / M);
+}
+
 /** An office tower, in model units: tiers of curtain wall or stone, a glass lobby and canopy at the front, a crown. */
 export function officeTowerGeometry(family: OfficeBuilding): THREE.BufferGeometry {
   if (family === "officej") return pyramidTower();
+  if (family === "officek") return empireState();
   const model = OFFICE_BUILDINGS[family], t = TOWERS[family], k = OFFICE_METRES;
   const W = model.width * k, D = model.depth * k, H = model.height * k * .9, top = model.height * k;
   // The tower stands back by its canopy, so the canopy over the entrance ends at the footprint's front.

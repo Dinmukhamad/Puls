@@ -64,10 +64,11 @@ SQUARE, MODULE_CELLS = 0, 12
 #: A district this small shows only whether a project is still collecting, not how far.
 SMALL_TEAM = 3
 
-#: The ten ready office towers. The first nine follow the separate buildings of the "High Rise Office
-#: Buildings" collection they were first drawn from (Cube.000, .001, .002, .004 through .009; .003 is
-#: part of .002); the tenth, the tower with a pyramid, is drawn after the owner's photographs of a
-#: glass business complex. Every tower is bought finished on 2 × 2 cells, like a ready house.
+#: The eleven ready office towers. The first nine follow the separate buildings of the "High Rise
+#: Office Buildings" collection they were first drawn from (Cube.000, .001, .002, .004 through .009;
+#: .003 is part of .002); the tenth, the tower with a pyramid, is drawn after the owner's photographs
+#: of a glass business complex; the eleventh, the Empire State Building, after the owner's model of
+#: it. Every tower is bought finished on 2 × 2 cells, like a ready house.
 OFFICE_TOWERS = {
     "officea": ("Офисная башня A", 900),
     "officeb": ("Офисная башня B", 980),
@@ -79,6 +80,7 @@ OFFICE_TOWERS = {
     "officeh": ("Офисная башня H", 1560),
     "officei": ("Офисная башня I", 1700),
     "officej": ("Башня с пирамидой", 1860),
+    "officek": ("Эмпайр-стейт-билдинг", 2040),
 }
 
 #: What operators build on the land. Size is in cells (columns × rows, unturned): a house 3 × 3,
