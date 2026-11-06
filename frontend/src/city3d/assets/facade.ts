@@ -12,8 +12,11 @@ import * as THREE from "three/webgpu";
 import { abs, attribute, float, floor, fract, fwidth, hash, max, min, mix, positionWorld, smoothstep, step, texture, vec2, vec3, vec4, vertexColor } from "three/tsl";
 import { groundNoise } from "../render/ground";
 
-/** Surface kinds, kept in aSurf.z. */
-export const FACE = { window: 0, wall: 1, roof: 2, deck: 3, trim: 4, curtain: 5, light: 6, glass: 8 } as const;
+/**
+ * Surface kinds, kept in aSurf.z. `mirror` is a curtain wall of reflective glass in a thin dark grid; `spire` is the same
+ * glass on a roof, whose panes never light up at night as an office's do.
+ */
+export const FACE = { window: 0, wall: 1, roof: 2, deck: 3, trim: 4, curtain: 5, light: 6, mirror: 7, glass: 8, spire: 9 } as const;
 type Face = typeof FACE[keyof typeof FACE];
 export type V3 = [number, number, number];
 /** A colour as linear RGB, from an sRGB hex. */
@@ -78,6 +81,8 @@ export interface BoxOptions {
   even?: ("+z" | "-z" | "+x" | "-x")[];
   faces?: ("+z" | "-z" | "+x" | "-x")[];
   noTop?: boolean; occlude?: boolean;
+  /** Flat bevels: each chamfer strip keeps its own normal instead of blending those of the faces it joins (a cut corner, not a rounded one). */
+  crisp?: boolean;
 }
 /**
  * A box with its vertical and top edges chamfered. The walls keep flat normals; the chamfer strips blend the normals
@@ -85,8 +90,9 @@ export interface BoxOptions {
  */
 export function box(mb: MeshBuilder, [x0, y0, z0, x1, y1, z1]: [number, number, number, number, number, number], o: BoxOptions = {}) {
   const c = Math.min(o.c ?? .12, (x1 - x0) / 2.2, (z1 - z0) / 2.2, (y1 - y0) / 2.2);
-  const col = o.col ?? WHITE, kind = o.kind ?? FACE.wall, edgeKind = kind === FACE.window || kind === FACE.curtain ? FACE.wall : kind;
-  const edgeCol: V3 = kind === FACE.curtain ? [col[0] * .5, col[1] * .55, col[2] * .6] : col;
+  const col = o.col ?? WHITE, kind = o.kind ?? FACE.wall, glassy = kind === FACE.curtain || kind === FACE.mirror;
+  const edgeKind = kind === FACE.window || glassy ? FACE.wall : kind;
+  const edgeCol: V3 = glassy ? [col[0] * .5, col[1] * .55, col[2] * .6] : col;
   const target = o.bay ?? 2.8, floorH = o.floor ?? 2.9, ww = o.winW ?? .44, wh = o.winH ?? .48, faces = o.faces ?? ["+z", "-z", "+x", "-x"];
   const bays = (run: number, key: string) => {
     let n = Math.max(1, Math.round(run / target));
@@ -101,18 +107,19 @@ export function box(mb: MeshBuilder, [x0, y0, z0, x1, y1, z1]: [number, number, 
   if (faces.includes("-x")) mb.quad([[x0, y0, zi0], [x0, y0, zi1], [x0, yt, zi1], [x0, yt, zi0]], wall("-x", zi1 - zi0, [-1, 0, 0]));
   const e: FaceOptions = { kind: edgeKind, col: edgeCol };
   const s = Math.SQRT1_2, pz: V3 = [0, 0, 1], nz: V3 = [0, 0, -1], px: V3 = [1, 0, 0], nx: V3 = [-1, 0, 0], py: V3 = [0, 1, 0];
-  mb.quad([[xi1, y0, z1], [x1, y0, zi1], [x1, yt, zi1], [xi1, yt, z1]], { ...e, ns: [pz, px, px, pz], n: [s, 0, s] });
-  mb.quad([[x0, y0, zi1], [xi0, y0, z1], [xi0, yt, z1], [x0, yt, zi1]], { ...e, ns: [nx, pz, pz, nx], n: [-s, 0, s] });
-  mb.quad([[x1, y0, zi0], [xi1, y0, z0], [xi1, yt, z0], [x1, yt, zi0]], { ...e, ns: [px, nz, nz, px], n: [s, 0, -s] });
-  mb.quad([[xi0, y0, z0], [x0, y0, zi0], [x0, yt, zi0], [xi0, yt, z0]], { ...e, ns: [nz, nx, nx, nz], n: [-s, 0, -s] });
-  mb.quad([[xi0, yt, z1], [xi1, yt, z1], [xi1, y1, zi1], [xi0, y1, zi1]], { ...e, ns: [pz, pz, py, py], n: [0, s, s] });
-  mb.quad([[xi1, yt, z0], [xi0, yt, z0], [xi0, y1, zi0], [xi1, y1, zi0]], { ...e, ns: [nz, nz, py, py], n: [0, s, -s] });
-  mb.quad([[x1, yt, zi1], [x1, yt, zi0], [xi1, y1, zi0], [xi1, y1, zi1]], { ...e, ns: [px, px, py, py], n: [s, s, 0] });
-  mb.quad([[x0, yt, zi0], [x0, yt, zi1], [xi0, y1, zi1], [xi0, y1, zi0]], { ...e, ns: [nx, nx, py, py], n: [-s, s, 0] });
-  mb.tri([[xi1, yt, z1], [x1, yt, zi1], [xi1, y1, zi1]], { ...e, ns: [pz, px, py] });
-  mb.tri([[x0, yt, zi1], [xi0, yt, z1], [xi0, y1, zi1]], { ...e, ns: [nx, pz, py] });
-  mb.tri([[x1, yt, zi0], [xi1, yt, z0], [xi1, y1, zi0]], { ...e, ns: [px, nz, py] });
-  mb.tri([[xi0, yt, z0], [x0, yt, zi0], [xi0, y1, zi0]], { ...e, ns: [nz, nx, py] });
+  const blend = (...normals: V3[]) => o.crisp ? undefined : normals;
+  mb.quad([[xi1, y0, z1], [x1, y0, zi1], [x1, yt, zi1], [xi1, yt, z1]], { ...e, ns: blend(pz, px, px, pz), n: [s, 0, s] });
+  mb.quad([[x0, y0, zi1], [xi0, y0, z1], [xi0, yt, z1], [x0, yt, zi1]], { ...e, ns: blend(nx, pz, pz, nx), n: [-s, 0, s] });
+  mb.quad([[x1, y0, zi0], [xi1, y0, z0], [xi1, yt, z0], [x1, yt, zi0]], { ...e, ns: blend(px, nz, nz, px), n: [s, 0, -s] });
+  mb.quad([[xi0, y0, z0], [x0, y0, zi0], [x0, yt, zi0], [xi0, yt, z0]], { ...e, ns: blend(nz, nx, nx, nz), n: [-s, 0, -s] });
+  mb.quad([[xi0, yt, z1], [xi1, yt, z1], [xi1, y1, zi1], [xi0, y1, zi1]], { ...e, ns: blend(pz, pz, py, py), n: [0, s, s] });
+  mb.quad([[xi1, yt, z0], [xi0, yt, z0], [xi0, y1, zi0], [xi1, y1, zi0]], { ...e, ns: blend(nz, nz, py, py), n: [0, s, -s] });
+  mb.quad([[x1, yt, zi1], [x1, yt, zi0], [xi1, y1, zi0], [xi1, y1, zi1]], { ...e, ns: blend(px, px, py, py), n: [s, s, 0] });
+  mb.quad([[x0, yt, zi0], [x0, yt, zi1], [xi0, y1, zi1], [xi0, y1, zi0]], { ...e, ns: blend(nx, nx, py, py), n: [-s, s, 0] });
+  mb.tri([[xi1, yt, z1], [x1, yt, zi1], [xi1, y1, zi1]], { ...e, ns: blend(pz, px, py) });
+  mb.tri([[x0, yt, zi1], [xi0, yt, z1], [xi0, y1, zi1]], { ...e, ns: blend(nx, pz, py) });
+  mb.tri([[x1, yt, zi0], [xi1, yt, z0], [xi1, y1, zi0]], { ...e, ns: blend(px, nz, py) });
+  mb.tri([[xi0, yt, z0], [x0, yt, zi0], [xi0, y1, zi0]], { ...e, ns: blend(nz, nx, py) });
   if (!o.noTop) mb.quad([[xi0, y1, zi1], [xi1, y1, zi1], [xi1, y1, zi0], [xi0, y1, zi0]], { kind: o.top ?? FACE.deck, col: o.topCol ?? col, n: py, uv: [[xi0, zi1], [xi1, zi1], [xi1, zi0], [xi0, zi0]] });
   if (o.occlude !== false) mb.occluders.push([x0, y0, z0, x1, y1, z1]);
 }
@@ -162,6 +169,23 @@ export function hipRoof(mb: MeshBuilder, r: HipOptions) {
   }
   mb.quad([[X0, low - .05, Z0], [X1, low - .05, Z0], [X1, low - .05, Z1], [X0, low - .05, Z1]], { kind: FACE.trim, col: r.soffit ?? rgb("#d6d0c4"), n: [0, -1, 0] });
   return top;
+}
+
+export interface PyramidOptions { x0: number; x1: number; z0: number; z1: number; y: number; height: number; col: V3; kind?: Face; win?: [number, number, number, number] }
+/**
+ * A pyramid on a rectangle: four slopes meeting above its middle. `win` sets the grid a curtain wall draws on the
+ * slopes (bay and floor in metres); the wall coordinates run in metres along the base and up the slope. Returns the apex.
+ */
+export function pyramid(mb: MeshBuilder, r: PyramidOptions): number {
+  const { x0, x1, z0, z1, y, height } = r, xm = (x0 + x1) / 2, zm = (z0 + z1) / 2, apex = y + height;
+  const o = { kind: r.kind ?? FACE.roof, col: r.col, win: r.win };
+  const alongX = Math.hypot(height, (z1 - z0) / 2), alongZ = Math.hypot(height, (x1 - x0) / 2);
+  const slope = (run: number, rise: number): [number, number][] => [[0, 0], [run, 0], [run / 2, rise]];
+  mb.tri([[x0, y, z1], [x1, y, z1], [xm, apex, zm]], { ...o, uv: slope(x1 - x0, alongX) });
+  mb.tri([[x1, y, z1], [x1, y, z0], [xm, apex, zm]], { ...o, uv: slope(z1 - z0, alongZ) });
+  mb.tri([[x1, y, z0], [x0, y, z0], [xm, apex, zm]], { ...o, uv: slope(x1 - x0, alongX) });
+  mb.tri([[x0, y, z0], [x0, y, z1], [xm, apex, zm]], { ...o, uv: slope(z1 - z0, alongZ) });
+  return apex;
 }
 
 /** A low wall round a flat roof. */
@@ -248,14 +272,18 @@ export function facadeMaterial(night: Node): THREE.MeshStandardNodeMaterial {
   const windowGlow = mix(warm.mul(lit).mul(pane).mul(blind.mul(.5).oneMinus()), vec3(1, .7, .36).mul(cover.mul(.42)), far).mul(night).mul(.62);
   const windowRough = mix(mix(.88, .14, pane), .6, far);
 
-  // Curtain walls: mullions, a spandrel at every floor, tinted glass by floor, lit floors at night.
-  const mullion = smoothstep(.035, aa.add(.035), min(f.x, f.x.oneMinus())).oneMinus();
-  const spandrel = smoothstep(0, aa, f.y).mul(smoothstep(.24, aa.add(.24), f.y).oneMinus());
+  // Curtain walls: mullions, a spandrel at every floor, tinted glass by floor, lit floors at night. Mirror glass has the
+  // same panes in a thin dark grid, with thin transoms and a stronger sky in every pane.
+  const spire = is(FACE.spire), mirror = is(FACE.mirror).add(spire), curtain = is(FACE.curtain).add(mirror);
+  const mullionHalf = mix(.035, .022, mirror), band = mix(.24, .09, mirror);
+  const mullion = smoothstep(mullionHalf, aa.add(mullionHalf), min(f.x, f.x.oneMinus())).oneMinus();
+  const spandrel = smoothstep(0, aa, f.y).mul(smoothstep(band, aa.add(band), f.y).oneMinus());
   const solid = max(mullion, spandrel.mul(.92));
   const shade = pick(float(0), cell.y, 11).mul(.6).add(.2);
   // The city lights glass without an environment map (TZ §6.3): the tint and a sky gradient up each pane stand in for it.
-  const tinted = base.mul(mix(.55, 1, shade)).mul(.6).add(lin(.55, .66, .78).mul(smoothstep(.15, 1, f.y).mul(.16)));
-  const curtainColour = mix(mix(tinted, lin(.62, .64, .66).mul(.85), solid), mix(tinted, lin(.62, .64, .66).mul(.85), .3), far);
+  const tinted = base.mul(mix(.55, 1, shade)).mul(mix(.6, .98, mirror)).add(lin(.55, .66, .78).mul(smoothstep(.15, 1, f.y).mul(mix(.16, .34, mirror))));
+  const grid = mix(lin(.62, .64, .66).mul(.85), lin(.025, .03, .04), mirror);
+  const curtainColour = mix(mix(tinted, grid, solid), mix(tinted, grid, .3), far);
   const curtainGlow = mix(vec3(1, .74, .42).mul(step(.6, pick(cell.x, cell.y, 13))).mul(solid.oneMinus()), vec3(1, .74, .42).mul(.28), far).mul(night).mul(.6);
   const glazed = mix(solid.oneMinus(), .7, far);
 
@@ -267,12 +295,12 @@ export function facadeMaterial(night: Node): THREE.MeshStandardNodeMaterial {
   const deck = lin(.34, .35, .36).mul(mix(.8, 1.15, grit));
 
   const colour = windowColour.mul(is(FACE.window)).add(base.mul(is(FACE.wall))).add(roof.mul(is(FACE.roof))).add(deck.mul(is(FACE.deck)))
-    .add(base.mul(is(FACE.trim))).add(curtainColour.mul(is(FACE.curtain))).add(base.mul(is(FACE.light))).add(lin(.05, .07, .09).mul(is(FACE.glass)));
+    .add(base.mul(is(FACE.trim))).add(curtainColour.mul(curtain)).add(base.mul(is(FACE.light))).add(lin(.05, .07, .09).mul(is(FACE.glass)));
   material.colorNode = vec4(colour.mul(mix(1, occlusion, .32)), 1);
-  material.emissiveNode = windowGlow.mul(is(FACE.window)).add(curtainGlow.mul(is(FACE.curtain))).add(base.mul(night.mul(1.6).add(.4)).mul(is(FACE.light)));
+  material.emissiveNode = windowGlow.mul(is(FACE.window)).add(curtainGlow.mul(curtain).mul(spire.oneMinus())).add(base.mul(night.mul(1.6).add(.4)).mul(is(FACE.light)));
   material.roughnessNode = windowRough.mul(is(FACE.window)).add(float(.88).mul(is(FACE.wall))).add(float(.82).mul(is(FACE.roof))).add(float(.95).mul(is(FACE.deck)))
-    .add(float(.7).mul(is(FACE.trim))).add(mix(.55, .22, glazed).mul(is(FACE.curtain))).add(float(.5).mul(is(FACE.light))).add(float(.08).mul(is(FACE.glass)));
-  material.metalnessNode = mix(.05, .15, glazed).mul(is(FACE.curtain)).add(float(.5).mul(is(FACE.glass))).add(pane.mul(.2).mul(far.oneMinus()).mul(is(FACE.window)));
+    .add(float(.7).mul(is(FACE.trim))).add(mix(.55, .22, glazed).mul(curtain)).add(float(.5).mul(is(FACE.light))).add(float(.08).mul(is(FACE.glass)));
+  material.metalnessNode = mix(.05, .15, glazed).mul(curtain).add(float(.5).mul(is(FACE.glass))).add(pane.mul(.2).mul(far.oneMinus()).mul(is(FACE.window)));
   material.aoNode = occlusion;
   return material;
 }
