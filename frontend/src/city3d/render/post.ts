@@ -6,10 +6,12 @@
  * costs the most. With nothing on, render() is a plain renderer.render(): no extra render target, no extra
  * pass. The glow is built only once the night falls (TZ §6.7): by day it barely showed and its passes cost
  * every frame. At night it grows with ctx.night.level; tiers without bloom keep it off, and the lights read by
- * their own emissive colours. Tilt-shift, grading and TRAA come with the content of stage 3.
+ * their own emissive colours. The corner shading fades out past the city (AO_FADE, docs/CITY_V4.md stage 3):
+ * farther away its samples are finer than a pixel and only laid a grid of noise over the hazy hills. No other
+ * passes (tilt-shift, grading, TRAA): quality `tiltShift` stays unused.
  */
 import * as THREE from "three/webgpu";
-import { mix, pass, renderOutput, vec4, type ShaderNodeObject } from "three/tsl";
+import { mix, pass, renderOutput, smoothstep, vec4, type ShaderNodeObject } from "three/tsl";
 import { ao } from "three/examples/jsm/tsl/display/GTAONode.js";
 import { bloom } from "three/examples/jsm/tsl/display/BloomNode.js";
 import { smaa } from "three/examples/jsm/tsl/display/SMAANode.js";
@@ -36,6 +38,8 @@ export interface Post {
 
 interface Pipeline { post: THREE.PostProcessing; nodes: THREE.Node[]; targets: THREE.RenderTarget[]; key: string; glow: ReturnType<typeof bloom> | null }
 
+/** The corner shading fades out between these distances from the camera, in world radii (the city, then its hills). */
+export const AO_FADE = [.65, 1.25] as const;
 /** Bloom strength and threshold as the night falls and at full night: windows, lamps and headlights glow clearly. */
 export const BLOOM_DAY = { strength: .32, threshold: .92 }, BLOOM_NIGHT = { strength: .9, threshold: .6 };
 
@@ -66,8 +70,11 @@ export function createPost(ctx: CityContext, options: PostOptions = {}): Post {
       occlusion.resolutionScale = .5;
       occlusion.radius.value = 1.4; occlusion.thickness.value = 2; occlusion.distanceExponent.value = 1.4; occlusion.scale.value = 1.1; occlusion.samples.value = 12;
       nodes.push(occlusion);
-      const texel = scenePass.getTextureNode("output");
-      color = vec4(texel.rgb.mul(mix(1, occlusion.getTextureNode().r, .85)), texel.a);
+      // Corner shading belongs to the city: past it (AO_FADE world radii from the camera) its samples grow finer
+      // than a pixel and only lay a grid of noise over the hazy hills, so it fades out there.
+      const texel = scenePass.getTextureNode("output"), radius = ctx.world.radius;
+      const near = smoothstep(radius * AO_FADE[0], radius * AO_FADE[1], scenePass.getViewZNode().negate()).oneMinus();
+      color = vec4(texel.rgb.mul(mix(1, occlusion.getTextureNode().r, near.mul(.85))), texel.a);
     }
     if (glowing) {
       // Glow is emitted light: extract it before occlusion dims the scene.

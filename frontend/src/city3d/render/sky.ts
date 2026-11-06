@@ -7,15 +7,20 @@
  * ctx.requestShadowUpdate() (engine/renderer.ts setStaticShadows). There is no scene.environment: its even
  * light fills the shade and the shadows disappear.
  *
- * By day a few fair-weather clouds drift over the hills. At night (TZ §6.7) the dome turns deep blue with a
- * warm glow of the city's lights along the horizon, twinkling stars and a moon: all in the one background
- * shader, faded in by ctx.night.level.
+ * By day a few fair-weather clouds drift over the hills, shaded grey-blue on the side away from the sun and
+ * white on their sunlit edges. At night (TZ §6.7) the dome turns deep blue with a warm glow of the city's lights
+ * along the horizon, twinkling stars and a moon: all in the one background shader, faded in by ctx.night.level.
+ *
+ * The colours of the moment are uniforms shared through scene.userData.skyLook (SkyLook): the water mirrors
+ * them (skyGradient) and the mountains' haze fades into them (skyHaze, the sky with the sun's halo), so day and
+ * night change only uniform values (docs/CITY_V4.md, stage 3).
  */
 import * as THREE from "three/webgpu";
-import { Fn, If, color, dot, exp, float, floor, fract, max, mix, mx_fractal_noise_float, normalize, pow, positionWorldDirection, smoothstep, step, time, uniform, vec3, type ShaderNodeObject } from "three/tsl";
+import { Fn, If, color, dot, exp, float, floor, fract, max, mix, normalize, pow, positionWorldDirection, smoothstep, step, texture, time, uniform, vec3, type ShaderNodeObject } from "three/tsl";
 import type { CityContext } from "../engine/context";
 import type { QualitySettings } from "../engine/qualityTypes";
 import { requestShadowRedraw, setStaticShadows } from "../engine/renderer";
+import { groundNoise } from "./ground";
 
 type Vec3Node = ShaderNodeObject<THREE.Node>;
 export interface Sky {
@@ -35,7 +40,9 @@ export interface Sky {
   dispose(): void;
 }
 
-const HORIZON = "#cfe6f5", ZENITH = "#5aa6e3", SUN = "#ffe9c8", SUN_INTENSITY = 3.3;
+/** The day's sky at the horizon (also the haze) and overhead; the water reflects them too (render/water.ts). */
+export const HORIZON = "#cfe6f5", ZENITH = "#5aa6e3";
+const SUN = "#ffe9c8", SUN_INTENSITY = 3.3;
 /** The haze starts past the city's flat land and is still light on the ridges (relief ends at 3.1 radii). */
 export const FOG_NEAR = 1.6, FOG_FAR = 6;
 /**
@@ -56,12 +63,17 @@ const SHADOW_REACH = 130;
  * horizon line, where it starts from nothing, so the fogged land still meets the sky without a seam and
  * whatever stands above the horizon shows as a dark silhouette on the glow.
  */
-const NIGHT_HORIZON = "#15203f", NIGHT_ZENITH = "#030813", CITY_GLOW = "#6a4524", MOON_LIGHT = "#9fb8ee";
+export const NIGHT_HORIZON = "#15203f", NIGHT_ZENITH = "#030813";
+const CITY_GLOW = "#6a4524", MOON_LIGHT = "#9fb8ee";
 /**
  * The moon disc sits just over the ridges (8–12° high), a little right of the default view, where the gaze
  * lifted at the full tilt (engine/camera.ts lookUp) meets it. The moonlight keeps the sun's higher path.
  */
 const MOON_AZIMUTH = 1.19, MOON_ELEVATION = .25, MOON_RADIUS = .0125;
+/** The disc's colour and brightness: bright enough to glow softly at night's bloom, not to burn out white. */
+const MOON_DISC = "#fff3de", MOON_BRIGHTNESS = 1.5;
+/** Clouds: the noise image's tile spans this many units of the cloud layer; their shaded and sunlit colours. */
+const CLOUD_SCALE = .26, CLOUD_SHADE = "#b4c2d2", CLOUD_LIT = "#fdfeff";
 /** Stars: cells of about 5 px at 1440 × 900, a star in every 36th of them. */
 const STAR_GRID = 260, STAR_SHARE = .028;
 
@@ -69,6 +81,44 @@ const STAR_GRID = 260, STAR_SHARE = .028;
 function hash3(p: Vec3Node): Vec3Node {
   const p3 = fract(p.mul(.1031)), q = p3.add(dot(p3, p3.zyx.add(31.32)));
   return fract(q.x.add(q.y).mul(q.z));
+}
+
+/**
+ * The sky's colours of the moment (uniforms), for what reflects or fades into it (render/water.ts,
+ * render/mountains.ts): the horizon, the zenith, the city's glow at night, the sun disc's direction and its light
+ * (black at night).
+ */
+export interface SkyLook { horizon: Vec3Node; zenith: Vec3Node; glow: Vec3Node; sun: Vec3Node; sunLight: Vec3Node; moon: Vec3Node; moonLight: Vec3Node }
+/** The day's sky without a scene to follow: no city glow, the sun's halo left out, no moon. */
+const daylight = () => ({ horizon: color(HORIZON), zenith: color(ZENITH), glow: vec3(0), sun: vec3(0, 1, 0), sunLight: vec3(0), moon: vec3(0, 1, 0), moonLight: vec3(0) }) as unknown as SkyLook;
+/** Brighter towards the horizon, deeper blue overhead, the city's glow low over the horizon at night. */
+function gradientOf({ horizon, zenith, glow }: SkyLook) {
+  return Fn(([direction]: [Vec3Node]) => {
+    const up = max(direction.y, float(0));
+    return mix(horizon, zenith, smoothstep(0, .55, pow(up, .8))).add(glow.mul(smoothstep(0, .012, up)).mul(exp(up.mul(-22))));
+  }) as unknown as (direction: Vec3Node) => Vec3Node;
+}
+/** The sun's wide halo, 0…0.47: a bright corona round the disc and a warm glow over its whole side of the sky. */
+function halo(sun: Vec3Node, direction: Vec3Node): Vec3Node {
+  const toward = max(dot(direction, sun), float(0));
+  return pow(toward, float(64)).mul(.35).add(pow(toward, float(8)).mul(.12));
+}
+/** The sky of the nearest scene up from `object` that has one (a city's districts or the lake city sit in the city's scene). */
+export function skyLook(object: THREE.Object3D | null): SkyLook | null {
+  for (let o = object; o; o = o.parent) if (o.userData.skyLook) return o.userData.skyLook as SkyLook;
+  return null;
+}
+/** The sky's colour (no sun, no clouds) in a world direction, from `look`, or the day's sky without one. */
+export function skyGradient(look: SkyLook | null, direction: Vec3Node): Vec3Node {
+  return gradientOf(look ?? daylight())(direction);
+}
+/**
+ * The colour far things fade into in a world direction: the sky behind them with the sun's halo, as the background
+ * draws it (no disc, no clouds), so a ridge in full haze is exactly the sky round it.
+ */
+export function skyHaze(look: SkyLook | null, direction: Vec3Node): Vec3Node {
+  const sky = look ?? daylight();
+  return gradientOf(sky)(direction).add(sky.sunLight.mul(halo(sky.sun, direction)));
 }
 
 export function createSky(ctx: CityContext): Sky {
@@ -81,10 +131,11 @@ export function createSky(ctx: CityContext): Sky {
   const nightFade = nightSky.mul(ctx.night.level);
 
   // Brighter towards the horizon, deeper blue overhead; below the horizon the fog colour, like the ground far away.
-  const gradient = Fn(([direction]: [Vec3Node]) => {
-    const up = max(direction.y, float(0));
-    return mix(horizon, zenith, smoothstep(0, .55, pow(up, .8))).add(cityGlow.mul(smoothstep(0, .012, up)).mul(exp(up.mul(-22))));
-  }) as unknown as (direction: Vec3Node) => Vec3Node;
+  const daySky = float(1).sub(nightSky);
+  const moon = uniform(new THREE.Vector3(Math.cos(MOON_ELEVATION) * Math.cos(MOON_AZIMUTH), Math.sin(MOON_ELEVATION), Math.cos(MOON_ELEVATION) * Math.sin(MOON_AZIMUTH)));
+  const look = { horizon, zenith, glow: cityGlow, sun: sunDisc, sunLight: sunColor.mul(daySky).div(SUN_INTENSITY), moon, moonLight: color(MOON_DISC).mul(nightFade) } as unknown as SkyLook;
+  const gradient = gradientOf(look);
+  scene.userData.skyLook = look;
   /** Twinkling stars, one at a random point of a few grid cells, fewer and dimmer down in the city's glow. */
   const starField = Fn(([direction]: [Vec3Node]) => {
     const p = direction.mul(STAR_GRID), cell = floor(p), h = hash3(cell);
@@ -95,33 +146,43 @@ export function createSky(ctx: CityContext): Sky {
     const shine = step(1 - STAR_SHARE, h).mul(float(1).sub(smoothstep(0, size, d))).mul(pow(bright, float(3)).mul(2.4).add(.35));
     return mix(color("#bcd0ff"), color("#fff0d6"), jitter.x).mul(shine).mul(twinkle).mul(smoothstep(.008, .09, direction.y));
   }) as unknown as (direction: Vec3Node) => Vec3Node;
-  /** Cloud cover 0…1: fractal noise on a flat layer high over the city, so far clouds bunch towards the horizon. */
-  const cloudCover = Fn(([direction]: [Vec3Node]) => {
+  /**
+   * Fair-weather clouds on a flat layer high over the city, so far clouds bunch towards the horizon: two reads of
+   * the ground's noise image (broad shapes and their edges) drifting with the wind. A third and fourth read a step
+   * towards the sun shade them: where the cloud thickens towards the sun this side is in its shadow, grey-blue;
+   * where it thins, the sunlit edge, white and warm. Far down by the horizon they fade into its haze.
+   */
+  const clouds = Fn(([direction, base]: [Vec3Node, Vec3Node]) => {
     const layer = direction.xz.div(max(direction.y, float(.035))).mul(.42);
-    const drift = ctx.reducedMotion ? vec3(0) : vec3(time.mul(.006), time.mul(.0025), 0);
-    const noise = mx_fractal_noise_float(vec3(layer.x, layer.y, 0).add(drift), 4, 2, .5, 1);
-    return smoothstep(.12, .5, noise).mul(smoothstep(.02, .12, direction.y)).mul(.9);
-  }) as unknown as (direction: Vec3Node) => Vec3Node;
-  const moon = uniform(new THREE.Vector3(Math.cos(MOON_ELEVATION) * Math.cos(MOON_AZIMUTH), Math.sin(MOON_ELEVATION), Math.cos(MOON_ELEVATION) * Math.sin(MOON_AZIMUTH)));
+    const drift = ctx.reducedMotion ? vec3(0).xy : vec3(time.mul(.0016), time.mul(.0007), 0).xy;
+    const density = (at: Vec3Node) => texture(groundNoise(), at.mul(CLOUD_SCALE).add(drift)).x.mul(.68)
+      .add(texture(groundNoise(), vec3(at.x.mul(.8).sub(at.y.mul(.6)), at.x.mul(.6).add(at.y.mul(.8)), 0).xy.mul(CLOUD_SCALE * 2.3).add(drift.mul(1.7)).add(.37)).y.mul(.42));
+    const here = density(layer), sunward = sunDisc.xz.div(max(sunDisc.xz.length(), 1e-4));
+    const lit = here.sub(density(layer.add(sunward.mul(.32)))).mul(5).add(.55).clamp(0, 1);
+    const toward = max(dot(direction, sunDisc), float(0));
+    const shade = mix(color(CLOUD_SHADE), color(CLOUD_LIT), lit).add(color(SUN).mul(pow(toward, float(6)).mul(lit).mul(.25)));
+    const cover = smoothstep(.6, .76, here).mul(smoothstep(.02, .13, direction.y)).mul(.92);
+    return mix(base, mix(shade, base, exp(direction.y.mul(-11)).mul(.55)), cover);
+  }) as unknown as (direction: Vec3Node, base: Vec3Node) => Vec3Node;
   /** A pale disc with soft grey seas and a faint halo of moonlight around it. */
   const moonDisc = Fn(([direction]: [Vec3Node]) => {
     const toward = max(dot(direction, moon), float(0)), angle = float(1).sub(toward).mul(2).max(0).sqrt();
     const local = direction.sub(moon).div(MOON_RADIUS);
     const seas = local.x.mul(3.1).add(local.z.mul(2.3)).add(1.7).sin().mul(local.y.mul(3.4).sub(local.x.mul(1.4)).sin()).mul(.14).add(.86);
-    const disc = float(1).sub(smoothstep(MOON_RADIUS * .88, MOON_RADIUS, angle)).mul(seas).mul(2.2);
+    const disc = float(1).sub(smoothstep(MOON_RADIUS * .88, MOON_RADIUS, angle)).mul(seas).mul(MOON_BRIGHTNESS);
     // The halo fades into the horizon haze instead of stopping at the night branch below.
     const halo = pow(toward, float(2600)).mul(.3).add(pow(toward, float(180)).mul(.05)).mul(smoothstep(-.03, .005, direction.y));
-    return color("#fff3de").mul(disc).add(color(MOON_LIGHT).mul(halo));
+    return color(MOON_DISC).mul(disc).add(color(MOON_LIGHT).mul(halo));
   }) as unknown as (direction: Vec3Node) => Vec3Node;
   const background = Fn(() => {
-    const direction = positionWorldDirection, toward = max(dot(direction, sunDisc), float(0)), daySky = float(1).sub(nightSky);
+    const direction = positionWorldDirection, toward = max(dot(direction, sunDisc), float(0));
     const sky = gradient(direction).toVar();
     // The dome is shaded behind the whole frame: clouds, stars and the moon only where the sky can show.
-    If(daySky.greaterThan(0).and(direction.y.greaterThan(.02)), () => { sky.assign(mix(sky, color("#fbfdff"), cloudCover(direction).mul(daySky))); });
-    // A small white-hot disc, a bright corona and a wide warm halo over its side of the sky; at night the
-    // moonlight has no disc of its own.
-    const disc = smoothstep(.99982, .99992, toward).mul(12), glow = pow(toward, float(900)).mul(1.4).add(pow(toward, float(64)).mul(.35)).add(pow(toward, float(8)).mul(.12));
-    sky.addAssign(sunColor.mul(disc.add(glow).div(SUN_INTENSITY)).mul(daySky));
+    If(daySky.greaterThan(0).and(direction.y.greaterThan(.02)), () => { sky.assign(clouds(direction, sky)); });
+    // A small white-hot disc, a bright corona and a wide warm halo over its side of the sky (skyHaze has the
+    // halo too); at night the moonlight has no disc of its own.
+    const disc = smoothstep(.99982, .99992, toward).mul(12), glow = pow(toward, float(900)).mul(1.4).add(halo(look.sun, direction));
+    sky.addAssign(look.sunLight.mul(disc.add(glow)));
     If(nightFade.greaterThan(0).and(direction.y.greaterThan(-.03)), () => { sky.addAssign(starField(direction).add(moonDisc(direction)).mul(nightFade)); });
     return sky;
   })();
@@ -213,6 +274,7 @@ export function createSky(ctx: CityContext): Sky {
       scene.remove(hemisphere, sun);
       sun.shadow.dispose(); sun.dispose(); hemisphere.dispose();
       if (sceneNodes.backgroundNode === background) sceneNodes.backgroundNode = null;
+      if (scene.userData.skyLook === look) delete scene.userData.skyLook;
       background.dispose();
       scene.fog = null;
     },
