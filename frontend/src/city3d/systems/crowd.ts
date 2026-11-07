@@ -197,7 +197,7 @@ const HIP = .71, KNEE = .41, ANKLE = .09, SHOULDER = 1.166, ELBOW = .921;
  * forward, the elbow's bend, and the body's rise between two steps (radians; units of the walker's frame).
  */
 const STEP_RATE = 4.6, LEG_SWING = .37, KNEE_BEND = .9, ARM_SWING = .32, ELBOW_BEND = .25, BOB = .006;
-const SHIRTS = ['#d97550', '#3d94cf', '#9572bc', '#34a385', '#e3b557', '#546fa2'];
+const SHIRTS = ['#de6539', '#2088ce', '#8a50b5', '#149777', '#e7ac2e', '#3d65a1'];
 const SKINS = ['#efbc96', '#bc845f', '#dfaa83', '#986849', '#f4c8a8', '#cd946e'];
 const TROUSERS = ['#34445a', '#586270', '#5b4e49', '#293d50'];
 const HAIRS = ['#263143', '#3b2a20', '#6b4a2e', '#c9a26a'];

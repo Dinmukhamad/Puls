@@ -406,12 +406,12 @@ export function vehicleGeometry(name: VehicleName): THREE.BufferGeometry {
 /** The vehicles' shades of paint: copy tints the paint takes (the rest keeps its colour). */
 export const PAINTS: Record<VehicleName, string[]> = {
   taxi: ["#ffffff"], police: ["#ffffff"], boat: ["#ffffff"],
-  sedan: ["#d1d9e0", "#3164a3", "#c53938", "#eeeeea", "#25282d", "#298561", "#6087b7", "#d3b27d"],
-  suv: ["#2f3236", "#f2f0e9", "#40845a", "#b7353f", "#b2bec8", "#2b6598"],
-  "hatchback-sports": ["#e34343", "#ffcf3f", "#287bc5", "#ececea", "#ff7a1a", "#2b2d31"],
-  van: ["#f4f3ed", "#c4cfd6", "#376e9d", "#e4d7b9"],
-  delivery: ["#ed6332", "#2b85d0", "#32a96b", "#ffc336"],
-  truck: ["#33865f", "#ce4938", "#f0e9d8", "#536d85", "#3566a3"],
+  sedan: ["#d1d9e0", "#1558a4", "#c82e2f", "#eeeeea", "#25282d", "#16865b", "#4685bd", "#d1a357"],
+  suv: ["#2f3236", "#f2f0e9", "#25804f", "#b72539", "#b2bec8", "#145e9e"],
+  "hatchback-sports": ["#e92f35", "#ffbe19", "#126ed0", "#ececea", "#f5660c", "#2b2d31"],
+  van: ["#f4f3ed", "#c4cfd6", "#1e6ca9", "#e3c89a"],
+  delivery: ["#e95621", "#0e79cd", "#18a766", "#ffba1b"],
+  truck: ["#16794e", "#ca3428", "#f0e9d8", "#365f83", "#205fa8"],
 };
 
 type Node = ShaderNodeObject<THREE.Node>;

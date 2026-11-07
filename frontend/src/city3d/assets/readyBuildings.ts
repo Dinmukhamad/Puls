@@ -16,11 +16,11 @@ import { NURLY_TAU_RISE, NURLY_TAU_WIDTH, OFFICE_BUILDINGS, type OfficeBuilding 
 /** Metres in one of the tables' model units: a house is drawn 1.35 times bigger, an office twice, a unit is about 4 m. */
 const HOUSE_METRES = 4 * 1.35, OFFICE_METRES = 4 * 2;
 const FINISH: Record<typeof FINISHES[number], { wall: V3; plinth: V3; door: V3 }> = {
-  brick: { wall: rgb("#b85f3b"), plinth: rgb("#80654f"), door: rgb("#225e84") },
-  stone: { wall: rgb("#f0ddbd"), plinth: rgb("#a3947a"), door: rgb("#8c4930") },
+  brick: { wall: rgb("#bc542e"), plinth: rgb("#86552f"), door: rgb("#146b9e") },
+  stone: { wall: rgb("#f3d39b"), plinth: rgb("#b39160"), door: rgb("#a24727") },
 };
 const ROOF: Record<ReadyHouse, V3> = {
-  carport: rgb("#426a86"), bungalow: rgb("#c65c39"), attic: rgb("#415a7a"), modern: rgb("#f6eddb"), bayhouse: rgb("#a85139"), terrace: rgb("#356c83"),
+  carport: rgb("#2e648b"), bungalow: rgb("#d04b29"), attic: rgb("#304e78"), modern: rgb("#fff0cc"), bayhouse: rgb("#b4482b"), terrace: rgb("#206c8b"),
 };
 const TRIM = rgb("#fff5df"), DARK = rgb("#273e4f"), PAVING = rgb("#c6b9a0"), GARAGE = rgb("#ece9df");
 const ZINC = rgb("#a0afb4"), ANODIZED = rgb("#49738a"), VENT = rgb("#3b474b");
@@ -240,15 +240,15 @@ interface Tower {
   chamfer?: number; ring?: boolean;
 }
 const TOWERS: Record<Exclude<OfficeBuilding, "officej" | "officek" | "officel">, Tower> = {
-  officea: { glass: rgb("#76bce5"), stone: rgb("#f1dfbd"), tiers: [[0, .16, "stone"], [1, 1, "glass"]] },
-  officeb: { glass: rgb("#a1c4df"), stone: rgb("#edc9a3"), tiers: [[0, .86, "stone"], [1.4, 1, "stone"]] },
-  officec: { glass: rgb("#76c5ce"), stone: rgb("#e4e6d0"), tiers: [[0, .55, "glass"], [1.6, .8, "glass"], [3.2, 1, "glass"]] },
-  officed: { glass: rgb("#4a93bd"), stone: rgb("#d5e6f0"), tiers: [[0, .12, "stone"], [.6, 1, "glass"]], chamfer: 2.4 },
-  officee: { glass: rgb("#8bc8de"), stone: rgb("#dcbca2"), tiers: [[0, .42, "stone"], [.8, 1, "glass"]] },
-  officef: { glass: rgb("#416f9f"), stone: rgb("#e8d7bd"), tiers: [[0, .14, "stone"], [.5, 1, "glass"]], ring: true },
-  officeg: { glass: rgb("#67b6c9"), stone: rgb("#ebd7b5"), tiers: [[0, .2, "stone"], [.9, 1, "glass"]] },
-  officeh: { glass: rgb("#9bbce7"), stone: rgb("#e5d5ed"), tiers: [[0, .38, "glass"], [2.2, 1, "glass"]] },
-  officei: { glass: rgb("#5cacc8"), stone: rgb("#f4e6c9"), tiers: [[0, .1, "stone"], [.6, 1, "glass"]], chamfer: .9, ring: true },
+  officea: { glass: rgb("#53a8da"), stone: rgb("#f4d59d"), tiers: [[0, .16, "stone"], [1, 1, "glass"]] },
+  officeb: { glass: rgb("#7bacd4"), stone: rgb("#edb078"), tiers: [[0, .86, "stone"], [1.4, 1, "stone"]] },
+  officec: { glass: rgb("#4db9c8"), stone: rgb("#dfdfa6"), tiers: [[0, .55, "glass"], [1.6, .8, "glass"], [3.2, 1, "glass"]] },
+  officed: { glass: rgb("#287daf"), stone: rgb("#b8d9ee"), tiers: [[0, .12, "stone"], [.6, 1, "glass"]], chamfer: 2.4 },
+  officee: { glass: rgb("#61b7d6"), stone: rgb("#d9a77a"), tiers: [[0, .42, "stone"], [.8, 1, "glass"]] },
+  officef: { glass: rgb("#295f98"), stone: rgb("#ebca99"), tiers: [[0, .14, "stone"], [.5, 1, "glass"]], ring: true },
+  officeg: { glass: rgb("#3aa7bf"), stone: rgb("#edc788"), tiers: [[0, .2, "stone"], [.9, 1, "glass"]] },
+  officeh: { glass: rgb("#82a6df"), stone: rgb("#d5b8e7"), tiers: [[0, .38, "glass"], [2.2, 1, "glass"]] },
+  officei: { glass: rgb("#329bbb"), stone: rgb("#f8dfa8"), tiers: [[0, .1, "stone"], [.6, 1, "glass"]], chamfer: .9, ring: true },
 };
 
 /**
@@ -323,7 +323,7 @@ function pyramidTower(): THREE.BufferGeometry {
  */
 function empireState(): THREE.BufferGeometry {
   const model = OFFICE_BUILDINGS.officek, M = 130.4 / model.width, top = model.height * M;
-  const STONE = rgb("#e8d9b9"), CROWN = rgb("#f2e6ca"), ALUMINIUM = rgb("#718c96"), BRONZE = rgb("#98713f"), STEEL = rgb("#91a8ad");
+  const STONE = rgb("#e8d9b9"), CROWN = rgb("#f2e6ca"), ALUMINIUM = rgb("#718c96"), BRONZE = rgb("#b47b29"), STEEL = rgb("#91a8ad");
   const mb = new MeshBuilder();
   /** A limestone volume with its windows: half its width and depth, from y0 to y1. */
   const stone = (hx: number, hz: number, y0: number, y1: number, col = STONE) =>

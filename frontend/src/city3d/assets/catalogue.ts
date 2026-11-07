@@ -69,22 +69,22 @@ const MAX_FIT = 2.8;
 const GROUND = .2, PAD = .25;
 /** The old four plain blocks: floors, height, glass. Blocks use classes 0…2, towers 1…3 (Placement.variant). */
 const BLOCKS = [{ floors: 4, height: 3, glass: false }, { floors: 7, height: 5.2, glass: false }, { floors: 11, height: 8.4, glass: true }, { floors: 18, height: 13.6, glass: true }];
-const WALLS = ["#f6e1b5", "#d3e9fb", "#fac6b3", "#c9e9c4", "#e2d4f4", "#fff1ce"], GLASS = ["#89c5e7", "#7fc5cf", "#a6b8e6", "#afdcea"];
+const WALLS = ["#efc67d", "#9fc9eb", "#ee9c7d", "#a4d99d", "#c1afe2", "#ffe4a8"], GLASS = ["#5faedb", "#4eb0be", "#8d98d4", "#7ac8dc"];
 const TREE_TINTS = ["#ffffff", "#eaf6e2", "#f7ffe8", "#dfeed7", "#fff6dc"];
 /**
- * Residential walls, picked by index in world/complexes.ts: renders (0 ivory, 1 pearl, 2 cream, 3 lilac),
+ * Residential walls, picked by index in world/complexes.ts: renders (0 ivory, 1 warm cream, 2 ochre, 3 lilac),
  * bricks (4 red, 5 terracotta, 6 sand, 7 brown), accents (8 graphite, 9 peach, 10 sky blue, 11 warm stone) and two
  * greens (12 sage, 13 mint) whose towers get planted balconies (sectionFacade tells them by their green cast).
  */
-const SECTION_TINTS = ["#fffde2", "#f4e9cf", "#f5dfa8", "#d8d6ef", "#c86a47", "#d58752", "#e5b677", "#a46d4d", "#78858e", "#f0b3a0", "#8fbad6", "#c9b58e", "#96c795", "#c7e9c1"];
-/** Townhouse roofs: slate, terracotta, brown, dark grey, zinc. */
-const ROOF_TINTS = ["#4c7293", "#c15f3c", "#956448", "#3c5974", "#9bbcc8"];
+const SECTION_TINTS = ["#fffde2", "#f7dfa7", "#efc875", "#bbb7e8", "#c6532b", "#d96d33", "#e8b354", "#a45a33", "#526e87", "#f49a7a", "#63acd3", "#c89760", "#6fb677", "#9ddca4"];
+/** Townhouse roofs: blue slate, terracotta, brown, navy and zinc. */
+const ROOF_TINTS = ["#356486", "#c64b29", "#98532e", "#2d476d", "#75a8bd"];
 /** Section floors in world units. */
 const SECTION_FLOOR = .75;
 /** The garages of the operators' houses are cottages in this shade (world/landLayouts.ts GARAGE): they get a garage of their own. */
 const GARAGE_TINT = 8;
 /** Office glass: white, cool blue, warm cream and pale teal tints of the towers' curtain walls (assets/residential.ts). */
-const OFFICE_TINTS = ["#ffffff", "#c9e6fa", "#ffedcc", "#cee7e3"];
+const OFFICE_TINTS = ["#ffffff", "#a2d3f4", "#ffe0a2", "#a6d9d6"];
 const FURNITURE: FurnitureKind[] = ["bench", "slide", "swings", "climber", "sandbox", "goal", "hoop", "gazebo", "flowerbed", "bush", "hedge", "planter", "fountain"];
 
 /**
