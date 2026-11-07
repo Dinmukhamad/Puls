@@ -1,0 +1,348 @@
+{
+  "title": "Transport Collection",
+  "units": "meters",
+  "upAxis": "Y",
+  "forwardAxis": "+X",
+  "models": [
+    {
+      "id": "sedan",
+      "name": "Седан S4",
+      "category": "cars",
+      "type": "Бизнес-седан",
+      "file": "assets/sedan.glb",
+      "bytes": 1859088,
+      "dimensions": {
+        "length": 4.888000011444092,
+        "width": 2.1410000324249268,
+        "height": 1.522804149389267
+      },
+      "triangles": 69254,
+      "verticesBefore": 207762,
+      "verticesAfter": 59472,
+      "losslessIndexingVerified": true
+    },
+    {
+      "id": "hatchback",
+      "name": "Хэтчбек H3",
+      "category": "cars",
+      "type": "Городской хэтчбек",
+      "file": "assets/hatchback.glb",
+      "bytes": 1826060,
+      "dimensions": {
+        "length": 4.287999868392944,
+        "width": 2.0910000801086426,
+        "height": 1.552804229259491
+      },
+      "triangles": 68208,
+      "verticesBefore": 204624,
+      "verticesAfter": 58356,
+      "losslessIndexingVerified": true
+    },
+    {
+      "id": "crossover",
+      "name": "Кроссовер C5",
+      "category": "cars",
+      "type": "Средний кроссовер",
+      "file": "assets/crossover.glb",
+      "bytes": 1838568,
+      "dimensions": {
+        "length": 4.7179999351501465,
+        "width": 2.180999994277954,
+        "height": 1.7528041493892665
+      },
+      "triangles": 68536,
+      "verticesBefore": 205608,
+      "verticesAfter": 58794,
+      "losslessIndexingVerified": true
+    },
+    {
+      "id": "suv",
+      "name": "Внедорожник X8",
+      "category": "cars",
+      "type": "Большой внедорожник",
+      "file": "assets/suv.glb",
+      "bytes": 1851076,
+      "dimensions": {
+        "length": 5.197999954223633,
+        "width": 2.321000099182129,
+        "height": 1.9328042125701907
+      },
+      "triangles": 69202,
+      "verticesBefore": 207606,
+      "verticesAfter": 59150,
+      "losslessIndexingVerified": true
+    },
+    {
+      "id": "coupe",
+      "name": "Купе GT2",
+      "category": "cars",
+      "type": "Спортивное купе",
+      "file": "assets/coupe.glb",
+      "bytes": 1808216,
+      "dimensions": {
+        "length": 4.747999906539917,
+        "width": 2.2109999656677246,
+        "height": 1.3628041779994964
+      },
+      "triangles": 67140,
+      "verticesBefore": 201420,
+      "verticesAfter": 57880,
+      "losslessIndexingVerified": true
+    },
+    {
+      "id": "estate",
+      "name": "Универсал W6",
+      "category": "cars",
+      "type": "Пятидверный универсал",
+      "file": "assets/estate.glb",
+      "bytes": 1845552,
+      "dimensions": {
+        "length": 5.04800009727478,
+        "width": 2.180999994277954,
+        "height": 1.5928041970729827
+      },
+      "triangles": 68718,
+      "verticesBefore": 206154,
+      "verticesAfter": 59040,
+      "losslessIndexingVerified": true
+    },
+    {
+      "id": "cabriolet",
+      "name": "Родстер R2",
+      "category": "cars",
+      "type": "Открытый родстер",
+      "file": "assets/cabriolet.glb",
+      "bytes": 1850068,
+      "dimensions": {
+        "length": 4.588000059127808,
+        "width": 2.1610000133514404,
+        "height": 1.2819995963573456
+      },
+      "triangles": 69500,
+      "verticesBefore": 208500,
+      "verticesAfter": 58994,
+      "losslessIndexingVerified": true
+    },
+    {
+      "id": "pickup",
+      "name": "Пикап P7",
+      "category": "cars",
+      "type": "Двухрядный пикап",
+      "file": "assets/pickup.glb",
+      "bytes": 2018404,
+      "dimensions": {
+        "length": 5.568000078201294,
+        "width": 2.311000108718872,
+        "height": 1.9428042030334476
+      },
+      "triangles": 76510,
+      "verticesBefore": 229530,
+      "verticesAfter": 64296,
+      "losslessIndexingVerified": true
+    },
+    {
+      "id": "minivan",
+      "name": "Минивэн M8",
+      "category": "cars",
+      "type": "Семейный минивэн",
+      "file": "assets/minivan.glb",
+      "bytes": 1854928,
+      "dimensions": {
+        "length": 5.2179999351501465,
+        "width": 2.2709999084472656,
+        "height": 1.972804182767868
+      },
+      "triangles": 69142,
+      "verticesBefore": 207426,
+      "verticesAfter": 59330,
+      "losslessIndexingVerified": true
+    },
+    {
+      "id": "city-ev",
+      "name": "Электрокар E1",
+      "category": "cars",
+      "type": "Городской электромобиль",
+      "file": "assets/city-ev.glb",
+      "bytes": 1827192,
+      "dimensions": {
+        "length": 3.774999976158142,
+        "width": 1.9910000562667847,
+        "height": 1.6228041517734528
+      },
+      "triangles": 68508,
+      "verticesBefore": 205524,
+      "verticesAfter": 58328,
+      "losslessIndexingVerified": true
+    },
+    {
+      "id": "box-truck",
+      "name": "Городской фургон",
+      "category": "trucks",
+      "type": "Грузовой фургон · 2 оси",
+      "file": "assets/box-truck.glb",
+      "bytes": 1507200,
+      "dimensions": {
+        "length": 7.614021062850952,
+        "width": 3.170325756072998,
+        "height": 3.866860045818612
+      },
+      "triangles": 26688,
+      "verticesBefore": 41494,
+      "verticesAfter": 41494,
+      "losslessIndexingVerified": true
+    },
+    {
+      "id": "tractor-trailer",
+      "name": "Магистральный автопоезд",
+      "category": "trucks",
+      "type": "Седельный тягач · 6 осей",
+      "file": "assets/tractor-trailer.glb",
+      "bytes": 4756576,
+      "dimensions": {
+        "length": 16.176000595092773,
+        "width": 3.170325756072998,
+        "height": 4.167000236455351
+      },
+      "triangles": 89156,
+      "verticesBefore": 131324,
+      "verticesAfter": 131324,
+      "losslessIndexingVerified": true
+    },
+    {
+      "id": "dump-truck",
+      "name": "Строительный самосвал",
+      "category": "trucks",
+      "type": "Самосвал · 3 оси",
+      "file": "assets/dump-truck.glb",
+      "bytes": 2300748,
+      "dimensions": {
+        "length": 8.71036662327599,
+        "width": 3.170325756072998,
+        "height": 3.9891560065741896
+      },
+      "triangles": 41592,
+      "verticesBefore": 63307,
+      "verticesAfter": 63307,
+      "losslessIndexingVerified": true
+    },
+    {
+      "id": "flatbed-truck",
+      "name": "Бортовая платформа",
+      "category": "trucks",
+      "type": "Открытый грузовик · 3 оси",
+      "file": "assets/flatbed-truck.glb",
+      "bytes": 2602304,
+      "dimensions": {
+        "length": 10.04362964630127,
+        "width": 3.170325756072998,
+        "height": 3.7721969976555556
+      },
+      "triangles": 48172,
+      "verticesBefore": 71617,
+      "verticesAfter": 71617,
+      "losslessIndexingVerified": true
+    },
+    {
+      "id": "speedboat",
+      "name": "Прогулочный катер",
+      "category": "boats",
+      "type": "Боурайдер · 6,2 м",
+      "file": "assets/speedboat.glb",
+      "bytes": 1437800,
+      "dimensions": {
+        "length": 6.976305961608887,
+        "width": 2.4076831340789795,
+        "height": 2.172017812728882
+      },
+      "triangles": 44614,
+      "verticesBefore": 133842,
+      "verticesAfter": 48126,
+      "losslessIndexingVerified": true
+    },
+    {
+      "id": "fishing-boat",
+      "name": "Рыболовный катер",
+      "category": "boats",
+      "type": "Пилотхаус · 8,1 м",
+      "file": "assets/fishing-boat.glb",
+      "bytes": 1694720,
+      "dimensions": {
+        "length": 8.859378814697266,
+        "width": 3.082627534866333,
+        "height": 4.909762382507324
+      },
+      "triangles": 53036,
+      "verticesBefore": 159108,
+      "verticesAfter": 56726,
+      "losslessIndexingVerified": true
+    },
+    {
+      "id": "cabin-boat",
+      "name": "Каютный круизер",
+      "category": "boats",
+      "type": "Круизер · 9,6 м",
+      "file": "assets/cabin-boat.glb",
+      "bytes": 1656300,
+      "dimensions": {
+        "length": 10.542923927307129,
+        "width": 3.167766571044922,
+        "height": 4.2607903480529785
+      },
+      "triangles": 52788,
+      "verticesBefore": 158364,
+      "verticesAfter": 55149,
+      "losslessIndexingVerified": true
+    },
+    {
+      "id": "motor-yacht",
+      "name": "Моторная яхта",
+      "category": "yachts",
+      "type": "Флайбридж · 18 м",
+      "file": "assets/motor-yacht.glb",
+      "bytes": 2407820,
+      "dimensions": {
+        "length": 19.550525665283203,
+        "width": 5.087803363800049,
+        "height": 8.268158912658691
+      },
+      "triangles": 67382,
+      "verticesBefore": 202146,
+      "verticesAfter": 82813,
+      "losslessIndexingVerified": true
+    },
+    {
+      "id": "sailing-yacht",
+      "name": "Парусная яхта",
+      "category": "yachts",
+      "type": "Шлюп · 12,2 м",
+      "file": "assets/sailing-yacht.glb",
+      "bytes": 1835604,
+      "dimensions": {
+        "length": 12.256032943725586,
+        "width": 3.7077863216400146,
+        "height": 20.53999900817871
+      },
+      "triangles": 64168,
+      "verticesBefore": 192504,
+      "verticesAfter": 59704,
+      "losslessIndexingVerified": true
+    },
+    {
+      "id": "sport-yacht",
+      "name": "Спортивная яхта",
+      "category": "yachts",
+      "type": "Хардтоп · 14,2 м",
+      "file": "assets/sport-yacht.glb",
+      "bytes": 2022424,
+      "dimensions": {
+        "length": 15.351062774658203,
+        "width": 4.137795925140381,
+        "height": 5.026185512542725
+      },
+      "triangles": 59740,
+      "verticesBefore": 179220,
+      "verticesAfter": 68666,
+      "losslessIndexingVerified": true
+    }
+  ]
+}

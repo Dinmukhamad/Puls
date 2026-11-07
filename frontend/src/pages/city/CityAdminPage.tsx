@@ -37,7 +37,7 @@ export function CityAdminPage() {
   const tabRow = useRef<HTMLDivElement>(null);
   useEffect(() => { tabRow.current?.querySelector(".segmented__item.is-active")?.scrollIntoView({ block: "nearest", inline: "nearest" }); }, [tab]);
   return <div className="stack city-admin">
-    <div className="page-head"><div><h1 className="page-title">Управление городом</h1><p className="page-subtitle">Назначайте команды районов, настраивайте миссии и следите за прогрессом.</p></div><div className="page-head__actions"><Link className="btn btn--secondary btn--m" to="/training/city">Открыть город</Link></div></div>
+    <div className="page-head"><div><h1 className="page-title">Управление городом</h1><p className="page-subtitle">Назначайте команды районов, настраивайте миссии и следите за прогрессом.</p></div><div className="page-head__actions"><Link className="btn btn--secondary btn--m" to="/training/city">Открыть город</Link><a className="btn btn--secondary btn--m" href="/transport-collection/index.html" target="_blank" rel="noopener noreferrer">Коллекция транспорта</a></div></div>
     <div className="city-admin-tabs" ref={tabRow}><SegmentedControl label="Разделы управления городом" options={tabs} value={tab} onChange={select} /></div>
     {tab==='world'?<CityWorldEditor isHead={user?.role === "head"} />:tab==='estates'?<Estates />:tab==='seasons'?<CitySeasonsAdmin />:tab==='participants'?<Participants />:tab==='economy'?<Economy />:tab==='situations'?<Situations />:settings.data?<MissionEditor initial={settings.data} canEdit={canEdit} />:settings.isError?<ErrorState error={settings.error} onRetry={()=>settings.refetch()} />:<Skeleton height={350} />}
   </div>;
