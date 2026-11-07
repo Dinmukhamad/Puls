@@ -12,6 +12,7 @@ from tests.conftest import auth, login, make_user
 from tests.test_city_estate import (
     ADMIN,
     CITY,
+    ENSEMBLES,
     FIRST,
     HOUSE,
     OFFICES,
@@ -212,12 +213,16 @@ async def test_squares_gather_into_parks_and_buildings_go_back(client, session, 
 
 
 async def test_office_towers_build_for_free_under_the_same_land_rules(client, session, me):
-    plots = [(col, row) for row in (0, 1) for col in range(6)]
-    for family, (col, row) in zip(OFFICES, plots, strict=False):
+    # The towers in two rows of 2 × 2 plots, the complex on the 4 × 4 plot beside the first row.
+    towers = [family for family in OFFICES if family not in ENSEMBLES]
+    plots = dict(zip(towers, [(col, row) for row in (0, 1) for col in range(6)], strict=False))
+    plots.update({family: (3, 0) for family in ENSEMBLES})
+    for family in OFFICES:
+        (col, row), size = plots[family], ENSEMBLES.get(family, SMALL)
         r = await build(client, me, family, FIRST, col, row)
         assert r.status_code == 200, r.text
         tower = r.json()["object"]
-        assert (tower["family"], tower["w"], tower["h"]) == (family, SMALL, SMALL)
+        assert (tower["family"], tower["w"], tower["h"]) == (family, size, size)
         assert tower["level"] == 1
         assert not r.json()["merged"]
         assert (await level(client, me, tower, 2)).json()["code"] == "bad_level"
@@ -226,7 +231,7 @@ async def test_office_towers_build_for_free_under_the_same_land_rules(client, se
     assert centre.json()["code"] == "wrong_plot"
     view = await sandbox(client, me)
     assert [o["family"] for o in view["objects"]] == list(OFFICES)
-    assert view["land"]["taken"] == len(OFFICES) * SMALL * SMALL
+    assert view["land"]["taken"] == sum(ENSEMBLES.get(family, SMALL) ** 2 for family in OFFICES)
     assert await count(session, CoinTransaction) == 0
     assert (await estate(client, me))["objects"] == []
 

@@ -66,7 +66,10 @@ OFFICES = {
     "officei": 1700,
     "officej": 1860,
     "officek": 2040,
+    "officel": 3600,
 }
+#: Office buildings on more cells than a tower's 2 × 2: the Nurly Tau complex on 4 × 4.
+ENSEMBLES = {"officel": 4}
 FAMILIES = {"square", "house", *READY, *OFFICES, "park", "bigpark"}
 
 
@@ -338,25 +341,31 @@ async def test_ready_houses_are_bought_finished_at_the_price_of_their_size(
 
 async def test_all_supplied_office_towers_are_bought_finished_on_four_cells(client, session, team):
     me = auth(await login(client, team.login))
-    await fund(session, team.id, sum(SMALL_LAND + price for price in OFFICES.values()))
+    side = {family: ENSEMBLES.get(family, SMALL) for family in OFFICES}
+    land = {family: side[family] ** 2 * LAND[0] for family in OFFICES}
+    await fund(session, team.id, sum(land[family] + price for family, price in OFFICES.items()))
     catalogue = {c["family"]: c for c in (await estate(client, me))["catalogue"]}
     assert [f for f, c in catalogue.items() if c["ready"]] == [*READY, *OFFICES]
-    plots = [(col, row) for row in (0, 1) for col in range(6)]
+    # The towers in two rows of 2 × 2 plots, the complex on the 4 × 4 plot beside the first row.
+    towers = [family for family in OFFICES if family not in ENSEMBLES]
+    plots = dict(zip(towers, [(col, row) for row in (0, 1) for col in range(6)], strict=False))
+    plots.update({family: (3, 0) for family in ENSEMBLES})
     purchased = []
-    for (family, price), (col, row) in zip(OFFICES.items(), plots, strict=False):
+    for family, price in OFFICES.items():
+        (col, row), size, cost = plots[family], side[family], land[family] + price
         item = catalogue[family]
-        assert item["size"] == [SMALL, SMALL] and item["squares"] is None
+        assert item["size"] == [size, size] and item["squares"] is None
         assert len(item["levels"]) == 1 and item["levels"][0]["price"] == price
         op = key()
         r = await buy(client, me, family, FIRST, col, row, op=op)
         assert r.status_code == 200, r.text
         data = r.json()
         tower = data["object"]
-        assert data["price"] == SMALL_LAND + price and not data["merged"]
-        assert (tower["family"], tower["w"], tower["h"]) == (family, SMALL, SMALL)
+        assert data["price"] == cost and not data["merged"]
+        assert (tower["family"], tower["w"], tower["h"]) == (family, size, size)
         assert tower["level"] == 1
-        assert tower["paid"] == SMALL_LAND + price and tower["source"] == "purchase"
-        assert (tower["module"], tower["u"], tower["v"]) == (FIRST, col * SMALL, row * SMALL)
+        assert tower["paid"] == cost and tower["source"] == "purchase"
+        assert (tower["module"], tower["u"], tower["v"]) == (FIRST, col * size, row * size)
         purchased.append(tower)
         replay = await buy(client, me, family, FIRST, col, row, op=op)
         assert replay.status_code == 200 and replay.json()["replayed"]
@@ -372,10 +381,10 @@ async def test_all_supplied_office_towers_are_bought_finished_on_four_cells(clie
     assert [o["id"] for o in (await estate(client, me))["objects"]] == [o["id"] for o in purchased]
     view = await district_view(client, me)
     assert [o["family"] for o in view["objects"]] == list(OFFICES)
-    taken = len(OFFICES) * SMALL * SMALL
+    taken = sum(size * size for size in side.values())
     assert view["land"]["taken"] == view["land"]["built"] == taken
     assert await session.scalar(select(func.count()).select_from(CityCell)) == taken
-    assert sum(await spent(session)) == -sum(SMALL_LAND + price for price in OFFICES.values())
+    assert sum(await spent(session)) == -sum(land[f] + price for f, price in OFFICES.items())
 
 
 async def test_saved_economies_gain_offices_and_keep_custom_prices(client, session, head, team):

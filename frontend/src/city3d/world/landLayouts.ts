@@ -11,7 +11,7 @@
 import type { Frame } from "./land";
 import type { PlotFamily } from "./estateGrid";
 import { HOUSE_SCALE, READY_HOUSES, isReadyHouse, type ReadyHouse } from "./familyHouses";
-import { OFFICE_BUILDINGS, OFFICE_SETBACK, isOfficeBuilding, officeBuildingScale, type OfficeBuilding } from "./officeBuildings";
+import { ENSEMBLE_MARGIN, OFFICE_BUILDINGS, OFFICE_SETBACK, isOfficeBuilding, officeBuildingScale, type OfficeBuilding } from "./officeBuildings";
 import type { Placement, PlacementKind, Surface, SurfaceKind } from "./types";
 
 export interface Layout { placements: Placement[]; surfaces: Surface[] }
@@ -163,6 +163,29 @@ function ready(f: Lot, family: ReadyHouse) {
   if (f.street) f.put("lamp", door + (drive && drive.lo > door ? -.6 : .6), D * .72, 0);
 }
 
+/**
+ * A business complex on its plot (an ensemble of world/officeBuildings.ts): paved all round, small trees down its
+ * middle alley and a fountain in it, a path from the alley to the plot's front, and trees and lawns in the corners
+ * that the buildings leave free.
+ */
+function ensemble(f: Lot, family: OfficeBuilding) {
+  const { W, D } = f, model = OFFICE_BUILDINGS[family], scale = officeBuildingScale(family, W * 2, D * 2);
+  const width = model.width * scale, depth = model.depth * scale;
+  f.patch("plaza", 0, 0, 2 * W - .4, 2 * D - .4);
+  f.put("office-building", 0, 0, 0, { variant: model.model - 1, scale, width, depth });
+  // The alley runs front to back down the middle, a nineteenth of the complex wide.
+  const alley = width * .055;
+  for (const t of [-.42, -.3, -.18, -.06, .06, .38, .46]) for (const side of [-1, 1]) tree(f, side * alley, t * depth, .42);
+  f.disc("plaza", 0, -.1 * depth, alley * .8); f.put("fountain", 0, -.1 * depth, 0, { width: alley * 1.4, scale: .4 });
+  const front = depth / 2;
+  f.patch("slab", 0, (front + D - .2) / 2, alley * 1.6, Math.max(.2, D - .2 - front));
+  for (const su of [-1, 1]) for (const sw of [-1, 1]) {
+    const u = su * (W - ENSEMBLE_MARGIN / 2), w = sw * (D - ENSEMBLE_MARGIN / 2);
+    f.patch("lawn", u, w, .8, .8);
+    tree(f, u, w, .7);
+  }
+}
+
 /** A ready office tower, with a paved entrance plaza and planting kept clear of the building. */
 function office(f: Lot, family: OfficeBuilding) {
   const { W, D } = f, model = OFFICE_BUILDINGS[family], scale = officeBuildingScale(family, W * 2, D * 2);
@@ -247,7 +270,7 @@ export function plotLayout(frame: Frame, family: PlotFamily, level: number, seed
   if (family === "square") square(f);
   else if (family === "house") house(f, Math.max(1, Math.min(5, level)));
   else if (isReadyHouse(family)) ready(f, family);
-  else if (isOfficeBuilding(family)) office(f, family);
+  else if (isOfficeBuilding(family)) (OFFICE_BUILDINGS[family].ensemble ? ensemble : office)(f, family);
   else if (family === "park") park(f, Math.max(1, Math.min(2, level)));
   else bigpark(f, Math.max(1, Math.min(3, level)));
   return { placements: f.placements, surfaces: f.surfaces };

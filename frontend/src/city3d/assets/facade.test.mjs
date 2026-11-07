@@ -37,6 +37,21 @@ function openEdges(geometry) {
   return [...edges.values()].filter(count => count % 2).length;
 }
 
+test('plans extrude and tent outwards whichever way round they are given, a crisp box included', () => {
+  // A block with cut corners and its front swept in, as the complex's volumes are drawn, and the same reversed.
+  const plan = [[-2, -3], [2, -3], [3, -2], [3, 2], [2, 3], [1, 2.6], [0, 2.4], [-1, 2.6], [-2, 3], [-3, 2], [-3, -2]];
+  for (const ring of [plan, [...plan].reverse()]) {
+    const mb = new f.MeshBuilder();
+    f.extrude(mb, ring, 0, 4, { kind: f.FACE.mirror, bay: 1.2, floor: 1.5 });
+    f.tent(mb, ring, 4, 6.5, { kind: f.FACE.spire, win: [1, 1, 0, 0] });
+    const geometry = mb.build(1), { bad, total } = faced(geometry);
+    assert.ok(total >= 2 * plan.length, 'walls and slopes');
+    assert.equal(bad, 0, `${bad} of ${total} triangles face inwards`);
+  }
+  const mb = new f.MeshBuilder(); f.box(mb, [-1, 0, -1, 1, 3, 1], { c: .3, crisp: true });
+  assert.equal(faced(mb.build(1)).bad, 0, 'crisp bevels face outwards');
+});
+
 test('round shapes face outwards: cylinders, frustums, cones, domes, balls, tori, pyramids, pediments, arches and rods', () => {
   const shapes = {
     cylinder: mb => f.cylinder(mb, { x: 1, z: -2, y0: 0, y1: 3, r: 1.2, seg: 12, bottom: true }),

@@ -1,19 +1,39 @@
 /**
- * Hills and mountains round the city (world/relief.ts): one low-poly mesh from the edge of the flat land (the
- * island city's horizon or the lake city's rectangle) out past the fog, painted by height and slope — meadow,
- * forest green on the hills, grey rock on steep and high slopes, snow on the peaks — so the fog turns the ranges
- * into hazy silhouettes behind the skyline. One draw call; it only receives shadows (it lies beyond the shadow map
- * anyway). Over the railway's cutting the rays run four times closer; at the tunnel (world/railway.ts) rings close
- * together frame the portal: the hill's face has a hole the portal's hood fills, through which the bore stays open,
- * and the slope down to the hood keeps its shape.
+ * Hills and mountains round the city (world/relief.ts): one mesh from the edge of the flat land (the island city's
+ * horizon or the lake city's rectangle) out past the fog. One draw call; it only receives shadows (it lies beyond
+ * the shadow map anyway). Over the railway's cutting the rays run four times closer; at the tunnel (world/railway.ts)
+ * rings close together frame the portal: the hill's face has a hole the portal's hood fills, through which the bore
+ * stays open, and the slope down to the hood keeps its shape.
+ *
+ * The look (docs/CITY_V4.md, stage 3), all in the shader, from the height, the slope and the ground's noise image:
+ * - smooth shading over the rounded hills, sharp edges only where the ground folds (rock crests, the cutting);
+ * - meadow low down, forest green on the hills, grey rock on steep and high slopes with layered strata and grit
+ *   (the strata fade to their average once they are finer than a pixel), snow by height on the gentler faces of
+ *   the peaks, its line wandering with the noise;
+ * - layers of haze: it thickens with the distance from the camera and more in the valleys than on the crests, so
+ *   each range stands paler behind the one before; it takes the sky's colour round each ridge (render/sky.ts
+ *   skyHaze, with the sun's halo), and the last stretch of the relief dissolves into the sky entirely, so the
+ *   edge of the map never shows. Day and night follow the sky's uniforms.
  */
 import * as THREE from "three/webgpu";
+import { cameraPosition, clamp, color, exp, float, fwidth, max, mix, normalWorld, output, positionWorld, smoothstep, texture, vec2, vec4 } from "three/tsl";
 import type { CityContext } from "../engine/context";
-import { fbm, flatLand, groundHeight, landEdge, RELIEF_END, type FlatLand } from "../world/relief";
+import { flatLand, groundHeight, landEdge, RELIEF_END, type FlatLand } from "../world/relief";
 import { PORTAL_HOLE, RAIL_TOP, portalHole, railLocal, railPoint, type RailLine } from "../world/railway";
+import { groundNoise } from "./ground";
+import { FOG_NEAR, skyHaze, skyLook } from "./sky";
 
 const TOP = .2, TAU = Math.PI * 2;
-const MEADOW = new THREE.Color("#86a174"), FOREST = new THREE.Color("#5c7c52"), ROCK = new THREE.Color("#8e8a83"), SNOW = new THREE.Color("#eef2f5");
+const MEADOW = "#86a174", DRY = "#9aa77a", FOREST = "#5c7c52", ROCK = "#8e8a83", ROCK_WARM = "#9a8f80", SNOW = "#eef2f5";
+/** Faces meeting at more than this angle keep a sharp edge between them; gentler folds are shaded smooth. */
+const CREASE = 50 * Math.PI / 180;
+/**
+ * The haze over the ranges, in world radii of the camera's distance: none nearer than HAZE_START (where the scene's
+ * fog begins, so the city and its hills stay clear), then thickening over every HAZE_DEPTH, up to HAZE_MAX; twice
+ * as thick on the valley floors as high on the crests (HAZE_HEIGHT units up). The last EDGE of the relief's reach
+ * fades into the sky completely.
+ */
+export const HAZE_START = FOG_NEAR, HAZE_DEPTH = 1.15, HAZE_MAX = .82, HAZE_HEIGHT = 55, EDGE = .2;
 /** The face's rings, along the track from the face: the cutting's last, the hole's bottom, the hill's first, then the slope over the portal. */
 const FACE_RINGS = [-.2, -.1, .1, 1.5, 3, 5, 7.5, 10.5];
 
@@ -78,31 +98,86 @@ export function createMountains(ctx: CityContext, options: { end?: number } = {}
     const a = k * count + i, b = k * count + j, c = a + count, d = b + count;
     indices.push(a, b, c, b, d, c);
   }
-  let geometry = new THREE.BufferGeometry();
-  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
-  geometry.setIndex(indices);
-  // Flat faces for the low-poly look of the rest of the city: every triangle its own normal and colour.
-  const flat = geometry.toNonIndexed(); geometry.dispose(); geometry = flat;
-  geometry.computeVertexNormals();
-  const position = geometry.getAttribute("position"), normal = geometry.getAttribute("normal"), colors = new Float32Array(position.count * 3), paint = new THREE.Color();
-  for (let t = 0; t < position.count; t += 3) {
-    const y = (position.getY(t) + position.getY(t + 1) + position.getY(t + 2)) / 3 - TOP, x = position.getX(t), z = position.getZ(t);
-    const steep = 1 - normal.getY(t), jitter = fbm(x / 23, z / 23, 2) - .5;
-    const snowLine = 118 + jitter * 40, rockLine = 48 + jitter * 30;
-    if (y > snowLine && steep < .55) paint.copy(SNOW);
-    else if (y > rockLine || steep > .45) paint.copy(ROCK).lerp(FOREST, Math.max(0, .35 - steep) * (y < rockLine + 20 ? 1 : 0));
-    else paint.copy(MEADOW).lerp(FOREST, Math.min(1, Math.max(0, (y - 2.5) / 9 + jitter * .6)));
-    paint.offsetHSL(0, 0, jitter * .05);
-    for (let v = 0; v < 3; v++) paint.toArray(colors, (t + v) * 3);
-  }
-  geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
-  geometry.computeBoundingSphere();
-  // The faces' own normals (computed above), not the shader's screen-space ones: those go wrong on the thin
-  // faces over the cutting once they are narrower than a pixel far away.
-  const material = new THREE.MeshStandardNodeMaterial({ vertexColors: true, roughness: .95, metalness: 0 });
-  const mesh = new THREE.Mesh(geometry, material);
+  const geometry = creasedGeometry(positions, indices, CREASE);
+  const mesh = new THREE.Mesh(geometry, mountainMaterial(ctx, end));
+  const material = mesh.material;
   // The ranges lie past the shadow map, where shading for shadows would only cost: they take none.
   mesh.name = "city-mountains"; mesh.receiveShadow = false; mesh.matrixAutoUpdate = false;
   ctx.scene.add(mesh);
   return { mesh, dispose() { ctx.scene.remove(mesh); geometry.dispose(); material.dispose(); } };
+}
+
+/**
+ * Triangles of an indexed mesh as separate corners, each with the normal of the faces round its vertex that meet
+ * its own face at less than `crease` (weighted by their areas): smooth over rounded ground, sharp where it folds.
+ * The faces' own normals, not the shader's screen-space ones: those go wrong on the thin faces over the cutting once
+ * they are narrower than a pixel far away.
+ */
+export function creasedGeometry(positions: ArrayLike<number>, indices: ArrayLike<number>, crease: number): THREE.BufferGeometry {
+  const triangles = indices.length / 3, vertices = positions.length / 3, limit = Math.cos(crease);
+  const area = new Float32Array(triangles * 3), unit = new Float32Array(triangles * 3);
+  const first = new Int32Array(vertices + 1), around = new Int32Array(indices.length);
+  for (let t = 0; t < triangles; t++) {
+    const a = indices[t * 3] * 3, b = indices[t * 3 + 1] * 3, c = indices[t * 3 + 2] * 3;
+    // (c - b) × (a - b), as BufferGeometry.computeVertexNormals: the side the triangles wind counter-clockwise.
+    const ux = positions[c] - positions[b], uy = positions[c + 1] - positions[b + 1], uz = positions[c + 2] - positions[b + 2];
+    const vx = positions[a] - positions[b], vy = positions[a + 1] - positions[b + 1], vz = positions[a + 2] - positions[b + 2];
+    const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx, length = Math.hypot(nx, ny, nz) || 1;
+    area[t * 3] = nx; area[t * 3 + 1] = ny; area[t * 3 + 2] = nz;
+    unit[t * 3] = nx / length; unit[t * 3 + 1] = ny / length; unit[t * 3 + 2] = nz / length;
+    for (let k = 0; k < 3; k++) first[indices[t * 3 + k] + 1]++;
+  }
+  for (let v = 0; v < vertices; v++) first[v + 1] += first[v];
+  const filled = first.slice(0, vertices);
+  for (let t = 0; t < triangles; t++) for (let k = 0; k < 3; k++) around[filled[indices[t * 3 + k]]++] = t;
+  const position = new Float32Array(triangles * 9), normal = new Float32Array(triangles * 9);
+  for (let t = 0; t < triangles; t++) for (let k = 0; k < 3; k++) {
+    const v = indices[t * 3 + k], o = (t * 3 + k) * 3;
+    let x = 0, y = 0, z = 0;
+    for (let i = first[v]; i < first[v + 1]; i++) {
+      const f = around[i];
+      if (unit[t * 3] * unit[f * 3] + unit[t * 3 + 1] * unit[f * 3 + 1] + unit[t * 3 + 2] * unit[f * 3 + 2] < limit) continue;
+      x += area[f * 3]; y += area[f * 3 + 1]; z += area[f * 3 + 2];
+    }
+    const length = Math.hypot(x, y, z) || 1;
+    position[o] = positions[v * 3]; position[o + 1] = positions[v * 3 + 1]; position[o + 2] = positions[v * 3 + 2];
+    normal[o] = x / length; normal[o + 1] = y / length; normal[o + 2] = z / length;
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(position, 3));
+  geometry.setAttribute("normal", new THREE.BufferAttribute(normal, 3));
+  geometry.computeBoundingSphere();
+  return geometry;
+}
+
+/** The ranges' material: ground painted by height and slope, then the layers of haze (see the top of the file). */
+function mountainMaterial(ctx: CityContext, end: number) {
+  const material = new THREE.MeshStandardNodeMaterial({ roughness: .94, metalness: 0 });
+  const p = positionWorld, height = p.y.sub(TOP), steep = float(1).sub(normalWorld.y), noise = groundNoise();
+  // Noise at three sizes: broad wander of the zones (cells of about 23 units, as the old painting's), patches of
+  // 6–24 units, and grit a fraction of a unit fine (the image's mip levels average it far away).
+  const jitter = texture(noise, p.xz.div(92)).x.sub(.5), patches = texture(noise, p.xz.div(170).add(.31)).y, grit = texture(noise, p.xz.div(29).add(.67)).z;
+  const forest = clamp(height.sub(2.5).div(9).add(jitter.mul(.6)), 0, 1).mul(patches.mul(.5).add(.75)).min(1);
+  const green = mix(mix(color(MEADOW), color(DRY), smoothstep(.55, .75, patches).mul(.6)), color(FOREST), forest);
+  // Rock: tilted strata a few units apart, bent by the noise, fading to their average once finer than a pixel; grit on top.
+  const rockLine = jitter.mul(30).add(48), layer = height.mul(1.1).add(p.x.mul(.17)).sub(p.z.mul(.11)).add(patches.mul(12));
+  const strata = layer.sin().mul(float(1).sub(smoothstep(.5, 1.6, fwidth(layer)))).mul(.06);
+  const scrub = max(float(.35).sub(steep), 0).mul(float(1).sub(smoothstep(rockLine.add(14), rockLine.add(26), height)));
+  const rock = mix(mix(color(ROCK), color(ROCK_WARM), patches), color(FOREST), scrub).mul(strata.add(.92).add(grit.mul(.16)));
+  const rocky = max(smoothstep(rockLine.sub(8), rockLine.add(8), height), smoothstep(.38, .52, steep));
+  // Snow from about 118 up (± 20 with the noise), only where the face is gentle enough to hold it; steeper as it rises.
+  const snowLine = jitter.mul(40).add(118).add(grit.sub(.5).mul(10)), hold = smoothstep(150, 175, height).mul(.12);
+  const snow = smoothstep(snowLine.sub(6), snowLine.add(6), height).mul(float(1).sub(smoothstep(hold.add(.5), hold.add(.6), steep)));
+  const ground = mix(mix(green, rock, rocky), color(SNOW).mul(grit.mul(.06).add(.97)), snow);
+  material.colorNode = ground.mul(jitter.mul(.1).add(1));
+  material.roughnessNode = mix(.95, .62, snow);
+  // Layers of haze over the lit, fogged colour (`output`): see HAZE_*; the sky's colour round each point.
+  const radius = end / RELIEF_END, look = skyLook(ctx.scene);
+  const toward = p.sub(cameraPosition), distance = toward.length();
+  const depth = max(distance.sub(radius * HAZE_START), 0).div(radius * HAZE_DEPTH);
+  const valley = exp(max(height, 0).div(-HAZE_HEIGHT)).mul(.5).add(.5);
+  const haze = float(1).sub(exp(depth.mul(valley).negate())).mul(HAZE_MAX);
+  const veil = max(haze, smoothstep(end * (1 - EDGE), end, vec2(p.x, p.z).length()));
+  material.outputNode = vec4(mix(output.rgb, skyHaze(look, toward.div(distance)), veil), output.a);
+  return material;
 }

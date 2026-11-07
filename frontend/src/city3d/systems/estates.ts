@@ -924,7 +924,16 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
         if (district && obj) {
           const frame = placeOf(district, obj);
           place = frame;
-          if (frame && isOfficeBuilding(obj.family)) { const bounds = officeBuildingBounds(obj.family, frame); place = bounds; y = .2 + bounds.height / 2; }
+          if (frame && isOfficeBuilding(obj.family)) {
+            const tower = officeBuildingBounds(obj.family, frame); place = tower; y = .2 + tower.height / 2;
+            // A complex is wider than the close view: the camera frames the whole of it, as it frames a district.
+            if (OFFICE_BUILDINGS[obj.family].ensemble) {
+              const c = Math.cos(tower.rotation), s = Math.sin(tower.rotation);
+              bounds = new THREE.Box3();
+              for (const u of [-tower.width / 2, tower.width / 2]) for (const v of [-tower.depth / 2, tower.depth / 2]) for (const h of [.2, .2 + tower.height])
+                bounds.expandByPoint(new THREE.Vector3(tower.x + c * u + s * v, h, tower.z - s * u + c * v));
+            }
+          }
         }
       } else if (target.kind === "public" && centre) {
         place = { ...centre.square };

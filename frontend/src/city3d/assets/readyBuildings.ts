@@ -9,9 +9,9 @@
  * to them; eaves may reach a little past the walls, as on a real house.
  */
 import type * as THREE from "three/webgpu";
-import { FACE, MeshBuilder, bakeOcclusion, box, cylinder, gableRoof, hipRoof, parapet, pyramid, rgb, type V3 } from "./facade";
+import { FACE, MeshBuilder, bakeOcclusion, box, cylinder, extrude, gableRoof, hipRoof, parapet, pyramid, rgb, tent, type Plan, type V3 } from "./facade";
 import { FINISHES, READY_HOUSES, type ReadyHouse, type ReadyHouseModel } from "../world/familyHouses";
-import { OFFICE_BUILDINGS, type OfficeBuilding } from "../world/officeBuildings";
+import { NURLY_TAU_WIDTH, OFFICE_BUILDINGS, type OfficeBuilding } from "../world/officeBuildings";
 
 /** Metres in one of the tables' model units: a house is drawn 1.35 times bigger, an office twice, a unit is about 4 m. */
 const HOUSE_METRES = 4 * 1.35, OFFICE_METRES = 4 * 2;
@@ -183,7 +183,7 @@ interface Tower {
   tiers: [number, number, "glass" | "stone"][];
   chamfer?: number; ring?: boolean;
 }
-const TOWERS: Record<Exclude<OfficeBuilding, "officej" | "officek">, Tower> = {
+const TOWERS: Record<Exclude<OfficeBuilding, "officej" | "officek" | "officel">, Tower> = {
   officea: { glass: rgb("#7da7c2"), stone: rgb("#d9d4cb"), tiers: [[0, .16, "stone"], [1, 1, "glass"]] },
   officeb: { glass: rgb("#9cb4c4"), stone: rgb("#cfc6b8"), tiers: [[0, .86, "stone"], [1.4, 1, "stone"]] },
   officec: { glass: rgb("#86a9b8"), stone: rgb("#d5d0c6"), tiers: [[0, .55, "glass"], [1.6, .8, "glass"], [3.2, 1, "glass"]] },
@@ -308,10 +308,96 @@ function empireState(): THREE.BufferGeometry {
   return mb.build(1 / M);
 }
 
+/**
+ * A volume of Nurly Tau as measured in the owner's model, in its metres: [x, z, width, depth, chamfer, sag, turn, from,
+ * to, roof]. A block with cut corners whose front (+z) is swept in by `sag` at its middle, turned by `turn` radians
+ * round its middle, standing from `from` to `to`; its roof flat (0), a tent up to that height, or a square pyramid
+ * [apex, half width, half depth] (the crown of a tower).
+ */
+type Volume = [number, number, number, number, number, number, number, number, number, number | [number, number, number]];
+const NURLY_TAU: Record<"towers" | "slabs" | "blocks" | "links", Volume[]> = {
+  // The four towers at the back: a core, a steel collar with its pyramid, a wing on either side, a bay high on the front.
+  towers: [
+    [91, -116, 30, 34, 3.2, 3.8, .025, 1.1, 96, 0], [91, -116, 25.5, 26.43, 1.56, 1.34, -.046, 95.9, 99, [124.5, 12.97, 13.46]],
+    [71.37, -114.99, 13.86, 25.72, 3.28, 1.18, -.125, 1.1, 83, 86.7], [110.55, -114.01, 13.86, 25.72, 3.28, 1.18, -.125, 1.1, 77, 80.7],
+    [90.53, -97.2, 17.29, 8.09, 1.11, 1.06, -.051, 89, 94, 98.3],
+    [-91, -106, 31, 35, 3.2, 3.8, -.025, 1.1, 104, 0], [-91, -106, 25.5, 26.43, 1.48, 1.34, .046, 103.9, 107, [132.5, 12.97, 13.46]],
+    [-70.87, -105, 13.97, 26.44, 1.17, 1.19, .125, 1.1, 85, 88.7], [-111.06, -104, 13.98, 26.44, 1.18, 1.19, .125, 1.1, 91, 94.7],
+    [-90.52, -86.7, 17.3, 8.09, 1.11, 1.06, .051, 97, 102, 106.3],
+    [72, -38, 31, 35, 3.2, 3.8, -.035, 1.1, 103, 0], [72, -38, 25.49, 26.43, 1.49, 1.35, .036, 102.9, 106, [132, 13.1, 13.58]],
+    [92.14, -37.2, 13.95, 26.44, 1.18, 1.18, .114, 1.1, 84, 87.7], [51.96, -35.8, 13.98, 26.44, 1.18, 1.19, .115, 1.1, 90, 93.7],
+    [72.68, -18.71, 17.3, 8.08, 1.11, 1.04, .04, 96, 101, 105.3],
+    [-72, -28, 31, 35, 3.2, 3.8, .035, 1.1, 99, 0], [-72, -28, 25.49, 26.43, 1.55, 1.35, -.036, 98.9, 102, [129, 13.1, 13.58]],
+    [-92.14, -27.2, 13.95, 26.44, 3.37, 1.18, -.114, 1.1, 86, 89.7], [-51.96, -25.8, 13.98, 26.44, 3.41, 1.19, -.115, 1.1, 80, 83.7],
+    [-72.68, -8.71, 17.3, 8.08, 1.11, 1.04, -.04, 92, 97, 101.3],
+  ],
+  // Two slabs with flat roofs either side of the alley.
+  slabs: [[35, -75, 27.01, 38.99, 2.29, 5.49, -.025, 1.1, 91, 0], [-35, -65, 27.01, 38.99, 2.3, 5.49, .025, 1.1, 86, 0]],
+  // Eight blocks under tall tent roofs of glass, lower towards the front.
+  blocks: [
+    [-51, 22, 45.01, 45.01, 4, 6.51, -.045, 1.1, 62, 84], [51, 22, 45.01, 45.01, 4, 6.51, .045, 1.1, 65, 87],
+    [-48, 69, 48, 43, 4.19, 7.8, .055, 1.1, 43, 64], [48, 69, 48, 43, 4.2, 7.8, -.055, 1.1, 45, 66],
+    [-39, 111, 46, 39, 4.2, 7, -.035, 1.1, 31.5, 51.5], [39, 111, 46, 39, 4.2, 7, .035, 1.1, 31.5, 51.5],
+    [-87, 113, 47.88, 40.82, 3.63, 6.49, 0, 1.1, 27.2, 46.2], [87, 113, 47.88, 40.82, 4.04, 6.49, 0, 1.1, 27.2, 46.2],
+  ],
+  // Low links between them.
+  links: [
+    [-51, -5, 24, 17, 1.4, 1.2, 0, 1.1, 19, 0], [51, -5, 24, 17, 1.4, 1.2, 0, 1.1, 19, 0],
+    [-46, 47, 26, 13, 1.4, 1.2, 0, 1.1, 17.5, 0], [46, 47, 26, 13, 1.4, 1.2, 0, 1.1, 17.5, 0],
+    [-43, 91, 24, 12, 1.1, 1, 0, 1.1, 14.5, 0], [43, 91, 24, 12, 1.1, 1, 0, 1.1, 14.5, 0],
+    [-64, 112, 12, 21, 1.1, 1, 0, 1.1, 16, 0], [64, 112, 12, 21, 1.1, 1, 0, 1.1, 16, 0],
+  ],
+};
+
+/** A volume's plan: its corners cut by `c`, its front swept in by `sag` in `n` steps, turned and placed. */
+function sweptPlan([x, z, w, d, c, sag, turn]: Volume, n = 4): Plan {
+  const local: Plan = [[-w / 2 + c, -d / 2], [w / 2 - c, -d / 2], [w / 2, -d / 2 + c], [w / 2, d / 2 - c], [w / 2 - c, d / 2]];
+  for (let k = n - 1; k > 0; k--) { const t = -1 + 2 * k / n; local.push([(w / 2 - c) * t, d / 2 - sag * (1 - t * t)]); }
+  local.push([-w / 2 + c, d / 2], [-w / 2, d / 2 - c], [-w / 2, -d / 2 + c]);
+  const cos = Math.cos(turn), sin = Math.sin(turn);
+  return local.map(([u, v]) => [x + u * cos - v * sin, z + u * sin + v * cos]);
+}
+
+/**
+ * Nurly Tau, the business complex in Almaty (world/officeBuildings.ts officel), after the owner's model of it: drawn in
+ * its own metres, the complex centred and its low blocks to the front, every volume where that model has it
+ * (NURLY_TAU). Silver-green mirror glass in a thin dark grid over a granite ground floor, glass tents and pyramids in
+ * a grid of panes that never lights up at night, steel collars under the towers' pyramids with a red light on each,
+ * and the long fountain pool of the alley.
+ */
+function nurlyTau(): THREE.BufferGeometry {
+  const model = OFFICE_BUILDINGS.officel, M = NURLY_TAU_WIDTH / model.width;
+  const GLASS = ["#93abad", "#89a2a5", "#9cb3b4"].map(rgb), ROOF = rgb("#a9bcc0"), GRANITE = rgb("#765a4a"), STEEL = rgb("#46535e");
+  const mb = new MeshBuilder();
+  const all = [...NURLY_TAU.towers, ...NURLY_TAU.slabs, ...NURLY_TAU.blocks, ...NURLY_TAU.links];
+  all.forEach((v, i) => {
+    const [x, z, , , , , , y0, y1, roof] = v, plan = sweptPlan(v);
+    if (Array.isArray(roof)) {
+      // A tower's crown: the steel collar, the pyramid on it, the red light on the apex.
+      const [apex, hx, hz] = roof;
+      extrude(mb, plan, y0, y1, { kind: FACE.trim, col: STEEL, top: FACE.trim, topCol: rgb("#3a444d") });
+      pyramid(mb, { x0: x - hx, x1: x + hx, z0: z - hz, z1: z + hz, y: y1, h: apex - y1, roof: ROOF, kind: FACE.spire, win: [1.6, 1.6, 0, 0] });
+      box(mb, [x - .5, apex - .4, z - .5, x + .5, apex + .8, z + .5], { c: .1, kind: FACE.light, col: rgb("#ff3a2a"), top: FACE.light, occlude: false });
+      return;
+    }
+    // Granite under the glass, one floor and a half on the tall ones; the bays high on the towers are glass alone.
+    const plinth = y0 < 2 ? y0 + Math.min(7, (y1 - y0) * .3) : y0;
+    if (plinth > y0) extrude(mb, plan, y0, plinth, { kind: FACE.wall, col: GRANITE, top: null });
+    extrude(mb, plan, plinth, y1, { kind: FACE.mirror, col: GLASS[i % GLASS.length], top: roof ? null : FACE.deck, bay: 1.6, floor: 1.8 });
+    if (roof) tent(mb, plan, y1, roof, { kind: FACE.spire, col: ROOF, win: [1.6, 1.6, 0, 0] });
+  });
+  // The fountain pool down the middle of the alley: a granite kerb and the water.
+  box(mb, [-4.6, 0, 58.4, 4.6, .9, 81.6], { c: .2, kind: FACE.trim, col: rgb("#b9b2a2"), top: FACE.trim, occlude: false });
+  box(mb, [-4, .9, 59, 4, 1, 81], { kind: FACE.pane, col: rgb("#3d7f88"), noTop: false, occlude: false });
+  bakeOcclusion(mb, { reach: 12, ground: 8 });
+  return mb.build(1 / M);
+}
+
 /** An office tower, in model units: tiers of curtain wall or stone, a glass lobby and canopy at the front, a crown. */
 export function officeTowerGeometry(family: OfficeBuilding): THREE.BufferGeometry {
   if (family === "officej") return pyramidTower();
   if (family === "officek") return empireState();
+  if (family === "officel") return nurlyTau();
   const model = OFFICE_BUILDINGS[family], t = TOWERS[family], k = OFFICE_METRES;
   const W = model.width * k, D = model.depth * k, H = model.height * k * .9, top = model.height * k;
   // The tower stands back by its canopy, so the canopy over the entrance ends at the footprint's front.
