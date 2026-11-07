@@ -6,6 +6,7 @@ import { seasonDates, seasonWarning, shortLeft } from "./seasonText";
 import { CityWorldPanel, CityJourney } from "./CityWorldPanel";
 import { CityEstateDock, type BuildState, type EstateTarget } from "./CityEstateDock";
 import { CitySandboxDock } from "./CitySandboxDock";
+import { CityFullBanner, useFullCity } from "./CityFullView";
 import { DEFAULT_SCREEN, type ScreenWays } from "./decorArrange";
 import type { CityEstateView, EstatePick, JourneyPhase, PlotAddress } from "../../city3d/types";
 import { NO_CHOICE, isBuilding, spacing } from "./cellChoice";
@@ -110,9 +111,13 @@ export function CityPage() {
   const historyId = !sandboxOn && /^\d+$/.test(params.get("history") ?? "") ? Number(params.get("history")) : null, historyOn = historyId !== null;
   const historyLand = useQuery({ queryKey: ["city-history", historyId, department], queryFn: ({ signal }) => citySeasons.city(historyId!, department, signal), retry: retryCityRead, enabled: historyOn, staleTime: Infinity });
   const [historyOpen, setHistoryOpen] = useState(false);
+  // «Весь город» (?full=1), for everyone: the city as it could look with all its land built on, only to look at
+  // (fullCity.ts). The real land is still read, for the districts' names; nothing is built or sent.
+  const fullOn = !sandboxOn && !historyOn && params.get("full") === "1";
   const supportLand = useQuery({ queryKey: ["city-estates", "support"], queryFn: ({ signal }) => cityEstate.city("support", signal), retry: retryCityRead, enabled: department === "support" && !sandboxOn && !historyOn, refetchInterval: landPoll, refetchOnWindowFocus: true });
   const salesLand = useQuery({ queryKey: ["city-estates", "sales"], queryFn: ({ signal }) => cityEstate.city("sales", signal), retry: retryCityRead, enabled: department === "sales" && !sandboxOn && !historyOn, refetchInterval: landPoll, refetchOnWindowFocus: true });
   const sandboxLand = useQuery({ queryKey: ["city-sandbox", department], queryFn: ({ signal }) => citySandbox.city(department, signal), retry: retryCityRead, enabled: sandboxOn, refetchInterval: landPoll, refetchOnWindowFocus: true });
+  const supportFull = useFullCity(fullOn ? supportLand.data : undefined), salesFull = useFullCity(fullOn ? salesLand.data : undefined);
   const estateViews = useMemo(() => {
     const views: Partial<Record<DepartmentId, CityEstateView>> = {};
     // A past city is only looked at: its land as it stood on the season's last day.
@@ -124,10 +129,15 @@ export function CityPage() {
       if (sandboxLand.data?.city === department) views[department] = { state: sandboxLand.data };
       return views;
     }
+    if (fullOn) {
+      if (supportFull) views.support = { state: supportFull };
+      if (salesFull) views.sales = { state: salesFull };
+      return views;
+    }
     if (supportLand.data) views.support = { state: supportLand.data };
     if (salesLand.data) views.sales = { state: salesLand.data };
     return views;
-  }, [historyOn, historyLand.data, sandboxOn, department, sandboxLand.data, supportLand.data, salesLand.data]);
+  }, [historyOn, historyLand.data, sandboxOn, department, sandboxLand.data, fullOn, supportFull, salesFull, supportLand.data, salesLand.data]);
   const [building, setBuilding] = useState<BuildState | null>(null), [estateFocus, setEstateFocus] = useState<EstateTarget & { at: number }>();
   // Which way of the cells is up the screen now, for the arrows that move small things (decorArrange.ts).
   const [screen, setScreen] = useState<ScreenWays>(DEFAULT_SCREEN);
@@ -158,7 +168,7 @@ export function CityPage() {
   }, [sandboxOn, homeEstate?.id]);
   function onEstate(pick: EstatePick) {
     if (pick.kind === "screen") { setScreen(s => s.up === pick.up && s.right === pick.right ? s : { up: pick.up, right: pick.right }); return; }
-    if (historyOn) return;
+    if (historyOn || fullOn) return;
     if (sandboxOn && (pick.kind === "project" || pick.kind === "public")) { setWorldSelected(null); openSandbox(pick.district, true); return; }
     if (pick.kind === "public") { setBuilding(null); setWorldSelected(pick.district); focusLand({ district: pick.district, kind: "public" }); return; }
     if (pick.kind === "place") setBuilding(b => b && { ...b, spot: { module: pick.module, u: pick.u, v: pick.v, rotation: pick.rotation, problem: pick.problem } });
@@ -204,14 +214,24 @@ export function CityPage() {
   }
   function viewHistory(season: PastSeason) {
     const next = new URLSearchParams(params);
-    next.set("history", String(season.id)); next.delete("sandbox");
+    next.set("history", String(season.id)); next.delete("sandbox"); next.delete("full");
     setParams(next); setHistoryOpen(false); setBuilding(null); setWorldSelected(null); toolbar.setActive(null);
   }
   function leaveHistory() {
     const next = new URLSearchParams(params);
     next.delete("history"); setParams(next, { replace: true });
   }
-  useEffect(() => { if (historyOn) setBuilding(null); }, [historyOn]);
+  useEffect(() => { if (historyOn || fullOn) setBuilding(null); }, [historyOn, fullOn]);
+  function toggleFull() {
+    const next = new URLSearchParams(params);
+    if (fullOn) next.delete("full"); else { next.set("full", "1"); next.delete("sandbox"); next.delete("history"); }
+    setParams(next, { replace: true });
+    setBuilding(null); setWorldSelected(null);
+    // The camera flies to the viewer's own district, or the city's first one, to see the streets built up.
+    const land = (department === "sales" ? salesLand : supportLand).data;
+    const shown = fullOn ? null : land?.districts.find(d => d.id === homeEstate?.id) ?? land?.districts.find(d => d.land);
+    if (shown) focusLand({ district: shown.id, kind: "district" });
+  }
   // The camera flies to what the past season built: the viewer's own district, or the first one built on.
   useEffect(() => {
     const land = historyLand.data;
@@ -228,7 +248,7 @@ export function CityPage() {
   const sandboxFirst = (sandboxLand.data?.city === department ? sandboxLand.data.districts[0]?.id : undefined) ?? `${department}-team-1`;
   function toggleSandbox() {
     const next = new URLSearchParams(params);
-    if (sandboxOn) next.delete("sandbox"); else next.set("sandbox", "1");
+    if (sandboxOn) next.delete("sandbox"); else { next.set("sandbox", "1"); next.delete("full"); }
     setParams(next, { replace: true });
     setWorldSelected(null);
     if (sandboxOn) setBuilding(null); else openSandbox(sandboxFirst);
@@ -335,7 +355,7 @@ export function CityPage() {
   const seasons = seasonsQuery.data, past = historyLand.data?.history;
   // A few days before the schedule resets the city, the toolbar counts down to it.
   const warning = !historyOn && seasons?.current.warning && seasons.current.ends_at ? seasons.current : null;
-  return <CityToolbarProvider state={toolbar}><div className="city-immersive" data-department={department} data-building={building ? true : undefined} data-history={historyOn || undefined}>
+  return <CityToolbarProvider state={toolbar}><div className="city-immersive" data-department={department} data-building={building ? true : undefined} data-history={historyOn || undefined} data-full={fullOn || undefined}>
     <CityToolbar />
     {/* With a schedule set, everyone can look up when the season ends; past seasons stay a click away. */}
     {seasons && (historyOn || warning || seasons.history.length > 0 || seasons.current.ends_at) && <CityToolbarButton slot="history"
@@ -346,6 +366,7 @@ export function CityPage() {
       {past && <button type="button" onClick={() => setHistoryOpen(true)}>Итоги</button>}
       <button type="button" onClick={leaveHistory}>Выйти</button>
     </div>}
+    {fullOn && <CityFullBanner onLeave={toggleFull} />}
     {historyOpen && seasons && <CityHistory seasons={seasons} department={department} viewing={historyId} onView={viewHistory} onLeave={() => { setHistoryOpen(false); leaveHistory(); }} onClose={() => setHistoryOpen(false)} />}
     <CityMap key={mapAttempt} department={department} departmentWorld={worldQuery.data} onWorldPick={pickWorld} onArrival={visit} onJourney={setJourney} worldAction={worldAction} estates={estateViews} build={buildView} onEstate={onEstate} estateFocus={estateFocus} sceneIdentity={`${data.user_id}:${data.inspecting ? "inspect" : "self"}`} forceWebGL={params.get("backend") === "webgl"} mascot={mascot} labels={labels} districts={data.districts} missions={data.missions} selected={selected.id} focusRequest={focusRequest} onSelect={selectDistrict} plots={data.plots} quests={data.quests?.items ?? []} onQuest={data.inspecting ? undefined : slot => { answer.reset(); setQuestSlot(slot); }} questFocus={questFocus} controls={controls} onControls={user ? () => setControlsEditing(true) : undefined} controlsOpen={showControls} onStatus={setMapStatus} onRetry={retryMap} progressKey={!data.inspecting && !data.preview ? `city-levels:${data.user_id}` : undefined} levelsSeen={data.levels_seen ?? null} onLevelsSeen={seeLevels} />
 
@@ -362,8 +383,9 @@ export function CityPage() {
       {!data.preview && <div className="city-hud__coins"><span className="city-coin" aria-hidden="true">◈</span><span className="city-hud__stat"><strong>{data.balance.toLocaleString("ru-RU")}</strong><span className="city-hud__label">коинов в кошельке</span></span></div>}
       <nav className="city-hud__links" aria-label="Обучение">
         {user?.role === "admin" && <button type="button" className="city-group-button" data-open={sandboxOn || undefined} aria-pressed={sandboxOn} onClick={toggleSandbox} aria-label={sandboxOn ? "Выйти из тестового города" : "Тестовый город администраторов"} title="Тестовый город: только для администраторов"><span aria-hidden="true">🧪</span><span className="city-hud__wide">Тест</span></button>}
+        <button type="button" className="city-group-button" data-open={fullOn || undefined} aria-pressed={fullOn} onClick={toggleFull} aria-label={fullOn ? "Вернуться к настоящему городу" : "Весь город застроен: посмотреть"} title="Как город может выглядеть, когда вся земля застроена"><span aria-hidden="true">🏙️</span><span className="city-hud__wide">Весь город</span></button>
         {/* Operators build from the toolbar's «Строить»; staff with land of their own, from here. */}
-        {canOpenBuild && !sandboxOn && !historyOn && user?.role !== "operator" && <button type="button" className="city-group-button" data-open={building ? true : undefined} aria-pressed={!!building} onClick={() => building ? setBuilding(null) : openBuild()} aria-label={mineEstate!.district!.city === department ? "Строить в своём районе" : "Мой район в другом городе"}><span aria-hidden="true">🏡</span><span className="city-hud__wide">{mineEstate!.district!.city === department ? "Строить" : "Мой район"}</span></button>}
+        {canOpenBuild && !sandboxOn && !historyOn && !fullOn && user?.role !== "operator" && <button type="button" className="city-group-button" data-open={building ? true : undefined} aria-pressed={!!building} onClick={() => building ? setBuilding(null) : openBuild()} aria-label={mineEstate!.district!.city === department ? "Строить в своём районе" : "Мой район в другом городе"}><span aria-hidden="true">🏡</span><span className="city-hud__wide">{mineEstate!.district!.city === department ? "Строить" : "Мой район"}</span></button>}
         {user?.role !== "operator" && <Link to="/admin/learning/city" aria-label="Управление городом"><span aria-hidden="true">⚙︎</span><span className="city-hud__wide">Управление</span></Link>}
       </nav>
     </header>
@@ -377,7 +399,7 @@ export function CityPage() {
     </div>
     </CityPeekPanel>
 
-    {user?.role === "operator" && !data.inspecting && !building && !sandboxOn && !historyOn && <CityPeekPanel className="city-build-peek" toolbarSlot="build" label="Застройка района" compactLabel="Строить" icon="🏡"><CityBuildEntry mine={mineEstate} loading={estateQuery.isPending} failed={estateQuery.isError} onRetry={() => { void estateQuery.refetch(); }} onBuild={openBuild} /></CityPeekPanel>}
+    {user?.role === "operator" && !data.inspecting && !building && !sandboxOn && !historyOn && !fullOn && <CityPeekPanel className="city-build-peek" toolbarSlot="build" label="Застройка района" compactLabel="Строить" icon="🏡"><CityBuildEntry mine={mineEstate} loading={estateQuery.isPending} failed={estateQuery.isError} onRetry={() => { void estateQuery.refetch(); }} onBuild={openBuild} /></CityPeekPanel>}
     <div className="city-notes">
       {(askGuide || guideEditing) && <CityGuideSetup onClose={askGuide ? undefined : () => setGuideEditing(false)} onLater={askGuide ? () => putOff("guide") : undefined} />}
       {showControls && <CityControlsSetup value={controls} onPick={setControlsPreview} onClose={closeControls} cancellable={controlsEditing} onLater={controlsEditing ? undefined : () => { putOff("controls"); closeControls(); }} />}
@@ -394,9 +416,9 @@ export function CityPage() {
       <CityTasks quests={quests} coins={data.quests?.coins ?? 0} allPassed={allPassed} assigned={assigned} onQuest={openQuest} onStart={item => startAssignment.mutate(item)} starting={startAssignment.isPending ? startAssignment.variables?.id ?? null : null} error={startAssignment.isError ? startAssignment.error.message : null} />
     </CityPeekPanel>}
     {worldQuery.data && <CityWorldPanel world={worldQuery.data} current={department} selected={worldSelected} onPick={pickWorld} onClose={() => setWorldSelected(null)} ready={mapStatus === "ready"} onVisit={visit} onTravel={id => { setDestination(id); setWorldAction({ kind: "travel", target: id, at: Date.now() }); }}
-      estates={department === "sales" ? salesLand.data : supportLand.data} mine={mineEstate} onMyEstate={canOpenBuild && !historyOn ? openBuild : undefined}
-      onOpenProject={district => { setBuilding({ district, area: "public", placing: null, selected: null, choice: null, spot: null, project: true }); focusLand({ district, kind: "public" }); }} />}
-    {building && mineEstate && !sandboxOn && !historyOn && <CityEstateDock mine={mineEstate} land={buildingLand} build={building} setBuild={setBuilding} onClose={() => setBuilding(null)} onFocus={focusLand} onChooseFree={mapStatus === "ready" && !buildingLandQuery.isError && suggestedPlot && building.district === homeEstate?.id ? chooseFreePlot : undefined} mapStatus={mapStatus} loadingLand={!buildingLand && !buildingLandQuery.isError} landError={buildingLandQuery.isError ? buildingLandQuery.error : null} onRetryLand={reloadBuildLand} onRetryMap={retryMap} screen={screen} />}
+      estates={department === "sales" ? salesLand.data : supportLand.data} mine={mineEstate} onMyEstate={canOpenBuild && !historyOn && !fullOn ? openBuild : undefined}
+      onOpenProject={fullOn ? undefined : district => { setBuilding({ district, area: "public", placing: null, selected: null, choice: null, spot: null, project: true }); focusLand({ district, kind: "public" }); }} />}
+    {building && mineEstate && !sandboxOn && !historyOn && !fullOn && <CityEstateDock mine={mineEstate} land={buildingLand} build={building} setBuild={setBuilding} onClose={() => setBuilding(null)} onFocus={focusLand} onChooseFree={mapStatus === "ready" && !buildingLandQuery.isError && suggestedPlot && building.district === homeEstate?.id ? chooseFreePlot : undefined} mapStatus={mapStatus} loadingLand={!buildingLand && !buildingLandQuery.isError} landError={buildingLandQuery.isError ? buildingLandQuery.error : null} onRetryLand={reloadBuildLand} onRetryMap={retryMap} screen={screen} />}
     {building && sandboxOn && <CitySandboxDock city={department} state={sandboxLand.data?.city === department ? sandboxLand.data : undefined} mine={mineEstate} build={building} setBuild={setBuilding} onClose={() => setBuilding(null)} onFocus={focusLand} screen={screen} />}
     <CityJourney phase={journey} destination={worldQuery.data?.cities.find(c => c.id === destination)?.name ?? destination} onSkip={() => setWorldAction({ kind: "skip", target: destination, at: Date.now() })} />
 

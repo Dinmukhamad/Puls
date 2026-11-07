@@ -40,3 +40,6 @@
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .city-history__warning { color: #ffd28a; } :root:not([data-theme="light"]) .city-toolbar .city-toolbar-button[data-tone="warn"] .city-peek__label { color: #ffc56b; } }
 :root[data-theme="dark"] .city-history__warning { color: #ffd28a; }
 :root[data-theme="dark"] .city-toolbar .city-toolbar-button[data-tone="warn"] .city-peek__label { color: #ffc56b; }
+/* «Весь город»: the same banner over the made-up city, in the city's blue (CityFullView.tsx). */
+.city-full-banner { border-color: color-mix(in srgb, #3d7cc4 40%, var(--separator)); }
+@media (max-width: 700px) { .city-full-banner__about { display: none; } }

@@ -80,8 +80,8 @@ test("only administrators get the test city on the city page, and its dock repla
   // While it is on, the map draws only the test city, and the real land is not even asked for.
   assert.match(page, /enabled: department === "support" && !sandboxOn/);
   assert.match(page, /enabled: department === "sales" && !sandboxOn/);
-  // A past season (?history=) is only looked at: the real dock stays shut there too.
-  assert.match(page, /\{building && mineEstate && !sandboxOn && !historyOn && <CityEstateDock/);
+  // A past season (?history=) and the whole city built up (?full=) are only looked at: the real dock stays shut there too.
+  assert.match(page, /\{building && mineEstate && !sandboxOn && !historyOn && !fullOn && <CityEstateDock/);
   assert.match(page, /\{building && sandboxOn && <CitySandboxDock/);
   const dock = readFileSync(new URL("./CitySandboxDock.tsx", import.meta.url), "utf8");
   // The test city never calls the real city's paid operations.
