@@ -170,8 +170,9 @@ test('all twelve offices are finished purchases on their cells and fit them anyw
   for (const [family, model] of Object.entries(E.OFFICE_BUILDINGS)) {
     assert.equal(model.name, SERVER_OFFICES[family].name);
     assert.equal(E.PLOT_LEVELS[family], 1);
-    // A tower on 2 × 2 cells; the complex on 4 × 4, centred, a margin all round.
-    const n = model.ensemble ? 4 : 2;
+    // A tower on 2 × 2 cells, the Empire State Building on 4 × 4; the complex on 8 × 8, centred, a margin all round.
+    const n = model.ensemble ? 8 : family === 'officek' ? 4 : 2;
+    assert.deepEqual(E.PLOT_SIZE[family], [n, n]);
     for (const rotation of [0, 1, 2, 3]) assert.deepEqual(E.plotFootprint(family, rotation), [n, n]);
     for (const frame of plotFrames(n)) {
       const layout = E.plotLayout(frame, family, 1, 19), offices = layout.placements.filter(p => p.kind === 'office-building');
@@ -180,7 +181,7 @@ test('all twelve offices are finished purchases on their cells and fit them anyw
       assert.equal(office.variant, model.model - 1);
       assert.equal(office.rotation, frame.rotation);
       assert.equal(office.scale, E.officeBuildingScale(family, frame.width, frame.depth));
-      assert.ok(office.scale > 0 && office.scale <= E.OFFICE_SCALE);
+      assert.ok(office.scale > 0 && (model.ensemble || office.scale <= E.OFFICE_SCALE));
       const path = layout.surfaces.find(s => s.kind === 'slab'), pathAt = local(frame, path);
       if (model.ensemble) {
         assert.ok(Math.abs(at.u) < 1e-9 && Math.abs(at.w) < 1e-9, `${family} in the middle of its plot`);

@@ -926,8 +926,9 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
           place = frame;
           if (frame && isOfficeBuilding(obj.family)) {
             const tower = officeBuildingBounds(obj.family, frame); place = tower; y = .2 + tower.height / 2;
-            // A complex is wider than the close view: the camera frames the whole of it, as it frames a district.
-            if (OFFICE_BUILDINGS[obj.family].ensemble) {
+            // A landmark on more than 2 × 2 cells outgrows the close view: the camera frames the whole of it, as it
+            // frames a district.
+            if (Math.max(...plotFootprint(obj.family, 0)) > 2) {
               const c = Math.cos(tower.rotation), s = Math.sin(tower.rotation);
               bounds = new THREE.Box3();
               for (const u of [-tower.width / 2, tower.width / 2]) for (const v of [-tower.depth / 2, tower.depth / 2]) for (const h of [.2, .2 + tower.height])

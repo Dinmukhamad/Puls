@@ -4,7 +4,7 @@ import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
 
 const built = await build({
-  stdin: { contents: 'export * from "./estates.ts"; export * from "../render/night.ts"; export * from "../engine/camera.ts"; export * from "../assets/catalogue.ts"; export * from "../world/familyHouses.ts"; export * from "../world/land.ts"; export * from "../world/districtGarden.ts"; export * from "../world/landLayouts.ts"; export * from "../world/officeBuildings.ts"; export * from "../world/districtLandmark.ts"; export * from "../world/cities.ts"; export * from "../world/worldSpec.ts"; export * as THREE from "three/webgpu";', resolveDir: fileURLToPath(new URL('.', import.meta.url)) },
+  stdin: { contents: 'export * from "./estates.ts"; export * from "../render/night.ts"; export * from "../engine/camera.ts"; export * from "../assets/catalogue.ts"; export * from "../world/familyHouses.ts"; export * from "../world/land.ts"; export * from "../world/districtGarden.ts"; export * from "../world/landLayouts.ts"; export * from "../world/officeBuildings.ts"; export * from "../world/districtLandmark.ts"; export * from "../world/cities.ts"; export * from "../world/worldSpec.ts"; export { plotFootprint } from "../world/estateGrid.ts"; export * as THREE from "three/webgpu";', resolveDir: fileURLToPath(new URL('.', import.meta.url)) },
   bundle: true, platform: 'node', format: 'esm', write: false, logLevel: 'error',
   plugins: [{ name: 'url', setup(b) {
     b.onResolve({ filter: /\?url$/ }, a => ({ path: a.path, namespace: 'url' }));
@@ -308,8 +308,9 @@ test('every office focuses on its actual centre and keeps the complete tower vis
     const focus = s.estates.focus({ kind: 'object', district: districtId, object: 7 }, 30, .86), bounds = city.officeBuildingBounds(family, frame);
     assert.ok(Math.abs(focus.point.y - (.2 + bounds.height / 2)) < 1e-9);
     assert.ok(Math.abs(focus.point.x - bounds.x) < 1e-9 && Math.abs(focus.point.z - bounds.z) < 1e-9);
-    if (city.OFFICE_BUILDINGS[family].ensemble) {
-      // A complex hands the camera its whole box to frame (camera.focusBounds), every corner of it inside.
+    if (Math.max(...city.plotFootprint(family, 0)) > 2) {
+      // A landmark on more than 2 × 2 cells hands the camera its whole box to frame (camera.focusBounds), every corner
+      // of it inside.
       const c = Math.cos(bounds.rotation), sin = Math.sin(bounds.rotation);
       for (const x of [-bounds.width / 2, bounds.width / 2]) for (const z of [-bounds.depth / 2, bounds.depth / 2]) for (const y of [.2, .2 + bounds.height])
         assert.ok(focus.bounds?.expandByScalar(1e-6).containsPoint(new THREE.Vector3(bounds.x + c * x + sin * z, y, bounds.z - sin * x + c * z)), `${family} framed whole`);

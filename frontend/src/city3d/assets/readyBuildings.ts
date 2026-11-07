@@ -11,7 +11,7 @@
 import type * as THREE from "three/webgpu";
 import { FACE, MeshBuilder, bakeOcclusion, box, cylinder, extrude, gableRoof, hipRoof, parapet, pyramid, rgb, tent, type Plan, type V3 } from "./facade";
 import { FINISHES, READY_HOUSES, type ReadyHouse, type ReadyHouseModel } from "../world/familyHouses";
-import { NURLY_TAU_WIDTH, OFFICE_BUILDINGS, type OfficeBuilding } from "../world/officeBuildings";
+import { NURLY_TAU_RISE, NURLY_TAU_WIDTH, OFFICE_BUILDINGS, type OfficeBuilding } from "../world/officeBuildings";
 
 /** Metres in one of the tables' model units: a house is drawn 1.35 times bigger, an office twice, a unit is about 4 m. */
 const HOUSE_METRES = 4 * 1.35, OFFICE_METRES = 4 * 2;
@@ -363,28 +363,29 @@ function sweptPlan([x, z, w, d, c, sag, turn]: Volume, n = 4): Plan {
  * its own metres, the complex centred and its low blocks to the front, every volume where that model has it
  * (NURLY_TAU). Silver-green mirror glass in a thin dark grid over a granite ground floor, glass tents and pyramids in
  * a grid of panes that never lights up at night, steel collars under the towers' pyramids with a red light on each,
- * and the long fountain pool of the alley.
+ * and the long fountain pool of the alley. Every height is drawn NURLY_TAU_RISE times its metres (the walls' grid in
+ * the metres drawn, so the panes keep their size).
  */
 function nurlyTau(): THREE.BufferGeometry {
-  const model = OFFICE_BUILDINGS.officel, M = NURLY_TAU_WIDTH / model.width;
+  const model = OFFICE_BUILDINGS.officel, M = NURLY_TAU_WIDTH / model.width, up = (y: number) => y * NURLY_TAU_RISE;
   const GLASS = ["#93abad", "#89a2a5", "#9cb3b4"].map(rgb), ROOF = rgb("#a9bcc0"), GRANITE = rgb("#765a4a"), STEEL = rgb("#46535e");
   const mb = new MeshBuilder();
   const all = [...NURLY_TAU.towers, ...NURLY_TAU.slabs, ...NURLY_TAU.blocks, ...NURLY_TAU.links];
   all.forEach((v, i) => {
-    const [x, z, , , , , , y0, y1, roof] = v, plan = sweptPlan(v);
-    if (Array.isArray(roof)) {
+    const [x, z, , , , , , from, to, top] = v, plan = sweptPlan(v), y0 = up(from), y1 = up(to);
+    if (Array.isArray(top)) {
       // A tower's crown: the steel collar, the pyramid on it, the red light on the apex.
-      const [apex, hx, hz] = roof;
+      const [peak, hx, hz] = top, apex = up(peak);
       extrude(mb, plan, y0, y1, { kind: FACE.trim, col: STEEL, top: FACE.trim, topCol: rgb("#3a444d") });
       pyramid(mb, { x0: x - hx, x1: x + hx, z0: z - hz, z1: z + hz, y: y1, h: apex - y1, roof: ROOF, kind: FACE.spire, win: [1.6, 1.6, 0, 0] });
       box(mb, [x - .5, apex - .4, z - .5, x + .5, apex + .8, z + .5], { c: .1, kind: FACE.light, col: rgb("#ff3a2a"), top: FACE.light, occlude: false });
       return;
     }
     // Granite under the glass, one floor and a half on the tall ones; the bays high on the towers are glass alone.
-    const plinth = y0 < 2 ? y0 + Math.min(7, (y1 - y0) * .3) : y0;
+    const plinth = from < 2 ? y0 + Math.min(7, (y1 - y0) * .3) : y0;
     if (plinth > y0) extrude(mb, plan, y0, plinth, { kind: FACE.wall, col: GRANITE, top: null });
-    extrude(mb, plan, plinth, y1, { kind: FACE.mirror, col: GLASS[i % GLASS.length], top: roof ? null : FACE.deck, bay: 1.6, floor: 1.8 });
-    if (roof) tent(mb, plan, y1, roof, { kind: FACE.spire, col: ROOF, win: [1.6, 1.6, 0, 0] });
+    extrude(mb, plan, plinth, y1, { kind: FACE.mirror, col: GLASS[i % GLASS.length], top: top ? null : FACE.deck, bay: 1.6, floor: 1.8 });
+    if (top) tent(mb, plan, y1, up(top), { kind: FACE.spire, col: ROOF, win: [1.6, 1.6, 0, 0] });
   });
   // The fountain pool down the middle of the alley: a granite kerb and the water.
   box(mb, [-4.6, 0, 58.4, 4.6, .9, 81.6], { c: .2, kind: FACE.trim, col: rgb("#b9b2a2"), top: FACE.trim, occlude: false });
