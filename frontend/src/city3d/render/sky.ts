@@ -41,7 +41,7 @@ export interface Sky {
 }
 
 /** The day's sky at the horizon (also the haze) and overhead; the water reflects them too (render/water.ts). */
-export const HORIZON = "#cfe6f5", ZENITH = "#5aa6e3";
+export const HORIZON = "#c8eaff", ZENITH = "#459ee9";
 const SUN = "#ffe9c8", SUN_INTENSITY = 3.3;
 /** The haze starts past the city's flat land and is still light on the ridges (relief ends at 3.1 radii). */
 export const FOG_NEAR = 1.6, FOG_FAR = 6;
@@ -192,7 +192,7 @@ export function createSky(ctx: CityContext): Sky {
   scene.fog = new THREE.Fog(HORIZON, world.radius * FOG_NEAR, world.radius * FOG_FAR);
 
   // A warm late-morning sun, low enough for long shadows; the sky and the grass fill the shade softly.
-  const hemisphere = new THREE.HemisphereLight("#d9ebff", "#71805c", 1.15);
+  const hemisphere = new THREE.HemisphereLight("#e0f0ff", "#7d9565", 1.22);
   const sun = new THREE.DirectionalLight(SUN, SUN_INTENSITY);
   // The map covers a square of ±reach: SHADOW_REACH at first, then as much as the view shows (followView).
   let reach = Math.min(world.radius, SHADOW_REACH), distance = reach + 60;
@@ -236,9 +236,9 @@ export function createSky(ctx: CityContext): Sky {
     // islands, roads and roofs still read.
     if (night) sun.color.set(MOON_LIGHT); else sun.color.copy(dusk).lerp(noon, day);
     sun.intensity = night ? .8 : SUN_INTENSITY * THREE.MathUtils.smoothstep(elevation, -.02, .12);
-    hemisphere.color.set(night ? "#8eaee6" : "#d9ebff");
-    hemisphere.groundColor.set(night ? "#262f44" : "#71805c");
-    hemisphere.intensity = night ? .55 : .35 + .8 * THREE.MathUtils.smoothstep(elevation, -.15, .3);
+    hemisphere.color.set(night ? "#8eaee6" : "#e0f0ff");
+    hemisphere.groundColor.set(night ? "#262f44" : "#7d9565");
+    hemisphere.intensity = night ? .55 : .35 + .87 * THREE.MathUtils.smoothstep(elevation, -.15, .3);
     horizon.value.set(night ? NIGHT_HORIZON : HORIZON); zenith.value.set(night ? NIGHT_ZENITH : ZENITH);
     cityGlow.value.set(night ? CITY_GLOW : 0x000000); nightSky.value = night ? 1 : 0;
     (scene.fog as THREE.Fog).color.copy(horizon.value);

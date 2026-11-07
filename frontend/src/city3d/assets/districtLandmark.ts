@@ -15,10 +15,10 @@ import { landmarkBoxes, type LandmarkBox, type LandmarkFinish } from "../world/d
 export const LANDMARK_METRES = 2;
 const M = LANDMARK_METRES;
 const FINISH: Record<LandmarkFinish, { kind: Face; col: V3 }> = {
-  stone: { kind: FACE.wall, col: rgb("#e8e1d3") }, white: { kind: FACE.wall, col: rgb("#f1ede5") }, trim: { kind: FACE.trim, col: rgb("#d3c5a8") },
-  dark: { kind: FACE.trim, col: rgb("#33454c") }, green: { kind: FACE.leaf, col: rgb("#6f8f62") }, accent: { kind: FACE.trim, col: rgb("#6b55c8") },
-  roof: { kind: FACE.roof, col: rgb("#3f6670") }, gold: { kind: FACE.metal, col: rgb("#cf9b4a") }, window: { kind: FACE.window, col: rgb("#ece6da") },
-  wood: { kind: FACE.trim, col: rgb("#8d6744") }, leaf: { kind: FACE.leaf, col: rgb("#668f5e") }, glass: { kind: FACE.curtain, col: rgb("#a4c6d6") },
+  stone: { kind: FACE.wall, col: rgb("#f2e2bf") }, white: { kind: FACE.wall, col: rgb("#fff5df") }, trim: { kind: FACE.trim, col: rgb("#dfc08b") },
+  dark: { kind: FACE.trim, col: rgb("#25495d") }, green: { kind: FACE.leaf, col: rgb("#5a9d59") }, accent: { kind: FACE.trim, col: rgb("#825add") },
+  roof: { kind: FACE.roof, col: rgb("#367f96") }, gold: { kind: FACE.metal, col: rgb("#e3ab37") }, window: { kind: FACE.window, col: rgb("#f5e8cc") },
+  wood: { kind: FACE.trim, col: rgb("#a56c3b") }, leaf: { kind: FACE.leaf, col: rgb("#53a864") }, glass: { kind: FACE.curtain, col: rgb("#9bd2e8") },
 };
 
 /** A window box: a window cell on its outer face (front, or the side it stands out of), its frame, glass and blind drawn by the material. */

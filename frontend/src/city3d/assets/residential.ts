@@ -10,7 +10,7 @@
 import type * as THREE from "three/webgpu";
 import { FACE, MeshBuilder, bakeOcclusion, box, gableRoof, parapet, rgb, rod, type V3 } from "./facade";
 
-const WHITE: V3 = [1, 1, 1], TRIM = rgb("#efede7"), DARK = rgb("#3a4047"), CONCRETE = rgb("#c9c6bf"), RAIL = rgb("#a9b6bf");
+const WHITE: V3 = [1, 1, 1], TRIM = rgb("#fff2d7"), DARK = rgb("#2e4b64"), CONCRETE = rgb("#d8d3c3"), RAIL = rgb("#a4c6d8");
 /** A floor of the residential sections and cottages (world/complexes.ts FLOOR, 0.75 units), in metres. */
 const FLOOR = 3;
 /** A floor of the office towers (OFFICE_FLOOR, 0.9 units). */

@@ -1,7 +1,7 @@
 /**
  * The pictures of the district shop (src/pages/city/CityShop.tsx): every thing it sells, rendered from the city's own
  * models and layouts (world/landLayouts.ts, world/decor.ts, assets/catalogue.ts) on a tile of grass, in a headless
- * browser, and written to public/city/shop/v5 as small WebP files the shop loads only when it shows them. Run it
+ * browser, and written to public/city/shop/v6 as small WebP files the shop loads only when it shows them. Run it
  * again when a model or a layout changes (and bump the folder's version, so browsers take the new pictures):
  *
  *   cd frontend && node scripts/shop-pictures.mjs
@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 import { createServer } from "vite";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
-const OUT = fileURLToPath(new URL("../public/city/shop/v5/", import.meta.url));
+const OUT = fileURLToPath(new URL("../public/city/shop/v6/", import.meta.url));
 const { chromium } = await import(process.env.PLAYWRIGHT ?? "playwright").catch(() => {
   throw new Error("Playwright is needed: npm i -D playwright, or PLAYWRIGHT=<path to playwright/index.mjs>");
 });
@@ -94,7 +94,7 @@ async function main() {
   const images = {};
   for (const family of ITEMS) {
     const scene = new THREE.Scene(), { cols, rows, placements, surfaces, ground } = stage(family);
-    scene.add(new THREE.HemisphereLight("#d9ebff", "#71805c", 1.15));
+    scene.add(new THREE.HemisphereLight("#e0f0ff", "#7d9565", 1.22));
     const width = cols * CELL + 1.2, depth = rows * CELL + 1.2;
     const tile = new THREE.Mesh(new THREE.BoxGeometry(width, .6, depth).translate(0, TOP - .3, 0), [soil, soil, grass, soil, soil, soil]);
     tile.receiveShadow = true; scene.add(tile);
@@ -150,7 +150,7 @@ const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_EXE
 try {
   const page = await browser.newPage();
   page.on("pageerror", error => console.error("page:", error.message));
-  await page.goto(`${server.resolvedUrls.local[0]}__shop-pictures`);
+  await page.goto(`${server.resolvedUrls.local[0]}__shop-pictures`, { waitUntil: "domcontentloaded", timeout: 120_000 });
   await page.waitForFunction(() => window.shopPictures?.done, null, { timeout: 15 * 60_000, polling: 1000 });
   const { images, error } = await page.evaluate(() => window.shopPictures);
   if (error) throw new Error(error);
