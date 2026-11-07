@@ -33,8 +33,8 @@ function lightGeometry(marine: boolean) {
     .setAttribute("normal", new THREE.Float32BufferAttribute(normals, 3)).setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
 }
 
-export function createCollectionTraffic(ctx: CityContext, models: Map<string, TransportModel>, random: () => number): Traffic {
-  const group = new THREE.Group(); group.name = "city-traffic"; group.userData.collection = true; ctx.scene.add(group);
+export function createCollectionTraffic(ctx: CityContext, models: Map<string, TransportModel>, random: () => number, parent: THREE.Object3D): Traffic {
+  const group = new THREE.Group(); group.name = "city-traffic"; group.userData.collection = true; parent.add(group);
   const plans = createTransportPlans(ctx.world, random), material = vehicleMaterial(skyLook(ctx.scene));
   // The collection includes two-sided sails, windscreens and thin trim panels.
   material.side = THREE.DoubleSide;
@@ -66,19 +66,19 @@ export function createCollectionTraffic(ctx: CityContext, models: Map<string, Tr
   blobMaterial.opacityNode = saturate(uv().sub(.5).length().mul(2).oneMinus().div(.875)).mul(.275);
   const shadowMatrices = copyMatrices(roadCount).setUsage(THREE.DynamicDrawUsage);
   const shadows = copyMesh(blobGeometry, blobMaterial, shadowMatrices, copyTints(roadCount));
-  shadows.name = "city-traffic-shadows"; ctx.scene.add(shadows);
+  shadows.name = "city-traffic-shadows"; parent.add(shadows);
   const glow = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
   glow.colorNode = attribute("color", "vec3").mul(ctx.night.level);
   const roadLightGeometry = lightGeometry(false), boatLightGeometry = lightGeometry(true);
   const lampMatrices = copyMatrices(roadCount).setUsage(THREE.DynamicDrawUsage), boatMatrices = copyMatrices(boatCount).setUsage(THREE.DynamicDrawUsage);
   const lamps = copyMesh(roadLightGeometry, glow, lampMatrices, copyTints(roadCount)); lamps.name = "city-traffic-lamps";
   const boatLamps = copyMesh(boatLightGeometry, glow, boatMatrices, copyTints(boatCount)); boatLamps.name = "city-traffic-boat-lights";
-  for (const mesh of [lamps, boatLamps]) ctx.scene.add(mesh);
+  for (const mesh of [lamps, boatLamps]) parent.add(mesh);
   // A soft additive pool ahead of the bumper, also shared by every road vehicle.
   const beamGeometry = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2).translate(0, .025, 1);
   const beamMaterial = new THREE.MeshBasicNodeMaterial({ color: "#fff2d0", transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
   beamMaterial.opacityNode = saturate(uv().sub(.5).length().mul(2).oneMinus()).mul(ctx.night.level).mul(.22);
-  const beams = copyMesh(beamGeometry, beamMaterial, lampMatrices, copyTints(roadCount)); beams.name = "city-traffic-beams"; ctx.scene.add(beams);
+  const beams = copyMesh(beamGeometry, beamMaterial, lampMatrices, copyTints(roadCount)); beams.name = "city-traffic-beams"; parent.add(beams);
   const frustum = new THREE.Frustum(), projection = new THREE.Matrix4(), sphere = new THREE.Sphere();
   const position = new THREE.Vector3(), center = new THREE.Vector3(), matrix = new THREE.Matrix4(), size = new THREE.Vector3(), turn = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0);
   let enabled = !ctx.reducedMotion, dirty = true, clock = 0, lit = false;

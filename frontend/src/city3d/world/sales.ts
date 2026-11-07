@@ -4,6 +4,7 @@ import { rng } from "./generate";
 import { RAIL_LINES } from "./railway";
 import { addStationSquare } from "./stationSquare";
 import { LAKE_LINES } from "./land";
+import { createSalesTrafficRoutes, SALES_ROAD_RADIUS } from "./salesTraffic";
 import type { Placement, Road, WorldData } from "./types";
 
 export const SALES_CENTERS = Array.from({ length: 10 }, (_, i) => ({
@@ -12,7 +13,7 @@ export const SALES_CENTERS = Array.from({ length: 10 }, (_, i) => ({
 /**
  * Where the town's streets ran: the inner square round the lake and the outer frame. The team districts' land now
  * covers them and the two bands that grew round them (world/land.ts LAKE_LINES), and the districts' operators lay their
- * own roads; only the station's street is left. The flat land reaches a little past the outer band, where the hills
+ * own roads; the public shore road stays inside the unbuildable lake reservation. The flat land reaches a little past the outer band, where the hills
  * begin; the boulevard from the lake meets the station's forecourt at the edge (world/railway.ts).
  */
 const WIDTH = 2 * (LAKE_LINES.edgeX + 1), DEPTH = 2 * (LAKE_LINES.edgeZ + 2), FORECOURT = LAKE_LINES.edgeZ - 8;
@@ -38,10 +39,10 @@ export function generateSalesWorld(): WorldData {
     districts: [], radius: SALES_RADIUS,
     land: { annuli: [], islets: [], rectangle: { width: WIDTH, depth: DEPTH, lake: 46 }, platforms: [{ x: 0, z: 0, width: 38, depth: 76 }, { x: 0, z: 47, width: 4, depth: 20 }] },
     water: { annuli: [{ inner: 0, outer: 46 }] },
-    roads: { rings: [], streets, bridges: [], crosswalks: [], parking: [] },
+    roads: { rings: [SALES_ROAD_RADIUS], streets, bridges: [], crosswalks: [], parking: [] },
     placements, parks: [], complexes: [], alleys: [], surfaces,
     walks: [Array.from({ length: 65 }, (_, i) => ({ x: Math.cos(i / 64 * Math.PI * 2) * 50, z: Math.sin(i / 64 * Math.PI * 2) * 50 }))],
-    plots: [], questSpots: [], routes: [],
+    plots: [], questSpots: [], routes: createSalesTrafficRoutes(),
     railway: RAIL_LINES.sales,
   };
   // The station's street, car park and park, between the town's edge and the hills (world/stationSquare.ts). The

@@ -8,6 +8,8 @@ export const TRANSPORT_IDS = {
   boats: ["speedboat", "fishing-boat", "cabin-boat"],
   yachts: ["motor-yacht", "sailing-yacht", "sport-yacht"],
 } as const;
+/** The detailed kit is larger than the other city assets and loads behind an already running fallback. */
+export const TRANSPORT_LOAD_TIMEOUT_MS = 45000;
 export interface TransportModel {
   id: string;
   category: keyof typeof TRANSPORT_IDS;
@@ -32,7 +34,7 @@ export function disposeTrafficCollection(models: Map<string, TransportModel>) {
 }
 
 export async function loadTrafficCollection(options: ModelLoadOptions = {}): Promise<Map<string, TransportModel>> {
-  const source = await loadModels("/city/transport-v1/collection.glb", options), collection = new Map<string, TransportModel>();
+  const source = await loadModels("/city/transport-v1/collection.glb", { timeoutMs: TRANSPORT_LOAD_TIMEOUT_MS, ...options }), collection = new Map<string, TransportModel>();
   const owned: THREE.BufferGeometry[] = [];
   try {
     if (options.signal?.aborted) throw new DOMException("Transport load aborted", "AbortError");

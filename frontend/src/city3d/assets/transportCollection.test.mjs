@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
 
-const built = await build({ stdin: { contents: `export * from './transportCollection.ts'; export * from '../systems/traffic.ts'; export * from '../world/cities.ts'; export * from '../world/worldSpec.ts'; export * from '../render/night.ts'; export * as THREE from 'three/webgpu';`, resolveDir: fileURLToPath(new URL('.', import.meta.url)) }, bundle: true, platform: 'node', format: 'esm', write: false, logLevel: 'error', plugins: [{ name: 'url', setup(b) {
+const built = await build({ stdin: { contents: `export * from './transportCollection.ts'; export * from '../systems/traffic.ts'; export * from '../world/cities.ts'; export * from '../world/sales.ts'; export * from '../world/worldSpec.ts'; export * from '../render/night.ts'; export * as THREE from 'three/webgpu';`, resolveDir: fileURLToPath(new URL('.', import.meta.url)) }, bundle: true, platform: 'node', format: 'esm', write: false, logLevel: 'error', plugins: [{ name: 'url', setup(b) {
   b.onResolve({ filter: /\?url$/ }, a => ({ path: a.path, namespace: 'url' }));
   b.onLoad({ filter: /.*/, namespace: 'url' }, a => ({ contents: `export default ${JSON.stringify(a.path.replace(/\?url$/, ''))}`, loader: 'js' }));
 } }] });
@@ -22,10 +22,10 @@ after(() => city.disposeTrafficCollection(originals));
 const cloneModels = () => new Map([...originals].map(([id, model]) => [id, { ...model, lods: model.lods.map(g => g.clone()) }]));
 const rng = seed => () => ((seed = Math.imul(seed, 1664525) + 1013904223 >>> 0) / 4294967296);
 
-function context({ reducedMotion = false } = {}) {
+function context({ reducedMotion = false, world = city.islandWorld(city.WORLD_X4) } = {}) {
   const frames = new Set(), moves = new Set(), qualities = new Set();
   const ctx = {
-    world: city.islandWorld(city.WORLD_X4), scene: new THREE.Scene(), camera: new THREE.PerspectiveCamera(50, 1.5, .1, 20000),
+    world, scene: new THREE.Scene(), camera: new THREE.PerspectiveCamera(50, 1.5, .1, 20000),
     renderer: { domElement: { dataset: {} } }, reducedMotion, mobile: false, night: city.createNight(),
     quality: { tier: 'high', lodDistances: [40, 120, 10000], crowd: 1 },
     onFrame(cb) { frames.add(cb); return () => frames.delete(cb); }, onCameraMove(cb) { moves.add(cb); return () => moves.delete(cb); }, onQuality(cb) { qualities.add(cb); return () => qualities.delete(cb); },
@@ -105,6 +105,22 @@ test('density, distance LODs, culling, pause and night work after the collection
   traffic.dispose();
 });
 
+test('Sales city also draws the complete moving collection around its lake and central campus', async () => {
+  const { ctx, traffic } = await loaded({ world: city.generateSalesWorld() });
+  assert.equal(new Set(drawn(ctx).map(m => m.userData.model)).size, 20);
+  assert.equal(count(ctx), 25, '19 road vehicles and six watercraft in the actual Sales world');
+  assert.equal(ctx.scene.getObjectByName('city-traffic-shadows').geometry.instanceCount, 19);
+  const before = snapshot(ctx); ctx.frame(.25); assert.notEqual(snapshot(ctx), before);
+  for (const mesh of drawn(ctx)) for (let i = 0; i < mesh.geometry.instanceCount; i++) {
+    const a = matrices(mesh), x = a[i * 16 + 12], z = a[i * 16 + 14];
+    if (originals.get(mesh.userData.model).draft) {
+      assert.ok(Math.hypot(x, z) < 46, 'boats stay in the lake');
+      assert.ok(Math.abs(x) > 22, 'boats clear the campus and footbridge');
+    } else assert.ok(Math.abs(Math.hypot(x, z) - 51.5) < .7, 'road vehicles stay on the lake road');
+  }
+  traffic.dispose(); assert.equal(ctx.listeners, 0); assert.equal(ctx.scene.children.length, 0);
+});
+
 test('failed detail download leaves working traffic; disposing a pending load aborts and releases its late result', async () => {
   const ctx = context(), traffic = city.createTraffic(ctx, { loadCollection: async () => { throw new Error('offline'); } });
   assert.equal(await traffic.ready, false); ctx.frame(.01);
@@ -124,4 +140,18 @@ test('random city seeds change model order and positions while the same seed is 
     await traffic.ready; ctx.frame(0); const value = snapshot(ctx); traffic.dispose(); return value;
   }
   assert.equal(await run(15), await run(15)); assert.notEqual(await run(15), await run(16));
+});
+
+test('a delayed collection stays inside its department after the scene is reparented or hidden', async () => {
+  const ctx = context(); let resolve;
+  const traffic = city.createTraffic(ctx, { loadCollection: () => new Promise(r => { resolve = r; }), random: rng(42) });
+  const owner = ctx.scene.getObjectByName('city-transport-root'), support = new THREE.Group();
+  support.name = 'support-city'; ctx.scene.add(support); support.add(owner); support.visible = false;
+  resolve(cloneModels()); assert.equal(await traffic.ready, true); ctx.frame(0);
+  assert.equal(owner.parent, support);
+  assert.deepEqual(ctx.scene.children, [support], 'no late meshes escape the hidden city');
+  for (const name of ['city-traffic', 'city-traffic-shadows', 'city-traffic-lamps', 'city-traffic-boat-lights', 'city-traffic-beams']) {
+    assert.equal(ctx.scene.getObjectByName(name).parent, owner, name);
+  }
+  traffic.dispose(); assert.equal(support.children.length, 0); assert.equal(ctx.listeners, 0);
 });
