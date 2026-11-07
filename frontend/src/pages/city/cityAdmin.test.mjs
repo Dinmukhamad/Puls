@@ -87,7 +87,7 @@ const { FormStatus, Switch } = load(controls.outputFiles[0].text, "admin");
 test("the page uses the site's head and one segmented row of sections that follows the address", () => {
   const html = page("economy");
   assert.match(html, /<div class="page-head"><div><h1 class="page-title">Управление городом<\/h1><p class="page-subtitle">/);
-  assert.match(html, /<div class="page-head__actions"><a href="\/training\/city" class="btn btn--secondary btn--m">Открыть город<\/a><\/div>/);
+  assert.match(html, /<div class="page-head__actions"><a href="\/training\/city" class="btn btn--secondary btn--m">Открыть город<\/a><a class="btn btn--secondary btn--m" href="\/transport-collection\/index\.html" target="_blank" rel="noopener noreferrer">Коллекция транспорта<\/a><\/div>/);
   assert.match(html, /<div class="city-admin-tabs"><div class="segmented" role="radiogroup" aria-label="Разделы управления городом">/);
   assert.equal((html.match(/role="radio"/g) ?? []).length, 7);
   assert.doesNotMatch(html, /Города групп/);
