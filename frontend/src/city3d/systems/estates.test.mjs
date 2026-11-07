@@ -308,6 +308,14 @@ test('every office focuses on its actual centre and keeps the complete tower vis
     const focus = s.estates.focus({ kind: 'object', district: districtId, object: 7 }, 30, .86), bounds = city.officeBuildingBounds(family, frame);
     assert.ok(Math.abs(focus.point.y - (.2 + bounds.height / 2)) < 1e-9);
     assert.ok(Math.abs(focus.point.x - bounds.x) < 1e-9 && Math.abs(focus.point.z - bounds.z) < 1e-9);
+    if (city.OFFICE_BUILDINGS[family].ensemble) {
+      // A complex hands the camera its whole box to frame (camera.focusBounds), every corner of it inside.
+      const c = Math.cos(bounds.rotation), sin = Math.sin(bounds.rotation);
+      for (const x of [-bounds.width / 2, bounds.width / 2]) for (const z of [-bounds.depth / 2, bounds.depth / 2]) for (const y of [.2, .2 + bounds.height])
+        assert.ok(focus.bounds?.expandByScalar(1e-6).containsPoint(new THREE.Vector3(bounds.x + c * x + sin * z, y, bounds.z - sin * x + c * z)), `${family} framed whole`);
+      continue;
+    }
+    assert.equal(focus.bounds, undefined, `${family} is seen from the close view`);
     for (const aspect of [.5, 1]) {
       s.aim(focus.point, focus.azimuth, aspect);
       const c = Math.cos(bounds.rotation), sin = Math.sin(bounds.rotation);
