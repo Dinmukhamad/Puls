@@ -76,3 +76,29 @@ test('the borders free their geometry and materials', () => {
   drawn.dispose();
   assert.equal(freed.length, 4);
 });
+
+test('the ring roads stay clear of the borders in every layout: no band over the asphalt, no post on it (the lake city\'s shore traffic)', () => {
+  // The asphalt's half width (render/terrain.ts ring road, world/salesTraffic.ts lanes) and a post's radius.
+  const ASPHALT = 1.15, POST = .085, matrix = new THREE.Matrix4();
+  for (const [name, world] of Object.entries(WORLDS)) for (const count of [2, 3, 4, 5]) {
+    const grid = city.landGrid(world, count), borders = city.districtBorders(grid, world), drawn = city.createBorders(borders, city.districtColour);
+    const position = drawn.band.geometry.getAttribute('position');
+    for (const ring of world.roads.rings) {
+      for (let i = 0; i < position.count; i++) {
+        const r = Math.hypot(position.getX(i), position.getZ(i));
+        assert.ok(Math.abs(r - ring) > ASPHALT, `${name}, ${count} districts: a border's band at radius ${r.toFixed(2)} on ring road ${ring}`);
+      }
+      // Bands are quads along each border: their corners off the road mean the border does not cross it either.
+      for (const b of borders) for (let t = 0; t <= 1; t += 1 / 32) {
+        const r = Math.hypot(b.a.x + (b.b.x - b.a.x) * t, b.a.z + (b.b.z - b.a.z) * t);
+        assert.ok(Math.abs(r - ring) > ASPHALT, `${name}, ${count} districts: a border crosses ring road ${ring} at radius ${r.toFixed(2)}`);
+      }
+      for (let i = 0; i < drawn.posts.count; i++) {
+        drawn.posts.getMatrixAt(i, matrix);
+        const r = Math.hypot(matrix.elements[12], matrix.elements[14]);
+        assert.ok(Math.abs(r - ring) > ASPHALT + POST, `${name}, ${count} districts: a border post at radius ${r.toFixed(2)} on ring road ${ring}`);
+      }
+    }
+    drawn.dispose();
+  }
+});

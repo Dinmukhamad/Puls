@@ -137,11 +137,18 @@ export function areaPoint(corners: Point[], s: number, t: number): Point {
 export interface DistrictBorder { a: Point; b: Point; normal: Point; toward: number; away: number; gaps: [number, number]; street: boolean }
 /** Blocks of two districts this close are neighbours: only the gap between two districts parts them. */
 const NEIGHBOURS = 2.5, STEP = 1;
+/**
+ * A border keeps this far from a ring road's middle: its asphalt (half 1.15) and a border post's width beside it. The
+ * lake city's public shore road (world/salesTraffic.ts) runs inside the reservation round the lake, where the borders
+ * of the three-district layout begin: they now begin past it, so no band crosses its lanes and no post stands on them.
+ */
+const RING_CLEAR = 1.6;
 
 /**
  * Where the districts meet, to draw on the ground (systems/estates.ts): on the island city the cuts out from the centre
  * between their sectors, on the lake city the gap between neighbouring blocks of two districts. Only over dry land: a
- * border stops at the water (the lake and its shore) and on the railway and the station square.
+ * border stops at the water (the lake and its shore), on the railway and the station square, and short of the ring
+ * roads (RING_CLEAR), whose traffic must not drive through its band and posts.
  */
 export function districtBorders(grid: LandGrid, world: WorldData): DistrictBorder[] {
   type Line = Omit<DistrictBorder, "gaps"> & { gap: (p: Point) => number };
@@ -170,6 +177,7 @@ export function districtBorders(grid: LandGrid, world: WorldData): DistrictBorde
   const dry = (p: Point) => {
     const r = Math.hypot(p.x, p.z);
     if (rect ? Math.abs(p.x) > rect.width / 2 || Math.abs(p.z) > rect.depth / 2 || r < rect.lake + 4 : !world.land.annuli.some(a => r > a.inner + .5 && r < a.outer - .5)) return false;
+    if (world.roads.rings.some(ring => Math.abs(r - ring) < RING_CLEAR)) return false;
     return !(line && (onRailway(line, p, 1) || (square ? onSquare(line, square, p, 1) : false)));
   };
   const out: DistrictBorder[] = [];
