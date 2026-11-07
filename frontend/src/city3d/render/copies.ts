@@ -15,7 +15,8 @@ export const COPY_STRIDE = 16;
 const COLUMNS = ["copyMatrix0", "copyMatrix1", "copyMatrix2", "copyMatrix3"], TINT = "copyTint";
 // A matrix from four column vectors, as InstanceNode builds one; @types/three lists only 1 or 16 arguments.
 const fromColumns = mat4 as unknown as (...columns: ReturnType<typeof attribute>[]) => ReturnType<typeof mat4>;
-const copyMatrix = fromColumns(...COLUMNS.map(name => attribute(name, "vec4")));
+/** A copy's matrix, for materials that place their vertices themselves (systems/crowd.ts walkers). */
+export const copyMatrix = fromColumns(...COLUMNS.map(name => attribute(name, "vec4")));
 
 /** Moves a vertex to its copy, as InstanceNode does in NodeMaterial.setupPosition. */
 class PlaceCopy extends THREE.Node {
@@ -69,8 +70,10 @@ export function copyMaterial(source: THREE.Material): THREE.NodeMaterial {
   material = new (copyClass(node ? source.constructor as MaterialClass : NODE_CLASSES[source.type] ?? THREE.MeshStandardNodeMaterial))();
   const from = source as unknown as Record<string, unknown>, to = material as unknown as Record<string, unknown>;
   for (const key in from) if (key !== "uuid" && key !== "type" && key !== "_listeners") to[key] = from[key];
+  // A material that tints its colour itself (userData.copyTint === "own": only some of its surfaces take the tint)
+  // keeps its colour node as it is.
   const own = node ? (source as THREE.NodeMaterial).colorNode : null;
-  material.colorNode = own ? vec4(own).mul(tint) : tinted;
+  material.colorNode = own ? (source.userData.copyTint === "own" ? own : vec4(own).mul(tint)) : tinted;
   material.castShadowPositionNode = shadowPosition;
   variants.set(source, material);
   const copy = material;
@@ -88,19 +91,28 @@ export function copyTints(capacity: number) {
 }
 
 /**
- * A mesh drawing copies of the source geometry: set `mesh.geometry.instanceCount` and flag the matrices and tints
- * for upload. Its geometry shares the source's attributes and index, and the renderer tracks them through it:
- * disposing it frees their GPU buffers too. Do that only where nothing else draws the source; copy meshes of a
- * shared source (the catalogue's parts) are just dropped, and their buffers go with the renderer.
+ * The copies' geometry: the source's attributes and index, the copies' matrices (copyMatrix0…3) and tints (copyTint),
+ * no copy drawn yet. copyMesh pairs it with the copy version of a material; a material that places its vertices
+ * itself (reading `copyMatrix`) takes it as it is.
  */
-export function copyMesh(source: THREE.BufferGeometry, material: THREE.Material, matrices: THREE.InstancedInterleavedBuffer, tints: THREE.InstancedBufferAttribute) {
+export function copyGeometry(source: THREE.BufferGeometry, matrices: THREE.InstancedInterleavedBuffer, tints: THREE.InstancedBufferAttribute) {
   const geometry = new THREE.InstancedBufferGeometry();
   geometry.setIndex(source.getIndex());
   for (const [name, value] of Object.entries(source.attributes)) geometry.setAttribute(name, value);
   COLUMNS.forEach((name, column) => geometry.setAttribute(name, new THREE.InterleavedBufferAttribute(matrices, 4, column * 4)));
   geometry.setAttribute(TINT, tints);
   geometry.instanceCount = 0;
-  const mesh = new THREE.Mesh(geometry, copyMaterial(material));
+  return geometry;
+}
+
+/**
+ * A mesh drawing copies of the source geometry: set `mesh.geometry.instanceCount` and flag the matrices and tints
+ * for upload. Its geometry shares the source's attributes and index, and the renderer tracks them through it:
+ * disposing it frees their GPU buffers too. Do that only where nothing else draws the source; copy meshes of a
+ * shared source (the catalogue's parts) are just dropped, and their buffers go with the renderer.
+ */
+export function copyMesh(source: THREE.BufferGeometry, material: THREE.Material, matrices: THREE.InstancedInterleavedBuffer, tints: THREE.InstancedBufferAttribute) {
+  const mesh = new THREE.Mesh(copyGeometry(source, matrices, tints), copyMaterial(material));
   // The copies are everywhere: the source's bounds say nothing about where they stand.
   mesh.frustumCulled = false; mesh.matrixAutoUpdate = false;
   return mesh;

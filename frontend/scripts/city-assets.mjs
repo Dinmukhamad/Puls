@@ -20,7 +20,8 @@ export const VERSION = "v1";
 const FRONTEND = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export const SOURCE_DIR = resolve(FRONTEND, "src/pages/city/models");
 export const OUT_DIR = resolve(FRONTEND, "public/city", VERSION);
-export const SOURCES = ["city-models.glb", "vehicles.glb"];
+/** The Kenney building kit (the five-island map's houses, offices and industry); the vehicles are built in code (assets/vehicles.ts). */
+export const SOURCES = ["city-models.glb"];
 
 /** TZ §5.7 checks: file size, LOD triangle shares of LOD0, LOD0 triangles (§5.3), unique materials per file. */
 // LOD1 share is 0.72 in stage 1: the Kenney kits split vertices along texture seams, so meshopt cannot go

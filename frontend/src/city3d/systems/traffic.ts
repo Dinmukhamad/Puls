@@ -1,9 +1,9 @@
 /**
- * Traffic, stage 1 (TZ §7.1; the GPU version replaces it in stage 2): cars drive the generator's loops and
- * boats the canal, moved on the CPU. Each model part is one copy mesh (render/copies.ts), and all parts of a
- * model share one matrix buffer. Every frame the vehicles in view are packed to the front of that buffer and
- * the instance count cuts the rest, so far and off-screen cars cost the GPU nothing and draw calls do not grow
- * with the city.
+ * Traffic (TZ §7.1): cars drive the generator's loops and boats the canal, moved on the CPU. The vehicles are the
+ * city's own (assets/vehicles.ts, docs/CITY_V4.md stage 4): each kind is one geometry, drawn as one copy mesh
+ * (render/copies.ts) in the vehicles' shared material, its paint from the kind's palette per vehicle. Every frame the
+ * vehicles in view are packed to the front of their kind's buffers and the instance count cuts the rest, so far
+ * and off-screen cars cost the GPU nothing and draw calls do not grow with the city: one per kind on the screen.
  * Every car has a blob shadow and casts none into the sun's map: that map is static, and a moving car would
  * leave its shadow behind on the road.
  * At night (TZ §6.7) cars show head and tail lights and a beam on the road ahead, boats their navigation
@@ -13,18 +13,17 @@
  */
 import * as THREE from "three/webgpu";
 import { attribute, float, rangeFogFactor, saturate, smoothstep, uv } from "three/tsl";
-import { createTaxiModel } from "../assets/taxi";
-import type { Model } from "../assets/loader";
+import { PAINTS, vehicleGeometry, vehicleMaterial, type VehicleName } from "../assets/vehicles";
 import type { CityContext } from "../engine/context";
 import { sampleRoute } from "../world/generate";
 import type { Route } from "../world/types";
-import { disposeTree } from "./districts";
 import { COPY_STRIDE, copyMatrices, copyMesh, copyTints } from "../render/copies";
+import { skyLook } from "../render/sky";
 
-/** Car Kit vehicles are 1.5 units wide; this makes them fit a one-unit lane. */
+/** The vehicles are built 1.5 units wide, as the Car Kit's were; this makes them fit a one-unit lane. */
 export const CAR_SCALE = .5, BOAT_SCALE = .75;
 /** Every fourth car on the inner ring road and every car elsewhere comes from this list: half are taxis. */
-const TRAFFIC = ["taxi", "sedan", "taxi", "suv", "taxi", "van", "taxi", "delivery", "taxi", "hatchback-sports"];
+const TRAFFIC: VehicleName[] = ["taxi", "sedan", "taxi", "suv", "taxi", "van", "taxi", "delivery", "taxi", "hatchback-sports"];
 /** Road surfaces of the old city: ring roads lie a little lower than streets and bridges; boats float in the canal. */
 const RING_Y = .215, STREET_Y = .26, WATER_Y = -1.36, BLOB_LIFT = .012;
 /** A vehicle and its shadow fit in a sphere of 2; the rest covers a frame of camera turn before the next packing. */
@@ -34,37 +33,25 @@ const HEAD = "#fff2d0", TAIL = "#ff1008", HEAD_GLOW = 4, TAIL_GLOW = 1.6, LAMP_Y
 /** The beam: a soft pool on the road ahead, in car lengths, just above the road markings. */
 const BEAM = "#fff2d0", BEAM_STRENGTH = .6, BEAM_LENGTH = 1.4, BEAM_LIFT = .02;
 
-type Part = { geometry: THREE.BufferGeometry; material: THREE.Material };
-/** `size`: the model's bounds; `lights`: a night-only part (boats). */
-interface Kind { parts: Part[]; base: THREE.Matrix4; size: THREE.Vector3; lights?: Part }
-interface Vehicle { route: Route; s: number; speed: number; boat: boolean; active: boolean; rank: number }
+/** `size`: the vehicle's bounds; `paints`: its palette; `lights`: a night-only geometry (boats). */
+interface Kind { name: VehicleName; geometry: THREE.BufferGeometry; base: THREE.Matrix4; size: THREE.Vector3; paints: THREE.Color[]; lights?: THREE.BufferGeometry }
+/** `paint`: the vehicle's shade in its kind's palette. */
+interface Vehicle { route: Route; s: number; speed: number; boat: boolean; active: boolean; rank: number; paint: number }
 type CopyMesh = ReturnType<typeof copyMesh>;
-interface Fleet { kind: Kind; vehicles: Vehicle[]; matrices: THREE.InstancedInterleavedBuffer; meshes: CopyMesh[] }
-
-export interface TrafficOptions {
-  /** Catalogue cars (Kenney Car Kit from vehicles.glb by scene name); without them every car is a taxi. They stay the caller's. */
-  vehicles?: Map<string, Model>;
-}
+/** `owners`: which vehicle each slot of the buffers last held, so a shade is written only when a slot changes hands. */
+interface Fleet { kind: Kind; vehicles: Vehicle[]; matrices: THREE.InstancedInterleavedBuffer; tints: THREE.InstancedBufferAttribute; owners: Int32Array; meshes: CopyMesh[] }
 
 export interface Traffic {
   setEnabled(enabled: boolean): void;
-  /** Swaps the catalogue cars in once they have loaded. */
-  setVehicles(vehicles: Map<string, Model>): void;
-  /** Objects for the dynamic shadow map: the group of vehicle meshes, whose children change on setVehicles. */
+  /** Objects for the dynamic shadow map: the group of vehicle meshes. */
   movers: THREE.Object3D[];
   dispose(): void;
 }
 
-/** Parts centred on the footprint with the wheels at y = 0, as the old modelParts() did. */
-function kindOf(parts: Kind["parts"], bounds: THREE.Box3): Kind {
-  const center = bounds.getCenter(new THREE.Vector3());
-  return { parts, base: new THREE.Matrix4().makeTranslation(-center.x, -bounds.min.y, -center.z), size: bounds.getSize(new THREE.Vector3()) };
-}
-function taxiKind(taxi: THREE.Object3D) {
-  const parts: Kind["parts"] = [];
-  taxi.updateMatrixWorld(true);
-  taxi.traverse(o => { const mesh = o as THREE.Mesh; if (mesh.isMesh) parts.push({ geometry: mesh.geometry, material: mesh.material as THREE.Material }); });
-  return kindOf(parts, new THREE.Box3().setFromObject(taxi));
+/** A vehicle centred on its footprint with its wheels (or keel) at y = 0. */
+function kindOf(name: VehicleName, lights?: THREE.BufferGeometry): Kind {
+  const geometry = vehicleGeometry(name), bounds = geometry.boundingBox!, center = bounds.getCenter(new THREE.Vector3());
+  return { name, geometry, base: new THREE.Matrix4().makeTranslation(-center.x, -bounds.min.y, -center.z), size: bounds.getSize(new THREE.Vector3()), paints: PAINTS[name].map(c => new THREE.Color(c)), lights };
 }
 /** [width, height, depth, x, y, z, colour, glow]: one box of a vertex-coloured part. */
 type Box = [number, number, number, number, number, number, string, number?];
@@ -86,18 +73,16 @@ function boxes(list: Box[]) {
 /** Additive glow: never darkens or hides what is behind; no fog colour, it fades with the fog by itself. */
 const glowMaterial = () => new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false });
 
-/** A small white motor boat with a blue stripe and a cabin, in one vertex-coloured part; its lights face +z like the cars. */
-function boatKind(lights: THREE.Material) {
-  const geometry = boxes([[1, .36, 2.1, 0, .18, 0, "#ffffff"], [1.02, .08, 2.12, 0, .3, 0, "#3f78d8"], [.6, .34, .7, 0, .53, -.25, "#f4efe4"]]);
-  const material = new THREE.MeshStandardNodeMaterial({ vertexColors: true, roughness: .72, metalness: .04 });
-  // A white mast light over the cabin, red to port (+x when heading +z) and green to starboard at the bow,
-  // warm cabin windows on both sides.
-  const glow = boxes([
+/**
+ * The motor boat's night lights, in its own frame (it faces +z like the cars): a white mast light over the cabin,
+ * red to port (+x when heading +z) and green to starboard on the hull's sides by the bow, warm cabin windows.
+ */
+function boatLights() {
+  return boxes([
     [.1, .1, .1, 0, .82, -.35, "#ffffff", 5],
-    [.03, .07, .14, .52, .3, .66, "#ff2a18", 5], [.03, .07, .14, -.52, .3, .66, "#22ff66", 4],
+    [.03, .07, .14, .48, .3, .66, "#ff2a18", 5], [.03, .07, .14, -.48, .3, .66, "#22ff66", 4],
     [.02, .12, .44, .31, .56, -.25, "#ffc070", 1.6], [.02, .12, .44, -.31, .56, -.25, "#ffc070", 1.6],
   ]);
-  return { ...kindOf([{ geometry, material }], geometry.boundingBox!), lights: { geometry: glow, material: lights } };
 }
 /** Head and tail lights of any car in a frame where the car is 1 wide and 1 long; heights are in model units. */
 function carLamps() {
@@ -124,7 +109,7 @@ function blobMaterial() {
 /** Whether vehicle `rank` of a loop stays at this crowd share: every n-th one goes, so the rest stay evenly spread. */
 export const activeAt = (rank: number, share: number) => Math.floor((rank + 1) * share) > Math.floor(rank * share);
 
-export function createTraffic(ctx: CityContext, { vehicles }: TrafficOptions = {}): Traffic {
+export function createTraffic(ctx: CityContext): Traffic {
   const group = new THREE.Group(); group.name = "city-traffic"; ctx.scene.add(group);
   const blobGeometry = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), blobs = blobMaterial();
   const level = ctx.night.level, fog = ctx.scene.fog instanceof THREE.Fog ? ctx.scene.fog : null;
@@ -139,7 +124,8 @@ export function createTraffic(ctx: CityContext, { vehicles }: TrafficOptions = {
     .mul(level).mul(clearAir).mul(BEAM_STRENGTH);
   // Ahead of the road tops and markings at any distance.
   beamMaterial.polygonOffset = true; beamMaterial.polygonOffsetFactor = -2; beamMaterial.polygonOffsetUnits = -2;
-  const taxiModel = createTaxiModel(), taxi = taxiKind(taxiModel), boat = boatKind(lampMaterial);
+  // One material for every vehicle, mirroring the sky of the moment.
+  const material = vehicleMaterial(skyLook(ctx.scene)), lightsGeometry = boatLights();
   const rings = ctx.world.roads.rings;
   // Lamps and beams of all cars: one draw call each, one matrix per car (unit frame scaled to the car's bounds).
   const carCount = Math.max(1, ctx.world.routes.reduce((sum, plan) => sum + (plan.boats ? 0 : plan.cars), 0));
@@ -150,57 +136,44 @@ export function createTraffic(ctx: CityContext, { vehicles }: TrafficOptions = {
   // Contact shadows: one per car, in a buffer of their own.
   const blobMatrices = copyMatrices(carCount).setUsage(THREE.DynamicDrawUsage), shadows = copyMesh(blobGeometry, blobs, blobMatrices, white);
   shadows.name = "city-traffic-shadows"; ctx.scene.add(shadows);
-  let catalogue = vehicles ?? null, fleets: Fleet[] = [], boatLights: CopyMesh | null = null;
+  let fleets: Fleet[] = [], boatGlow: CopyMesh | null = null;
   let enabled = !ctx.reducedMotion, dirty = true, clock = 0, crowd = ctx.quality.crowd, lit = false;
   /** Night meshes are drawn only while the level is above 0; the lamp matrices are written only then. */
   function show() {
     lit = level.value > 0;
     lamps.visible = beams.visible = lit;
-    if (boatLights) boatLights.visible = lit;
+    if (boatGlow) boatGlow.visible = lit;
   }
   show();
 
-  const kinds = new Map<string, Kind>();
-  function kind(name: string): Kind {
-    if (name === "taxi") return taxi;
-    if (name === "boat") return boat;
-    if (!kinds.has(name)) { const model = catalogue?.get(name); kinds.set(name, model ? kindOf(model.parts, model.bounds) : taxi); }
-    return kinds.get(name)!;
-  }
-  // The fleets' copy meshes share the vehicles' own buffers (the catalogue's cars, the taxi, the boat): dropping
-  // them is enough, the owners free those.
-  function clear() {
-    for (const fleet of fleets) for (const mesh of fleet.meshes) mesh.removeFromParent();
-    fleets = []; boatLights = null; kinds.clear();
-  }
+  const kinds = new Map<VehicleName, Kind>();
+  const kind = (name: VehicleName): Kind => { let k = kinds.get(name); if (!k) { k = kindOf(name, name === "boat" ? lightsGeometry : undefined); kinds.set(name, k); } return k; };
   /** Loops start at different phases, so vehicles are spread over the map from the first frame. */
   function build() {
-    clear();
     const lists = new Map<Kind, Vehicle[]>();
     let n = 0;
     ctx.world.routes.forEach((plan, i) => {
       const mainRing = !plan.boats && plan.route.points.every(p => Math.abs(Math.hypot(p.x, p.z) - rings[0]) < 1);
       for (let k = 0; k < plan.cars; k++) {
-        const name = plan.boats ? "boat" : !catalogue || (mainRing && k % 4 !== 3) ? "taxi" : TRAFFIC[n++ % TRAFFIC.length];
-        const vehicle: Vehicle = { route: plan.route, s: ((k / plan.cars + i * .618) % 1) * plan.route.length, speed: plan.speed, boat: !!plan.boats, rank: k, active: activeAt(k, crowd) };
-        const list = lists.get(kind(name)) ?? []; list.push(vehicle); lists.set(kind(name), list);
+        const name: VehicleName = plan.boats ? "boat" : mainRing && k % 4 !== 3 ? "taxi" : TRAFFIC[n++ % TRAFFIC.length];
+        // The kind's vehicles take its paints in turn.
+        const list = lists.get(kind(name)) ?? [];
+        list.push({ route: plan.route, s: ((k / plan.cars + i * .618) % 1) * plan.route.length, speed: plan.speed, boat: !!plan.boats, rank: k, active: activeAt(k, crowd), paint: list.length });
+        lists.set(kind(name), list);
       }
     });
     lists.forEach((list, k) => {
-      // One buffer for all parts: each car's matrix is written once, not once per part.
-      const matrices = copyMatrices(list.length).setUsage(THREE.DynamicDrawUsage), tints = list.length > carCount ? copyTints(list.length) : white;
-      const meshes = k.parts.map(part => {
-        const mesh = copyMesh(part.geometry, part.material, matrices, tints);
-        // The shadow map is static: a car casting into it would leave its shadow behind on the road.
-        mesh.castShadow = false; mesh.receiveShadow = true; group.add(mesh);
-        return mesh;
-      });
+      const matrices = copyMatrices(list.length).setUsage(THREE.DynamicDrawUsage), tints = copyTints(list.length).setUsage(THREE.DynamicDrawUsage);
+      const mesh = copyMesh(k.geometry, material, matrices, tints);
+      // The shadow map is static: a car casting into it would leave its shadow behind on the road.
+      mesh.name = `city-traffic-${k.name}`; mesh.castShadow = false; mesh.receiveShadow = true; group.add(mesh);
+      const meshes = [mesh];
       if (k.lights) {
         // Glow casts no shadow, so it stays out of the movers group.
-        boatLights = copyMesh(k.lights.geometry, k.lights.material, matrices, tints); boatLights.name = "city-traffic-boat-lights";
-        ctx.scene.add(boatLights); meshes.push(boatLights); show();
+        boatGlow = copyMesh(k.lights, lampMaterial, matrices, list.length > carCount ? copyTints(list.length) : white); boatGlow.name = "city-traffic-boat-lights";
+        ctx.scene.add(boatGlow); meshes.push(boatGlow); show();
       }
-      fleets.push({ kind: k, vehicles: list, matrices, meshes });
+      fleets.push({ kind: k, vehicles: list, matrices, tints, owners: new Int32Array(list.length).fill(-1), meshes });
     });
     dirty = true;
   }
@@ -218,9 +191,10 @@ export function createTraffic(ctx: CityContext, { vehicles }: TrafficOptions = {
     let blob = 0, lamp = 0;
     clock += dt;
     for (const fleet of fleets) {
-      const array = fleet.matrices.array as Float32Array, bounds = fleet.kind.size;
-      let count = 0;
-      for (const v of fleet.vehicles) {
+      const array = fleet.matrices.array as Float32Array, bounds = fleet.kind.size, paints = fleet.kind.paints, shades = fleet.tints.array as Float32Array;
+      let count = 0, repainted = false;
+      for (let index = 0; index < fleet.vehicles.length; index++) {
+        const v = fleet.vehicles[index];
         v.s = (v.s + v.speed * dt) % v.route.length;
         if (!v.active) continue;
         const p = sampleRoute(v.route, v.s);
@@ -228,6 +202,8 @@ export function createTraffic(ctx: CityContext, { vehicles }: TrafficOptions = {
         position.set(p.x, v.boat ? WATER_Y + Math.sin(clock * 1.67 + v.s) * .04 : roadY(p.x, p.z), p.z);
         if (position.distanceToSquared(camera.position) > far * far || !frustum.intersectsSphere(sphere.set(position, REACH))) continue;
         turn.setFromAxisAngle(up, p.heading);
+        // Its shade goes up only when the slot changed hands: on most frames every vehicle keeps its slot.
+        if (fleet.owners[count] !== index) { fleet.owners[count] = index; paints[v.paint % paints.length].toArray(shades, count * 3); repainted = true; }
         matrix.compose(position, turn, size.setScalar(v.boat ? BOAT_SCALE : CAR_SCALE)).multiply(fleet.kind.base).toArray(array, count++ * COPY_STRIDE);
         if (v.boat) continue;
         // Lamps and beam: the frame of the centred parts, stretched to the car's width and length.
@@ -238,6 +214,7 @@ export function createTraffic(ctx: CityContext, { vehicles }: TrafficOptions = {
       }
       for (const mesh of fleet.meshes) mesh.geometry.instanceCount = count;
       fleet.matrices.needsUpdate = true;
+      if (repainted) fleet.tints.needsUpdate = true;
     }
     shadows.geometry.instanceCount = blob; blobMatrices.needsUpdate = true;
     lamps.geometry.instanceCount = beams.geometry.instanceCount = lamp;
@@ -261,19 +238,17 @@ export function createTraffic(ctx: CityContext, { vehicles }: TrafficOptions = {
 
   return {
     setEnabled(next) { enabled = next; },
-    setVehicles(next) { catalogue = next; build(); },
     movers: [group],
     dispose() {
       offFrame(); offCamera(); offQuality();
-      // The taxi's and the boat's copy meshes are the only users of their shapes (the catalogue's cars are parked in
-      // pools too): freeing them frees those shapes' buffers.
-      for (const fleet of fleets) if (fleet.kind === taxi || fleet.kind === boat) for (const mesh of fleet.meshes) mesh.geometry.dispose();
-      clear();
+      // The vehicles' shapes live for the session (assets/vehicles.ts) and the car parks draw them too: freeing the
+      // copy meshes only lets their buffers go up again where they are drawn next.
+      for (const fleet of fleets) for (const mesh of fleet.meshes) { mesh.removeFromParent(); mesh.geometry.dispose(); }
+      fleets = []; boatGlow = null; kinds.clear();
       group.removeFromParent();
-      disposeTree(taxiModel); boat.parts.forEach(p => { p.geometry.dispose(); p.material.dispose(); });
       // These copy meshes are the only users of their geometries: freeing them frees the shapes' buffers too.
       for (const mesh of [lamps, beams, shadows]) { mesh.removeFromParent(); mesh.geometry.dispose(); }
-      blobs.dispose(); boat.lights!.geometry.dispose(); lampMaterial.dispose(); beamMaterial.dispose();
+      blobs.dispose(); lightsGeometry.dispose(); material.dispose(); lampMaterial.dispose(); beamMaterial.dispose();
     },
   };
 }

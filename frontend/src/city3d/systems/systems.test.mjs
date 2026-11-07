@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 // plain paths; the operator glTF cannot load in Node, which exercises the robot fallback.
 const dir = fileURLToPath(new URL('.', import.meta.url));
 const built = await build({
-  stdin: { contents: ['districts', 'traffic', 'mascot'].map(f => `export * from './${f}.ts';`).join('\n') + '\nexport * from "../world/generate.ts"; export * from "../world/worldSpec.ts"; export * from "../render/night.ts"; export * from "../engine/camera.ts"; export * from "../render/copies.ts"; export * as THREE from "three/webgpu";', resolveDir: dir },
+  stdin: { contents: ['districts', 'traffic', 'mascot'].map(f => `export * from './${f}.ts';`).join('\n') + '\nexport * from "../world/generate.ts"; export * from "../world/worldSpec.ts"; export * from "../render/night.ts"; export * from "../engine/camera.ts"; export * from "../render/copies.ts"; export { VEHICLES, vehicleGeometry } from "../assets/vehicles.ts"; export * as THREE from "three/webgpu";', resolveDir: dir },
   bundle: true, platform: 'node', format: 'esm', write: false, logLevel: 'error',
   plugins: [{ name: 'url', setup(b) {
     b.onResolve({ filter: /\?url$/ }, a => ({ path: a.path, namespace: 'url' }));
@@ -239,24 +239,29 @@ test('a lower crowd share thins the traffic without rebuilding it', () => {
   traffic.dispose();
 });
 
-test('catalogue cars join the loops, unknown names drive as taxis, and the catalogue stays the caller\'s', () => {
-  const model = color => { const geometry = new THREE.BoxGeometry(1.5, 1, 3).translate(0, .5, 0); geometry.computeBoundingBox(); return { name: color, parts: [{ geometry, material: new THREE.MeshStandardNodeMaterial({ color }), castShadow: true }], bounds: geometry.boundingBox.clone() }; };
-  const vehicles = new Map([['sedan', model('#f00')], ['suv', model('#0f0')]]);
+test('the traffic drives the city\'s own vehicles: one copy mesh per kind in one material, the old mix, each painted from its palette', () => {
   const ctx = fakeContext(worlds.v1, { far: 1e4 }), traffic = city.createTraffic(ctx);
-  const group = ctx.scene.getObjectByName('city-traffic'), taxiOnly = group.children.length;
-  traffic.setVehicles(vehicles); ctx.frame(1 / 60, 0);
-  assert.equal(group.children.length, taxiOnly + 2);
-  const sedan = group.children.find(m => m.geometry.getAttribute('position') === vehicles.get('sedan').parts[0].geometry.getAttribute('position'));
-  assert.ok(countOf(sedan) > 0 && !sedan.castShadow, 'cars keep to their blob shadows: the sun\'s map is static');
+  ctx.frame(1 / 60, 0);
+  const group = ctx.scene.getObjectByName('city-traffic'), kinds = group.children.map(m => m.name.replace('city-traffic-', ''));
+  // Taxis on the main ring with every fourth car from the old list, every car elsewhere from it, boats on the canal.
+  assert.ok(kinds.includes('taxi') && kinds.includes('boat') && kinds.filter(k => ['sedan', 'suv', 'van', 'delivery', 'hatchback-sports'].includes(k)).length >= 4, kinds.join());
+  assert.equal(new Set(kinds).size, kinds.length, 'one copy mesh per kind');
+  assert.equal(new Set(group.children.map(m => m.material)).size, 1, 'one material for every kind');
+  for (const mesh of group.children) {
+    assert.ok(!mesh.castShadow && mesh.receiveShadow, 'cars keep to their blob shadows: the sun\'s map is static');
+    assert.equal(mesh.geometry.getAttribute('position'), city.vehicleGeometry(mesh.name.replace('city-traffic-', '')).getAttribute('position'), 'the shared shape');
+  }
+  // A kind's drawn copies take turns through its palette.
+  const shades = mesh => { const tints = mesh.geometry.getAttribute('copyTint'); return new Set(Array.from({ length: countOf(mesh) }, (_, i) => [tints.getX(i), tints.getY(i), tints.getZ(i)].map(v => v.toFixed(3)).join())); };
+  const painted = group.children.filter(m => !['taxi', 'boat'].includes(m.name.replace('city-traffic-', '')) && countOf(m) > 1);
+  assert.ok(painted.length > 0 && painted.every(m => shades(m).size > 1), 'more than one shade per kind');
   assert.deepEqual(traffic.movers, [group]);
-  const catalogue = [...vehicles.values()].flatMap(m => [m.parts[0].geometry, m.parts[0].material]), freed = new Set();
-  catalogue.forEach(r => r.addEventListener('dispose', () => freed.add(r)));
-  // The cars' copy meshes and copy materials draw the catalogue's own buffers and stay with them.
-  const ofCatalogue = r => catalogue.some(c => c === r || (c.isMaterial ? city.copyMaterial(c) === r : r.isBufferGeometry && r.getAttribute('position') === c.getAttribute('position')));
+  const shared = city.VEHICLES.map(name => city.vehicleGeometry(name)), freed = new Set();
+  shared.forEach(g => g.addEventListener('dispose', () => freed.add(g)));
   const resources = watchResources(ctx.scene);
   traffic.dispose();
-  assert.equal(freed.size, 0);
-  assert.deepEqual([...resources].filter(([r, disposed]) => !disposed && !ofCatalogue(r)).map(([r]) => r.type), []);
+  assert.equal(freed.size, 0, 'the vehicles\' shapes stay for the car parks and the next visit');
+  assert.deepEqual([...resources].filter(([, disposed]) => !disposed).map(([r]) => r.type), []);
   assert.equal(ctx.scene.children.length, 0);
   assert.equal(ctx.listeners, 0);
 });

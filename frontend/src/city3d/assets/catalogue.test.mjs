@@ -58,9 +58,13 @@ test('Kenney glass gets one seed per window; walls, skylights and parked cars st
   assert.equal(near.material.map, map); assert.equal(near.material.roughness, .7); assert.equal(near.material.metalness, .1);
   assert.ok(near.material.color.equals(kit.color) && near.material.emissive.equals(new THREE.Color(0)));
 
-  // Parked cars keep the kit material.
-  assert.equal(taxi.lods[0].parts[0].material, kit);
-  assert.equal(taxi.lods[0].parts[0].geometry.getAttribute('windowSeed'), undefined);
+  // Parked cars are the city's own vehicles (assets/vehicles.ts), even when a kit has a car of the name: one part in
+  // the vehicles' material, which tints only their paint; their windows never light.
+  const [car] = taxi.lods[0].parts;
+  assert.equal(taxi.lods[0].parts.length, 1);
+  assert.ok(car.material !== kit && car.material.isMeshStandardNodeMaterial && car.material.userData.copyTint === 'own' && car.castShadow);
+  assert.equal(car.geometry.getAttribute('windowSeed'), undefined);
+  assert.ok(taxi.tints.length >= 1 && taxi.tintStep > 0);
 
   let freed = false; near.material.addEventListener('dispose', () => { freed = true; });
   catalogue.dispose();
