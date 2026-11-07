@@ -7,8 +7,8 @@
 import type * as THREE from "three/webgpu";
 import { FACE, MeshBuilder, bakeOcclusion, box, cylinder, gableRoof, rgb, rod, type V3 } from "./facade";
 
-const U = 4, CRANE = rgb("#d9a13b"), DARK = rgb("#3d4148"), STEEL = rgb("#8e959c");
-const CONTAINERS = ["#b5432f", "#2f6fa3", "#d38b2c", "#3f8a5a", "#8a8f99", "#c9c3b6"].map(rgb);
+const U = 4, CRANE = rgb("#e9aa1d"), DARK = rgb("#3d4148"), STEEL = rgb("#91a9b6");
+const CONTAINERS = ["#c6422a", "#1a70b4", "#e69a19", "#238652", "#5f87a2", "#dcc9a4"].map(rgb);
 
 /** A shed's walls with a row of high windows, the floors' grid shifted so the row sits under the eaves. */
 function shed(mb: MeshBuilder, [x0, z0, x1, z1]: [number, number, number, number], h: number, wall: V3) {
@@ -29,7 +29,7 @@ function rooflights(mb: MeshBuilder, x: number, z0: number, z1: number, h: numbe
   for (const px of [-x * .38, x * .38]) for (const side of [-1, 1]) {
     const a = middle + side * depth * .3, b = middle + side * depth * .58;
     const low = Math.min(a, b), high = Math.max(a, b), y = (z: number) => h + (depth - Math.abs(z - middle)) * pitch + .025;
-    mb.quad([[px - 1.2, y(low), low], [px - 1.2, y(high), high], [px + 1.2, y(high), high], [px + 1.2, y(low), low]], { kind: FACE.pane, col: rgb("#577583"), win: [.25, 0, 0, 0] });
+    mb.quad([[px - 1.2, y(low), low], [px - 1.2, y(high), high], [px + 1.2, y(high), high], [px + 1.2, y(low), low]], { kind: FACE.pane, col: rgb("#397f9e"), win: [.25, 0, 0, 0] });
     // Unchamfered small rails stay within the roof's old maximum height and plan.
     for (const sx of [-1, 1]) {
       const left = px + sx * 1.2;
@@ -68,9 +68,9 @@ function containers(mb: MeshBuilder, seed: number) {
 /** The five port pieces: a warehouse, the gantry crane, two container yards, a second shed. */
 export const PORT: ((seed: number) => THREE.BufferGeometry)[] = [
   () => {
-    const mb = new MeshBuilder(), wall = rgb("#cfc6b6"), x = 6.2 * U / 2, z = 3.8 * U / 2, h = 2.2 * U;
+    const mb = new MeshBuilder(), wall = rgb("#e2c893"), x = 6.2 * U / 2, z = 3.8 * U / 2, h = 2.2 * U;
     shed(mb, [-x, -z, x, z], h, wall);
-    gableRoof(mb, { a0: -x, a1: x, b0: -z, b1: z, y: h, pitch: .22, overhang: .5, axis: "x", roof: rgb("#8f5f4c"), wall });
+    gableRoof(mb, { a0: -x, a1: x, b0: -z, b1: z, y: h, pitch: .22, overhang: .5, axis: "x", roof: rgb("#a34a2b"), wall });
     rooflights(mb, x, -z, z, h, .22);
     for (const dx of [-2, 0, 2]) door(mb, dx * U, z, 1.3 * U, 1.5 * U, rgb("#6b7380"));
     box(mb, [-x - .3, 0, z, x + .3, .9, z + 2], { c: .05, kind: FACE.wall, col: rgb("#b9b3a6"), top: FACE.trim, topCol: rgb("#a9a396") });
@@ -102,9 +102,9 @@ export const PORT: ((seed: number) => THREE.BufferGeometry)[] = [
   seed => { const mb = new MeshBuilder(); containers(mb, seed); bakeOcclusion(mb, { rays: 16, reach: 4 }); return mb.build(1 / U); },
   seed => { const mb = new MeshBuilder(); containers(mb, seed); bakeOcclusion(mb, { rays: 16, reach: 4 }); return mb.build(1 / U); },
   () => {
-    const mb = new MeshBuilder(), wall = rgb("#b9c2c9"), x = 6.4 * U / 2, z0 = (-.4 - 1.5) * U, z1 = (-.4 + 1.5) * U, h = 2.8 * U;
+    const mb = new MeshBuilder(), wall = rgb("#a9cadd"), x = 6.4 * U / 2, z0 = (-.4 - 1.5) * U, z1 = (-.4 + 1.5) * U, h = 2.8 * U;
     shed(mb, [-x, z0, x, z1], h, wall);
-    gableRoof(mb, { a0: -x, a1: x, b0: z0, b1: z1, y: h, pitch: .18, overhang: .5, axis: "x", roof: rgb("#6f7d88"), wall });
+    gableRoof(mb, { a0: -x, a1: x, b0: z0, b1: z1, y: h, pitch: .18, overhang: .5, axis: "x", roof: rgb("#416e92"), wall });
     rooflights(mb, x, z0, z1, h, .18);
     for (const dx of [-1.8, 1.8]) door(mb, dx * U, z1, 1.6 * U, 1.8 * U, rgb("#5a626d"));
     bakeOcclusion(mb, { rays: 16, reach: 5 });

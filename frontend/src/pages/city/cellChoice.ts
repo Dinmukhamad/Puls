@@ -66,4 +66,4 @@ export const firstTab = (choice: Pick<Choice, "cells" | "family"> | null): ShopT
   choice?.family ? shopTab(choice.family) : (choice?.cells.length ?? 0) > 1 ? "roads" : "houses";
 
 /** The picture of a thing in the shop: a snapshot of its model (scripts/shop-pictures.mjs), loaded when it shows. */
-export const shopPicture = (family: string) => `${import.meta.env?.BASE_URL ?? "/"}city/shop/v6/${family}.webp`;
+export const shopPicture = (family: string) => `${import.meta.env?.BASE_URL ?? "/"}city/shop/v7/${family}.webp`;

@@ -13,8 +13,8 @@ import * as THREE from "three/webgpu";
 import { FACE, MeshBuilder, arch as archShape, box as boxShape, cylinder, dome as domeShape, gableRoof, prism as prismShape, pyramid as pyramidShape, rgb, rod as rodShape, sphere, torus as torusShape, type BoxOptions, type Face, type V3 } from "./facade";
 
 export const C = {
-  stone: '#f0dfb7', ivory: '#fff2d6', trim: '#d8b675', ink: '#243c54', glass: '#60a9c7', gold: '#e4ae3e', roof: '#39758a', leaf: '#4d9b59', wood: '#a36e3f',
-  steel: '#aabac2', concrete: '#d3cebe', red: '#df5a45', taxi: '#f1be38', slate: '#476e88', lawn: '#75b75c', white: '#fbf7ed',
+  stone: '#f1d49b', ivory: '#fff0cd', trim: '#dbab55', ink: '#1d3b60', glass: '#419cc8', gold: '#f1ae24', roof: '#236d8e', leaf: '#378f4c', wood: '#ae652e',
+  steel: '#aabac2', concrete: '#d3cebe', red: '#e6462f', taxi: '#ffc52f', slate: '#35678d', lawn: '#64b342', white: '#fbf7ed',
 };
 /** The top of the island plinth every landmark stands on (5.7 × 5.3, front steps out to z = 3). */
 export const PLINTH = .275;
