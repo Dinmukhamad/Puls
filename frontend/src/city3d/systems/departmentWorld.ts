@@ -1,5 +1,6 @@
 /** Two departmental roots share the renderer, sky, camera and catalogue. Only the active root ticks. */
 import * as THREE from "three/webgpu";
+import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import { float, uniform } from "three/tsl";
 import type { CityWorld, DepartmentId } from "../../api/cityWorld";
 import type { CityContext } from "../engine/context";
@@ -22,6 +23,8 @@ import { mergeStatic } from "../assets/landmarks";
 import { generateSalesWorld, SALES_CENTERS } from "../world/sales";
 import { landGrid, type LandGrid } from "../world/land";
 import { FIRST_LAYOUT, districtLayout, districtNumber } from "../world/estateGrid";
+import { refineModelSurfaces, surfaceMaterial } from "../assets/surfaceDetail";
+import { skyLook, type SkyLook } from "../render/sky";
 import { districtMainFrame, landmarkBounds } from "../world/districtLandmark";
 import { createEstates, type Estates, type EstateFocusView } from "./estates";
 import type { CityBuildView, CityEstateView, EstatePick, EstateTarget } from "../types";
@@ -42,11 +45,12 @@ export interface DepartmentWorld {
 }
 const WALL = "#f0e8d6", GLASS = "#397181", DARK = "#39484b", GOLD = "#ddb04f", GREEN = "#728963";
 const materialSets = new WeakMap<THREE.Object3D, Map<string, THREE.MeshStandardNodeMaterial>>();
-function builder(root: THREE.Object3D) {
+function builder(root: THREE.Object3D, look: SkyLook | null = null) {
   const materials = materialSets.get(root) ?? new Map<string, THREE.MeshStandardNodeMaterial>(); materialSets.set(root, materials);
   return (w: number, h: number, d: number, x: number, y: number, z: number, color: string) => {
-    if (!materials.has(color)) materials.set(color, new THREE.MeshStandardNodeMaterial({ color, roughness: color === GLASS ? .25 : .7, metalness: color === GLASS ? .3 : .03 }));
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), materials.get(color)!);
+    if (!materials.has(color)) materials.set(color, surfaceMaterial({ color, look, finish: color === GLASS ? "glass" : color === GOLD || color === DARK ? "metal" : "stone", roughness: color === GLASS ? .15 : color === DARK ? .42 : .78, metalness: color === GOLD || color === DARK ? .62 : color === GLASS ? .08 : .02 }));
+    const geometry = Math.min(w, h, d) > .28 ? new RoundedBoxGeometry(w, h, d, 1, Math.min(.055, w / 12, h / 12, d / 12)) : new THREE.BoxGeometry(w, h, d);
+    const mesh = new THREE.Mesh(geometry, materials.get(color)!);
     mesh.position.set(x, y, z); mesh.castShadow = mesh.receiveShadow = true; root.add(mesh); return mesh;
   };
 }
@@ -65,6 +69,14 @@ function campusOffice(mb: MeshBuilder, x: number, z: number, index: number) {
   mb.detail(() => { for (let y = 1; y < h; y += 1.25) b(7.6, .13, 6.3, x, .5 + y - .065, z, { c: 0, kind: FACE.trim, col: wall, top: FACE.trim, occlude: false }); });
   b(8.2, .35, 6.6, x, h + .425, z, { c: .06, kind: FACE.trim, col: rgb(DARK), top: FACE.deck });
   b(5.6, .3, 4, x, h + .7, z, { c: .05, kind: FACE.leaf, col: rgb(GREEN), top: FACE.leaf });
+  mb.detail(() => {
+    for (const dx of [-1.1, 1.1]) {
+      b(.8, .14, .8, x + dx, h + .78, z - .45, { c: .025, kind: FACE.metal, col: rgb("#9da8aa"), top: FACE.metal, occlude: false });
+      for (const offset of [-.24, 0, .24]) b(.055, .06, .65, x + dx + offset, h + .92, z - .45, { c: 0, kind: FACE.trim, col: rgb(DARK), top: FACE.trim, occlude: false });
+    }
+    b(2.25, .08, .42, x, .46, z + 3.45, { c: .02, kind: FACE.trim, col: rgb("#bdb7aa"), top: FACE.trim, occlude: false });
+    for (const dx of [-.37, .37]) b(.035, .33, .04, x + dx, 1.05, z + 3.29, { c: .008, kind: FACE.metal, col: rgb("#bbc1c0"), top: FACE.metal, occlude: false });
+  });
   b(3.1, .2, 1.9, x, 1.7, z + 3.5, { c: .03, kind: FACE.metal, col: rgb(GOLD), top: FACE.metal, bottom: true, occlude: false });
   b(2, 1.4, .15, x, .45, z + 3.2, { c: 0, kind: FACE.curtain, col: rgb("#3c5660"), top: FACE.trim, bay: 1, floor: S(1.4), occlude: false });
   for (const dx of [-3.2, 3.2]) { b(1.2, .5, 1.2, x + dx, .45, z + 3.8, { c: .04, kind: FACE.wall, col: wall, top: FACE.trim }); sphere(mb, { x: S(x + dx), y: S(1.15), z: S(z + 3.8), r: S(.55), rise: S(.42), seg: 10, rings: 3, kind: FACE.leaf, col: rgb(GREEN) }); }
@@ -84,9 +96,9 @@ function glow(color: string) {
  * they cannot load. Built in the line's own frame: u along the track from the buffer stop (local +z), w across
  * it, positive on the station's side. `city` picks the name on the station's boards.
  */
-function station(line: RailLine, city: DepartmentId) {
+function station(line: RailLine, city: DepartmentId, look: SkyLook | null) {
   const root = new THREE.Group(), fixed = new THREE.Group(), train = new THREE.Group(); root.add(fixed, train);
-  const b = builder(fixed), t = builder(train), G = GROUND_Y, L = line.length, F = STATION.floor, x = (w: number) => -line.side * w;
+  const b = builder(fixed, look), t = builder(train, look), G = GROUND_Y, L = line.length, F = STATION.floor, x = (w: number) => -line.side * w;
   const box = (across: number, height: number, along: number, w: number, y: number, u: number, color: string) => b(across, height, along, x(w), y, u, color);
   const lamp = (across: number, height: number, along: number, w: number, y: number, u: number, color: string) => {
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(across, height, along), glow(color)); mesh.position.set(x(w), y, u); fixed.add(mesh);
@@ -115,11 +127,29 @@ function station(line: RailLine, city: DepartmentId) {
   for (const u of [2.8, 6.8, 10.8]) {
     t(1.8, 1.6, 3.6, 0, G + 1.35, u, WALL); t(1.88, .24, 3.65, 0, G + .75, u, PULS); t(1.9, .2, 3.7, 0, G + 2.25, u, DARK);
     for (const w of [-.91, .91]) for (const du of [-1, 0, 1]) t(.06, .65, .65, w, G + 1.6, u + du, GLASS);
-    for (const du of [-1.1, 1.1]) t(1.7, .32, .5, 0, G + .42, u + du, DARK);
+    for (const du of [-1.1, 1.1]) {
+      const bogie = t(1.5, .22, .6, 0, G + .45, u + du, DARK);
+      for (const side of [-1, 1]) {
+        const wheel = new THREE.Mesh(new THREE.CylinderGeometry(.21, .21, .1, 12).rotateZ(Math.PI / 2), bogie.material);
+        wheel.position.set(side * .84, G + .47, u + du); wheel.castShadow = wheel.receiveShadow = true; train.add(wheel);
+      }
+    }
+    t(1.05, .16, 1.2, 0, G + .64, u, DARK);
+    for (const du of [-.3, 0, .3]) t(.7, .065, .18, 0, G + 2.30, u + du, DARK);
+    for (const side of [-1, 1]) {
+      t(.045, 1.12, .045, side * .925, G + 1.17, u - 1.4, DARK);
+      t(.045, 1.12, .045, side * .925, G + 1.17, u - .7, DARK);
+      t(.05, .07, .12, side * .93, G + 1.22, u - .85, GOLD);
+    }
+  }
+  for (const u of [4.8, 8.8]) {
+    t(1.45, 1.35, .32, 0, G + 1.34, u, DARK);
+    for (const du of [-.1, 0, .1]) for (const side of [-1, 1]) t(.035, 1.36, .025, side * .735, G + 1.34, u + du, DARK);
   }
   t(1.5, .7, .08, 0, G + 1.6, 12.61, GLASS);
+  for (const side of [-1, 1]) t(.16, .1, .03, side * .56, G + 1.03, 12.63, "#f1e6c9");
   mergeOwned(fixed); mergeOwned(train);
-  let building = drawnBuilding(line), portal = drawnPortal(line); root.add(building, portal);
+  let building = drawnBuilding(line, look), portal = drawnPortal(line, look); root.add(building, portal);
   root.position.set(line.x, 0, line.z); root.rotation.y = railHeading(line);
   // The head reaches the portal at 85 % of the trip, so the train is in the tunnel when the trip says so.
   const travel = (L - 12.6) / .85;
@@ -147,8 +177,8 @@ function station(line: RailLine, city: DepartmentId) {
  * The drawn station building: a long glazed hall with a taller middle, the brand stripe, a clock and the entrance
  * canopy, on the floor slab across the end of the track. Its own materials, freed with it.
  */
-function drawnBuilding(line: RailLine) {
-  const group = new THREE.Group(), b = builder(group), G = GROUND_Y + STATION.floor, side = line.side;
+function drawnBuilding(line: RailLine, look: SkyLook | null) {
+  const group = new THREE.Group(), b = builder(group, look), G = GROUND_Y + STATION.floor, side = line.side;
   const box = (across: number, height: number, along: number, w: number, y: number, u: number, color: string) => b(across, height, along, -side * w, y, u, color);
   box(17, 4.8, 8.5, 4, G + 2.4, -5.75, WALL); box(15.6, 3.2, .12, 4, G + 2.3, -10.02, GLASS);
   for (const w of [-4.2, -.2, 3.8, 7.8, 12.2]) box(.32, 4.8, .3, w, G + 2.4, -10.1, WALL);
@@ -200,8 +230,8 @@ function lampAt(group: THREE.Object3D, side: 1 | -1, across: number, height: num
  * dark walls, floor and vault (the hill has no ground in the bore), lamps along both walls and the far end out of
  * sight. Its own materials, freed with it.
  */
-function drawnPortal(line: RailLine) {
-  const group = new THREE.Group(), b = builder(group), G = GROUND_Y, L = line.length, side = line.side;
+function drawnPortal(line: RailLine, look: SkyLook | null) {
+  const group = new THREE.Group(), b = builder(group, look), G = GROUND_Y, L = line.length, side = line.side;
   const box = (across: number, height: number, along: number, w: number, y: number, u: number, color: string) => b(across, height, along, -side * w, y, u, color);
   const wall = L - 1.2;
   for (const w of [-4.4, 4.4]) box(4.2, 8.4, 3.6, w, G + 4.2, wall, STONE);
@@ -252,7 +282,7 @@ export function createDepartmentWorld(ctx: CityContext, catalogue: Catalogue, on
   const supportRoot = new THREE.Group(); supportRoot.name = "support-city";
   supportNodes.forEach(n => supportRoot.add(n)); ctx.scene.add(supportRoot);
   const supportOverlayNodes = [...ctx.overlay.children] as HTMLElement[];
-  const supportLine: RailLine = ctx.world.railway ?? RAIL_LINES.x4, supportRail = station(supportLine, "support"); ctx.scene.add(supportRail.root);
+  const supportLine: RailLine = ctx.world.railway ?? RAIL_LINES.x4, supportRail = station(supportLine, "support", skyLook(ctx.scene)); ctx.scene.add(supportRail.root);
   // The tunnel portals' model and the station buildings'; both stations use drawn ones until they arrive, and keep
   // them if they cannot.
   let portalModel: Model | null = null, stationModels: Map<string, Model> | null = null, disposed = false;
@@ -260,11 +290,11 @@ export function createDepartmentWorld(ctx: CityContext, catalogue: Catalogue, on
   void loadModels(portalUrl, { signal: assetController.signal }).then(models => {
     const model = models.get("railway-portal") ?? [...models.values()][0];
     if (disposed || !model) { disposeModels(models); return; }
-    portalModel = model; supportRail.usePortal(model); sales?.rail.usePortal(model); ctx.requestShadowUpdate();
+    refineModelSurfaces(models, skyLook(ctx.scene)); portalModel = model; supportRail.usePortal(model); sales?.rail.usePortal(model); ctx.requestShadowUpdate();
   }).catch(() => undefined);
   void loadModels(stationUrl, { signal: assetController.signal }).then(models => {
     if (disposed || !models.has("railway-station")) { disposeModels(models); return; }
-    litWindows(models); stationModels = models; supportRail.useBuilding(models); sales?.rail.useBuilding(models);
+    refineModelSurfaces(models, skyLook(ctx.scene)); litWindows(models); stationModels = models; supportRail.useBuilding(models); sales?.rail.useBuilding(models);
     [supportRail.root, sales?.rail.root].forEach(root => { if (root) illuminate(root); });
     ctx.requestShadowUpdate();
   }).catch(() => undefined);
@@ -311,7 +341,7 @@ export function createDepartmentWorld(ctx: CityContext, catalogue: Catalogue, on
   const elements = { support: new Map<string, HTMLElement>(), sales: new Map<string, HTMLElement>() };
   let night = false, traffic = true;
   // The lake city's campus offices share one facade material; setNight lights their windows.
-  const campusNight = uniform(0), campusMaterial = facadeMaterial(campusNight as unknown as Parameters<typeof facadeMaterial>[0], { seed: float(0), lit: .55 });
+  const campusNight = uniform(0), campusMaterial = facadeMaterial(campusNight as unknown as Parameters<typeof facadeMaterial>[0], { seed: float(0), lit: .55, look: skyLook(ctx.scene) });
   function illuminate(root: THREE.Object3D) {
     root.traverse(object => {
       if (!(object instanceof THREE.Mesh)) return;
@@ -341,7 +371,7 @@ export function createDepartmentWorld(ctx: CityContext, catalogue: Catalogue, on
     campusMesh.castShadow = campusMesh.receiveShadow = true; campusMesh.name = "sales-campus"; campus.add(campusMesh);
     // The hills round the lake city, out as far as the island city's, so the fog hides their edge the same way.
     const hills = createMountains(context, { end: ctx.world.radius * RELIEF_END });
-    const rail = station(world.railway ?? RAIL_LINES.sales, "sales"); scene.add(rail.root);
+    const rail = station(world.railway ?? RAIL_LINES.sales, "sales", skyLook(ctx.scene)); scene.add(rail.root);
     if (portalModel) rail.usePortal(portalModel);
     if (stationModels) rail.useBuilding(stationModels);
     const count = layoutOf(views.sales), grid = gridOf("sales", world, count)!; grids.sales = grid; layouts.sales = count;

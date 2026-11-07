@@ -39,7 +39,8 @@ test('each vehicle is one geometry built once, within the triangle budget, with 
     const g = city.vehicleGeometry(name);
     assert.equal(city.vehicleGeometry(name), g, 'shared, built once');
     const triangles = g.index.count / 3;
-    assert.ok(triangles < (name === 'boat' ? 800 : 1500), `${name}: ${triangles} triangles`);
+    // The rounded tyre shoulders and open alloy rims add about 500 triangles to a whole car, not another draw call.
+    assert.ok(triangles < (name === 'boat' ? 800 : 2000), `${name}: ${triangles} triangles`);
     for (const attribute of Object.values(g.attributes)) assert.ok(Array.from(attribute.array).every(Number.isFinite), `${name}: finite ${attribute.name ?? ''}`);
     assert.ok(city.PAINTS[name]?.length >= 1, `${name} has paints`);
     const kinds = new Set(kindsOf(g));
@@ -52,7 +53,27 @@ test('the vehicles\' material tints only the paint and mirrors the sky; the surf
   const material = city.vehicleMaterial();
   assert.ok(material.isMeshStandardNodeMaterial && material.userData.copyTint === 'own' && !material.vertexColors);
   assert.ok(material.colorNode && material.emissiveNode && material.roughnessNode);
+  assert.ok(material.isMeshPhysicalNodeMaterial && material.clearcoatNode && material.clearcoatRoughnessNode, 'paint and glazing use a masked physical clear coat');
   // The builder's boxes treat the facade's window (0), curtain (5) and mirror (11) kinds specially.
   for (const kind of Object.values(PART)) assert.ok(![0, 5, 11].includes(kind));
   material.dispose();
+});
+
+test('tyre shoulders are rounded and the metal rims sit in front of a recessed dark wheel well', () => {
+  const g = city.vehicleGeometry('sedan'), position = g.attributes.position, normal = g.attributes.normal, kinds = kindsOf(g);
+  const rubber = [], chrome = [], recess = [];
+  for (let i = 0; i < position.count; i++) {
+    if (position.getX(i) < .5 || position.getY(i) > .61 || Math.abs(position.getZ(i) - .84) > .31) continue;
+    if (kinds[i] === PART.rubber) rubber.push(i);
+    if (kinds[i] === PART.chrome && normal.getX(i) > .99) chrome.push(i);
+    if (kinds[i] === PART.plastic && normal.getX(i) > .99) recess.push(i);
+  }
+  assert.ok(rubber.filter(i => Math.abs(normal.getX(i)) > .1 && Math.abs(normal.getX(i)) < .95).length > 40, 'smooth shoulder normals between tread and sidewall');
+  const maxX = Math.max(...rubber.map(i => position.getX(i))), centreX = .665;
+  const radius = i => Math.hypot(position.getY(i) - .3, position.getZ(i) - .84);
+  const tread = Math.max(...rubber.filter(i => Math.abs(position.getX(i) - centreX) < .08).map(radius));
+  const shoulder = Math.max(...rubber.filter(i => position.getX(i) > maxX - .001).map(radius));
+  assert.ok(tread > shoulder + .025, 'tyre narrows smoothly at its shoulders');
+  assert.ok(chrome.length && recess.length, 'both the alloy and the dark backing are present');
+  assert.ok(Math.max(...chrome.map(i => position.getX(i))) > Math.max(...recess.map(i => position.getX(i))) + .004, 'recess has real depth behind the spokes');
 });

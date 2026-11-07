@@ -36,7 +36,7 @@ function column(k: Kit, x: number, z: number, y0: number, h: number, r = .09, c:
  * pediment of `rise` under a tiled cover; returns the top of the entablature.
  */
 function portico(k: Kit, xs: readonly number[], w: number, d: number, z: number, y0: number, h: number, rise: number) {
-  k.block(w, .16, d, C.ivory, 0, y0, z);
+  for (let step = 0; step < 3; step++) k.block(w - step * .06, .16 / 3, d - step * .06, C.ivory, 0, y0 + step * .16 / 3, z, { r: 0 });
   for (const x of xs) column(k, x, z + d / 2 - .22, y0 + .16, h);
   const top = y0 + .16 + h;
   k.block(w + .1, .24, d + .06, C.ivory, 0, top, z);
@@ -62,7 +62,7 @@ function piers(k: Kit, w: number, d: number, x: number, z: number, y0: number, h
 function clock(k: Kit, x: number, y: number, z: number, r = .24) {
   k.disc(r, .05, C.ivory, x, y, z, 24);
   k.torus(r, .025, C.gold, x, y, z + .03, { front: true, seg: 24 });
-  for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2; k.box(.03, .03, .02, C.ink, x + Math.sin(a) * r * .78, y + Math.cos(a) * r * .78, z + .035, { r: 0 }); }
+  for (let i = 0; i < 12; i++) { const a = i * Math.PI / 6, size = i % 3 ? .017 : .03; k.box(size, size, .02, C.ink, x + Math.sin(a) * r * .78, y + Math.cos(a) * r * .78, z + .035, { r: 0 }); }
   k.box(.025, r * .75, .02, C.ink, x, y + r * .3, z + .045, { r: 0 });
   k.box(r * .6, .025, .02, C.ink, x + r * .25, y, z + .045, { r: 0 });
 }

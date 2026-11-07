@@ -14,6 +14,7 @@
  * uplight in the landmarks' own emissive, scaled by ctx.night.level.
  */
 import * as THREE from "three/webgpu";
+import { skyLook } from "../render/sky";
 import { color, exp, float, normalWorld, positionWorld, rangeFogFactor, smoothstep, uniform, uv, vertexColor, type ShaderNodeObject } from "three/tsl";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import type { DistrictId } from "../../api/city";
@@ -94,7 +95,7 @@ export function createDistricts(ctx: CityContext, { levels, grown = [] }: Distri
   // with `windows` (setNight), its walls take the floodlights' uplight (0 in the day). The window pattern is fixed
   // per building (assets/landmarks.ts shifts every wall's), so the material needs no seed from a copy.
   const windows = uniform(0);
-  const shell = facadeMaterial(windows as unknown as Parameters<typeof facadeMaterial>[0], { seed: float(0), lit: WINDOWS_LIT });
+  const shell = facadeMaterial(windows as unknown as Parameters<typeof facadeMaterial>[0], { seed: float(0), lit: WINDOWS_LIT, look: skyLook(ctx.scene) });
   shell.emissiveNode = (shell.emissiveNode as ShaderNodeObject<THREE.Node>).add(uplight(ctx.night.level));
   shell.name = "city-district-landmarks"; shell.userData.districtNight = windows;
   const architecture = createArchitecture(shell);

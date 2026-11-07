@@ -5,7 +5,7 @@
  * stacked containers whose ribbed sides the facade material draws. Drawn in metres, handed over in units of 4 m.
  */
 import type * as THREE from "three/webgpu";
-import { FACE, MeshBuilder, bakeOcclusion, box, gableRoof, rgb, rod, type V3 } from "./facade";
+import { FACE, MeshBuilder, bakeOcclusion, box, cylinder, gableRoof, rgb, rod, type V3 } from "./facade";
 
 const U = 4, CRANE = rgb("#d9a13b"), DARK = rgb("#3d4148"), STEEL = rgb("#8e959c");
 const CONTAINERS = ["#b5432f", "#2f6fa3", "#d38b2c", "#3f8a5a", "#8a8f99", "#c9c3b6"].map(rgb);
@@ -19,16 +19,40 @@ function door(mb: MeshBuilder, x: number, z: number, w: number, h: number, col: 
   box(mb, [x - w / 2 - .2, 0, z - .05, x + w / 2 + .2, h + .25, z + .08], { c: 0, kind: FACE.trim, col: DARK, top: FACE.trim, occlude: false });
   box(mb, [x - w / 2, 0, z + .08, x + w / 2, h, z + .14], { c: 0, kind: FACE.trim, col, top: FACE.trim, occlude: false });
   for (let k = 1; k < 6; k++) box(mb, [x - w / 2, k * h / 6 - .03, z + .14, x + w / 2, k * h / 6 + .03, z + .17], { c: 0, kind: FACE.trim, col: rgb("#565d66"), top: FACE.trim, occlude: false });
+  // The shutter has a bottom weather rail and two rubber loading buffers beside it.
+  box(mb, [x - w / 2, .06, z + .14, x + w / 2, .16, z + .21], { c: 0, kind: FACE.metal, col: STEEL, top: FACE.metal, occlude: false });
+  for (const side of [-1, 1]) box(mb, [x + side * (w / 2 + .1) - .07, .2, z + .08, x + side * (w / 2 + .1) + .07, .75, z + .3], { c: 0, kind: FACE.trim, col: DARK, top: FACE.trim, occlude: false });
+}
+/** Flush rooflights follow the pitch exactly; their two raised rails catch the light without a new draw call. */
+function rooflights(mb: MeshBuilder, x: number, z0: number, z1: number, h: number, pitch: number) {
+  const middle = (z0 + z1) / 2, depth = (z1 - z0) / 2;
+  for (const px of [-x * .38, x * .38]) for (const side of [-1, 1]) {
+    const a = middle + side * depth * .3, b = middle + side * depth * .58;
+    const low = Math.min(a, b), high = Math.max(a, b), y = (z: number) => h + (depth - Math.abs(z - middle)) * pitch + .025;
+    mb.quad([[px - 1.2, y(low), low], [px - 1.2, y(high), high], [px + 1.2, y(high), high], [px + 1.2, y(low), low]], { kind: FACE.pane, col: rgb("#577583"), win: [.25, 0, 0, 0] });
+    // Unchamfered small rails stay within the roof's old maximum height and plan.
+    for (const sx of [-1, 1]) {
+      const left = px + sx * 1.2;
+      mb.quad([[left - .035, y(low) + .025, low], [left - .035, y(high) + .025, high], [left + .035, y(high) + .025, high], [left + .035, y(low) + .025, low]], { kind: FACE.metal, col: STEEL });
+    }
+  }
 }
 /** A container `l` long (along x), its sides ribbed (the tile rows of the roof finish, turned upright), its doors at the ends. */
 function container(mb: MeshBuilder, x: number, y: number, z: number, l: number, col: V3) {
   const w = 2.44, h = 2.55, x0 = x - l / 2, x1 = x + l / 2, z0 = z - w / 2, z1 = z + w / 2, y1 = y + h;
+  const inset = .035, end0 = x0 + inset, end1 = x1 - inset, side0 = z0 + inset, side1 = z1 - inset;
   // Long sides: v runs along the container, so the rows of the roof finish are its vertical ribs.
-  mb.quad([[x0, y, z1], [x1, y, z1], [x1, y1, z1], [x0, y1, z1]], { kind: FACE.roof, col, uv: [[0, 0], [0, l], [h, l], [h, 0]] });
-  mb.quad([[x1, y, z0], [x0, y, z0], [x0, y1, z0], [x1, y1, z0]], { kind: FACE.roof, col, uv: [[0, 0], [0, l], [h, l], [h, 0]] });
-  mb.quad([[x1, y, z1], [x1, y, z0], [x1, y1, z0], [x1, y1, z1]], { kind: FACE.trim, col: col.map(c => c * .82) as V3 });
-  mb.quad([[x0, y, z0], [x0, y, z1], [x0, y1, z1], [x0, y1, z0]], { kind: FACE.trim, col: col.map(c => c * .82) as V3 });
-  mb.quad([[x0, y1, z1], [x1, y1, z1], [x1, y1, z0], [x0, y1, z0]], { kind: FACE.trim, col: col.map(c => c * .9) as V3, uv: [[x0, z1], [x1, z1], [x1, z0], [x0, z0]] });
+  mb.quad([[end0, y, side1], [end1, y, side1], [end1, y1 - inset, side1], [end0, y1 - inset, side1]], { kind: FACE.roof, col, uv: [[0, 0], [0, l], [h, l], [h, 0]] });
+  mb.quad([[end1, y, side0], [end0, y, side0], [end0, y1 - inset, side0], [end1, y1 - inset, side0]], { kind: FACE.roof, col, uv: [[0, 0], [0, l], [h, l], [h, 0]] });
+  const endColor = col.map(c => c * .82) as V3;
+  mb.quad([[end1, y, side1], [end1, y, side0], [end1, y1 - inset, side0], [end1, y1 - inset, side1]], { kind: FACE.trim, col: endColor });
+  mb.quad([[end0, y, side0], [end0, y, side1], [end0, y1 - inset, side1], [end0, y1 - inset, side0]], { kind: FACE.trim, col: endColor });
+  mb.quad([[end0, y1 - inset, side1], [end1, y1 - inset, side1], [end1, y1 - inset, side0], [end0, y1 - inset, side0]], { kind: FACE.metal, col: col.map(c => c * .9) as V3, uv: [[x0, z1], [x1, z1], [x1, z0], [x0, z0]] });
+  // Actual corner castings/rails keep the exact original stacking envelope. Locking bars are on the
+  // recessed door face, so they do not push a yard beyond the catalogue's measured footprint.
+  for (const xx of [x0, x1 - .07]) for (const zz of [z0, z1 - .07]) box(mb, [xx, y, zz, xx + .07, y1, zz + .07], { c: 0, kind: FACE.metal, col, top: FACE.metal, occlude: false });
+  for (const zz of [z - .55, z + .55]) box(mb, [end1, y + .18, zz - .025, x1 - .008, y1 - .18, zz + .025], { c: 0, kind: FACE.metal, col: STEEL, top: FACE.metal, occlude: false });
+  mb.quad([[x1 - .005, y + .05, z + .012], [x1 - .005, y + .05, z - .012], [x1 - .005, y1 - .05, z - .012], [x1 - .005, y1 - .05, z + .012]], { kind: FACE.trim, col: DARK });
   mb.occlude([x0, y, z0, x1, y1, z1]);
 }
 /** A yard of stacked containers, one to three high, in seeded colours. */
@@ -47,6 +71,7 @@ export const PORT: ((seed: number) => THREE.BufferGeometry)[] = [
     const mb = new MeshBuilder(), wall = rgb("#cfc6b6"), x = 6.2 * U / 2, z = 3.8 * U / 2, h = 2.2 * U;
     shed(mb, [-x, -z, x, z], h, wall);
     gableRoof(mb, { a0: -x, a1: x, b0: -z, b1: z, y: h, pitch: .22, overhang: .5, axis: "x", roof: rgb("#8f5f4c"), wall });
+    rooflights(mb, x, -z, z, h, .22);
     for (const dx of [-2, 0, 2]) door(mb, dx * U, z, 1.3 * U, 1.5 * U, rgb("#6b7380"));
     box(mb, [-x - .3, 0, z, x + .3, .9, z + 2], { c: .05, kind: FACE.wall, col: rgb("#b9b3a6"), top: FACE.trim, topCol: rgb("#a9a396") });
     bakeOcclusion(mb, { rays: 16, reach: 5 });
@@ -64,6 +89,13 @@ export const PORT: ((seed: number) => THREE.BufferGeometry)[] = [
     rod(mb, [0, top, 3.6 * U], [0, top - 1.8 * U, 3.6 * U], .12, { kind: FACE.trim, col: DARK });
     box(mb, [-.35, top - 1.8 * U - .5, 3.6 * U - .35, .35, top - 1.8 * U, 3.6 * U + .35], { c: .05, kind: FACE.trim, col: DARK, top: FACE.trim, bottom: true });
     for (const z of [-1.2, 1.2]) box(mb, [-2.2 * U, 0, (z - .06) * U, 2.2 * U, .12, (z + .06) * U], { c: 0, kind: FACE.metal, col: STEEL, top: FACE.metal, occlude: false });
+    // Four low bogies and their steel wheels visibly carry the gantry on its rails.
+    mb.detail(() => {
+      for (const [x, z] of legs) {
+        box(mb, [x * U - .9, .2, z * U - .38, x * U + .9, .85, z * U + .38], { c: 0, kind: FACE.metal, col: DARK, top: FACE.metal, occlude: false });
+        for (const dx of [-.48, .48]) mb.frame([x * U + dx, .48, z * U - .42], [1, 0, 0], [0, 0, 1], [0, -1, 0], () => cylinder(mb, { x: 0, z: 0, y0: 0, y1: .84, r: .45, seg: 8, kind: FACE.metal, col: STEEL, top: FACE.metal, bottom: true, occlude: false }));
+      }
+    });
     bakeOcclusion(mb, { rays: 16, reach: 5 });
     return mb.build(1 / U);
   },
@@ -73,6 +105,7 @@ export const PORT: ((seed: number) => THREE.BufferGeometry)[] = [
     const mb = new MeshBuilder(), wall = rgb("#b9c2c9"), x = 6.4 * U / 2, z0 = (-.4 - 1.5) * U, z1 = (-.4 + 1.5) * U, h = 2.8 * U;
     shed(mb, [-x, z0, x, z1], h, wall);
     gableRoof(mb, { a0: -x, a1: x, b0: z0, b1: z1, y: h, pitch: .18, overhang: .5, axis: "x", roof: rgb("#6f7d88"), wall });
+    rooflights(mb, x, z0, z1, h, .18);
     for (const dx of [-1.8, 1.8]) door(mb, dx * U, z1, 1.6 * U, 1.8 * U, rgb("#5a626d"));
     bakeOcclusion(mb, { rays: 16, reach: 5 });
     return mb.build(1 / U);

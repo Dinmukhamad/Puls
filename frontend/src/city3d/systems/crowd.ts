@@ -7,7 +7,7 @@
  * the quality's share are as before.
  */
 import * as THREE from 'three/webgpu';
-import { abs, attribute, color, cos, float, floor, max, mix, nodeObject, normalGeometry, normalLocal, positionGeometry, positionLocal, saturate, sin, step, transformNormal, uniform, uv, vec3, vec4, type ShaderNodeObject } from 'three/tsl';
+import { abs, attribute, color, cos, float, floor, fwidth, max, mix, nodeObject, normalGeometry, normalLocal, positionGeometry, positionLocal, saturate, sin, smoothstep, step, transformNormal, uniform, uv, vec3, vec4, type ShaderNodeObject } from 'three/tsl';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { CityContext } from '../engine/context';
 import { COPY_STRIDE, copyGeometry, copyMatrices, copyMatrix, copyMesh, copyTints } from '../render/copies';
@@ -197,11 +197,11 @@ const HIP = .71, KNEE = .41, ANKLE = .09, SHOULDER = 1.166, ELBOW = .921;
  * forward, the elbow's bend, and the body's rise between two steps (radians; units of the walker's frame).
  */
 const STEP_RATE = 4.6, LEG_SWING = .37, KNEE_BEND = .9, ARM_SWING = .32, ELBOW_BEND = .25, BOB = .006;
-const SHIRTS = ['#ef9270', '#5e91be', '#8a78c8', '#4eaa98', '#eec768', '#647cba'];
+const SHIRTS = ['#b36b53', '#577c99', '#756783', '#507d70', '#c4a16c', '#515e78'];
 const SKINS = ['#efbc96', '#bc845f', '#dfaa83', '#986849', '#f4c8a8', '#cd946e'];
 const TROUSERS = ['#34445a', '#586270', '#5b4e49', '#293d50'];
 const HAIRS = ['#263143', '#3b2a20', '#6b4a2e', '#c9a26a'];
-const SHOES = '#eef1e6';
+const SHOES = '#47494b';
 /**
  * A walker's three numbers: its step's phase; shirt + 6 × skin; trousers + 4 × hair + 16 × long sleeves (a third of
  * the walkers). Shirt, skin and trousers by number as the old walkers had them.
@@ -209,18 +209,23 @@ const SHOES = '#eef1e6';
 export const codes = (actor: number): [number, number, number] => [actor * 2.399 % (Math.PI * 2), actor % 6 + 6 * (actor * 5 % 6), actor % 4 + 4 * (actor * 3 % 4) + (actor * 7 % 3 === 0 ? 16 : 0)];
 
 /**
- * One walker, about 900 triangles: jacket, hips, neck, head, nose and hair standing still, and the thighs, shins,
+ * One walker, about 1,050 triangles: adult head/neck proportions, a tailored jacket with collar, ears, shaped hands,
+ * shoe soles, and the thighs, shins,
  * shoes, upper arms and forearms with their hands as parts of their own (aPart) for the shader to turn.
  */
 export function walkerGeometry(): THREE.BufferGeometry {
   const parts: THREE.BufferGeometry[] = [];
-  const add = (geometry: THREE.BufferGeometry, bone: number, slot: number) => {
+  const add = (geometry: THREE.BufferGeometry, bone: number, slot: number, shade = 1) => {
     const flat = geometry.index ? geometry.toNonIndexed() : geometry;
     if (flat !== geometry) geometry.dispose();
     flat.deleteAttribute('uv');
     const marks = new Float32Array(flat.getAttribute('position').count * 2);
     for (let i = 0; i < marks.length; i += 2) { marks[i] = bone; marks[i + 1] = slot; }
     flat.setAttribute('aPart', new THREE.BufferAttribute(marks, 2));
+    // A little contact shading survives moving joints without another material or a per-frame CPU update.
+    const normal = flat.getAttribute('normal'), shades = new Float32Array(normal.count);
+    for (let i = 0; i < shades.length; i++) shades[i] = shade * (.86 + .14 * (normal.getY(i) * .5 + .5));
+    flat.setAttribute('aShade', new THREE.BufferAttribute(shades, 1));
     parts.push(flat);
   };
   // A shaped jacket and hips, a rounded head with a nose and a cap of hair keep the silhouette readable from afar.
@@ -231,25 +236,44 @@ export function walkerGeometry(): THREE.BufferGeometry {
   jacket.scale(1, 1, .68); jacket.translate(0, 1.02, 0); add(jacket, BONE.body, SLOT.shirt);
   const hips = new THREE.CapsuleGeometry(.125, .13, 2, 8);
   hips.rotateZ(Math.PI / 2); hips.scale(1, .66, .82); hips.translate(0, .769, 0); add(hips, BONE.body, SLOT.trousers);
-  const neck = new THREE.CylinderGeometry(.062, .068, .12, 7, 1, true); neck.translate(0, 1.26, 0); add(neck, BONE.body, SLOT.skin);
-  const head = new THREE.SphereGeometry(.15, 10, 7); head.scale(.93, 1.1, .92); head.translate(0, 1.423, 0); add(head, BONE.body, SLOT.skin);
-  const nose = new THREE.SphereGeometry(.03, 5, 3); nose.scale(.8, .9, 1.1); nose.translate(0, 1.405, .136); add(nose, BONE.body, SLOT.skin);
+  const collar = new THREE.LatheGeometry([new THREE.Vector2(.082, 0), new THREE.Vector2(.066, .035)], 10);
+  collar.scale(1, 1, .84); collar.translate(0, 1.215, .002); add(collar, BONE.body, SLOT.shirt, .72);
+  const neck = new THREE.CylinderGeometry(.049, .055, .145, 7, 1, true); neck.translate(0, 1.3025, 0); add(neck, BONE.body, SLOT.skin);
+  const head = new THREE.SphereGeometry(.11, 10, 7), hp = head.getAttribute('position');
+  for (let i = 0; i < hp.count; i++) {
+    // A slightly narrower jaw and flatter cheeks read as a face rather than a large sphere.
+    const taper = hp.getY(i) < 0 ? 1 + hp.getY(i) / .11 * .16 : 1;
+    hp.setX(i, hp.getX(i) * taper); hp.setZ(i, hp.getZ(i) * (hp.getZ(i) > 0 ? .95 : 1));
+  }
+  head.scale(.94, 1.08, .94); head.translate(0, 1.484, 0); head.computeVertexNormals(); add(head, BONE.body, SLOT.skin);
+  const nose = new THREE.SphereGeometry(.019, 5, 3); nose.scale(.72, .9, 1.2); nose.translate(0, 1.478, .102); add(nose, BONE.body, SLOT.skin);
+  for (const side of [-1, 1]) {
+    const ear = new THREE.SphereGeometry(.016, 6, 4); ear.scale(.55, 1.15, .7); ear.translate(side * .103, 1.48, -.006); add(ear, BONE.body, SLOT.skin, .94);
+  }
   // The hair: a cap tilted back, so it is low on the nape and clear of the forehead.
-  const hair = new THREE.SphereGeometry(.157, 10, 5, 0, Math.PI * 2, 0, Math.PI * .56); hair.rotateX(-.32); hair.scale(.96, 1.07, .94); hair.translate(0, 1.44, -.012); add(hair, BONE.body, SLOT.hair);
+  const hair = new THREE.SphereGeometry(.113, 10, 5, 0, Math.PI * 2, 0, Math.PI * .57); hair.rotateX(-.24); hair.scale(.98, 1.04, .96); hair.translate(0, 1.4908, -.007); add(hair, BONE.body, SLOT.hair);
   for (const side of [-1, 1]) {
     const left = side < 0, x = side * .095, ax = side * .224;
     /** A capsule from joint to joint, its ends rounding over the joints. */
-    const limb = (radius: number, from: number, to: number, bone: number, slot: number, lx: number) => {
+    const limb = (radius: number, from: number, to: number, bone: number, slot: number, lx: number, taper = 1) => {
       const g = new THREE.CapsuleGeometry(radius, Math.max(.01, from - to - radius * 2), 1, 7);
+      const p = g.getAttribute('position'), height = from - to;
+      for (let i = 0; i < p.count; i++) {
+        const share = Math.max(0, Math.min(1, (p.getY(i) + height / 2) / height)), width = taper + (1 - taper) * share;
+        p.setX(i, p.getX(i) * width); p.setZ(i, p.getZ(i) * width);
+      }
+      g.computeVertexNormals();
       g.translate(lx, (from + to) / 2, 0); add(g, bone, slot);
     };
     limb(.068, HIP, KNEE, left ? BONE.thighL : BONE.thighR, SLOT.trousers, x);
     limb(.058, KNEE, ANKLE, left ? BONE.shinL : BONE.shinR, SLOT.trousers, x);
     const shoe = new THREE.CapsuleGeometry(.058, .1, 1, 7); shoe.rotateX(Math.PI / 2); shoe.scale(1, .68, 1); shoe.translate(x, .042, .035);
     add(shoe, left ? BONE.footL : BONE.footR, SLOT.shoes);
+    const sole = new THREE.BoxGeometry(.105, .013, .175); sole.translate(x, .01005, .035);
+    add(sole, left ? BONE.footL : BONE.footR, SLOT.shoes, .55);
     limb(.064, SHOULDER, ELBOW, left ? BONE.armL : BONE.armR, SLOT.shirt, ax);
-    limb(.047, ELBOW, ELBOW - .225, left ? BONE.foreL : BONE.foreR, SLOT.sleeve, ax);
-    const hand = new THREE.SphereGeometry(.05, 6, 4); hand.translate(ax, ELBOW - .238, 0); add(hand, left ? BONE.foreL : BONE.foreR, SLOT.skin);
+    limb(.043, ELBOW, ELBOW - .225, left ? BONE.foreL : BONE.foreR, SLOT.sleeve, ax, .68);
+    const hand = new THREE.SphereGeometry(.045, 6, 4); hand.scale(.72, 1.06, .62); hand.translate(ax, ELBOW - .241, .003); add(hand, left ? BONE.foreL : BONE.foreR, SLOT.skin);
   }
   const geometry = mergeGeometries(parts)!;
   parts.forEach(part => part.dispose());
@@ -306,7 +330,12 @@ export function walkerMaterial(time: Node): THREE.MeshStandardNodeMaterial {
   const first = floor(data.y.add(.5)), second = floor(data.z.add(.5)), sleeves = step(15.5, second);
   const shirt = pick(SHIRTS, first.mod(6)), skin = pick(SKINS, floor(first.add(.5).div(6))), trousers = pick(TROUSERS, second.mod(4)), hair = pick(HAIRS, floor(second.add(.5).div(4)).mod(4));
   const worn = mix(mix(mix(mix(shirt, skin, step(.5, slot)), trousers, step(1.5, slot)), hair, step(2.5, slot)), color(SHOES), step(3.5, slot));
-  material.colorNode = mix(worn, mix(skin, shirt, sleeves), step(4.5, slot));
+  const cloth = float(1).sub(step(.5, slot)).add(step(1.5, slot).sub(step(2.5, slot))).add(step(4.5, slot).mul(sleeves));
+  const skinPart = step(.5, slot).sub(step(1.5, slot)).add(step(4.5, slot).mul(sleeves.oneMinus()));
+  const weaveFade = float(1).sub(smoothstep(.006, .035, fwidth(positionGeometry).length()));
+  const weave = sin(positionGeometry.y.mul(95)).mul(sin(positionGeometry.x.mul(82))).mul(.018).mul(weaveFade).mul(cloth);
+  material.colorNode = mix(worn, mix(skin, shirt, sleeves), step(4.5, slot)).mul(attribute('aShade', 'float')).mul(float(1).add(weave));
+  material.roughnessNode = float(.88).sub(skinPart.mul(.28)).sub(step(2.5, slot).sub(step(3.5, slot)).mul(.13)).sub(step(3.5, slot).sub(step(4.5, slot)).mul(.18));
   material.userData.walkTime = time;
   return material;
 }
