@@ -27,6 +27,8 @@ import { facadeMaterial } from "./facade";
 import { READY_HOUSE_VARIANTS, officeTowerGeometry, readyHouseGeometry } from "./readyBuildings";
 import { LANDMARK_LEVELS, LANDMARK_SIDE, landmarkLevel } from "../world/districtLandmark";
 import { landmarkGeometry } from "./districtLandmark";
+import { PAINTS, PARKED_TAXI_SCALE, vehicleGeometry, vehicleMaterial, type VehicleName } from "./vehicles";
+import type { SkyLook } from "../render/sky";
 
 /** A model's mesh. `matrix` places it inside the model and `colors` tint its parts. */
 export interface LodLevel { parts: ModelPart[]; matrix?: THREE.Matrix4; colors?: THREE.Color[] }
@@ -55,8 +57,10 @@ const LIGHT_OFFICES = ["c-building-a", "c-building-c", "c-building-d", "c-buildi
 const INDUSTRY = ["i-building-g", "i-building-h", "i-building-i", "i-building-g", "i-water-tower", "i-building-h"];
 /** Parked cars per car park, as in the old city: green-belt lots behind the depot and the CRM centre, the truck yard. */
 const PARKED = [["taxi", "delivery", "van", "taxi", "truck", "suv"], ["sedan", "suv", "hatchback-sports", "taxi", "police", "sedan"], ["truck", "delivery", "van", "truck"]];
-/** Car Kit vehicles are 1.5 units wide; this makes them fit a one-unit lane. */
+/** The vehicles are built 1.5 units wide, as the Car Kit's were; this makes them fit a one-unit lane. */
 const CAR_SCALE = .5;
+/** Parked cars of one model take its paints in this stride along the stalls (prime to every palette's length). */
+const CAR_TINT_STEP = 7;
 /** Fitted models never grow beyond this, so a small model on a big lot does not turn into a giant. */
 const MAX_FIT = 2.8;
 /** Top of the ground and of the parking pads. */
@@ -108,8 +112,11 @@ export async function loadCatalogueModels(lodUrls: string[] = [], options: Model
   return models;
 }
 
-/** Takes ownership of `models`: they are disposed with the catalogue. Windows glow with `night.level` (ctx.night). */
-export function createCatalogue(models: Map<string, Model>, night: Night = createNight()): Catalogue {
+/**
+ * Takes ownership of `models`: they are disposed with the catalogue. Windows glow with `night.level` (ctx.night);
+ * parked cars mirror `look`, the sky of the moment (render/sky.ts skyLook), or the day's without it.
+ */
+export function createCatalogue(models: Map<string, Model>, night: Night = createNight(), look: SkyLook | null = null): Catalogue {
   const owned = { geometries: new Set<THREE.BufferGeometry>(), materials: new Set<THREE.Material>(), textures: new Set<THREE.Texture>() };
   const own = <T extends THREE.BufferGeometry | THREE.Material | THREE.Texture>(item: T): T => {
     if ((item as THREE.Texture).isTexture) owned.textures.add(item as THREE.Texture);
@@ -155,8 +162,14 @@ export function createCatalogue(models: Map<string, Model>, night: Night = creat
   }
   const list = (names: string[]) => names.map(name => kenney(name)).filter((m): m is CatalogueModel => !!m);
   const houses = list(HOUSES), offices = list(LIGHT_OFFICES), industry = list(INDUSTRY);
-  const cars = new Map<string, CatalogueModel>();
-  for (const name of new Set(PARKED.flat())) { const car = kenney(name, false); if (car) cars.set(name, car); }
+  // The car parks' cars (PARKED): the city's own vehicles (assets/vehicles.ts) in one material, each model's paints
+  // taking turns along the stalls, the taxi at the old kit taxi's size. Their shapes live for the session (not owned).
+  const vehicles = own(vehicleMaterial(look)), cars = new Map<string, CatalogueModel>();
+  for (const name of new Set(PARKED.flat()) as Set<VehicleName>) {
+    const geometry = vehicleGeometry(name), bounds = geometry.boundingBox!.clone(), scale = name === "taxi" ? PARKED_TAXI_SCALE : 1;
+    cars.set(name, add({ id: name, lods: one({ parts: [{ geometry, material: vehicles, castShadow: true }] }), bounds,
+      base: new THREE.Matrix4().makeScale(scale, scale, scale).multiply(footprint(bounds)), tints: PAINTS[name].map(c => new THREE.Color(c)), tintStep: CAR_TINT_STEP }));
+  }
   // The districts' ready houses and office towers (world/familyHouses.ts, world/officeBuildings.ts): built in code
   // (assets/readyBuildings.ts), every house in both finishes, with one facade material that lights their windows.
   const facade = own(facadeMaterial(nightLevel as never));

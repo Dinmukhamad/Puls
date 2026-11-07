@@ -124,36 +124,35 @@ test('HTTP errors and already cancelled loads do not start decoding or leave a d
   assert.equal(f.downloads.length, 1); assert.equal(f.parses.length, 0); assert.equal(f.timers.size, 0);
 });
 
-test('generated full kits load once with their base models and named LODs; source kits are not downloaded', async t => {
+test('the generated full kit loads once with its base models and named LODs; the source kit is not downloaded', async t => {
   const f = fixture(t);
   f.state.download = url => {
-    const data = new Uint8Array(24); data[0] = url === '/preferred/city-models.glb' ? 1 : url === '/preferred/vehicles.glb' ? 2 : 3;
+    const data = new Uint8Array(24); data[0] = url === '/preferred/city-models.glb' ? 1 : 3;
     return Promise.resolve({ ok: true, arrayBuffer: async () => data.buffer });
   };
   f.state.decode = bytes => {
-    const marker = new Uint8Array(bytes)[0], kit = source(), name = marker === 1 ? 'building' : marker === 2 ? 'taxi' : 'extra';
+    const marker = new Uint8Array(bytes)[0], kit = source(), name = marker === 1 ? 'building' : 'extra';
     kit.gltf.scene.name = name; kit.gltf.scenes[1].name = `${name}__lod1`;
     const lod2 = new THREE.Group(); lod2.name = `${name}__lod2`; lod2.add(new THREE.Mesh(kit.geometry, kit.material)); kit.gltf.scenes.push(lod2);
     return Promise.resolve(kit.gltf);
   };
-  const models = await loadCatalogueModels(['/preferred/city-models.glb', '/preferred/vehicles.glb']);
-  for (const name of ['building', 'taxi']) for (const suffix of ['', '__lod1', '__lod2']) assert.ok(models.has(`${name}${suffix}`), `${name}${suffix} survives generated kit loading`);
-  assert.equal(f.downloads.length, 2, 'only the two full kits are downloaded: the ready houses and offices are built in code');
-  assert.equal(f.downloads.some(download => /\/pages\/city\/models\/(?:city-models|vehicles)\.glb$/.test(download.url)), false);
+  const models = await loadCatalogueModels(['/preferred/city-models.glb']);
+  for (const suffix of ['', '__lod1', '__lod2']) assert.ok(models.has(`building${suffix}`), `building${suffix} survives generated kit loading`);
+  assert.equal(f.downloads.length, 1, 'only the building kit is downloaded: the ready houses, offices and the vehicles are built in code');
+  assert.equal(f.downloads.some(download => /\/pages\/city\/models\/city-models\.glb$/.test(download.url) || /vehicles\.glb$/.test(download.url)), false);
   disposeModels(models);
 });
 
-test('a world without kit buildings never downloads the building kit, neither generated nor source', async t => {
+test('a world without kit buildings downloads no model at all; other worlds load only the building kit', async t => {
   const f = fixture(t);
   f.state.download = () => Promise.resolve({ ok: true, arrayBuffer: async () => new ArrayBuffer(24) });
   // Fresh addresses: files fetched by earlier tests are served from the byte cache.
-  const models = await loadCatalogueModels(['/kitless/city-models.glb', '/kitless/vehicles.glb'], { kits: false });
-  const urls = f.downloads.map(download => download.url);
-  assert.ok(urls.includes('/kitless/vehicles.glb'), urls.join(', '));
-  assert.equal(urls.some(url => /city-models\.glb$/.test(url)), false, urls.join(', '));
+  const models = await loadCatalogueModels(['/kitless/city-models.glb'], { kits: false });
+  assert.deepEqual(f.downloads.map(download => download.url), [], 'the vehicles are built in code, and so is every building of this world');
+  assert.equal(models.size, 0);
   disposeModels(models);
-  const withKits = await loadCatalogueModels(['/kits/city-models.glb', '/kits/vehicles.glb']);
-  assert.ok(f.downloads.some(download => download.url === '/kits/city-models.glb'), 'other worlds still load the kit');
+  const withKits = await loadCatalogueModels(['/kits/city-models.glb']);
+  assert.deepEqual(f.downloads.map(download => download.url), ['/kits/city-models.glb'], 'the five-island map still loads the kit');
   disposeModels(withKits);
 });
 
@@ -169,7 +168,8 @@ test('a missing generated kit falls back to the source within the same fifteen-s
   assert.ok(fallback, 'a fast generated-kit failure tries its source');
   assert.deepEqual([...f.timers.values()].map(timer => timer.delay), [6000], 'the fallback has the remaining budget, never another fifteen seconds');
   f.expire(); const models = await pending;
-  assert.equal(fallback.signal.aborted, true); assert.equal(f.state.now, MODEL_LOAD_TIMEOUT_MS); assert.ok(models.size > 0);
+  // The kit was the only download (the vehicles are built in code): the catalogue settles without it.
+  assert.equal(fallback.signal.aborted, true); assert.equal(f.state.now, MODEL_LOAD_TIMEOUT_MS); assert.equal(models.size, 0);
   disposeModels(models);
 });
 

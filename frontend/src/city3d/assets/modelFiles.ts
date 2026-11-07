@@ -6,22 +6,23 @@
  * imports it without the engine.
  */
 import modelsUrl from "../../pages/city/models/city-models.glb?url";
-import vehiclesUrl from "../../pages/city/models/vehicles.glb?url";
 
-/** Generated kits with their LOD levels (public/city/v1), preferred over the sources bundled with the code. */
-export const lodFiles = () => ["city/v1/city-models.glb", "city/v1/vehicles.glb"].map(path => `${import.meta.env.BASE_URL}${path}`);
+/**
+ * The generated building kit (public/city/v1), preferred over the source bundled with the code. The vehicles are
+ * built in code (assets/vehicles.ts): no download for them.
+ */
+export const lodFiles = () => ["city/v1/city-models.glb"].map(path => `${import.meta.env.BASE_URL}${path}`);
 
 /**
  * The catalogue's files, in the order it loads them, and the bundled source to try when a generated file fails.
- * `kits: false` leaves out the building kit (houses, offices, industry): only the five-island map places those.
+ * `kits: false` leaves out the building kit (houses, offices, industry): only the five-island map places those, and
+ * a world without them downloads nothing.
  */
 export function catalogueFiles(lodUrls: readonly string[] = [], kits = true) {
   const preferredModels = lodUrls.find(url => /(?:^|\/)city-models\.glb(?:[?#].*)?$/.test(url));
-  const preferredVehicles = lodUrls.find(url => /(?:^|\/)vehicles\.glb(?:[?#].*)?$/.test(url));
   const fallbacks = new Map<string, string>();
   if (preferredModels && preferredModels !== modelsUrl) fallbacks.set(preferredModels, modelsUrl);
-  if (preferredVehicles && preferredVehicles !== vehiclesUrl) fallbacks.set(preferredVehicles, vehiclesUrl);
-  const urls = [...new Set([...(kits ? [preferredModels ?? modelsUrl] : []), preferredVehicles ?? vehiclesUrl, ...lodUrls.filter(url => kits || url !== preferredModels)])];
+  const urls = [...new Set([...(kits ? [preferredModels ?? modelsUrl] : []), ...lodUrls.filter(url => kits || url !== preferredModels)])];
   return { urls, fallbacks };
 }
 

@@ -21,7 +21,7 @@ import { lodFiles } from "./assets/modelFiles";
 import { createInstancePools, type InstancePools } from "./render/instances";
 import { createTerrain, type Terrain } from "./render/terrain";
 import { createWater, type Water } from "./render/water";
-import { createSky, type Sky } from "./render/sky";
+import { createSky, skyLook, type Sky } from "./render/sky";
 import { createPost, type Post } from "./render/post";
 import { createDistricts, type Districts } from "./systems/districts";
 import { createMascot, type Mascot } from "./systems/mascot";
@@ -299,12 +299,11 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
       options.onProgress?.(.65);
       // New materials join the scene: nothing is drawn until their shaders are built too.
       placing = true; drawing = false;
-      const catalogue = createCatalogue(models, night);
+      const catalogue = createCatalogue(models, night, skyLook(scene));
       parts.catalogue = catalogue;
       parts.pools = createInstancePools(ctx, catalogue, world.placements);
       parts.plots.setCatalogue(catalogue);
-      traffic.setVehicles(models);
-      parts.departments = createDepartmentWorld(ctx, catalogue, models, id => options.onWorldPick?.(id), pick => options.onEstate?.(pick));
+      parts.departments = createDepartmentWorld(ctx, catalogue, id => options.onWorldPick?.(id), pick => options.onEstate?.(pick));
       if (departmentConfig) parts.departments.setConfig(departmentConfig);
       for (const city of ["support", "sales"] as const) if (estateViews[city] !== undefined) parts.departments.setEstates(city, estateViews[city] ?? null);
       parts.departments.setBuild(buildView);

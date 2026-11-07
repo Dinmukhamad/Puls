@@ -212,57 +212,6 @@
           "lod2": 12
         }
       }
-    },
-    "vehicles.glb": {
-      "bytes": 405904,
-      "materials": 1,
-      "models": {
-        "sedan": {
-          "lod0": 2032,
-          "lod1": 1214,
-          "lod2": 280
-        },
-        "taxi": {
-          "lod0": 2072,
-          "lod1": 1212,
-          "lod2": 12
-        },
-        "suv": {
-          "lod0": 2474,
-          "lod1": 1276,
-          "lod2": 352
-        },
-        "van": {
-          "lod0": 2082,
-          "lod1": 1102,
-          "lod2": 12
-        },
-        "delivery": {
-          "lod0": 2476,
-          "lod1": 1188,
-          "lod2": 12
-        },
-        "truck": {
-          "lod0": 2082,
-          "lod1": 1074,
-          "lod2": 12
-        },
-        "hatchback-sports": {
-          "lod0": 2088,
-          "lod1": 1108,
-          "lod2": 12
-        },
-        "ambulance": {
-          "lod0": 2804,
-          "lod1": 1516,
-          "lod2": 12
-        },
-        "police": {
-          "lod0": 2304,
-          "lod1": 1318,
-          "lod2": 12
-        }
-      }
     }
   }
 }

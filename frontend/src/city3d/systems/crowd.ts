@@ -1,9 +1,16 @@
-/** A bounded, instanced walking population for the city: every body part is one copy mesh (render/copies.ts). */
+/**
+ * A bounded walking population for the city (docs/CITY_V4.md, stage 4): every walker is a copy of one body
+ * (walkerGeometry) in one draw call, and the step is drawn in the vertex shader (walkerMaterial): the thighs, shins and
+ * feet, the upper arms and forearms are parts of the body that it turns about their joints, from a time uniform and
+ * each walker's phase, with no skeleton and no work on the CPU but one matrix a walker a frame. The clothes come from
+ * small palettes in the shader, by three numbers per copy. The routes, the population, the speeds, the culling and
+ * the quality's share are as before.
+ */
 import * as THREE from 'three/webgpu';
-import { saturate, uv } from 'three/tsl';
+import { abs, attribute, color, cos, float, floor, max, mix, nodeObject, normalGeometry, normalLocal, positionGeometry, positionLocal, saturate, sin, step, transformNormal, uniform, uv, vec3, vec4, type ShaderNodeObject } from 'three/tsl';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { CityContext } from '../engine/context';
-import { COPY_STRIDE, copyMatrices, copyMesh, copyTints } from '../render/copies';
+import { COPY_STRIDE, copyGeometry, copyMatrices, copyMatrix, copyMesh, copyTints } from '../render/copies';
 import { insideParking, segmentDistance } from '../world/generate';
 import type { Point, Route, WorldData } from '../world/types';
 import { DISTRICT_FACING } from '../engine/camera';
@@ -178,8 +185,131 @@ function islandPaving(routes: CrowdRoute[]) {
 }
 
 export interface Crowd { setEnabled(enabled: boolean): void; dispose(): void }
-/** One body part of every walker: its copy mesh with the copies' matrices and colours. */
-interface Batch { mesh: ReturnType<typeof copyMesh>; matrices: THREE.InstancedInterleavedBuffer; tints: THREE.InstancedBufferAttribute }
+
+/** Parts of a walker's body (aPart.x): the still body, and the limbs the vertex shader turns about their joints. */
+const BONE = { body: 0, thighL: 1, shinL: 2, footL: 3, thighR: 4, shinR: 5, footR: 6, armL: 7, foreL: 8, armR: 9, foreR: 10 } as const;
+/** What a vertex wears (aPart.y): the walker's shirt, skin, trousers or hair, the shoes, or a forearm (sleeve or skin). */
+const SLOT = { shirt: 0, skin: 1, trousers: 2, hair: 3, shoes: 4, sleeve: 5 } as const;
+/** The joints' heights in the walker's frame (feet on y = 0, facing +z), as the old jointed walkers had them. */
+const HIP = .71, KNEE = .41, ANKLE = .09, SHOULDER = 1.166, ELBOW = .921;
+/**
+ * The step: radians of its cycle a second (as before), the legs' and arms' swing, the knee's bend while the leg swings
+ * forward, the elbow's bend, and the body's rise between two steps (radians; units of the walker's frame).
+ */
+const STEP_RATE = 4.6, LEG_SWING = .37, KNEE_BEND = .9, ARM_SWING = .32, ELBOW_BEND = .25, BOB = .006;
+const SHIRTS = ['#ef9270', '#5e91be', '#8a78c8', '#4eaa98', '#eec768', '#647cba'];
+const SKINS = ['#efbc96', '#bc845f', '#dfaa83', '#986849', '#f4c8a8', '#cd946e'];
+const TROUSERS = ['#34445a', '#586270', '#5b4e49', '#293d50'];
+const HAIRS = ['#263143', '#3b2a20', '#6b4a2e', '#c9a26a'];
+const SHOES = '#eef1e6';
+/**
+ * A walker's three numbers: its step's phase; shirt + 6 × skin; trousers + 4 × hair + 16 × long sleeves (a third of
+ * the walkers). Shirt, skin and trousers by number as the old walkers had them.
+ */
+export const codes = (actor: number): [number, number, number] => [actor * 2.399 % (Math.PI * 2), actor % 6 + 6 * (actor * 5 % 6), actor % 4 + 4 * (actor * 3 % 4) + (actor * 7 % 3 === 0 ? 16 : 0)];
+
+/**
+ * One walker, about 900 triangles: jacket, hips, neck, head, nose and hair standing still, and the thighs, shins,
+ * shoes, upper arms and forearms with their hands as parts of their own (aPart) for the shader to turn.
+ */
+export function walkerGeometry(): THREE.BufferGeometry {
+  const parts: THREE.BufferGeometry[] = [];
+  const add = (geometry: THREE.BufferGeometry, bone: number, slot: number) => {
+    const flat = geometry.index ? geometry.toNonIndexed() : geometry;
+    if (flat !== geometry) geometry.dispose();
+    flat.deleteAttribute('uv');
+    const marks = new Float32Array(flat.getAttribute('position').count * 2);
+    for (let i = 0; i < marks.length; i += 2) { marks[i] = bone; marks[i + 1] = slot; }
+    flat.setAttribute('aPart', new THREE.BufferAttribute(marks, 2));
+    parts.push(flat);
+  };
+  // A shaped jacket and hips, a rounded head with a nose and a cap of hair keep the silhouette readable from afar.
+  const jacket = new THREE.LatheGeometry([
+    new THREE.Vector2(.145, -.205), new THREE.Vector2(.16, -.19), new THREE.Vector2(.205, .10), new THREE.Vector2(.19, .17),
+    new THREE.Vector2(.095, .215), new THREE.Vector2(0, .215),
+  ], 10);
+  jacket.scale(1, 1, .68); jacket.translate(0, 1.02, 0); add(jacket, BONE.body, SLOT.shirt);
+  const hips = new THREE.CapsuleGeometry(.125, .13, 2, 8);
+  hips.rotateZ(Math.PI / 2); hips.scale(1, .66, .82); hips.translate(0, .769, 0); add(hips, BONE.body, SLOT.trousers);
+  const neck = new THREE.CylinderGeometry(.062, .068, .12, 7, 1, true); neck.translate(0, 1.26, 0); add(neck, BONE.body, SLOT.skin);
+  const head = new THREE.SphereGeometry(.15, 10, 7); head.scale(.93, 1.1, .92); head.translate(0, 1.423, 0); add(head, BONE.body, SLOT.skin);
+  const nose = new THREE.SphereGeometry(.03, 5, 3); nose.scale(.8, .9, 1.1); nose.translate(0, 1.405, .136); add(nose, BONE.body, SLOT.skin);
+  // The hair: a cap tilted back, so it is low on the nape and clear of the forehead.
+  const hair = new THREE.SphereGeometry(.157, 10, 5, 0, Math.PI * 2, 0, Math.PI * .56); hair.rotateX(-.32); hair.scale(.96, 1.07, .94); hair.translate(0, 1.44, -.012); add(hair, BONE.body, SLOT.hair);
+  for (const side of [-1, 1]) {
+    const left = side < 0, x = side * .095, ax = side * .224;
+    /** A capsule from joint to joint, its ends rounding over the joints. */
+    const limb = (radius: number, from: number, to: number, bone: number, slot: number, lx: number) => {
+      const g = new THREE.CapsuleGeometry(radius, Math.max(.01, from - to - radius * 2), 1, 7);
+      g.translate(lx, (from + to) / 2, 0); add(g, bone, slot);
+    };
+    limb(.068, HIP, KNEE, left ? BONE.thighL : BONE.thighR, SLOT.trousers, x);
+    limb(.058, KNEE, ANKLE, left ? BONE.shinL : BONE.shinR, SLOT.trousers, x);
+    const shoe = new THREE.CapsuleGeometry(.058, .1, 1, 7); shoe.rotateX(Math.PI / 2); shoe.scale(1, .68, 1); shoe.translate(x, .042, .035);
+    add(shoe, left ? BONE.footL : BONE.footR, SLOT.shoes);
+    limb(.064, SHOULDER, ELBOW, left ? BONE.armL : BONE.armR, SLOT.shirt, ax);
+    limb(.047, ELBOW, ELBOW - .225, left ? BONE.foreL : BONE.foreR, SLOT.sleeve, ax);
+    const hand = new THREE.SphereGeometry(.05, 6, 4); hand.translate(ax, ELBOW - .238, 0); add(hand, left ? BONE.foreL : BONE.foreR, SLOT.skin);
+  }
+  const geometry = mergeGeometries(parts)!;
+  parts.forEach(part => part.dispose());
+  geometry.computeBoundingSphere();
+  return geometry;
+}
+
+type Node = ShaderNodeObject<THREE.Node>;
+/** Turns a point about the axis along x through height y (z = 0) by `angle` (positive: the end below swings back). */
+const turnAbout = (p: Node, y: Node, angle: Node): Node => {
+  const c = cos(angle), s = sin(angle), dy = p.y.sub(y);
+  return vec3(p.x, y.add(dy.mul(c)).sub(p.z.mul(s)), dy.mul(s).add(p.z.mul(c)));
+};
+const turnNormal = (n: Node, angle: Node): Node => { const c = cos(angle), s = sin(angle); return vec3(n.x, n.y.mul(c).sub(n.z.mul(s)), n.y.mul(s).add(n.z.mul(c))); };
+
+/**
+ * The step, in the vertex stage: each side's cycle (the right half a cycle behind the left) swings the thigh, and the
+ * shin and foot with it; the knee bends while the leg swings forward and straightens to stand; the arms swing against
+ * their side's leg with the elbows a little bent; the body rises a little between steps. Then the copy's matrix
+ * places the walker, as render/copies.ts places a copy.
+ */
+class Step extends THREE.Node {
+  constructor(private readonly time: Node) { super('void'); }
+  setup() {
+    const part = attribute('aPart', 'vec2'), data = attribute('copyTint', 'vec3'), bone = part.x;
+    const is = (k: number): Node => float(1).sub(step(.5, abs(bone.sub(k))));
+    const left = is(BONE.thighL).add(is(BONE.shinL)).add(is(BONE.footL)).add(is(BONE.armL)).add(is(BONE.foreL));
+    const thigh = is(BONE.thighL).add(is(BONE.thighR)), shin = is(BONE.shinL).add(is(BONE.shinR)), foot = is(BONE.footL).add(is(BONE.footR));
+    const upper = is(BONE.armL).add(is(BONE.armR)), fore = is(BONE.foreL).add(is(BONE.foreR));
+    const phase = this.time.mul(STEP_RATE).add(data.x), cycle = phase.add(left.oneMinus().mul(Math.PI)), swing = sin(cycle);
+    const legAngle = swing.mul(LEG_SWING), bend = max(cos(cycle).negate(), 0).mul(KNEE_BEND), armAngle = swing.mul(-ARM_SWING);
+    // First about the knee or the elbow, then about the hip or the shoulder.
+    const first = shin.mul(bend).sub(fore.mul(ELBOW_BEND)), firstY = mix(float(KNEE), float(ELBOW), fore);
+    const second = thigh.add(shin).mul(legAngle).add(upper.add(fore).mul(armAngle)), secondY = mix(float(HIP), float(SHOULDER), upper.add(fore));
+    // The shoes keep level and follow their ankles.
+    const rest = vec3(0, ANKLE, 0), ankle = turnAbout(turnAbout(rest, float(KNEE), bend), float(HIP), legAngle);
+    const bob = cos(phase.mul(2)).add(1).mul(BOB);
+    const placed = turnAbout(turnAbout(positionGeometry, firstY, first), secondY, second).add(ankle.sub(rest).mul(foot)).add(vec3(0, bob, 0));
+    positionLocal.assign(copyMatrix.mul(vec4(placed, 1)).xyz);
+    normalLocal.assign(transformNormal(turnNormal(turnNormal(normalGeometry, first), second), copyMatrix));
+  }
+}
+class WalkerMaterial extends THREE.MeshStandardNodeMaterial {
+  step: Node | null = null;
+  setupPosition(builder: THREE.NodeBuilder) { this.step?.toStack(); return super.setupPosition(builder); }
+}
+/** Picks colour `index` (a whole number) of a list in the shader. */
+const pick = (list: string[], index: Node): Node => list.slice(1).reduce<Node>((acc, hex, k) => mix(acc, color(hex), step(k + .5, index)), color(list[0]));
+/** The walkers' material: the step (Step) and the clothes by the copy's numbers (`codes`); `time` drives the step. */
+export function walkerMaterial(time: Node): THREE.MeshStandardNodeMaterial {
+  const material = new WalkerMaterial(); material.roughness = .88; material.metalness = 0;
+  material.step = nodeObject(new Step(time));
+  const data = attribute('copyTint', 'vec3'), slot = attribute('aPart', 'vec2').y;
+  const first = floor(data.y.add(.5)), second = floor(data.z.add(.5)), sleeves = step(15.5, second);
+  const shirt = pick(SHIRTS, first.mod(6)), skin = pick(SKINS, floor(first.add(.5).div(6))), trousers = pick(TROUSERS, second.mod(4)), hair = pick(HAIRS, floor(second.add(.5).div(4)).mod(4));
+  const worn = mix(mix(mix(mix(shirt, skin, step(.5, slot)), trousers, step(1.5, slot)), hair, step(2.5, slot)), color(SHOES), step(3.5, slot));
+  material.colorNode = mix(worn, mix(skin, shirt, sleeves), step(4.5, slot));
+  material.userData.walkTime = time;
+  return material;
+}
 
 export function createCrowd(ctx: CityContext): Crowd {
   const routes = createCrowdRoutes(ctx.world);
@@ -203,136 +333,39 @@ export function createCrowd(ctx: CityContext): Crowd {
   const count = people.length;
   const group = new THREE.Group(); group.name = 'city-crowd'; ctx.scene.add(group);
   group.userData.population = count;
-  const geometries = new Set<THREE.BufferGeometry>(), materials = new Set<THREE.Material>(), batches: Batch[] = [];
-  const root = new THREE.Object3D(), local = new THREE.Object3D(), matrix = new THREE.Matrix4(), color = new THREE.Color();
+  const geometries = new Set<THREE.BufferGeometry>(), materials = new Set<THREE.Material>();
   let disposed = false, enabled = !ctx.reducedMotion, dirty = true, clock = 0, density = ctx.quality.crowd;
-  function batch(name: string, geometry: THREE.BufferGeometry, material: THREE.Material, instances: number): Batch {
-    const matrices = copyMatrices(instances).setUsage(THREE.DynamicDrawUsage), tints = copyTints(instances);
-    const mesh = copyMesh(geometry, material, matrices, tints);
-    mesh.name = name; mesh.castShadow = false; mesh.receiveShadow = true; group.add(mesh);
-    geometries.add(geometry); materials.add(material);
-    const part = { mesh, matrices, tints }; batches.push(part);
-    return part;
-  }
-  const setMatrixAt = (part: Batch, index: number, value: THREE.Matrix4) => value.toArray(part.matrices.array as Float32Array, index * COPY_STRIDE);
-  const setColorAt = (part: Batch, index: number, value: THREE.Color) => value.toArray(part.tints.array as Float32Array, index * 3);
   const pavingGeometry = islandPaving(routes), pavingMaterial = new THREE.MeshStandardNodeMaterial({ color: '#dfd5c0', roughness: .92 });
   const paving = new THREE.Mesh(pavingGeometry, pavingMaterial); paving.name = 'city-crowd-pavement'; paving.receiveShadow = true; group.add(paving);
   geometries.add(pavingGeometry); materials.add(pavingMaterial);
-  const shirtMaterial = new THREE.MeshStandardNodeMaterial({ color: '#ffffff', roughness: .88 });
-  const skinMaterial = new THREE.MeshStandardNodeMaterial({ color: '#ffffff', roughness: .9 });
-  const trousersMaterial = new THREE.MeshStandardNodeMaterial({ color: '#ffffff', roughness: .94 });
-  const hairMaterial = new THREE.MeshStandardNodeMaterial({ color: '#263143', roughness: .98 });
-  const shoeMaterial = new THREE.MeshStandardNodeMaterial({ color: '#eef1e6', roughness: .8 });
-  const shirts = ['#ef9270', '#5e91be', '#8a78c8', '#4eaa98', '#eec768', '#647cba'];
-  const skinTones = ['#efbc96', '#bc845f', '#dfaa83', '#986849', '#f4c8a8', '#cd946e'];
-  const trouserColors = ['#34445a', '#586270', '#5b4e49', '#293d50'];
 
-  function joined(parts: THREE.BufferGeometry[]) {
-    const normalized = parts.map(geometry => {
-      geometry.deleteAttribute('uv');
-      return geometry.index ? geometry.toNonIndexed() : geometry;
-    });
-    const geometry = mergeGeometries(normalized)!;
-    normalized.forEach((part, index) => {
-      part.dispose();
-      if (part !== parts[index]) parts[index].dispose();
-    });
-    return geometry;
-  }
-
-  // A shaped jacket, rounded head with nose and eyes, hair cap, hips and
-  // articulated legs keep silhouettes readable at the island's camera scale.
-  const jacket = new THREE.LatheGeometry([
-    new THREE.Vector2(.145, -.205), new THREE.Vector2(.16, -.19),
-    new THREE.Vector2(.205, .10), new THREE.Vector2(.19, .17),
-    new THREE.Vector2(.095, .215), new THREE.Vector2(0, .215),
-  ], 10);
-  jacket.scale(1, 1, .68); jacket.translate(0, 1.02, 0);
-  const torso = batch('walker-jackets', jacket, shirtMaterial, count);
-
-  const head = new THREE.SphereGeometry(.153, 10, 8);
-  head.scale(.93, 1.1, .9); head.translate(0, 1.423, 0);
-  const neck = new THREE.CylinderGeometry(.064, .068, .12, 8);
-  neck.translate(0, 1.26, 0);
-  const nose = new THREE.SphereGeometry(.032, 6, 4);
-  nose.scale(.8, .95, 1.15); nose.translate(0, 1.405, .136);
-  const heads = batch('walker-heads', joined([head, neck, nose]), skinMaterial, count);
-
-  const hair = new THREE.SphereGeometry(.155, 10, 6, 0, TAU, 0, Math.PI * .51);
-  hair.scale(.96, 1.07, .93); hair.translate(0, 1.444, -.008);
-  const eyes = [-1, 1].map(side => {
-    const eye = new THREE.SphereGeometry(.012, 5, 4);
-    eye.translate(side * .053, 1.441, .127);
-    return eye;
-  });
-  const hairstyles = batch('walker-hair-eyes', joined([hair, ...eyes]), hairMaterial, count);
-  const hips = new THREE.CapsuleGeometry(.125, .13, 2, 8);
-  hips.rotateZ(Math.PI / 2); hips.scale(1, .66, .82); hips.translate(0, .769, 0);
-  const waists = batch('walker-waists', hips, trousersMaterial, count);
-
-  // Reuse each capsule geometry across a whole population; matrix scale
-  // supplies limb length while keeping the original rounded end caps.
-  const sleeveGeometry = new THREE.CapsuleGeometry(.068, .204, 2, 8);
-  const forearmGeometry = new THREE.CapsuleGeometry(.047, .166, 2, 8);
-  const legGeometry = new THREE.CapsuleGeometry(.064, .192, 2, 8);
-  const handGeometry = new THREE.SphereGeometry(.052, 8, 6);
-  const shoeGeometry = new THREE.CapsuleGeometry(.063, .11, 2, 8);
-  shoeGeometry.rotateX(Math.PI / 2); shoeGeometry.scale(1, .7, 1);
-  const upperArms = batch('walker-sleeves', sleeveGeometry, shirtMaterial, count * 2);
-  const forearms = batch('walker-forearms', forearmGeometry, skinMaterial, count * 2);
-  const hands = batch('walker-hands', handGeometry, skinMaterial, count * 2);
-  const legs = batch('walker-legs', legGeometry, trousersMaterial, count * 4);
-  const shoes = batch('walker-shoes', shoeGeometry, shoeMaterial, count * 2);
-  const staticBodies = [torso, heads, hairstyles, waists];
-
-  for (let index = 0; index < count; index++) {
-    const shirt = shirts[index % shirts.length];
-    const skin = skinTones[(index * 5) % skinTones.length];
-    const trouser = trouserColors[index % trouserColors.length];
-    setColorAt(torso, index, color.set(shirt));
-    setColorAt(heads, index, color.set(skin));
-    setColorAt(waists, index, color.set(trouser));
-    for (let side = 0; side < 2; side++) {
-      setColorAt(upperArms, index * 2 + side, color.set(shirt));
-      setColorAt(forearms, index * 2 + side, color.set(skin));
-      setColorAt(hands, index * 2 + side, color.set(skin));
-      setColorAt(legs, index * 4 + side * 2, color.set(trouser));
-      setColorAt(legs, index * 4 + side * 2 + 1, color.set(trouser));
-    }
-  }
-
-  function place(part: Batch, index: number, x: number, y: number, z: number, pitch = 0, lengthScale = 1) {
-    local.position.set(x, y, z);
-    local.rotation.set(pitch, 0, 0);
-    local.scale.set(1, lengthScale, 1);
-    local.updateMatrix();
-    matrix.multiplyMatrices(root.matrix, local.matrix);
-    setMatrixAt(part, index, matrix);
-  }
+  // Every walker in one draw call: one body whose limbs the vertex shader swings (walkerGeometry, walkerMaterial); per
+  // copy its place and size (the matrices) and its step's phase and clothes (the copy's three numbers, `codes`).
+  const body = walkerGeometry(), time = uniform(0);
+  const matrices = copyMatrices(count).setUsage(THREE.DynamicDrawUsage), details = copyTints(count).setUsage(THREE.DynamicDrawUsage);
+  const walkers = new THREE.Mesh(copyGeometry(body, matrices, details), walkerMaterial(time as unknown as Node));
+  walkers.name = 'city-crowd-walkers'; walkers.frustumCulled = false; walkers.matrixAutoUpdate = false;
+  walkers.castShadow = false; walkers.receiveShadow = true; group.add(walkers);
+  geometries.add(body); geometries.add(walkers.geometry); materials.add(walkers.material);
 
   // Moving people never enter the static sun map: a soft contact shadow is
   // updated with each logical resident, so pausing and culling leave no ghosts.
   const blobMaterial = new THREE.MeshBasicNodeMaterial({ color: '#273e35', transparent: true, depthWrite: false });
   blobMaterial.opacityNode = saturate(uv().sub(.5).length().mul(2).oneMinus()).mul(.25);
-  const shadows = batch('city-crowd-contact-shadows', new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), blobMaterial, count);
-  shadows.mesh.receiveShadow = false;
+  const blobGeometry = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), blobMatrices = copyMatrices(count).setUsage(THREE.DynamicDrawUsage);
+  const shadows = copyMesh(blobGeometry, blobMaterial, blobMatrices, copyTints(count));
+  shadows.name = 'city-crowd-contact-shadows'; shadows.castShadow = false; shadows.receiveShadow = false; group.add(shadows);
+  geometries.add(blobGeometry); geometries.add(shadows.geometry); materials.add(blobMaterial);
+
   const packed = new Int32Array(count).fill(-1), frustum = new THREE.Frustum(), viewProjection = new THREE.Matrix4();
-  const center = new THREE.Vector3(), sphere = new THREE.Sphere(center, 1.2);
-  let recoloured = false;
-  function tint(actor: number, slot: number) {
+  const center = new THREE.Vector3(), sphere = new THREE.Sphere(center, 1.2), matrix = new THREE.Matrix4();
+  const place = new THREE.Vector3(), turn = new THREE.Quaternion(), size = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
+  let recoded = false;
+  /** Gives slot `slot` to walker `actor`: its step's phase and its clothes go up only when the slot changes hands. */
+  function dress(actor: number, slot: number) {
     if (packed[slot] === actor) return;
-    packed[slot] = actor; recoloured = true;
-    setColorAt(torso, slot, color.set(shirts[actor % shirts.length]));
-    setColorAt(heads, slot, color.set(skinTones[(actor * 5) % skinTones.length]));
-    setColorAt(waists, slot, color.set(trouserColors[actor % trouserColors.length]));
-    for (let side = 0; side < 2; side++) {
-      setColorAt(upperArms, slot * 2 + side, color.set(shirts[actor % shirts.length]));
-      setColorAt(forearms, slot * 2 + side, color.set(skinTones[(actor * 5) % skinTones.length]));
-      setColorAt(hands, slot * 2 + side, color.set(skinTones[(actor * 5) % skinTones.length]));
-      setColorAt(legs, slot * 4 + side * 2, color.set(trouserColors[actor % trouserColors.length]));
-      setColorAt(legs, slot * 4 + side * 2 + 1, color.set(trouserColors[actor % trouserColors.length]));
-    }
+    packed[slot] = actor; recoded = true;
+    codes(actor).forEach((value, k) => { (details.array as Float32Array)[slot * 3 + k] = value; });
   }
 
   function update(dt: number) {
@@ -342,54 +375,26 @@ export function createCrowd(ctx: CityContext): Crowd {
     frustum.setFromProjectionMatrix(viewProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse), camera.coordinateSystem, camera.reversedDepth);
     // Farther from a high camera, as for the cars: walkers stay in the picture when zoomed out.
     const far = Math.max(120, ctx.quality.lodDistances[2]) + Math.min(450, Math.max(0, camera.position.y - 40) * 1.5), share = Math.max(0, Math.min(1, density));
+    const placed = matrices.array as Float32Array, blobs = blobMatrices.array as Float32Array;
     let slot = 0;
     for (let index = 0; index < count; index++) {
       if (Math.floor((index + 1) * share) === Math.floor(index * share)) continue;
       const person = people[index], point = sampleCrowdRoute(person.route, person.offset + clock * person.speed);
       center.set(point.x, GROUND_Y + .65, point.z);
       if (center.distanceToSquared(camera.position) > far * far || !frustum.intersectsSphere(sphere)) continue;
-      tint(index, slot);
-      const phase = clock * 4.6 + index * 2.399;
+      dress(index, slot);
       const height = PERSON_SCALE * (.94 + (index % 5) * .028);
-      root.scale.setScalar(height);
-      root.position.set(point.x, GROUND_Y + Math.abs(Math.sin(phase)) * .009, point.z);
-      root.rotation.set(0, point.heading, 0); root.updateMatrix();
-      for (const body of staticBodies) setMatrixAt(body, slot, root.matrix);
-
-      for (let side = 0; side < 2; side++) {
-        const sign = side ? 1 : -1;
-        const swing = Math.sin(phase + side * Math.PI);
-        const hipAngle = swing * .37;
-        const kneeAngle = hipAngle - Math.max(0, -swing) * .58;
-        const hipX = sign * .095, hipY = .71, upperLength = .3, lowerLength = .32;
-        const kneeY = hipY - Math.cos(hipAngle) * upperLength;
-        const kneeZ = -Math.sin(hipAngle) * upperLength;
-        const ankleY = kneeY - Math.cos(kneeAngle) * lowerLength;
-        const ankleZ = kneeZ - Math.sin(kneeAngle) * lowerLength;
-        place(legs, slot * 4 + side * 2, hipX, hipY - Math.cos(hipAngle) * upperLength / 2, -Math.sin(hipAngle) * upperLength / 2, hipAngle, upperLength / .32);
-        place(legs, slot * 4 + side * 2 + 1, hipX, kneeY - Math.cos(kneeAngle) * lowerLength / 2, kneeZ - Math.sin(kneeAngle) * lowerLength / 2, kneeAngle);
-        place(shoes, slot * 2 + side, hipX, ankleY - .045, ankleZ + .033);
-
-        const armAngle = -swing * .32, elbowAngle = armAngle - .17;
-        const shoulderX = sign * .224, shoulderY = 1.166, upperArmLength = .245, forearmLength = .225;
-        const elbowY = shoulderY - Math.cos(armAngle) * upperArmLength;
-        const elbowZ = -Math.sin(armAngle) * upperArmLength;
-        place(upperArms, slot * 2 + side, shoulderX, shoulderY - Math.cos(armAngle) * upperArmLength / 2, -Math.sin(armAngle) * upperArmLength / 2, armAngle, upperArmLength / .34);
-        place(forearms, slot * 2 + side, shoulderX, elbowY - Math.cos(elbowAngle) * forearmLength / 2, elbowZ - Math.sin(elbowAngle) * forearmLength / 2, elbowAngle, forearmLength / .26);
-        place(hands, slot * 2 + side, shoulderX, elbowY - Math.cos(elbowAngle) * (forearmLength + .013), elbowZ - Math.sin(elbowAngle) * (forearmLength + .013));
-      }
-      matrix.makeScale(.46, 1, .46).setPosition(point.x, .231, point.z); setMatrixAt(shadows, slot, matrix);
+      matrix.compose(place.set(point.x, GROUND_Y, point.z), turn.setFromAxisAngle(up, point.heading), size.setScalar(height)).toArray(placed, slot * COPY_STRIDE);
+      matrix.makeScale(.46, 1, .46).setPosition(point.x, .231, point.z).toArray(blobs, slot * COPY_STRIDE);
       slot++;
     }
-    for (const body of staticBodies) body.mesh.geometry.instanceCount = slot;
-    for (const limbs of [upperArms, forearms, hands, shoes]) limbs.mesh.geometry.instanceCount = slot * 2;
-    legs.mesh.geometry.instanceCount = slot * 4; shadows.mesh.geometry.instanceCount = slot;
-    for (const part of batches) {
-      part.matrices.needsUpdate = true;
-      // Colours go up only when a slot changed hands: on most frames every walker keeps its slot.
-      if (recoloured) part.tints.needsUpdate = true;
-    }
-    recoloured = false;
+    walkers.geometry.instanceCount = shadows.geometry.instanceCount = slot;
+    matrices.needsUpdate = blobMatrices.needsUpdate = true;
+    // The clothes go up only when a slot changed hands: on most frames every walker keeps its slot.
+    if (recoded) details.needsUpdate = true;
+    recoded = false;
+    // The step's clock: it stands still while the crowd is paused, so nobody jumps when it walks on.
+    time.value = clock;
   }
 
   const offFrame = ctx.onFrame(dt => {
@@ -404,8 +409,8 @@ export function createCrowd(ctx: CityContext): Crowd {
     dispose() {
       if (disposed) return;
       disposed = true; offFrame(); offCamera(); offQuality(); group.removeFromParent();
-      // Each copy mesh is the only user of its body part's shape: freeing it frees the shape's buffers too.
-      batches.forEach(part => part.mesh.geometry.dispose()); geometries.forEach(geometry => geometry.dispose()); materials.forEach(material => material.dispose()); group.clear();
+      // The copy meshes are the only users of their shapes: freeing them frees the shapes' buffers too.
+      geometries.forEach(geometry => geometry.dispose()); materials.forEach(material => material.dispose()); group.clear();
     },
   };
 }

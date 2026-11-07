@@ -246,7 +246,7 @@ function modelPortal(line: RailLine, model: Model) {
   return group;
 }
 
-export function createDepartmentWorld(ctx: CityContext, catalogue: Catalogue, models: Map<string, Model>, onPick: (id: string) => void, onEstate: (pick: EstatePick) => void = () => undefined): DepartmentWorld {
+export function createDepartmentWorld(ctx: CityContext, catalogue: Catalogue, onPick: (id: string) => void, onEstate: (pick: EstatePick) => void = () => undefined): DepartmentWorld {
   let active: DepartmentId = "support", sales: ReturnType<typeof salesRoot> | undefined;
   const supportNodes = [...ctx.scene.children].filter(n => !(n instanceof THREE.Light));
   const supportRoot = new THREE.Group(); supportRoot.name = "support-city";
@@ -330,7 +330,7 @@ export function createDepartmentWorld(ctx: CityContext, catalogue: Catalogue, mo
     const context: CityContext = { ...ctx, scene, world, overlay: salesLabels, get quality() { return ctx.quality; },
       onFrame(cb) { frames.add(cb); return () => { frames.delete(cb); }; }, onCameraMove(cb) { moves.add(cb); return () => { moves.delete(cb); }; } };
     const terrain = createTerrain(context), water = createWater(context), pools = createInstancePools(context, catalogue, world.placements);
-    const cars = createTraffic(context); cars.setVehicles(models); cars.setEnabled(traffic);
+    const cars = createTraffic(context); cars.setEnabled(traffic);
     const crowd = createCrowd(context); crowd.setEnabled(traffic); water.setNight(night);
     const campus = new THREE.Group(), teams = new THREE.Group(); scene.add(campus, teams);
     // The campus offices: one facade mesh, its windows lit at night with campusNight.
