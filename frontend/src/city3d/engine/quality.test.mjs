@@ -105,7 +105,7 @@ test('a 120 Hz screen with a busy GPU settles without blinking', () => {
 
 test('a GPU-bound phone concedes shadows, crowd, then pixels, never below 80 %', () => {
   const run = simulate({ base: medium, gpu: 60 });
-  assert.deepEqual(firstConcessions(run.trace), ['shadows:0', 'crowd:0.5', 'resolution:0.9', 'resolution:0.8']);
+  assert.deepEqual(firstConcessions(run.trace), ['shadows:0', 'crowd:0.5', 'detail:far', 'resolution:0.9', 'resolution:0.8']);
   assert.equal(run.settings.fps, 30);
   assert.equal(run.lowest, .8);
   assertSteady(run, 'phone GPU-bound');
@@ -118,12 +118,12 @@ test('an iPhone that cannot hold 60 drops to 30 frames a second before anything 
   assertSteady(run, 'iPhone 20 ms');
 });
 
-test('a very slow GPU walks the whole table in order and stops at 80 %', () => {
+test('a severely overloaded GPU applies relief in one window instead of waiting through the whole table', () => {
   const run = simulate({ base: high, gpu: 330, fixed: 20 });
   assert.deepEqual(firstConcessions(run.trace), core.STEPS.map(s => s.id));
   assert.deepEqual(run.concessions, core.STEPS.map(s => s.id));
   assert.equal(run.lowest, .8);
-  assert.equal(run.changes.length, core.STEPS.length, JSON.stringify(run.trace));
+  assert.equal(run.changes.length, 1, JSON.stringify(run.trace));
 });
 
 test('pixels are the last resort in every scenario: nothing earlier comes back while resolution is lowered', () => {
@@ -152,7 +152,30 @@ test('hitches, pauses and busy frames are not measured', () => {
   assert.deepEqual(run.changes, []);
   const adapter = core.createAdapter(high);
   for (let now = 0; now < 30000; now += 100) assert.equal(adapter.frame(100, now, true), false);
-  for (let now = 0; now < 30000; now += 1200) assert.equal(adapter.frame(1200, now), false);
+  assert.equal(adapter.frame(1200, 31000), false, 'an isolated long hitch is ignored');
+  assert.equal(adapter.frame(Infinity, 34000), false, 'resuming a hidden tab resets the long-frame streak');
+  assert.equal(adapter.frame(1200, 35200), false);
+});
+
+test('sustained frames longer than a second trigger relief while pauses and loading do not', () => {
+  const adapter = core.createAdapter(high);
+  assert.equal(adapter.frame(1400, 1400), false);
+  assert.equal(adapter.frame(1500, 2900), true);
+  assert.equal(adapter.settings.resolution, .8);
+  assert.equal(adapter.settings.bloom, false);
+  assert.equal(adapter.settings.staticShadowSize, 1024);
+  assert.deepEqual(adapter.settings.lodDistances.slice(0, 2), [22, 38]);
+  assert.ok(adapter.settings.lodDistances[0] > 18 * 1.06, 'full nearby geometry remains reachable at the camera minimum, including LOD hysteresis');
+  const applied = adapter.concessions.slice();
+  for (let now = 3000; now < 12000; now += 17) adapter.frame(17, now);
+  assert.deepEqual(adapter.concessions, applied, 'no immediate oscillation after emergency relief');
+});
+
+test('low and medium devices cap pixels before resolution adaptation, including high-DPR mobile screens', () => {
+  assert.equal(core.baseSettings('low', desktop).maxPixelRatio, 1);
+  assert.equal(core.baseSettings('medium', desktop).maxPixelRatio, 1.5);
+  assert.equal(core.baseSettings('medium', android).maxPixelRatio, 1.25);
+  assert.equal(core.baseSettings('ultra', desktop).maxPixelRatio, 2);
 });
 
 test('the first tier follows the device (TZ §8.1)', () => {
@@ -168,6 +191,7 @@ test('the first tier follows the device (TZ §8.1)', () => {
   assert.equal(tier({ gpu: 'intel gen-12lp' }), 'medium');
   assert.equal(tier({ gpu: 'ANGLE (Intel, Intel(R) HD Graphics 4000 (0x00000166) Direct3D11 vs_5_0 ps_5_0, D3D11)' }), 'low');
   assert.equal(tier({ gpu: 'Intel(R) HD Graphics' }), 'low');
+  assert.equal(tier({ gpu: 'Intel(R) HD Graphics 4000', cores: 4 }), 'low', 'a weak GPU cap still applies on four-core laptops');
   assert.equal(tier({ gpu: 'intel gen-8' }), 'low');
   assert.equal(tier({ gpu: 'ANGLE (Intel, Intel(R) Arc(TM) A770 Graphics (0x000056A0) Direct3D11 vs_5_0 ps_5_0, D3D11)' }), 'high');
   assert.equal(tier({ gpu: 'ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)' }), 'medium');

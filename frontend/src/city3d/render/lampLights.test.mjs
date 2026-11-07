@@ -117,14 +117,15 @@ test('the catalogue lamp has a shade, plain glass in the day, and its bulb glows
   const night = city.createNight(), catalogue = city.createCatalogue(new Map(), night);
   const matrix = new THREE.Matrix4(), lamp = catalogue.resolve({ kind: 'lamp', variant: 0, x: 3, z: 4, rotation: 0, scale: 1, width: 0 }, matrix);
   assert.equal(lamp.id, 'lamp');
-  assert.ok(lamp.lods.every(level => level === lamp.lods[0]), 'one lamp at every distance');
-  const bulbs = lamp.lods[0].parts.filter(part => part.material.name === 'lamp-bulb');
-  assert.equal(bulbs.length, 1);
-  for (const level of [lamp.lods[0]]) {
+  assert.ok(lamp.lods[2] !== lamp.lods[0], 'distant lamps use a lightweight pole and bulb');
+  const bulbs = lamp.lods.flatMap(level => level.parts.filter(part => part.material.name === 'lamp-bulb'));
+  assert.equal(bulbs.length, 3);
+  for (const level of lamp.lods) {
     // Two parts (two draw calls per level): the pole with its shade, and the bulb; tiny, as lamps come by the hundred.
     assert.equal(level.parts.length, 2);
     const triangles = level.parts.reduce((sum, part) => sum + (part.geometry.index?.count ?? part.geometry.getAttribute('position').count) / 3, 0);
     assert.ok(triangles <= 320, `${triangles} triangles including base, collars and shade rim`);
+    if (level === lamp.lods[2]) assert.ok(triangles <= 32, 'far silhouette has a strict geometry budget');
     const pole = new THREE.Box3().setFromBufferAttribute(level.parts.find(part => part.material.name !== 'lamp-bulb').geometry.getAttribute('position'));
     assert.ok(pole.max.x > .15, 'a shade wider than the pole');
   }

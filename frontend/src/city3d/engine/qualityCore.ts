@@ -47,7 +47,7 @@ export function initialTier(device: DeviceInfo): QualityTier {
   if (device.ios) return atMost("medium", cap);
   if (device.mobile) return device.cores <= 4 ? "low" : atMost("medium", cap);
   let tier: QualityTier = STRONG.test(gpu) && device.backend === "webgpu" && device.cores >= 8 ? "ultra" : "high";
-  tier = atMost(tier, device.cores <= 2 ? "low" : device.cores <= 4 ? "medium" : cap);
+  tier = atMost(tier, atMost(cap, device.cores <= 2 ? "low" : device.cores <= 4 ? "medium" : "ultra"));
   if (device.width * device.height * Math.min(device.dpr, 2) ** 2 > BIG_SCREEN) tier = lower(tier);
   // The WebGL2 fallback has no compute and slower draws: at most "high" (TZ §1.3.5 allows "medium").
   return device.backend === "webgl2" ? atMost(tier, "high") : tier;
@@ -57,12 +57,12 @@ export function initialTier(device: DeviceInfo): QualityTier {
 export function settingsFor(tier: QualityTier): QualitySettings {
   const top = tier === "ultra" || tier === "high";
   return {
-    tier, resolution: 1, fps: 60,
+    tier, resolution: 1, maxPixelRatio: tier === "low" ? 1 : tier === "ultra" ? 2 : 1.5, fps: 60,
     dynamicShadowSize: top ? 2048 : tier === "medium" ? 1024 : 0,
     staticShadowSize: top ? 4096 : tier === "medium" ? 2048 : 1024,
     ao: top, bloom: tier !== "low", tiltShift: top, antialias: top ? "smaa" : "fxaa",
     waterReflections: tier === "ultra" ? "planar" : tier === "high" ? "ssr" : "sky",
-    lodDistances: tier === "ultra" ? [50, 150, 300] : tier === "high" ? [40, 120, 250] : tier === "medium" ? [32, 100, 220] : [25, 80, 180],
+    lodDistances: tier === "ultra" ? [50, 150, 300] : tier === "high" ? [40, 120, 250] : tier === "medium" ? [26, 75, 220] : [22, 50, 180],
     crowd: tier === "low" ? .5 : 1,
   };
 }
@@ -70,6 +70,7 @@ export function settingsFor(tier: QualityTier): QualitySettings {
 /** Tier settings for this device: Android phones aim at 30 frames a second, iPhones at 60 on "medium" (TZ §1.2). */
 export function baseSettings(tier: QualityTier, device: Pick<DeviceInfo, "mobile" | "ios">): QualitySettings {
   const settings = settingsFor(tier);
+  if (device.mobile && tier === "medium") settings.maxPixelRatio = 1.25;
   if (device.mobile && (!device.ios || tier === "high" || tier === "ultra")) settings.fps = 30;
   return settings;
 }
@@ -83,6 +84,7 @@ export const STEPS: Step[] = [
   { id: "shadows:0", apply: s => { s.dynamicShadowSize = 0; } },
   { id: "crowd:0.5", apply: s => { s.crowd = Math.min(s.crowd, .5); } },
   { id: "fps:30", apply: s => { s.fps = 30; } },
+  { id: "detail:far", apply: s => { s.lodDistances = [Math.min(s.lodDistances[0], 22), Math.min(s.lodDistances[1], 38), s.lodDistances[2]]; s.bloom = false; s.staticShadowSize = 1024; } },
   { id: "resolution:0.9", apply: s => { s.resolution = Math.min(s.resolution, .9); } },
   { id: "resolution:0.8", apply: s => { s.resolution = Math.min(s.resolution, .8); } },
 ];
@@ -117,13 +119,20 @@ export function createAdapter(base: QualitySettings): Adapter {
   const steps = STEPS.filter(step => differs(base, compose(base, [step])));
   let applied: Step[] = [], settings = { ...base };
   const blocked = new Map<Step, number>(), fails = new Map<Step, number>();
-  let spent = 0, frames = 0, calm = 0, streak = 0, quietUntil = 0;
+  let spent = 0, frames = 0, calm = 0, streak = 0, quietUntil = 0, longFrames = 0;
   /** The step just given back, on trial for two windows; the last concession, judged by the next window. */
   let trial: { step: Step; windows: number } | null = null, judged: { step: Step; before: number } | null = null;
 
   const inTable = (list: Step[]) => steps.filter(step => list.includes(step));
   const set = (next: Step[]) => { applied = inTable(next); settings = compose(base, applied); return true; };
   const pause = (n: number) => Math.min(RETRY_MAX, RETRY * 2 ** n);
+  function overload(now: number) {
+    const next = steps.filter(step => differs(base, compose(base, [step])));
+    if (next.every(step => applied.includes(step))) return false;
+    next.forEach(step => blocked.set(step, now + RETRY));
+    quietUntil = now + RETRY; calm = 0; trial = judged = null;
+    return set(next);
+  }
 
   function giveBackCandidate(now: number) {
     for (const step of [...applied].reverse()) {
@@ -134,6 +143,7 @@ export function createAdapter(base: QualitySettings): Adapter {
   }
 
   function judge(average: number, now: number): boolean {
+    if (average > 250) return overload(now);
     const budget = 1000 / settings.fps;
     if (judged) {
       // 30 frames a second changes the budget, not the frame time, so it is never judged.
@@ -168,8 +178,13 @@ export function createAdapter(base: QualitySettings): Adapter {
     get concessions() { return applied.map(step => step.id); },
     frame(gap, now, busy = false) {
       // Loading and shader compiles are not the device's pace; pauses restart the window.
-      if (busy) return false;
-      if (gap > WINDOW) { spent = frames = 0; return false; }
+      if (busy) { longFrames = 0; return false; }
+      if (!Number.isFinite(gap) || gap <= 0) { spent = frames = longFrames = 0; return false; }
+      if (gap > WINDOW) {
+        spent = frames = 0;
+        return ++longFrames >= 2 ? overload(now) : false;
+      }
+      longFrames = 0;
       // A one-off hitch (a compile, a big upload) is skipped rather than averaged in.
       if (frames > 3 && gap > 250 && gap > 4 * spent / frames) return false;
       spent += gap; frames++;
@@ -189,5 +204,6 @@ function compose(base: QualitySettings, steps: Step[]): QualitySettings {
 
 function differs(a: QualitySettings, b: QualitySettings) {
   return a.ao !== b.ao || a.waterReflections !== b.waterReflections || a.dynamicShadowSize !== b.dynamicShadowSize ||
-    a.crowd !== b.crowd || a.fps !== b.fps || a.resolution !== b.resolution;
+    a.crowd !== b.crowd || a.fps !== b.fps || a.resolution !== b.resolution || a.bloom !== b.bloom ||
+    a.staticShadowSize !== b.staticShadowSize || a.lodDistances.join() !== b.lodDistances.join();
 }

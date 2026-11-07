@@ -51,7 +51,8 @@ test('Kenney glass gets one seed per window; walls, skylights and parked cars st
   for (const k of [0, 1]) { assert.ok(pane(k)[0] > 0 && pane(k)[0] <= 1); assert.ok(pane(k).every(s => s === pane(k)[0]), 'one value per window'); }
   assert.notEqual(pane(0)[0], pane(1)[0]);
   assert.deepEqual([...pane(2), ...pane(3)], new Array(12).fill(0), 'walls and skylights stay dark');
-  assert.ok(house.lods.every(level => level === house.lods[0]) && taxi.lods.every(level => level === taxi.lods[0]), 'the same model near and far: no LOD copies, no boxes');
+  assert.ok(house.lods.every(level => level === house.lods[0]), 'the loaded kit stays unchanged');
+  assert.ok(taxi.lods[2].parts[0].geometry.index.count < taxi.lods[0].parts[0].geometry.index.count, 'distant parked cars omit subpixel fittings');
 
   // One lit node copy of the kit material, with the kit's look.
   assert.ok(near.material.isMeshStandardNodeMaterial && near.material.emissiveNode && near.material !== kit);
@@ -85,7 +86,7 @@ test('blocks, towers and port sheds light their windows at night; trees, lamp po
   }
 
   const sheds = [0, 1, 2, 3, 4].map(v => at('port', v)), windows = sheds.map(m => surfaceVertices(m.lods[0].parts[0].geometry, city.FACE.window).length);
-  assert.ok(sheds.every(m => m.lods[0].parts[0].material.emissiveNode && m.lods.every(level => level === m.lods[0])), 'one lit facade model at every distance');
+  assert.ok(sheds.every(m => m.lods[0].parts[0].material.emissiveNode && m.lods.every(level => level.parts[0].material === m.lods[0].parts[0].material)), 'all port detail levels retain the lit facade material');
   assert.ok(windows[0] > 0 && windows[4] > 0, 'the two sheds have window walls');
   assert.ok(surfaceVertices(sheds[0].lods[0].parts[0].geometry, city.FACE.roof).length > 0, 'and roofs that do not light');
   assert.ok(windows[2] === 0 && windows[3] === 0, 'container yards stay dark');
@@ -104,7 +105,7 @@ test('community centre levels resolve cached lit models and retain actual steppe
     assert.equal(at(i), model, 'refreshes resolve the same cached geometry');
     assert.ok(model.bounds.min.x > -9 && model.bounds.max.x < 9 && model.bounds.min.z > -9 && model.bounds.max.z < 9);
     if (i) assert.ok(model.bounds.max.y > levels[i - 1].bounds.max.y);
-    assert.ok(model.lods.every(level => level === model.lods[0]), 'one model near and far');
+    assert.ok(model.lods.every(level => level && level.parts[0].material === model.lods[0].parts[0].material), 'one facade material across structural detail levels');
     assert.equal(model.lods[0].parts.length, 1, 'walls, roofs, glass and windows in one pooled part');
     const [part] = model.lods[0].parts;
     assert.ok(part.geometry.hasAttribute('color') && part.geometry.hasAttribute('aSurf') && part.geometry.hasAttribute('aWin'), 'built with the facade builder');
@@ -133,7 +134,7 @@ test('residential sections: a model per height with its balconies at every dista
   assert.ok(Math.abs(heights[0].width - 3.2) < 1e-6 && Math.abs(heights[0].depth - 2.2) < 1e-6, 'the footprint is the placement');
   const count = (level) => level.parts[0].geometry.getAttribute('position').count;
   for (const { model } of heights) {
-    assert.ok(model.lods.every(level => level === model.lods[0]) && count(model.lods[0]) > 24, 'balconies and the roof house at every distance');
+    assert.ok(model.lods.every(Boolean) && count(model.lods[0]) > 24 && count(model.lods[2]) < count(model.lods[0]), 'detailed balconies nearby and structural facades at distance');
     const geometry = model.lods[0].parts[0].geometry;
     assert.ok(geometry.getAttribute('aUnitU') && geometry.getAttribute('aUnitV') && surfaceVertices(geometry, city.FACE.window).length > 0, 'a unit model with windowed walls, measured on the copy');
     assert.ok(Math.abs(geometry.boundingBox.min.x + .5) < .02 && Math.abs(geometry.boundingBox.max.x - .5) < .02 && Math.abs(geometry.boundingBox.min.y) < 1e-6, 'in the unit box');
@@ -164,14 +165,15 @@ test('residential sections: a model per height with its balconies at every dista
     assert.equal(model.lods[0].parts[0].material.userData.citySurfaceEmission, 'reflected-light');
     assert.ok(model.lods[0].parts[0].geometry.getAttribute('position').count < 3000, `${kind} is light`);
   }
-  // Architectural shapes remain unchanged; detailed vegetation/furniture retain their footprint in a far mesh.
-  for (const kind of ['slide', 'swings', 'goal', 'hoop', 'gazebo', 'hedge', 'lamp']) assert.ok(at(kind).lods.every(level => level === at(kind).lods[0]), `${kind} is one model at every distance`);
+  // Tiny standalone props disappear at distance; greenery and street lighting keep inexpensive silhouettes.
+  for (const kind of ['slide', 'swings', 'goal', 'hoop', 'gazebo']) assert.equal(at(kind).lods[2], null, `${kind} does not draw subpixel geometry`);
+  for (const kind of ['hedge', 'lamp']) assert.ok(at(kind).lods[2], `${kind} retains a far silhouette`);
   for (const kind of ['bench', 'tree-cone', 'tree-round', 'tree-birch', 'tree-oak', 'bush', 'flowerbed', 'planter', 'fountain']) {
-    const model = at(kind), high = model.lods[0].parts[0].geometry, low = model.lods[2].parts[0].geometry;
+    const model = at(kind), high = model.lods[0].parts[0].geometry, low = (model.lods[2] ?? model.lods[1]).parts[0].geometry;
     assert.notEqual(high, low); high.computeBoundingBox(); low.computeBoundingBox();
     assert.ok(low.getAttribute('position').count < high.getAttribute('position').count, `${kind} reduces repeated distant detail`);
     assert.ok(low.boundingBox.min.distanceTo(high.boundingBox.min) < .001 && low.boundingBox.max.distanceTo(high.boundingBox.max) < .001, `${kind} keeps its silhouette envelope`);
-    assert.ok(low.getAttribute('aProp') && low.getAttribute('color') && low.getAttribute('position').count > 36, `${kind} retains its actual model and material, not a box`);
+    assert.ok(low.getAttribute('aProp') && low.getAttribute('color') && low.getAttribute('position').count >= 24, `${kind} retains a colored silhouette and its physical surface properties`);
   }
   // Offices: a lit glass model per height, podiums and towers alike, raised onto their podium by `lift`.
   const towers = [0, 1, 2, 3, 4, 5].map(variant => at('glass-tower', { variant, width: 8, depth: 6 }));
@@ -203,7 +205,7 @@ test('ready houses: each house in each finish its own model, built in code on th
   assert.ok(material.isMeshStandardNodeMaterial && material.colorNode && material.emissiveNode, 'one facade material: walls, roofs and windows that light at night');
   for (const [family, m] of Object.entries(city.READY_HOUSES)) for (const finish of city.FINISHES) {
     const variant = (m.model - 1) * 2 + city.FINISHES.indexOf(finish), model = models[variant], [part] = model.lods[0].parts;
-    assert.ok(model.lods.every(level => level === model.lods[0]), `${family}: one model near and far`);
+    assert.ok(model.lods.every(level => level.parts[0].material === material), `${family}: its facade remains lit at every detail level`);
     assert.equal(part.material, material, 'every house shares the facade material');
     const box = part.geometry.boundingBox, extent = box.getSize(new THREE.Vector3());
     assert.ok(Math.abs(box.min.y) < 1e-4 && Math.abs(box.min.x + box.max.x) < .3 && Math.abs(box.min.z + box.max.z) < .3, `${family} ${finish}: on its footprint and grounded`);
@@ -239,7 +241,7 @@ test('all twelve ready offices are built in code at the table\'s proportions, gr
     const [part] = model.lods[0].parts;
     assert.ok([city.FACE.curtain, city.FACE.mirror, city.FACE.window].some(kind => surfaceVertices(part.geometry, kind).length > 0), 'glass or windowed facades');
     // A tower within 1500 triangles; the complex of fourteen buildings within 2500.
-    assert.ok(part.geometry.index.count / 3 < (definition.ensemble ? 2500 : 1500) && model.lods.every(level => level === model.lods[0]));
+    assert.ok(part.geometry.index.count / 3 < (definition.ensemble ? 2500 : 1500) && model.lods.every(level => level.parts[0].material === part.material));
     assert.ok(part.material.emissiveNode, 'lit at night');
     return model;
   });

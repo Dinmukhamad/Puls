@@ -204,7 +204,7 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
     const resize = () => {
       if (!active) return;
       const width = host.clientWidth, height = host.clientHeight; if (!width || !height) return;
-      renderer.setPixelRatio(pixelRatio(mobile, quality.settings.resolution)); renderer.setSize(width, height, false);
+      renderer.setPixelRatio(pixelRatio(mobile, quality.settings.resolution, quality.settings.maxPixelRatio)); renderer.setSize(width, height, false);
       rig.resize(width, height); post.setSize(width, height);
     };
     const observer = new ResizeObserver(resize); startupDisposers.push(() => observer.disconnect()); observer.observe(host); if (options.frame) observer.observe(options.frame);

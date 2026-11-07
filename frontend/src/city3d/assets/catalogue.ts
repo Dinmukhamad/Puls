@@ -1,7 +1,7 @@
 /**
  * The model catalogue: which model, with which transform, stands for every Placement of the world (TZ §5.3). Every
- * building has one level of detail (docs/CITY_V4.md), with window/tile detail averaged by its material. Repeated
- * trees and small courtyard pieces keep their species/form with fewer hidden branches/slats in the far slot,
+ * building retains its detailed near model and structural mid/far geometry, with window/tile detail averaged by
+ * its material. Trees keep a small closed silhouette; subpixel courtyard pieces leave the far slot empty,
  * so the fully built city does not draw millions of invisible details. Kenney models (CC0) are
  * reused from the old city with its lists (the five-island map); every other building is built in code in the city's
  * v4 style (assets/facade.ts): the shop's ready houses and office towers (assets/readyBuildings.ts), the community
@@ -18,6 +18,8 @@ import { createNight, type Night } from "../render/night";
 import { loadModels, disposeModels, MODEL_LOAD_TIMEOUT_MS, type Model, type ModelPart, type ModelLoadOptions } from "./loader";
 import { catalogueFiles } from "./modelFiles";
 import { furnitureGeometry, treeKindGeometry, type FurnitureKind } from "./courtyard";
+import { distantTreeGeometry, fitPropEnvelope, paintProp } from "./vegetation";
+import { architectureLod } from "./architectureLod";
 import { archGeometry, blockGeometry, cottageGeometry, garageGeometry, officeGeometry, roofGeometry, sectionGeometry } from "./residential";
 import { PORT } from "./port";
 import { OFFICE_FLOOR, OFFICE_FLOORS, SECTION_FLOORS, SECTION_WIDTH } from "../world/complexes";
@@ -36,7 +38,7 @@ import { vegetationGeometry } from "./vegetation";
 export interface LodLevel { parts: ModelPart[]; matrix?: THREE.Matrix4; colors?: THREE.Color[] }
 export interface CatalogueModel {
   id: string;
-  /** The pools' three level slots; architectural models share one level, repeated vegetation has a far mesh. */
+  /** Detailed near geometry, reduced middle geometry, and a structural far silhouette (or null for tiny decor). */
   lods: [LodLevel, LodLevel | null, LodLevel | null];
   /** Bounds in model space. */
   bounds: THREE.Box3;
@@ -152,6 +154,11 @@ export function createCatalogue(models: Map<string, Model>, night: Night = creat
   /** A loaded kit model at its one level of detail; a name listed twice is one model drawn twice as often. */
   const byName = new Map<string, CatalogueModel | null>();
   const one = (level: LodLevel): CatalogueModel["lods"] => [level, level, level];
+  const structural = (geometry: THREE.BufferGeometry, material: THREE.Material, ownNear = true): CatalogueModel["lods"] => [
+    { parts: [{ geometry: ownNear ? own(geometry) : geometry, material, castShadow: true }] },
+    { parts: [{ geometry: own(architectureLod(geometry, 1)), material, castShadow: true }] },
+    { parts: [{ geometry: own(architectureLod(geometry, 2)), material, castShadow: true }] },
+  ];
   function kenney(name: string, windows = true) {
     if (byName.has(name)) return byName.get(name)!;
     const source = models.get(name);
@@ -169,13 +176,14 @@ export function createCatalogue(models: Map<string, Model>, night: Night = creat
   const vehicles = own(vehicleMaterial(look)), cars = new Map<string, CatalogueModel>();
   for (const name of new Set(PARKED.flat()) as Set<VehicleName>) {
     const geometry = vehicleGeometry(name), bounds = geometry.boundingBox!.clone(), scale = name === "taxi" ? PARKED_TAXI_SCALE : 1;
-    cars.set(name, add({ id: name, lods: one({ parts: [{ geometry, material: vehicles, castShadow: true }] }), bounds,
+    const lods = structural(geometry, vehicles, false); lods[2]!.parts[0].castShadow = false;
+    cars.set(name, add({ id: name, lods, bounds,
       base: new THREE.Matrix4().makeScale(scale, scale, scale).multiply(footprint(bounds)), tints: PAINTS[name].map(c => new THREE.Color(c)), tintStep: CAR_TINT_STEP }));
   }
   // The districts' ready houses and office towers (world/familyHouses.ts, world/officeBuildings.ts): built in code
   // (assets/readyBuildings.ts), every house in both finishes, with one facade material that lights their windows.
   const facade = own(facadeMaterial(nightLevel as never, { look }));
-  const builtModel = (id: string, geometry: THREE.BufferGeometry) => add(procedural(id, one({ parts: [{ geometry: own(geometry), material: facade, castShadow: true }] })));
+  const builtModel = (id: string, geometry: THREE.BufferGeometry) => add(procedural(id, structural(geometry, facade)));
   const readyHouses = READY_HOUSE_VARIANTS.map(({ family, finish }, variant) => builtModel(houseModelName(variant), readyHouseGeometry(family, finish)));
   const officeFamilies = (Object.entries(OFFICE_BUILDINGS) as [OfficeBuilding, typeof OFFICE_BUILDINGS[OfficeBuilding]][]).sort((a, b) => a[1].model - b[1].model);
   const officeBuildings = officeFamilies.map(([, model]) => model);
@@ -185,20 +193,22 @@ export function createCatalogue(models: Map<string, Model>, night: Night = creat
   const unitFacade = own(facadeMaterial(nightLevel as never, { unit: true, look }));
   const unitBox = new THREE.Box3(new THREE.Vector3(-.5, 0, -.5), new THREE.Vector3(.5, 1, .5));
   const unitModel = (id: string, geometry: THREE.BufferGeometry, tints: string[], tintStep: number) =>
-    add({ id, lods: one({ parts: [{ geometry: own(geometry), material: unitFacade, castShadow: true }] }), bounds: unitBox.clone(), base: new THREE.Matrix4(), tints: tints.map(c => new THREE.Color(c)), tintStep });
+    add({ id, lods: structural(geometry, unitFacade), bounds: unitBox.clone(), base: new THREE.Matrix4(), tints: tints.map(c => new THREE.Color(c)), tintStep });
   const blocks = BLOCKS.map((kind, index) => unitModel(`block-${index}`, blockGeometry(kind.floors, kind.glass), kind.glass ? GLASS : WALLS, 5));
 
   const treeMaterial = own(surfaceMaterial({ finish: "foliage", look, vertexColors: true, roughness: .87, flatShading: false, properties: true }));
   const tree = (round: boolean) => {
     const near: LodLevel = { parts: [{ geometry: own(treeGeometry(round, false)), material: treeMaterial, castShadow: true }] };
-    const far: LodLevel = { parts: [{ geometry: own(treeGeometry(round, true)), material: treeMaterial, castShadow: true }] };
-    return add(procedural(`tree-${round ? "round" : "cone"}`, [near, near, far], { tints: TREE_TINTS.map(c => new THREE.Color(c)), tintStep: 7 }));
+    const mid: LodLevel = { parts: [{ geometry: own(treeGeometry(round, true)), material: treeMaterial, castShadow: true }] };
+    const far: LodLevel = { parts: [{ geometry: own(distantTreeGeometry(round ? "round" : "cone")), material: treeMaterial, castShadow: false }] };
+    return add(procedural(`tree-${round ? "round" : "cone"}`, [near, mid, far], { tints: TREE_TINTS.map(c => new THREE.Color(c)), tintStep: 7 }));
   };
   const trees = { cone: tree(false), round: tree(true) };
   const moreTrees = Object.fromEntries((["birch", "oak"] as const).map(kind => {
     const near: LodLevel = { parts: [{ geometry: own(treeKindGeometry(kind, false)), material: treeMaterial, castShadow: true }] };
-    const far: LodLevel = { parts: [{ geometry: own(treeKindGeometry(kind, true)), material: treeMaterial, castShadow: true }] };
-    return [kind, add(procedural(`tree-${kind}`, [near, near, far], { tints: TREE_TINTS.map(c => new THREE.Color(c)), tintStep: 3 }))];
+    const mid: LodLevel = { parts: [{ geometry: own(treeKindGeometry(kind, true)), material: treeMaterial, castShadow: true }] };
+    const far: LodLevel = { parts: [{ geometry: own(distantTreeGeometry(kind)), material: treeMaterial, castShadow: false }] };
+    return [kind, add(procedural(`tree-${kind}`, [near, mid, far], { tints: TREE_TINTS.map(c => new THREE.Color(c)), tintStep: 3 }))];
   })) as Record<"birch" | "oak", CatalogueModel>;
 
   // Residential sections, one model per height with its balconies, entrances and roof house.
@@ -219,8 +229,15 @@ export function createCatalogue(models: Map<string, Model>, night: Night = creat
   const furniture = Object.fromEntries(FURNITURE.map(kind => {
     const [nearGeometry, farGeometry] = furnitureGeometry(kind), material = (kind === "bush" || kind === "hedge") ? treeMaterial : furnitureMaterial;
     const near: LodLevel = { parts: [{ geometry: own(nearGeometry), material, castShadow: true }] };
-    const far: LodLevel = farGeometry ? { parts: [{ geometry: own(farGeometry), material, castShadow: true }] } : near;
-    return [kind, add(procedural(kind, [near, near, far], (kind === "bush" || kind === "hedge") ? { tints: TREE_TINTS.map(c => new THREE.Color(c)), tintStep: 2 } : {}))];
+    const mid: LodLevel = farGeometry ? { parts: [{ geometry: own(farGeometry), material, castShadow: true }] } : near;
+    let far: LodLevel | null = null;
+    if (kind === "bush" || kind === "hedge") {
+      nearGeometry.computeBoundingBox();
+      const b = nearGeometry.boundingBox!, shape = kind === "hedge" ? new THREE.BoxGeometry(1, 1, 1) : new THREE.OctahedronGeometry(1);
+      const geometry = fitPropEnvelope(paintProp(shape, "#5bb264", .94), [b.min.toArray(), b.max.toArray()]);
+      far = { parts: [{ geometry: own(geometry), material, castShadow: false }] };
+    }
+    return [kind, add(procedural(kind, [near, mid, far], (kind === "bush" || kind === "hedge") ? { tints: TREE_TINTS.map(c => new THREE.Color(c)), tintStep: 2 } : {}))];
   })) as Record<FurnitureKind, CatalogueModel>;
 
   const poleMaterial = own(surfaceMaterial({ finish: "metal", look, color: "#54616a", roughness: .38, metalness: .68 }));
@@ -239,7 +256,11 @@ export function createCatalogue(models: Map<string, Model>, night: Night = creat
     ])), material: poleMaterial, castShadow: true },
     { geometry: own(detail ? new THREE.SphereGeometry(.09, 8, 6).translate(0, 1.35, 0) : new THREE.IcosahedronGeometry(.09, 0).translate(0, 1.35, 0)), material: bulbMaterial, castShadow: false },
   ] });
-  const lamp = add(procedural("lamp", one(lampLevel(true))));
+  const farLamp: LodLevel = { parts: [
+    { geometry: own(merge([new THREE.CylinderGeometry(.04, .05, 1.45, 4).translate(0, .725, 0), new THREE.ConeGeometry(.17, .12, 4, 1, true).translate(0, 1.44, 0)])), material: poleMaterial, castShadow: false },
+    { geometry: own(new THREE.OctahedronGeometry(.09).translate(0, 1.35, 0)), material: bulbMaterial, castShadow: false },
+  ] };
+  const nearLamp = lampLevel(true), lamp = add(procedural("lamp", [nearLamp, nearLamp, farLamp]));
 
   // The port (assets/port.ts): warehouses whose high windows light at night, the gantry crane, container yards.
   const port = PORT.map((build, index) => builtModel(`port-${index}`, build(index)));

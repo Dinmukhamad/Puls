@@ -5,6 +5,8 @@ export interface QualitySettings {
   tier: QualityTier;
   /** Pixel ratio multiplier on top of the device ratio cap; never below 0.8 (TZ §8.2). */
   resolution: number;
+  /** Device-pixel ceiling before the adaptive resolution multiplier. */
+  maxPixelRatio?: number;
   /** 60 or 30 frames a second. */
   fps: 60 | 30;
   /** Real-time shadow map size for moving objects; 0 = blob shadows only. */

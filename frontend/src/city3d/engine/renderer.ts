@@ -40,9 +40,9 @@ type LossInfo = Parameters<THREE.WebGPURenderer["onDeviceLost"]>[0];
 interface BackendInternals { isWebGPUBackend?: boolean; device?: GPUDevice; gl?: WebGL2RenderingContext }
 
 /** Device pixel ratio (TZ §6.1): at most 2 on desktop and 1.5 on phones, never below 1; quality scales it by 0.8…1. */
-export function pixelRatio(mobile: boolean, resolution = 1) {
+export function pixelRatio(mobile: boolean, resolution = 1, maximum = mobile ? 1.5 : 2) {
   const dpr = typeof window === "undefined" ? 1 : window.devicePixelRatio || 1;
-  return Math.max(1, Math.min(dpr, mobile ? 1.5 : 2)) * resolution;
+  return Math.max(1, Math.min(dpr, mobile ? 1.5 : 2, maximum)) * resolution;
 }
 
 export async function createRenderer(canvas: HTMLCanvasElement, { forceWebGL = false, mobile = false, signal }: RendererOptions = {}): Promise<RendererHandle> {

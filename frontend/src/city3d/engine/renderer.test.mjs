@@ -14,7 +14,18 @@ const built = await build({
     ` }));
   } }],
 });
-const { createRenderer, RENDERER_STARTUP_TIMEOUT_MS } = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
+const { createRenderer, pixelRatio, RENDERER_STARTUP_TIMEOUT_MS } = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
+
+test('device tier limits high-DPR framebuffer cost before adaptive resolution is applied', t => {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'window');
+  Object.defineProperty(globalThis, 'window', { configurable: true, value: { devicePixelRatio: 3 } });
+  t.after(() => { if (descriptor) Object.defineProperty(globalThis, 'window', descriptor); else delete globalThis.window; });
+  assert.equal(pixelRatio(false, 1, 1), 1);
+  assert.equal(pixelRatio(false, .8, 1), .8);
+  assert.equal(pixelRatio(false, 1, 1.5), 1.5);
+  assert.equal(pixelRatio(true, 1, 1.25), 1.25);
+  assert.equal(pixelRatio(false), 2);
+});
 
 function deferred() {
   let resolve, reject;
