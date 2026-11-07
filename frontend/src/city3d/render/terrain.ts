@@ -8,7 +8,7 @@
  */
 import * as THREE from "three/webgpu";
 import type { CityContext } from "../engine/context";
-import type { Road, Surface, SurfaceKind, WorldData } from "../world/types";
+import type { CivicCenter, Point, Road, Surface, SurfaceKind, WorldData } from "../world/types";
 import { groundMaterial, surfaceOf } from "./ground";
 
 const GRASS = "#8ba67a", GROUND = "#86a174", STONE = "#d4cab6", RIM = "#eadfc8", ROAD = "#6d7385", KERB = "#e5dfcf", MARK = "#f7f3e8";
@@ -25,6 +25,9 @@ const SURFACES: Record<SurfaceKind, [string, number]> = {
 };
 /** Land top, quay wall foot, water floor. */
 const TOP = .2, FOOT = -1.75, BED = -1.7;
+const CIVIC_STONE = "#e7e2d8", CIVIC_EDGE = "#a9aaa3", CIVIC_WALK = "#e4dfd4";
+/** The new limestone tones use the existing pavement treatment, with no additional texture or shader. */
+const CIVIC_SURFACES: Record<string, string> = { [CIVIC_STONE]: "#efe7d6", [CIVIC_EDGE]: "#9aa1aa", [CIVIC_WALK]: "#e2dbcc", "#c9c8be": "#9aa1aa" };
 
 export interface Terrain { group: THREE.Group; dispose(): void }
 
@@ -33,7 +36,7 @@ class Mesher {
   private positions: number[] = []; private normals: number[] = []; private colors: number[] = []; private surfaces: number[] = []; private indices: number[] = [];
   private count = 0; private paint = new THREE.Color(); private surface = 0;
   /** The paint of what follows; its surface (render/ground.ts) gives the ground material its texture. */
-  color(hex: string) { this.paint.set(hex); this.surface = surfaceOf(hex); return this; }
+  color(hex: string) { this.paint.set(hex); this.surface = surfaceOf(CIVIC_SURFACES[hex] ?? hex); return this; }
   vertex(x: number, y: number, z: number, nx: number, ny: number, nz: number) {
     this.positions.push(x, y, z); this.normals.push(nx, ny, nz); this.colors.push(this.paint.r, this.paint.g, this.paint.b); this.surfaces.push(this.surface);
     return this.count++;
@@ -151,7 +154,8 @@ function land(world: WorldData, flat: Mesher, solid: Mesher) {
     if (inner) ring(flat, a.inner, a.inner + (last ? 1 : .32), TOP + .005);
     if (outer) ring(flat, a.outer - .32, a.outer, TOP + .005);
   });
-  for (const islet of world.land.islets) {
+  if (world.center) civicCenter(world.center, flat, solid);
+  else for (const islet of world.land.islets) {
     flat.color(GRASS); ring(flat, 0, islet.r, TOP, islet.x, islet.z);
     solid.color(STONE); wall(solid, islet.r, FOOT, TOP + .005, true, islet.x, islet.z);
     flat.color(RIM); ring(flat, islet.r - .32, islet.r, TOP + .005, islet.x, islet.z);
@@ -159,10 +163,84 @@ function land(world: WorldData, flat: Mesher, solid: Mesher) {
   flat.color(FLOOR);
   for (const w of water) ring(flat, w.inner, w.outer, BED);
   // The paved plaza, a little above the islet, and the promenade on the quay.
-  flat.color(PLAZA); ring(flat, 0, spec.plaza, TOP + .11); wall(flat, spec.plaza, TOP - .01, TOP + .11, true);
+  if (!world.center) { flat.color(PLAZA); ring(flat, 0, spec.plaza, TOP + .11); wall(flat, spec.plaza, TOP - .01, TOP + .11, true); }
   flat.color(RIM); ring(flat, spec.promenade - .5, spec.promenade + .5, TOP + .015);
   flat.color(PARK);
   for (const park of world.parks) ring(flat, 0, 2.2, TOP + .003, park.x, park.z);
+}
+
+/** A continuous park, square and reflecting pools, still inside the terrain's two existing batches. */
+function civicCenter(center: CivicCenter, flat: Mesher, solid: Mesher) {
+  // Shape XY maps to world XZ with Y up; invert its Y coordinate before rotating the cap.
+  const shape = new THREE.Shape(center.outline.map(p => new THREE.Vector2(p.x, -p.z)));
+  for (const pond of center.ponds) {
+    const x0 = pond.x - pond.width / 2, x1 = pond.x + pond.width / 2, z0 = pond.z - pond.depth / 2, z1 = pond.z + pond.depth / 2;
+    const hole = new THREE.Path();
+    hole.moveTo(x0, -z0); hole.lineTo(x1, -z0); hole.lineTo(x1, -z1); hole.lineTo(x0, -z1); hole.closePath();
+    shape.holes.push(hole);
+  }
+  flat.color(GRASS).add(new THREE.ShapeGeometry(shape), box.makeRotationX(-Math.PI / 2).setPosition(0, TOP, 0));
+  polygonWall(solid.color(STONE), center.outline, FOOT, TOP + .008);
+  // A continuous narrow coping softens the edge without adding another perimeter road.
+  flat.color(CIVIC_STONE);
+  for (let i = 0; i < center.outline.length; i++) {
+    const a = center.outline[i], b = center.outline[(i + 1) % center.outline.length];
+    const inset = (p: Point) => { const d = Math.hypot(p.x, p.z), k = (d - .42) / d; return { x: p.x * k, z: p.z * k }; };
+    const ai = inset(a), bi = inset(b), y = TOP + .012;
+    const vertices = [ai, a, b, bi].map(p => flat.vertex(p.x, y, p.z, 0, 1, 0));
+    flat.quad(vertices[0], vertices[3], vertices[2], vertices[1]);
+  }
+  for (const court of center.forecourts) {
+    flat.color(CIVIC_STONE); mark(flat, court.x, court.z, 0, court.width, court.depth, TOP + .014);
+    // Thin dark edging reads as a civic forecourt instead of an isolated circular island.
+    rectBorder(flat.color(CIVIC_EDGE), court.x, court.z, court.width, court.depth, .13, TOP + .017);
+  }
+  flat.color(CIVIC_WALK);
+  for (const path of center.paths) {
+    for (let i = 1; i < path.points.length; i++) {
+      const a = path.points[i - 1], b = path.points[i], dx = b.x - a.x, dz = b.z - a.z, length = Math.hypot(dx, dz);
+      if (length > 1e-5) mark(flat, (a.x + b.x) / 2, (a.z + b.z) / 2, Math.atan2(dx, dz), path.width, length, TOP + .022);
+    }
+    for (const p of path.points) flat.add(new THREE.CircleGeometry(path.width / 2, 8), box.makeRotationX(-Math.PI / 2).setPosition(p.x, TOP + .022, p.z));
+  }
+  const p = center.plaza;
+  solid.color(CIVIC_STONE); slab(solid, p.x, p.z, 0, p.width, p.depth, TOP - .01, TOP + .11);
+  flat.color(CIVIC_STONE); mark(flat, p.x, p.z, 0, p.width, p.depth, TOP + .112);
+  rectBorder(flat.color(CIVIC_EDGE), p.x, p.z, p.width - 1.1, p.depth - 1.1, .16, TOP + .115);
+  // Wide slabs and restrained joints keep the plaza legible from the normal city view.
+  flat.color("#c9c8be");
+  for (let x = -p.width / 2 + 4; x < p.width / 2 - 1; x += 4) mark(flat, p.x + x, p.z, 0, .045, p.depth - 1.4, TOP + .115);
+  for (let z = -p.depth / 2 + 4; z < p.depth / 2 - 1; z += 4) mark(flat, p.x, p.z + z, 0, p.width - 1.4, .045, TOP + .115);
+  for (const pond of center.ponds) {
+    const edge = .42;
+    solid.color(CIVIC_STONE);
+    for (const side of [-1, 1]) {
+      slab(solid, pond.x + side * (pond.width + edge) / 2, pond.z, 0, edge, pond.depth + edge * 2, FOOT, TOP + .04);
+      slab(solid, pond.x, pond.z + side * (pond.depth + edge) / 2, 0, pond.width, edge, FOOT, TOP + .04);
+    }
+    // Six small fountain jets: ten triangles each, sharing the terrain material and actual water below.
+    for (const along of [-.32, 0, .32]) {
+      const height = 2.3;
+      flat.color("#c8eff6").add(new THREE.CylinderGeometry(.024, .065, height, 5, 1, true), box.makeTranslation(pond.x, -1.25 + height / 2, pond.z + along * pond.depth));
+    }
+  }
+}
+
+function rectBorder(m: Mesher, x: number, z: number, width: number, depth: number, band: number, y: number) {
+  for (const side of [-1, 1]) {
+    mark(m, x + side * (width - band) / 2, z, 0, band, depth, y);
+    mark(m, x, z + side * (depth - band) / 2, 0, width - band * 2, band, y);
+  }
+}
+
+/** Convex outline in counter-clockwise XZ order, with outward-facing side walls. */
+function polygonWall(m: Mesher, outline: readonly Point[], bottom: number, top: number) {
+  for (let i = 0; i < outline.length; i++) {
+    const a = outline[i], b = outline[(i + 1) % outline.length], dx = b.x - a.x, dz = b.z - a.z, length = Math.hypot(dx, dz);
+    const nx = dz / length, nz = -dx / length;
+    const vertices = [[a.x, bottom, a.z], [a.x, top, a.z], [b.x, top, b.z], [b.x, bottom, b.z]].map(([x, y, z]) => m.vertex(x, y, z, nx, 0, nz));
+    m.quad(vertices[0], vertices[1], vertices[2], vertices[3]);
+  }
 }
 
 /** Ground patches that change while the city is open (the operator's plots): one mesh in the terrain's colours. */
@@ -228,7 +306,8 @@ function street(m: Mesher, road: Road, base: number) {
 function lagoonBridge(world: WorldData, solid: Mesher, flat: Mesher, road: Road) {
   const { length, angle, cx, cz } = along(road), [ax, az, bx, bz] = road, ux = Math.sin(angle), uz = Math.cos(angle);
   solid.color(DECK); slab(solid, cx, cz, angle, 2.75, length, TOP - .36, TOP - .02);
-  street(flat, road, TOP - .02);
+  if (world.center) { flat.color(CIVIC_WALK); mark(flat, cx, cz, angle, 2.45, length, TOP + .022); }
+  else street(flat, road, TOP - .02);
   const trim = (x: number, z: number) => {
     const islet = world.land.islets.find(i => Math.abs(Math.hypot(x - i.x, z - i.z) - i.r) < 1);
     const shore = islet ? islet.r : -(world.land.annuli.find(a => Math.abs(Math.hypot(x, z) - a.inner) < 1)?.inner ?? world.spec.lagoon);

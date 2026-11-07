@@ -12,6 +12,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import type { CityContext } from '../engine/context';
 import { COPY_STRIDE, copyGeometry, copyMatrices, copyMatrix, copyMesh, copyTints } from '../render/copies';
 import { insideParking, segmentDistance } from '../world/generate';
+import { centerContains } from '../world/civicCenter';
 import type { Point, Route, WorldData } from '../world/types';
 import { DISTRICT_FACING } from '../engine/camera';
 
@@ -44,14 +45,14 @@ function clearOfLandmark(p: Point, world: WorldData, margin: number) {
     // Keep the approach from the radial bridge empty even where WorldData's
     // road segments end at the island edge (a future entrance must stay clear).
     const r = Math.hypot(d.x, d.z) || 1;
-    if (Math.abs(dx * d.z - dz * d.x) / r < 1.35 + margin) return false;
+    if (!world.center && Math.abs(dx * d.z - dz * d.x) / r < 1.35 + margin) return false;
   }
   return true;
 }
 
 /** Build routes once from actual land/roads, so changing world radii never strands residents in water. */
 export function createCrowdRoutes(world: WorldData): CrowdRoute[] {
-  const roads = [...world.roads.streets, ...world.roads.bridges.map(bridge => bridge.road)];
+  const roads = [...world.roads.streets, ...world.roads.bridges.filter(bridge => !world.center || bridge.canal).map(bridge => bridge.road)];
   // Round obstacles, and the sections of the complexes as boxes, filed in a grid of 4-unit cells by their reach.
   const CELL = 4, cells = new Map<number, Obstacle[]>();
   const file = (o: Obstacle, reach: number) => {
@@ -87,8 +88,11 @@ export function createCrowdRoutes(world: WorldData): CrowdRoute[] {
     const radius = Math.hypot(p.x, p.z);
     const rect = world.land.rectangle;
     const rectangleLand = rect && Math.abs(p.x) < rect.width / 2 - margin && Math.abs(p.z) < rect.depth / 2 - margin && radius > rect.lake + margin;
-    if (!rectangleLand && !world.land.islets.some(island => Math.hypot(p.x - island.x, p.z - island.z) <= island.r - margin)
+    const centerLand = world.center && centerContains(world.center, p, margin);
+    if (!rectangleLand && !centerLand && !world.land.islets.some(island => Math.hypot(p.x - island.x, p.z - island.z) <= island.r - margin)
       && !world.land.annuli.some(land => radius >= land.inner + margin && radius <= land.outer - margin)) return false;
+    if (world.center && radius < world.spec.lagoon && !centerLand) return false;
+    if (world.center && Math.abs(p.x - world.center.plaza.x) < world.center.plaza.width / 2 + margin && Math.abs(p.z - world.center.plaza.z) < world.center.plaza.depth / 2 + margin) return false;
     if (world.roads.rings.some(ring => Math.abs(radius - ring) < 1 + margin)) return false;
     if (roads.some(road => segmentDistance(p.x, p.z, road) < 1.35 + margin)) return false;
     if (world.roads.parking.some(lot => insideParking(p, lot, margin + .2))) return false;

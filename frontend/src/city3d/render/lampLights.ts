@@ -10,6 +10,7 @@ import { abs, attribute, cameraPosition, cameraWorldMatrix, color, float, int, m
 import type { CityContext } from "../engine/context";
 import type { Placement, Road, WorldData } from "../world/types";
 import { BRIDGE_HALF, segmentDistance } from "../world/generate";
+import { centerContains, centerShoreDistance } from "../world/civicCenter";
 
 /** Bulb centre: the lamps stand on the ground (0.2) and the catalogue hangs the bulb 1.35 above the foot. */
 export const BULB_Y = .2 + 1.35;
@@ -40,7 +41,7 @@ export interface LampLights {
  */
 export function poolGround(world: WorldData, x: number, z: number): [number, number, number, number] {
   const r = Math.hypot(x, z), rings = world.land.annuli;
-  if (world.land.islets.some(islet => Math.hypot(x - islet.x, z - islet.z) <= islet.r)) return [0, 1e6, 0, NO_DECK];
+  if (world.center ? centerContains(world.center, { x, z }) : world.land.islets.some(islet => Math.hypot(x - islet.x, z - islet.z) <= islet.r)) return [0, 1e6, 0, NO_DECK];
   const gap = (a: { inner: number; outer: number }) => r < a.inner ? a.inner - r : r > a.outer ? r - a.outer : 0;
   const land = rings.reduce<typeof rings[number] | null>((best, a) => !best || gap(a) < gap(best) ? a : best, null);
   const [inner, outer] = land ? [land.inner, land.outer] : [0, 1e6];
@@ -61,11 +62,11 @@ const glowMaterial = () => new THREE.MeshBasicNodeMaterial({ transparent: true, 
  * positionNode gives the world position itself (three r180 applies positionNode before an instance matrix,
  * so a node there cannot see where its copy is), and there is no matrix buffer to upload.
  */
-function lampQuads(quad: THREE.BufferGeometry, lamps: Placement[], y: number, extra: Record<string, [Float32Array, number]> = {}) {
+function lampQuads(quad: THREE.BufferGeometry, lamps: Placement[], y: number | ((lamp: Placement) => number), extra: Record<string, [Float32Array, number]> = {}) {
   const geometry = new THREE.InstancedBufferGeometry(), n = lamps.length, at = new Float32Array(n * 3), shades = new Float32Array(n * 3), shade = new THREE.Color();
   geometry.setIndex(quad.getIndex());
   for (const name of ["position", "normal", "uv"]) geometry.setAttribute(name, quad.getAttribute(name));
-  lamps.forEach((lamp, i) => { at.set([lamp.x, y, lamp.z], i * 3); shade.set(SHADES[i * 3 % SHADES.length]).toArray(shades, i * 3); });
+  lamps.forEach((lamp, i) => { at.set([lamp.x, typeof y === "function" ? y(lamp) : y, lamp.z], i * 3); shade.set(SHADES[i * 3 % SHADES.length]).toArray(shades, i * 3); });
   const attributes: Record<string, [Float32Array, number]> = { lampAt: [at, 3], lampShade: [shades, 3], ...extra };
   for (const [name, [array, size]] of Object.entries(attributes)) geometry.setAttribute(name, new THREE.InstancedBufferAttribute(array, size));
   geometry.instanceCount = n;
@@ -89,14 +90,22 @@ export function createLampLights(ctx: CityContext, lamps: Placement[] = ctx.worl
   // Pools: flat quads on the ground, cut at the quay walls (the land ring) unless on a bridge deck.
   const grounds = new Float32Array(lamps.length * 4);
   lamps.forEach((lamp, i) => grounds.set(poolGround(ctx.world, lamp.x, lamp.z), i * 4));
-  const pools = new THREE.Mesh(lampQuads(new THREE.PlaneGeometry(POOL_RADIUS * 2, POOL_RADIUS * 2).rotateX(-Math.PI / 2), lamps, POOL_Y, { lampGround: [grounds, 4] }), glowMaterial());
+  const center = ctx.world.center, radii = center ? new Float32Array(lamps.length) : null;
+  if (center) lamps.forEach((lamp, i) => { radii![i] = centerContains(center, lamp) ? Math.min(POOL_RADIUS, centerShoreDistance(center, lamp)) : POOL_RADIUS; });
+  const poolHeight = (lamp: Placement) => center && Math.abs(lamp.x - center.plaza.x) <= center.plaza.width / 2 && Math.abs(lamp.z - center.plaza.z) <= center.plaza.depth / 2 ? .316 : POOL_Y;
+  const extras: Record<string, [Float32Array, number]> = { lampGround: [grounds, 4] };
+  if (radii) extras.lampLandRadius = [radii, 1];
+  const pools = new THREE.Mesh(lampQuads(new THREE.PlaneGeometry(POOL_RADIUS * 2, POOL_RADIUS * 2).rotateX(-Math.PI / 2), lamps, poolHeight, extras), glowMaterial());
   const ground = attribute("lampGround", "vec4"), r = positionWorld.xz.length();
   // Edges ascending: smoothstep is undefined for edge0 ≥ edge1 in GLSL and WGSL.
   const onLand = smoothstep(ground.x, ground.x.add(.1), r).mul(smoothstep(ground.y.sub(.1), ground.y, r).oneMinus());
   const normal = vec2(ground.z.cos(), ground.z.sin()), onDeck = smoothstep(BRIDGE_HALF - .1, BRIDGE_HALF, abs(positionGeometry.xz.dot(normal).sub(ground.w))).oneMinus();
   pools.material.positionNode = at.add(positionGeometry);
   pools.material.colorNode = color(POOL_WARM).mul(shade);
-  pools.material.opacityNode = falloff.mul(falloff).mul(max(onLand, onDeck)).mul(level).mul(clear).mul(POOL_STRENGTH);
+  // A central lamp's pool fits inside the nearest real shore in every direction. This conservative cut uses
+  // one float per lamp, not a polygon test in every fragment, and keeps the total vertex buffers below eight.
+  const centralCut = radii ? smoothstep(attribute("lampLandRadius", "float").sub(.1).max(0), attribute("lampLandRadius", "float").max(.0001), positionGeometry.xz.length()).oneMinus() : float(1);
+  pools.material.opacityNode = falloff.mul(falloff).mul(max(onLand, onDeck)).mul(centralCut).mul(level).mul(clear).mul(POOL_STRENGTH);
   // Just above the paving; the offset keeps it ahead of the street tops at any distance.
   pools.material.polygonOffset = true; pools.material.polygonOffsetFactor = -2; pools.material.polygonOffsetUnits = -2;
 

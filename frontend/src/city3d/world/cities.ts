@@ -8,11 +8,13 @@ import { generateWorld } from "./generate";
 import { clearMainland } from "./land";
 import { clearRailway } from "./railway";
 import { addStationSquare } from "./stationSquare";
+import { addCivicCenter } from "./civicCenter";
 import type { WorldData, WorldSpec } from "./types";
 
 export function islandWorld(spec: WorldSpec): WorldData {
   const world = generateWorld(spec);
   if (spec.name === "x4") clearMainland(world);
   if (world.railway) { clearRailway(world, world.railway); addStationSquare(world); }
+  addCivicCenter(world);
   return world;
 }

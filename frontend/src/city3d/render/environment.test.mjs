@@ -52,6 +52,35 @@ test('water covers the expanded lagoon/canal and changing night keeps one geomet
   water.dispose(); assert.ok(geometryFreed && materialFreed); assert.equal(ctx.listeners, 0); assert.equal(ctx.scene.children.length, 0);
 });
 
+test('civic reflecting pools follow their rectangular shores without changing water geometry or the outer canal', () => {
+  const ctx = context(), original = city.createWater(ctx);
+  const center = {
+    outline: Array.from({ length: 64 }, (_, i) => ({ x: Math.cos(i * Math.PI / 32) * 57.4, z: Math.sin(i * Math.PI / 32) * 57 })),
+    ponds: [{ x: 15, z: 3, width: 6, depth: 14 }],
+    plaza: { x: 0, z: 0, width: 20, depth: 34 }, forecourts: [], paths: [],
+  };
+  ctx.world = { ...ctx.world, center };
+  const water = city.createWater(ctx), p = water.mesh.geometry.getAttribute('position');
+  const before = original.mesh.geometry.getAttribute('shore'), after = water.mesh.geometry.getAttribute('shore');
+  assert.equal(p.count, original.mesh.geometry.getAttribute('position').count, 'the new shores add no water vertices or draws');
+  assert.equal(water.mesh.geometry.index.count, original.mesh.geometry.index.count);
+  let pond = 0, canal = 0;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), z = p.getZ(i);
+    if (Math.abs(x - 15) < 2.5 && Math.abs(z - 3) < 6.5) {
+      const expected = Math.min(3 - Math.abs(x - 15), 7 - Math.abs(z - 3)) / 4.5;
+      assert.ok(Math.abs(after.getX(i) - expected) < 1e-5, 'depth tint follows the pool wall instead of an obsolete island');
+      pond++;
+    }
+    if (Math.hypot(x, z) > ctx.world.spec.quay) {
+      assert.equal(after.getX(i), before.getX(i), 'outer-canal shore attributes remain unchanged');
+      canal++;
+    }
+  }
+  assert.ok(pond > 10 && canal > 100, `${pond} reflecting-pool and ${canal} canal samples`);
+  water.dispose(); original.dispose();
+});
+
 test("the scene's fog stays off the city and only lightly veils everything out to the relief's end", () => {
   // The fog covers every mesh (the city, the forests on the hills); the ranges add their own layers of haze (below).
   const ctx = context(), sky = city.createSky(ctx), fog = ctx.scene.fog, r = ctx.world.radius;

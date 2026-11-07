@@ -94,8 +94,19 @@ export interface RoutePlan { route: Route; cars: number; speed: number; boats?: 
 
 export interface ParkingLot { x: number; z: number; angle: number; length: number; depth: number; stalls: (Point & { rotation: number })[] }
 
+/** A connected civic park inside the old lagoon; mission coordinates and the outer city remain stable. */
+export interface CivicCenter {
+  outline: Point[];
+  ponds: { x: number; z: number; width: number; depth: number }[];
+  plaza: { x: number; z: number; width: number; depth: number };
+  forecourts: { x: number; z: number; width: number; depth: number }[];
+  paths: { points: Point[]; width: number }[];
+}
+
 export interface WorldData {
   spec: WorldSpec;
+  /** Present only in the redesigned Support city; lake city and the original v1 layout stay separate. */
+  center?: CivicCenter;
   /** The railway to the other city: the terminus at the town's edge and the line into the hills (world/railway.ts). */
   railway?: RailLine;
   districts: { id: string; x: number; z: number; color: string; soon: boolean }[];
