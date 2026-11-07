@@ -7,7 +7,7 @@
  *
  * The look (docs/CITY_V4.md, stage 3), all in the shader, from the height, the slope and the ground's noise image:
  * - smooth shading over the rounded hills, sharp edges only where the ground folds (rock crests, the cutting);
- * - meadow low down, forest green on the hills, grey rock on steep and high slopes with layered strata and grit
+ * - fresh meadow low down, forest green on the hills, blue-slate rock on steep and high slopes with layered strata and grit
  *   (the strata fade to their average once they are finer than a pixel), snow by height on the gentler faces of
  *   the peaks, its line wandering with the noise;
  * - layers of haze: it thickens with the distance from the camera and more in the valleys than on the crests, so
@@ -27,7 +27,7 @@ import { groundNoise } from "./ground";
 import { FOG_NEAR, skyHaze, skyLook } from "./sky";
 
 const TOP = .2, TAU = Math.PI * 2;
-const MEADOW = "#86a174", DRY = "#9aa77a", FOREST = "#5c7c52", ROCK = "#8e8a83", ROCK_WARM = "#9a8f80", SNOW = "#eef2f5";
+const MEADOW = "#78b960", DRY = "#a9b66c", FOREST = "#3d8754", ROCK = "#6c839a", ROCK_WARM = "#a09b88", SNOW = "#f1f8ff";
 /** Faces meeting at more than this angle keep a sharp edge between them; gentler folds are shaded smooth. */
 const CREASE = 50 * Math.PI / 180;
 /**
@@ -37,6 +37,8 @@ const CREASE = 50 * Math.PI / 180;
  * fades into the sky completely.
  */
 export const HAZE_START = FOG_NEAR, HAZE_DEPTH = 1.15, HAZE_MAX = .82, HAZE_HEIGHT = 55, EDGE = .2;
+/** Clear daytime air keeps the nearest ridges' colour and contrast; night retains its deeper veil. */
+const DAY_HAZE_MAX = .65;
 /**
  * The haze stays off the hills the forests stand on (world/generate.ts FOREST_REACH): the trees are copies with the
  * scene's fog only, and on hazed ground they would hang in the haze. It sets in past them over this share of a radius.
@@ -187,7 +189,8 @@ function mountainMaterial(ctx: CityContext, end: number) {
   const depth = max(distance.sub(radius * HAZE_START), 0).div(radius * HAZE_DEPTH);
   const valley = exp(max(height, 0).div(-HAZE_HEIGHT)).mul(.5).add(.5);
   const reach = forestReach(ctx.world), fromCentre = vec2(p.x, p.z).length();
-  const haze = float(1).sub(exp(depth.mul(valley).negate())).mul(HAZE_MAX).mul(smoothstep(reach, reach + radius * FOREST_FADE, fromCentre));
+  const hazeStrength = mix(DAY_HAZE_MAX, HAZE_MAX, ctx.night.level);
+  const haze = float(1).sub(exp(depth.mul(valley).negate())).mul(hazeStrength).mul(smoothstep(reach, reach + radius * FOREST_FADE, fromCentre));
   const veil = max(haze, smoothstep(end * (1 - EDGE), end, fromCentre));
   material.outputNode = vec4(mix(output.rgb, skyHaze(look, toward.div(distance)), veil), output.a);
   return material;
