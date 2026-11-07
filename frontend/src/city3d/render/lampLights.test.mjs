@@ -113,6 +113,29 @@ test('a city that starts at night shows the lights on its first frame', () => {
   dispose();
 });
 
+test('civic lamps light new park land, clear the raised plaza and clip conservatively at real shores', () => {
+  const center = {
+    outline: Array.from({ length: 64 }, (_, i) => ({ x: Math.cos(i * Math.PI / 32) * 57.4, z: Math.sin(i * Math.PI / 32) * 57 })),
+    ponds: [{ x: 15, z: 3, width: 6, depth: 14 }],
+    plaza: { x: 0, z: 0, width: 20, depth: 34 }, forecourts: [], paths: [],
+  };
+  const lamps = [[0, 0], [11.5, 3], [56.8, 0], [70, 0]].map(([x, z]) => ({ kind: 'lamp', variant: 0, x, z, rotation: 0, scale: 1, width: 0 }));
+  const world = { ...worlds.x4, center, placements: lamps, roads: { ...worlds.x4.roads, bridges: worlds.x4.roads.bridges.filter(b => b.canal) } };
+  const ctx = context(world, true), lights = city.createLampLights(ctx);
+  for (const lamp of lamps.slice(0, 3)) assert.deepEqual(city.poolGround(world, lamp.x, lamp.z).slice(0, 2), [0, 1e6], 'the park is walkable land, not the old lagoon');
+  assert.deepEqual(city.poolGround(world, 70, 0), city.poolGround(worlds.x4, 70, 0), 'legacy quay clipping is preserved');
+  const position = lights.pools.geometry.getAttribute('lampAt'), radii = lights.pools.geometry.getAttribute('lampLandRadius');
+  assert.ok(position.getY(0) > .31 && position.getY(0) < .33, 'plaza pools sit above the raised paving');
+  assert.ok(Math.abs(position.getY(1) - city.POOL_Y) < 1e-5);
+  assert.ok(Math.abs(radii.getX(1) - .5) < 1e-5, 'a pool near the reflecting pond never reaches its water');
+  assert.ok(radii.getX(2) > .5 && radii.getX(2) < .601, 'the polygon coast clips the outer park lamp');
+  assert.ok(Math.abs(radii.getX(3) - city.POOL_RADIUS) < 1e-6);
+  const buffers = new Set(Object.values(lights.pools.geometry.attributes).map(a => a.data ?? a));
+  assert.ok(buffers.size <= 8, 'the center cut stays within the WebGPU vertex-buffer limit');
+  assert.equal(ctx.scene.children.filter(o => o.isMesh).length, 2, 'still one pool draw and one halo draw');
+  lights.dispose();
+});
+
 test('the catalogue lamp has a shade, plain glass in the day, and its bulb glows with the city night level', () => {
   const night = city.createNight(), catalogue = city.createCatalogue(new Map(), night);
   const matrix = new THREE.Matrix4(), lamp = catalogue.resolve({ kind: 'lamp', variant: 0, x: 3, z: 4, rotation: 0, scale: 1, width: 0 }, matrix);

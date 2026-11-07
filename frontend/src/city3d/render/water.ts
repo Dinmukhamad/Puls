@@ -19,6 +19,7 @@ import { attribute, cameraPosition, cameraWorldMatrix, color, dot, float, int, m
 import type { CityContext } from "../engine/context";
 import type { WorldData } from "../world/types";
 import { BRIDGE_HALF, segmentDistance } from "../world/generate";
+import { centerContains, centerShoreDistance } from "../world/civicCenter";
 import { groundNoise } from "./ground";
 import { HORIZON, skyGradient, skyLook } from "./sky";
 
@@ -48,6 +49,7 @@ function waterGeometry(world: WorldData) {
     // Under the land by a little at both edges, as the old rings were, so no gap shows at the walls.
     const r0 = Math.max(0, inner - .5), r1 = outer + .5, rings = Math.max(2, Math.ceil((r1 - r0) / 1.5)), sides = Math.min(720, Math.max(96, Math.round(2 * Math.PI * r1 / 1.5)));
     const islets = world.land.islets.filter(i => Math.hypot(i.x, i.z) + i.r > inner && Math.hypot(i.x, i.z) - i.r < outer);
+    const center = world.center && outer <= world.spec.lagoon + .01 ? world.center : null;
     const bridges = world.roads.bridges.map(b => b.road);
     const start = positions.length / 3;
     for (let k = 0; k <= rings; k++) {
@@ -55,7 +57,11 @@ function waterGeometry(world: WorldData) {
       for (let s = 0; s < sides; s++) {
         const a = s / sides * Math.PI * 2, x = Math.cos(a) * r, z = Math.sin(a) * r;
         let d = Math.min(r - inner, outer - r);
-        for (const i of islets) d = Math.min(d, Math.hypot(x - i.x, z - i.z) - i.r);
+        if (center) {
+          // The connected park covers the old islets; only its actual coast and reflecting-pool walls form shores.
+          const point = { x, z };
+          d = centerContains(center, point) ? 0 : Math.min(outer - r, centerShoreDistance(center, point));
+        } else for (const i of islets) d = Math.min(d, Math.hypot(x - i.x, z - i.z) - i.r);
         positions.push(x, WATER_Y, z); shore.push(THREE.MathUtils.clamp(d / SHELF, 0, 1));
         // 1 under a bridge's edge, 0 from REFLECTION_REACH beyond it: where its lamps and cars mirror at night.
         let b = Infinity;
