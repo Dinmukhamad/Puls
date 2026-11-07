@@ -9,6 +9,24 @@ export const TREE_ENVELOPES: Record<TreeSpecies, [Vec, Vec]> = {
   birch: [[-.46, 0, -.46], [.46, 2.65, .46]], oak: [[-.82, 0, -.72], [.9, 2.05, .68]],
 };
 
+/** A few closed volumes at distance: the same species, height and planting envelope, without hidden branches. */
+export function distantTreeGeometry(species: TreeSpecies) {
+  const parts: THREE.BufferGeometry[] = [];
+  const trunk = paintProp(new THREE.CylinderGeometry(.045, .075, .85, 4).translate(0, .425, 0), species === "birch" ? "#e9e5d5" : "#84583d", .86);
+  parts.push(trunk);
+  if (species === "cone") {
+    parts.push(paintProp(new THREE.ConeGeometry(.6, 1.45, 5).translate(0, 1.1, 0), "#338653", .94));
+    parts.push(paintProp(new THREE.ConeGeometry(.4, 1.3, 5).translate(0, 1.75, 0), "#56a465", .94));
+  } else {
+    const tall = species === "birch";
+    const lobe = (x: number, y: number, z: number, w: number, h: number, d: number, tint: string) =>
+      paintProp(new THREE.OctahedronGeometry(1).scale(w, h, d).translate(x, y, z), tint, .94);
+    parts.push(lobe(-.15, tall ? 1.5 : 1.15, .03, tall ? .38 : .66, tall ? .8 : .62, tall ? .34 : .6, tall ? "#8ac669" : "#48964e"));
+    parts.push(lobe(.2, tall ? 2.05 : 1.5, -.04, tall ? .3 : .56, tall ? .6 : .55, tall ? .3 : .54, tall ? "#aed786" : "#7cbd68"));
+  }
+  return fitPropEnvelope(mergePropGeometries(parts), TREE_ENVELOPES[species]);
+}
+
 /** `aProp` carries roughness and metalness so one shared material can distinguish timber, foliage and metal. */
 export function paintProp(geometry: THREE.BufferGeometry, color: string, roughness = .78, metalness = 0, variation = .035) {
   const part = geometry.index ? geometry.toNonIndexed() : geometry, position = part.getAttribute("position"), normal = part.getAttribute("normal");

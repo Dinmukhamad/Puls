@@ -110,7 +110,11 @@ export function select(grid: Grid, copies: Copies, selector: Selector, view: Vie
   let n = 0;
   for (const cell of grid.cells) {
     if (boxOutside(view.planes, cell, view.margin)) continue;
-    for (const i of cell.items) {
+    copy: for (const i of cell.items) {
+      const radius = copies.radius[i] + view.margin;
+      for (let p = 0; p < 24; p += 4) {
+        if (view.planes[p] * copies.x[i] + view.planes[p + 1] * copies.y[i] + view.planes[p + 2] * copies.z[i] + view.planes[p + 3] < -radius) continue copy;
+      }
       const dx = copies.x[i] - view.x, dy = copies.y[i] - view.y, dz = copies.z[i] - view.z;
       const level = lodLevel(Math.sqrt(dx * dx + dy * dy + dz * dz), levels[i], view.distances);
       levels[i] = level;

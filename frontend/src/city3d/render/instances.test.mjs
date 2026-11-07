@@ -22,6 +22,17 @@ function lattice(half, step) {
 /** A box-shaped "frustum": x and z within [x0, x1] × [z0, z1], y within [-10, 100]. */
 const boxPlanes = (x0, x1, z0, z1) => [1, 0, 0, -x0, -1, 0, 0, x1, 0, 0, 1, -z0, 0, 0, -1, z1, 0, 1, 0, 10, 0, -1, 0, 100];
 
+test('edge cells reject offscreen copies individually while retaining touching spheres and shadow margin', () => {
+  const copies = cells.createCopies(4);
+  [5, 13, 19, 28].forEach((x, i) => { copies.x[i] = x; copies.y[i] = 1; copies.z[i] = 5; copies.radius[i] = i === 1 ? 3 : 1; });
+  const grid = cells.buildGrid(copies), selector = cells.createSelector(4);
+  const view = { x: 0, y: 10, z: 0, planes: boxPlanes(0, 10, 0, 10), margin: 0, distances: DISTANCES };
+  cells.select(grid, copies, selector, view);
+  assert.deepEqual([...selector.current.copies.slice(0, selector.current.count)], [0, 1]);
+  cells.select(grid, copies, selector, { ...view, margin: 10 });
+  assert.deepEqual([...selector.current.copies.slice(0, selector.current.count)], [0, 1, 2]);
+});
+
 test('every copy lands in exactly one cell whose box holds its sphere', () => {
   const copies = lattice(200, 5), grid = cells.buildGrid(copies);
   const seen = new Uint8Array(copies.count);
