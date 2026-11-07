@@ -89,8 +89,8 @@ export function createInstancePools(ctx: CityContext, catalogue: Catalogue, plac
   ctx.scene.add(group);
 
   const camera = ctx.camera, frustum = new THREE.Frustum(), projection = new THREE.Matrix4(), planes = new Float32Array(24);
-  // LOD2 proxies are 12-triangle boxes: they stay out to the last placements (FOG_END radii, past the hills),
-  // so the map never shows empty ground; the quality's last distance only limits LOD1.
+  // The far slot retains the architectural model (or a reduced tree/prop silhouette) out to the last placements,
+  // so the map never shows empty ground; the quality's last distance only limits the middle slot.
   const fogFar = ctx.world.radius * FOG_END;
   const distancesFor = (d: readonly number[]) => [d[0], d[1], Math.max(d[2], fogFar)] as [number, number, number];
   const view: View = { x: 0, y: 0, z: 0, planes, margin: CULL_MARGIN, distances: distancesFor(ctx.quality.lodDistances) };

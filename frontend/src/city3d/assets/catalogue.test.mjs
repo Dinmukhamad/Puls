@@ -78,8 +78,11 @@ test('blocks, towers and port sheds light their windows at night; trees, lamp po
   assert.ok(at('tower', 3).lods[0].parts[0].material.emissiveNode);
   // Houses without the Kenney file fall back to lit blocks.
   assert.ok(at('house').lods[0].parts[0].material.emissiveNode);
-  for (const kind of ['tree-cone', 'tree-round']) assert.equal(at(kind).lods[0].parts[0].material.emissiveNode, null);
-  assert.equal(at('lamp').lods[0].parts[0].material.emissiveNode, null);
+  for (const kind of ['tree-cone', 'tree-round', 'lamp']) {
+    const pole = at(kind).lods[0].parts[0].material;
+    assert.equal(pole.emissive.getHex(), 0, `${kind} has no light source of its own`);
+    assert.equal(pole.userData.citySurfaceEmission, 'reflected-light');
+  }
 
   const sheds = [0, 1, 2, 3, 4].map(v => at('port', v)), windows = sheds.map(m => surfaceVertices(m.lods[0].parts[0].geometry, city.FACE.window).length);
   assert.ok(sheds.every(m => m.lods[0].parts[0].material.emissiveNode && m.lods.every(level => level === m.lods[0])), 'one lit facade model at every distance');
@@ -157,11 +160,19 @@ test('residential sections: a model per height with its balconies at every dista
     const model = at(kind);
     assert.ok(model, kind);
     assert.equal(model.lods[0].parts.length, 1, `${kind} is one merged part`);
-    assert.equal(model.lods[0].parts[0].material.emissiveNode, null, `${kind} does not glow`);
+    assert.equal(model.lods[0].parts[0].material.emissive.getHex(), 0, `${kind} has no light source of its own`);
+    assert.equal(model.lods[0].parts[0].material.userData.citySurfaceEmission, 'reflected-light');
     assert.ok(model.lods[0].parts[0].geometry.getAttribute('position').count < 3000, `${kind} is light`);
   }
-  // Small pieces stay themselves far away: no boxes.
-  for (const kind of ['bench', 'slide', 'swings', 'goal', 'hoop', 'gazebo', 'hedge', 'lamp']) assert.ok(at(kind).lods.every(level => level === at(kind).lods[0]), `${kind} is one model at every distance`);
+  // Architectural shapes remain unchanged; detailed vegetation/furniture retain their footprint in a far mesh.
+  for (const kind of ['slide', 'swings', 'goal', 'hoop', 'gazebo', 'hedge', 'lamp']) assert.ok(at(kind).lods.every(level => level === at(kind).lods[0]), `${kind} is one model at every distance`);
+  for (const kind of ['bench', 'tree-cone', 'tree-round', 'tree-birch', 'tree-oak', 'bush', 'flowerbed', 'planter', 'fountain']) {
+    const model = at(kind), high = model.lods[0].parts[0].geometry, low = model.lods[2].parts[0].geometry;
+    assert.notEqual(high, low); high.computeBoundingBox(); low.computeBoundingBox();
+    assert.ok(low.getAttribute('position').count < high.getAttribute('position').count, `${kind} reduces repeated distant detail`);
+    assert.ok(low.boundingBox.min.distanceTo(high.boundingBox.min) < .001 && low.boundingBox.max.distanceTo(high.boundingBox.max) < .001, `${kind} keeps its silhouette envelope`);
+    assert.ok(low.getAttribute('aProp') && low.getAttribute('color') && low.getAttribute('position').count > 36, `${kind} retains its actual model and material, not a box`);
+  }
   // Offices: a lit glass model per height, podiums and towers alike, raised onto their podium by `lift`.
   const towers = [0, 1, 2, 3, 4, 5].map(variant => at('glass-tower', { variant, width: 8, depth: 6 }));
   assert.equal(new Set(towers).size, 6);
@@ -169,7 +180,7 @@ test('residential sections: a model per height with its balconies at every dista
   assert.ok(surfaceVertices(section.lods[0].parts[0].geometry, city.FACE.curtain).length === 0, 'sections have windows, offices glass: one stretched-facade material draws both');
   const raised = new THREE.Vector3(); at('glass-tower', { variant: 4, width: 8, depth: 6, lift: 2.7 }); matrix.decompose(raised, new THREE.Quaternion(), size);
   assert.ok(Math.abs(raised.y - 2.9) < 1e-6 && Math.abs(raised.y + size.y - (.2 + 26 * .9)) < 1e-6, 'a tower on its podium reaches its own height');
-  assert.ok(at('tree-oak').lods[2] === at('tree-oak').lods[0], 'trees too');
+  assert.equal(at('tree-oak').lods[2].parts[0].material, at('tree-oak').lods[0].parts[0].material, 'tree lighting is identical across detail levels');
   catalogue.dispose();
 });
 

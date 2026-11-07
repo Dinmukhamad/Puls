@@ -124,7 +124,7 @@ test('the catalogue lamp has a shade, plain glass in the day, and its bulb glows
     // Two parts (two draw calls per level): the pole with its shade, and the bulb; tiny, as lamps come by the hundred.
     assert.equal(level.parts.length, 2);
     const triangles = level.parts.reduce((sum, part) => sum + (part.geometry.index?.count ?? part.geometry.getAttribute('position').count) / 3, 0);
-    assert.ok(triangles <= 140, `${triangles} triangles`);
+    assert.ok(triangles <= 320, `${triangles} triangles including base, collars and shade rim`);
     const pole = new THREE.Box3().setFromBufferAttribute(level.parts.find(part => part.material.name !== 'lamp-bulb').geometry.getAttribute('position'));
     assert.ok(pole.max.x > .15, 'a shade wider than the pole');
   }

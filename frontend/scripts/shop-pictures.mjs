@@ -1,7 +1,7 @@
 /**
  * The pictures of the district shop (src/pages/city/CityShop.tsx): every thing it sells, rendered from the city's own
  * models and layouts (world/landLayouts.ts, world/decor.ts, assets/catalogue.ts) on a tile of grass, in a headless
- * browser, and written to public/city/shop/v4 as small WebP files the shop loads only when it shows them. Run it
+ * browser, and written to public/city/shop/v5 as small WebP files the shop loads only when it shows them. Run it
  * again when a model or a layout changes (and bump the folder's version, so browsers take the new pictures):
  *
  *   cd frontend && node scripts/shop-pictures.mjs
@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 import { createServer } from "vite";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
-const OUT = fileURLToPath(new URL("../public/city/shop/v4/", import.meta.url));
+const OUT = fileURLToPath(new URL("../public/city/shop/v5/", import.meta.url));
 const { chromium } = await import(process.env.PLAYWRIGHT ?? "playwright").catch(() => {
   throw new Error("Playwright is needed: npm i -D playwright, or PLAYWRIGHT=<path to playwright/index.mjs>");
 });
@@ -146,7 +146,7 @@ const server = await createServer({
   }],
 });
 await server.listen();
-const browser = await chromium.launch({ args: ["--use-gl=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"] });
+const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_EXECUTABLE || undefined, args: ["--no-sandbox", "--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"] });
 try {
   const page = await browser.newPage();
   page.on("pageerror", error => console.error("page:", error.message));

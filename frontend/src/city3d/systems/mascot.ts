@@ -12,6 +12,7 @@ import { loadCharacter } from "../assets/loader";
 import type { CityContext } from "../engine/context";
 import type { CityMascot } from "../types";
 import { disposeTree, paintGeometry } from "./districts";
+import { surfaceMaterial } from "../assets/surfaceDetail";
 
 /** A person is 2.25 units tall, comparable to the walkers, standing on a low .35-unit plinth. */
 const ROOT_Y = .3, ROOT_SCALE = 1;
@@ -35,7 +36,7 @@ function painted(parts: [THREE.BufferGeometry, string][], material: THREE.Materi
   mesh.castShadow = mesh.receiveShadow = true;
   return mesh;
 }
-const paint = () => new THREE.MeshStandardNodeMaterial({ vertexColors: true, roughness: .72, metalness: .04 });
+const paint = () => surfaceMaterial({ vertexColors: true, finish: "paint", roughness: .42, metalness: .24 });
 const cylinder = (r: number, h: number, x: number, y: number, z: number, segments = 32) => new THREE.CylinderGeometry(r, r, h, segments).translate(x, y, z);
 const sphere = (r: number, x: number, y: number, z: number, sx = 1, sy = 1, sz = 1) => new THREE.SphereGeometry(r, 18, 14).scale(sx, sy, sz).translate(x, y, z);
 
@@ -44,6 +45,14 @@ function robot() {
     [sphere(.55, 0, 1.05, 0, 1.1, .92, .8), "#b1b4b9"], [sphere(.42, 0, 1.08, .26, 1, .64, .35), "#22242a"],
     [sphere(.08, -.16, 1.12, .4), "#9ff5ea"], [sphere(.08, .16, 1.12, .4), "#9ff5ea"],
     [cylinder(.04, .32, 0, 1.6, 0), "#b6b9be"], [sphere(.09, 0, 1.8, 0), "#ffd976"], [sphere(.28, 0, .52, 0), "#9a9ea6"],
+    // Inset visor trim, acoustic grilles and a neck bearing; all stay inside the old assistant's silhouette.
+    [new THREE.TorusGeometry(.345, .016, 6, 30).scale(1.14, .7, 1).translate(0, 1.08, .34), "#607582"],
+    [cylinder(.285, .035, 0, .53, 0, 20), "#59646f"],
+    ...[-1, 1].flatMap(side => [
+      [sphere(.065, side * .58, 1.03, .1, .38, 1.25, .8), "#6c7d88"],
+      [sphere(.026, side * .594, 1.06, .13, .35, .3, 1), "#293742"],
+      [sphere(.026, side * .594, 1.00, .13, .35, .3, 1), "#293742"],
+    ] as [THREE.BufferGeometry, string][]),
   ], paint());
 }
 
@@ -54,7 +63,8 @@ function headset(male: boolean) {
     ...[-1, 1].map(side => new THREE.CylinderGeometry(.046, .046, .035, 16).rotateZ(Math.PI / 2).translate(side * .137, 0, 0)),
     new THREE.TubeGeometry(new THREE.CatmullRomCurve3([new THREE.Vector3(.145, -.025, .02), new THREE.Vector3(.13, -.08, .1), new THREE.Vector3(.04, -.095, .16)]), 12, .008, 6, false),
   ];
-  const mesh = new THREE.Mesh(mergeGeometries(parts)!, new THREE.MeshStandardNodeMaterial({ color: "#28383f", roughness: .4 }));
+  for (const side of [-1, 1]) parts.push(new THREE.TorusGeometry(.037, .007, 5, 16).rotateY(Math.PI / 2).translate(side * .145, 0, 0));
+  const mesh = new THREE.Mesh(mergeGeometries(parts)!, surfaceMaterial({ color: "#28383f", finish: "paint", roughness: .5, metalness: .12 }));
   parts.forEach(g => g.dispose());
   mesh.position.set(0, .095, male ? -.03 : .005); mesh.castShadow = true;
   return mesh;
@@ -96,7 +106,7 @@ function mergeSkinned(model: THREE.Object3D) {
     return paintGeometry(m.geometry, (m.material as THREE.MeshStandardMaterial).color);
   }));
   if (!geometry) return;
-  const mesh = new THREE.SkinnedMesh(geometry, new THREE.MeshStandardNodeMaterial({ vertexColors: true, roughness: .72, metalness: 0, side: (first.material as THREE.Material).side }));
+  const mesh = new THREE.SkinnedMesh(geometry, surfaceMaterial({ vertexColors: true, finish: "cloth", roughness: .76, metalness: 0, side: (first.material as THREE.Material).side }));
   mesh.name = "operator"; mesh.position.copy(first.position); mesh.quaternion.copy(first.quaternion); mesh.scale.copy(first.scale);
   mesh.castShadow = mesh.receiveShadow = true;
   first.parent!.add(mesh); mesh.bind(first.skeleton, first.bindMatrix);

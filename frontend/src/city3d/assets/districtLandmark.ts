@@ -39,6 +39,25 @@ function pane(mb: MeshBuilder, b: LandmarkBox, index: number) {
   }
 }
 
+/** Twelve radial hour marks, drawn as inlaid strips inside the dial rather than more little boxes. */
+function clockTicks(mb: MeshBuilder, x: number, y: number, z: number, radius: number) {
+  mb.detail(() => {
+    for (let k = 0; k < 12; k++) {
+      const a = k * Math.PI / 6, c = Math.cos(a), s = Math.sin(a), inner = radius * (k % 3 ? .81 : .73), outer = radius * .9, half = radius * .022;
+      const tx = -s * half, ty = c * half;
+      mb.quad([[x + c * inner - tx, y + s * inner - ty, z], [x + c * outer - tx, y + s * outer - ty, z],
+        [x + c * outer + tx, y + s * outer + ty, z], [x + c * inner + tx, y + s * inner + ty, z]], { kind: FACE.trim, col: FINISH.dark.col });
+    }
+  });
+}
+
+/** A small planted crown with overlapping lobes, bounded by the original tree's ellipsoid. */
+function crown(mb: MeshBuilder, b: LandmarkBox) {
+  const x = b.x * M, y = (b.y + b.height / 2) * M, z = b.z * M, r = b.width / 2 * M, rise = b.height / 2 * M, sz = b.depth / b.width;
+  sphere(mb, { x, y, z, r: r * .8, rise: rise * .96, sz, seg: 8, rings: 3, kind: FACE.leaf, col: FINISH.leaf.col });
+  for (const side of [-1, 1]) sphere(mb, { x: x + side * r * .4, y: y + side * rise * .09, z: z - r * .1, r: r * .56, rise: rise * .68, sz, seg: 6, rings: 2, kind: FACE.leaf, col: FINISH.leaf.col });
+}
+
 /** One part in its box, in metres. */
 function part(mb: MeshBuilder, b: LandmarkBox, index: number) {
   const f = FINISH[b.finish], x0 = (b.x - b.width / 2) * M, x1 = (b.x + b.width / 2) * M, z0 = (b.z - b.depth / 2) * M, z1 = (b.z + b.depth / 2) * M;
@@ -50,10 +69,18 @@ function part(mb: MeshBuilder, b: LandmarkBox, index: number) {
         if (b.finish === "glass") {
           // Curtain walls: storeys of 3.2 m from the foot, mullions every 1.4 m.
           box(mb, [x0, y0, z0, x1, y1, z1], { c: .12, kind: FACE.curtain, col: f.col, top: FACE.deck, bay: 1.4, floor: 3.2, v0: -y0 });
+          // A grounded sill and a transom give the glass wings a visible metal frame.
+          if (b.height > 1.5 && b.width > 1) mb.detail(() => {
+            box(mb, [x0 + .04, y0 + .02, z1 - .015, x1 - .04, y0 + .18, z1 + .025], { c: 0, kind: FACE.metal, col: FINISH.dark.col, top: FACE.metal, occlude: false });
+            box(mb, [x0 + .04, y1 - .16, z1 - .015, x1 - .04, y1 - .06, z1 + .025], { c: 0, kind: FACE.metal, col: FINISH.trim.col, top: FACE.metal, occlude: false });
+          });
           return;
         }
         // Flat roofs and terraces paved in the stone of their walls, like the square.
-        box(mb, [x0, y0, z0, x1, y1, z1], { c: small ? 0 : Math.min(.14, b.width * M / 8), kind: f.kind, col: f.col, top: f.kind, occlude: !small });
+        const plinth = (b.finish === "stone" || b.finish === "white") && b.width > 2.4 && b.depth > 2 && b.height > 1.5;
+        const inset = plinth ? .055 : 0;
+        box(mb, [x0 + inset, y0, z0 + inset, x1 - inset, y1, z1 - inset], { c: small ? 0 : Math.min(.14, b.width * M / 8), kind: f.kind, col: f.col, top: f.kind, occlude: !small });
+        if (plinth) box(mb, [x0, y0 + .02, z0, x1, y0 + .22, z1], { c: .02, kind: FACE.trim, col: FINISH.trim.col, top: FACE.trim, occlude: false });
         return;
       }
       case "cylinder": {
@@ -61,16 +88,25 @@ function part(mb: MeshBuilder, b: LandmarkBox, index: number) {
           // A disc facing the front: a clock's dial or its rim.
           const r = b.width / 2 * M, t = b.depth * M, cy = (b.y + b.height / 2) * M;
           mb.frame([cx, cy, z0], [1, 0, 0], [0, 0, 1], [0, -1, 0], () => cylinder(mb, { x: 0, z: 0, y0: 0, y1: t, r, seg: 24, kind: f.kind, col: f.col, top: f.kind, occlude: false }));
+          if (b.finish === "white") clockTicks(mb, cx, cy, z1 + .003, r);
           if (b.finish === "gold") mb.frame([cx, cy, z1], [1, 0, 0], [0, 0, 1], [0, -1, 0], () => torus(mb, { x: 0, y: 0, z: 0, R: r * .94, r: r * .06, seg: 24, tube: 5, kind: FACE.metal, col: f.col }));
           return;
         }
         const r = b.width / 2 * M, sz = b.depth / b.width;
         cylinder(mb, { x: cx, z: cz, y0, y1, r, r1: b.finish === "white" && b.height > 1.5 ? r * .88 : r, sz, seg: r > 1 ? 24 : 12, kind: f.kind, col: f.col, top: f.kind === FACE.wall ? FACE.trim : f.kind, occlude: r > .6 });
+        if (b.finish === "white" && b.height > 1.5) mb.detail(() => {
+          // A base and capital stay within the column's former cylinder and read clearly at the entrance.
+          cylinder(mb, { x: cx, z: cz, y0: y0 + .01, y1: y0 + .17, r, r1: r * .94, sz, seg: 8, kind: FACE.trim, col: FINISH.trim.col, top: FACE.trim, occlude: false });
+          cylinder(mb, { x: cx, z: cz, y0: y1 - .17, y1, r: r * .88, r1: r * .96, sz, seg: 8, kind: FACE.trim, col: FINISH.trim.col, top: FACE.trim, occlude: false });
+        });
         return;
       }
       case "cone": cylinder(mb, { x: cx, z: cz, y0, y1, r: b.width / 2 * M, r1: 0, sz: b.depth / b.width, seg: 16, kind: f.kind === FACE.wall ? FACE.roof : f.kind, col: f.col, occlude: false }); return;
       case "dome": dome(mb, { x: cx, z: cz, y0, r: b.width / 2 * M, rise: b.height * M, sz: b.depth / b.width, seg: 28, rings: 7, kind: f.kind === FACE.wall ? FACE.roof : f.kind, col: f.col }); return;
-      case "ball": { const r = b.width / 2 * M; sphere(mb, { x: cx, y: (b.y + b.height / 2) * M, z: cz, r, rise: b.height / 2 * M, sz: b.depth / b.width, seg: r > 1 ? 12 : 8, rings: r > 1 ? 4 : 3, kind: f.kind, col: f.col }); return; }
+      case "ball": {
+        if (b.finish === "leaf") { crown(mb, b); return; }
+        const r = b.width / 2 * M; sphere(mb, { x: cx, y: (b.y + b.height / 2) * M, z: cz, r, rise: b.height / 2 * M, sz: b.depth / b.width, seg: r > 1 ? 12 : 8, rings: r > 1 ? 4 : 3, kind: f.kind, col: f.col }); return;
+      }
       case "pyramid": pyramid(mb, { x0, x1, z0, z1, y: y0, h: y1 - y0, roof: f.col, kind: f.kind === FACE.roof ? FACE.roof : f.kind }); return;
       case "roof": {
         // A gable with eaves inside its box: the ridge along x or z, the eaves reaching the box's edges.
@@ -79,6 +115,8 @@ function part(mb: MeshBuilder, b: LandmarkBox, index: number) {
         // The wall plate under the eaves, then the roof from it: eaves at the box's edges, the ridge at its top.
         box(mb, along === "x" ? [a0, y0, c0, a1, plate, c1] : [c0, y0, a0, c1, plate, a1], { c: 0, kind: FACE.wall, col: FINISH.stone.col, noTop: true, occlude: false });
         gableRoof(mb, { a0, a1, b0: c0, b1: c1, y: plate, pitch, overhang: ov, axis: along, roof: f.col, wall: FINISH.stone.col });
+        // Metal ridge flashing is contained within the original roof box.
+        box(mb, along === "x" ? [x0 + .12, y1 - .1, cz - .09, x1 - .12, y1, cz + .09] : [cx - .09, y1 - .1, z0 + .12, cx + .09, y1, z1 - .12], { c: 0, kind: FACE.metal, col: FINISH.dark.col, top: FACE.metal, occlude: false });
         return;
       }
     }

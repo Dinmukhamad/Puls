@@ -11,8 +11,8 @@
  * small rounded boxes. The occlusion by the wheels and the ground is baked into the vertices (bakeOcclusion).
  */
 import * as THREE from "three/webgpu";
-import { abs, attribute, cameraPosition, color, dot, float, floor, fract, fwidth, max, min, mix, normalGeometry, normalWorld, positionGeometry, positionWorld, pow, reflect, smoothstep, step, varyingProperty, vec2, vec3, vertexColor, type ShaderNodeObject } from "three/tsl";
-import { MeshBuilder, bakeOcclusion, box, cylinder, rgb, type Face, type V3 } from "./facade";
+import { abs, attribute, cameraPosition, color, dot, float, floor, fract, fwidth, max, min, mix, normalGeometry, normalWorld, positionGeometry, positionWorld, pow, reflect, sin, smoothstep, step, varyingProperty, vec2, vec3, vertexColor, type ShaderNodeObject } from "three/tsl";
+import { MeshBuilder, bakeOcclusion, box, cylinder, rgb, rod, type Face, type V3 } from "./facade";
 import { skyGradient, type SkyLook } from "../render/sky";
 
 /**
@@ -165,14 +165,41 @@ function disc(mb: MeshBuilder, x: number, y: number, z: number, r: number, outwa
     mb.tri(outward > 0 ? [[x, y, z], p, q] : [[x, y, z], q, p], { kind: as(part), col, n, uv: [[z, y], [p[2], p[1]], [q[2], q[1]]] });
   }
 }
-/** A tyre with its rim and hub on the outer side, its axle along x. */
+/** Rounded tyre shoulders, an inset alloy ring and five open spokes, all in the vehicle's one mesh. */
 function wheel(mb: MeshBuilder, x: number, z: number, r: number, w: number) {
   const outward = x > 0 ? 1 : -1;
-  // The cylinder primitive stands along y: drawn in a frame whose y is the axle (x) and whose x is up.
-  mb.frame([x - w / 2, r, z], [0, 1, 0], [1, 0, 0], [0, 0, -1], () => cylinder(mb, { x: 0, z: 0, y0: 0, y1: w, r, seg: 10, kind: as(PART.rubber), col: C.rubber, top: outward > 0 ? as(PART.rubber) : null, bottom: outward < 0 }));
+  const seg = 12, profile = [[-.5, .84, -.88], [-.34, 1, -.26], [.34, 1, .26], [.5, .84, .88]];
+  const point = (j: number, angle: number): V3 => [x + profile[j][0] * w, r + Math.cos(angle) * r * profile[j][1], z + Math.sin(angle) * r * profile[j][1]];
+  const normal = (j: number, angle: number): V3 => {
+    const nx = profile[j][2], radial = Math.sqrt(1 - nx * nx);
+    return [nx, Math.cos(angle) * radial, Math.sin(angle) * radial];
+  };
+  for (let j = 0; j + 1 < profile.length; j++) for (let i = 0; i < seg; i++) {
+    const a = i / seg * Math.PI * 2, b = (i + 1) / seg * Math.PI * 2;
+    mb.quad([point(j, a), point(j, b), point(j + 1, b), point(j + 1, a)], { kind: as(PART.rubber), col: C.rubber, win: NONE, ns: [normal(j, a), normal(j, b), normal(j + 1, b), normal(j + 1, a)] });
+  }
+  const outer = x + outward * w / 2;
+  const ring = (at: number, inner: number, outerRadius: number, kind: Part, col: V3) => {
+    for (let i = 0; i < seg; i++) {
+      const a = i / seg * Math.PI * 2, b = (i + 1) / seg * Math.PI * 2;
+      const p = (radius: number, angle: number): V3 => [at, r + Math.cos(angle) * radius, z + Math.sin(angle) * radius];
+      const face = [p(inner, a), p(outerRadius, a), p(outerRadius, b), p(inner, b)];
+      mb.quad(outward > 0 ? face : face.reverse(), { kind: as(kind), col, n: [outward, 0, 0], win: NONE });
+    }
+  };
   mb.detail(() => {
-    disc(mb, x + outward * (w / 2 + .006), r, z, r * .6, outward, PART.chrome, C.chrome, 10);
-    disc(mb, x + outward * (w / 2 + .012), r, z, r * .2, outward, PART.plastic, C.plastic, 6);
+    ring(outer, r * .6, r * .84, PART.rubber, C.rubber);
+    disc(mb, x - outward * w / 2, r, z, r * .84, outward > 0 ? -1 : 1, PART.rubber, C.rubber, seg);
+    // A dark recessed brake/wheel well remains visible between the spokes.
+    disc(mb, outer + outward * .002, r, z, r * .6, outward, PART.plastic, C.grille, seg);
+    ring(outer + outward * .006, r * .51, r * .61, PART.chrome, C.chrome);
+    for (let k = 0; k < 5; k++) {
+      const a = k * Math.PI * 2 / 5, at = outer + outward * .008;
+      const p = (radius: number, angle: number): V3 => [at, r + Math.cos(angle) * radius, z + Math.sin(angle) * radius];
+      const face = [p(r * .16, a - .28), p(r * .55, a - .105), p(r * .55, a + .105), p(r * .16, a + .28)];
+      mb.quad(outward > 0 ? face : face.reverse(), { kind: as(PART.chrome), col: C.chrome, n: [outward, 0, 0], win: NONE });
+    }
+    disc(mb, outer + outward * .012, r, z, r * .18, outward, PART.chrome, C.chrome, 8);
   });
 }
 /** A small box from its centre and size, its edges rounded by `c` (0: a plain box of 10 triangles). */
@@ -210,8 +237,17 @@ function car(spec: Spec, paint: V3) {
       if (j >= 4 && j <= 5) return roof ? [upperPart, upperCol] : [PART.glass, C.glass];
       return [upperPart, upperCol];
     });
-    // Mirrors at the windscreen's foot, a little out from the body.
-    for (const side of [-1, 1]) part(mb, [side * (widest + .02), c.yB + .1, c.z[3] - .1], [.08, .075, .13], upperPart, upperCol, .02);
+    // Flush handles, a narrow door shut line and mirror glass read at close zoom without per-window geometry.
+    for (const side of [-1, 1]) {
+      const handleZ = (c.z[1] + c.z[2]) / 2 - .1, panel = sectionAt(body, handleZ);
+      part(mb, [side * (panel.hw + .005), c.yB - .085, handleZ], [.016, .025, .105], PART.chrome, C.chrome, .004);
+      const y0 = Math.max(band + .04, panel.y0 + .04), y1 = c.yB - .055, seam = .004;
+      const edge: V3[] = [[side * (panel.hw + .001), y0, pillar - seam], [side * (panel.hw + .001), y1, pillar - seam], [side * (panel.hw + .001), y1, pillar + seam], [side * (panel.hw + .001), y0, pillar + seam]];
+      mb.quad(side > 0 ? edge : edge.reverse(), { kind: as(PART.plastic), col: C.grille, n: [side, 0, 0], win: NONE });
+      part(mb, [side * (widest + .02), c.yB + .1, c.z[3] - .1], [.08, .075, .13], upperPart, upperCol, .02);
+      const mx = side * (widest + .02), my = c.yB + .1, mz = c.z[3] - .164;
+      mb.quad([[mx - .025, my - .023, mz], [mx - .025, my + .023, mz], [mx + .025, my + .023, mz], [mx + .025, my - .023, mz]], { kind: as(PART.glass), col: C.glass, n: [0, 0, -1], win: NONE });
+    }
   }
   const front = sectionAt(body, L / 2), rear = sectionAt(body, -L / 2), lamp = spec.lamps ?? { y: .62, inset: .2 };
   // Bumpers: dark plastic across the lower front and rear.
@@ -317,6 +353,15 @@ function boat() {
   });
   mb.quad([[-.28, .5, .1], [.28, .5, .1], [.26, .63, .02], [-.26, .63, .02]], { kind: as(PART.glass), col: C.glass });
   part(mb, [0, .75, -.35], [.03, .14, .03], PART.chrome, C.chrome, .006);
+  mb.detail(() => {
+    // Bow handrails and their stanchions remain inside the original hull and mast envelope.
+    for (const side of [-1, 1]) {
+      const rail: V3[] = [[side * .41, .5, .17], [side * .34, .51, .65], [side * .11, .54, .95]];
+      for (let i = 0; i + 1 < rail.length; i++) rod(mb, rail[i], rail[i + 1], .014, { kind: as(PART.chrome), col: C.chrome });
+      for (const p of [rail[0], rail[2]]) rod(mb, [p[0], hull(p[2]).y1, p[2]], p, .012, { kind: as(PART.chrome), col: C.chrome });
+    }
+  });
+  part(mb, [0, .4, -.94], [.23, .15, .17], PART.plastic, C.plastic, .025);
   return mb;
 }
 
@@ -377,7 +422,7 @@ type Node = ShaderNodeObject<THREE.Node>;
  * z, the arch's radius, the axle's height), with a soft edge one pixel wide.
  */
 export function vehicleMaterial(look: SkyLook | null = null): THREE.MeshStandardNodeMaterial {
-  const material = new THREE.MeshStandardNodeMaterial({ roughness: .5, metalness: 0 });
+  const material = new THREE.MeshPhysicalNodeMaterial({ roughness: .5, metalness: 0, clearcoat: .9, clearcoatRoughness: .16 });
   material.vertexColors = false; material.userData.copyTint = "own";
   const surf = attribute("aSurf", "vec4"), arch = attribute("aWin", "vec4"), kind = surf.z, ao = surf.w, base = vertexColor().xyz;
   const is = (part: Part): Node => float(1).sub(step(.5, abs(kind.sub(part))));
@@ -392,17 +437,28 @@ export function vehicleMaterial(look: SkyLook | null = null): THREE.MeshStandard
   const cell = vec2(p.z.div(.13), p.y.div(.09)), squares = fract(floor(cell.x).add(floor(cell.y)).mul(.5)).mul(2);
   const blur = smoothstep(.35, .9, max(fwidth(cell.x), fwidth(cell.y)));
   const checker = mix(mix(vec3(.02, .02, .025), vec3(.92, .92, .9), squares), vec3(.47), blur);
-  const painted = is(PART.paint);
-  const surface = mix(mix(mix(base, base.mul(tint), painted), checker, is(PART.checker)), color("#0d0e10"), well);
+  const painted = is(PART.paint), glass = is(PART.glass), chrome = is(PART.chrome), rubber = is(PART.rubber), wood = is(PART.wood);
+  const lacquer = painted.add(is(PART.fixed)).add(is(PART.checker)).clamp(0, 1);
+  // Fine surface variation is filtered out at a distance, so parked cars and large collection models never sparkle.
+  const pixel = max(max(fwidth(p.x), fwidth(p.y)), fwidth(p.z));
+  const fine = float(1).sub(smoothstep(.006, .035, pixel));
+  const grain = sin(p.x.mul(71).add(p.z.mul(19))).mul(sin(p.y.mul(53).sub(p.z.mul(13)))).mul(.5).add(.5);
+  const dust = smoothstep(.12, .55, p.y).oneMinus().mul(side).mul(lacquer).mul(.055);
+  const timber = fract(p.x.mul(10)), joint = float(1).sub(smoothstep(.006, max(.018, fwidth(p.x.mul(10))), min(timber, timber.oneMinus()))).mul(fine).mul(wood);
+  const surface = mix(mix(mix(base, base.mul(tint), painted), checker, is(PART.checker)), color("#0d0e10"), well)
+    .mul(float(1).sub(joint.mul(.35))).mul(float(1).sub(dust));
   material.colorNode = surface.mul(ao);
-  const glass = is(PART.glass), chrome = is(PART.chrome), rubber = is(PART.rubber), lamp = is(PART.head).add(is(PART.tail)).add(is(PART.blue)).add(is(PART.sign));
-  material.roughnessNode = mix(float(.62), float(.3), painted.add(is(PART.fixed)).add(is(PART.checker))).sub(glass.mul(.55)).sub(chrome.mul(.38)).add(rubber.mul(.3)).sub(lamp.mul(.32)).add(well.mul(.3)).clamp(.05, 1);
-  material.metalnessNode = chrome.mul(.35);
+  const lamp = is(PART.head).add(is(PART.tail)).add(is(PART.blue)).add(is(PART.sign));
+  const rough = mix(float(.66), float(.27), lacquer).sub(glass.mul(.57)).sub(chrome.mul(.49)).add(rubber.mul(.25)).sub(lamp.mul(.36)).add(wood.mul(.12));
+  material.roughnessNode = rough.add(grain.sub(.5).mul(fine).mul(.035)).add(dust.mul(1.8)).add(well.mul(.3)).clamp(.06, .96);
+  material.metalnessNode = chrome.mul(.88).add(painted.mul(.08));
+  material.clearcoatNode = lacquer.mul(.86).add(glass.mul(.92)).add(lamp.mul(.6)).mul(well.oneMinus()).clamp(0, 1);
+  material.clearcoatRoughnessNode = mix(float(.16), float(.08), glass).add(dust.mul(.8));
   // The sky in the lacquer and the glass: Fresnel from the view's angle, the sky's gradient in the reflected direction.
   const view = cameraPosition.sub(positionWorld).normalize(), facing = max(dot(normalWorld, view), 0);
   const fresnel = float(.04).add(pow(facing.oneMinus(), 5).mul(.96)), reflected = reflect(view.negate(), normalWorld);
   const sky = skyGradient(look, vec3(reflected.x, max(reflected.y, 0), reflected.z));
-  const gloss = painted.add(is(PART.fixed)).mul(.5).add(glass.mul(1.4)).add(chrome.mul(.7)).add(lamp.mul(.4)).mul(well.oneMinus());
+  const gloss = lacquer.mul(.28).add(glass.mul(1.2)).add(chrome.mul(.95)).add(lamp.mul(.3)).mul(well.oneMinus());
   material.emissiveNode = sky.mul(fresnel).mul(gloss).mul(ao);
   return material;
 }

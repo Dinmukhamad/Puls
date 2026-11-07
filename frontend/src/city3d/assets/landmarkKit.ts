@@ -78,8 +78,21 @@ export function createKit() {
     } else if (o.win) {
       Object.assign(options, { kind: FACE.window, bay: S(o.win.bay), floor: S(o.win.floor), winW: o.win.w ?? .46, winH: o.win.h ?? .5, even: o.win.even ? ['+z', '-z'] : undefined, shift: ++shift, top: o.top ? options.top : FACE.deck });
     }
-    const draw = () => boxShape(mb, [S(x - w / 2), S(y0), S(z - d / 2), S(x + w / 2), S(y0 + h), S(z + d / 2)], options);
+    // Full building volumes have a recessed shell between a stone base and roof coping. These parts stay
+    // inside the old envelope: doors, sills, plot edges and labels keep their original positions.
+    const architectural = !o.faces && w >= 1.1 && d >= .7 && h >= .9 && (s.kind === FACE.wall || s.kind === FACE.curtain || !!o.win);
+    const inset = architectural ? .012 : 0;
+    const draw = () => boxShape(mb, [S(x - w / 2 + inset), S(y0), S(z - d / 2 + inset), S(x + w / 2 - inset), S(y0 + h), S(z + d / 2 - inset)], options);
     if (big) draw(); else mb.detail(draw);
+    if (architectural) mb.detail(() => {
+      const x0 = S(x - w / 2), x1 = S(x + w / 2), z0 = S(z - d / 2), z1 = S(z + d / 2), base = S(y0), top = S(y0 + h);
+      boxShape(mb, [x0, base, z0, x1, base + S(.085), z1], { c: 0, kind: FACE.wall, col: rgb(C.concrete), top: FACE.trim, occlude: false });
+      boxShape(mb, [x0, top - S(.045), z0, x1, top, z1], { c: 0, kind: FACE.trim, col: rgb(s.kind === FACE.curtain ? C.steel : C.ivory), top: options.top, topCol: options.topCol, noTop: options.noTop, occlude: false });
+      if (s.kind === FACE.curtain) for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+        const px = S(x + sx * (w / 2 - .016)), pz = S(z + sz * (d / 2 - .016)), half = S(.016);
+        boxShape(mb, [px - half, base + S(.085), pz - half, px + half, top - S(.045), pz + half], { c: 0, kind: FACE.metal, col: rgb(C.steel), top: FACE.metal, occlude: false });
+      }
+    });
   }
   /** A box by its centre. */
   const box = (w: number, h: number, d: number, c: string, x: number, y: number, z: number, o: BlockOptions = {}) => block(w, h, d, c, x, y - h / 2, z, o);
@@ -87,9 +100,11 @@ export function createKit() {
   /** A cylinder standing on y0: posts, columns, shafts, tanks; `top` is its top radius. */
   function post(r: number, h: number, c: string, x: number, y0: number, z: number, top = r, seg = 12, o: { win?: Grid; cap?: string | null; ribbon?: boolean } = {}) {
     const s = surface(c), glass = s.kind === FACE.curtain;
+    const architectural = r >= .25 && top >= .18 && h >= 1 && (s.kind === FACE.wall || glass);
+    const inset = architectural ? .008 : 0;
     const floor = o.ribbon ? h / .76 : o.win?.floor ?? Math.min(h, 1.15);
     const cap = o.cap === null ? null : o.cap ? surface(o.cap) : { kind: glass ? FACE.deck : s.kind, col: s.col };
-    const shaft = { x: S(x), z: S(z), y0: S(y0), y1: S(y0 + h), r: S(r), r1: S(top), seg, kind: o.win && !glass ? FACE.window : s.kind, col: s.col, top: cap ? cap.kind : null, topCol: cap?.col, occlude: r >= .2 && h >= .3 };
+    const shaft = { x: S(x), z: S(z), y0: S(y0), y1: S(y0 + h), r: S(r - inset), r1: S(top - inset), seg, kind: o.win && !glass ? FACE.window : s.kind, col: s.col, top: cap ? cap.kind : null, topCol: cap?.col, occlude: r >= .2 && h >= .3 };
     const windows = glass || !!o.win;
     if (windows) Object.assign(shaft, { bay: S(o.win?.bay ?? .4), floor: S(floor), winW: o.win?.w ?? .5, winH: o.win?.h ?? .5 });
     const start = mb.count;
@@ -99,6 +114,10 @@ export function createKit() {
       const v0 = S(o.ribbon ? floor * .24 - y0 : -y0);
       for (let v = start; v < mb.count; v++) if (mb.s[v * 4 + 2] === FACE.curtain || mb.s[v * 4 + 2] === FACE.window) mb.s[v * 4 + 1] += v0;
     }
+    if (architectural) mb.detail(() => {
+      cylinder(mb, { x: S(x), z: S(z), y0: S(y0), y1: S(y0 + .055), r: S(r), r1: S(r - .004), seg, kind: FACE.trim, col: rgb(glass ? C.steel : C.concrete), top: FACE.trim, occlude: false });
+      cylinder(mb, { x: S(x), z: S(z), y0: S(y0 + h - .04), y1: S(y0 + h), r: S(top - .004), r1: S(top), seg, kind: FACE.trim, col: rgb(glass ? C.steel : C.ivory), top: cap?.kind ?? FACE.deck, topCol: cap?.col, occlude: false });
+    });
   }
   /** A disc r across and t thick facing the front, its middle at (x, y, z): a clock's dial, a round window. */
   function disc(r: number, t: number, c: string, x: number, y: number, z: number, seg = 20) {
@@ -164,6 +183,11 @@ export function createKit() {
     gableRoof(mb, { a0: S(a - length / 2), a1: S(a + length / 2), b0: S(b - across / 2), b1: S(b + across / 2), y: S(y0), pitch: h / (across / 2), overhang: S(overhang), axis: along, roof: rgb(cover), wall: rgb(wall) });
     // The ridge capping.
     block(along === 'x' ? length + overhang * 2 : .08, .05, along === 'x' ? .08 : length + overhang * 2, C.slate, x, y0 + h - .02, z, { r: 0 });
+    // Gutters sit below the eaves, inside their existing overhang instead of widening the model.
+    for (const side of [-1, 1]) {
+      if (along === 'x') block(length + overhang * 2, .035, .035, C.steel, x, y0 - .07, z + side * (d / 2 + overhang - .018), { r: 0 });
+      else block(.035, .035, length + overhang * 2, C.steel, x + side * (w / 2 + overhang - .018), y0 - .07, z, { r: 0 });
+    }
   }
   /** A barrel vault on y0 over a hall `len` long along z, its arch to the front, closed at both ends. */
   function vault(r: number, len: number, c: string, x: number, y0: number, z: number, end = C.stone) {
@@ -203,6 +227,16 @@ export function createKit() {
         mb.quad(pts, { kind: FACE.window, col, win, uv });
         boxShape(mb, out > 0 ? [centre - half * .8, sill - S(.045), o - S(.01), centre + half * .8, sill + S(.005), o + S(.07)] : [centre - half * .8, sill - S(.045), o - S(.07), centre + half * .8, sill + S(.005), o + S(.01)], { c: 0, kind: FACE.trim, col: rgb(C.stone), occlude: false });
       }
+      // Three shallow reveals give every individual window a real edge and shadow at close range. The
+      // glazing and its finer frame remain the material's grid, so distant windows do not multiply meshes.
+      mb.detail(() => {
+        const low = S(y0 - .015), high = S(y0 + h + .015), depth0 = o - S(out > 0 ? .005 : .035), depth1 = o + S(out > 0 ? .035 : .005), t = S(.025), ww = S(w / 2 + .018);
+        for (const sign of [-1, 1]) {
+          const a0 = centre + sign * ww - t / 2, a1 = a0 + t;
+          boxShape(mb, side ? [depth0, low, a0, depth1, high, a1] : [a0, low, depth0, a1, high, depth1], { c: 0, kind: FACE.trim, col, top: FACE.trim, occlude: false });
+        }
+        boxShape(mb, side ? [depth0, high - t, centre - ww, depth1, high, centre + ww] : [centre - ww, high - t, depth0, centre + ww, high, depth1], { c: 0, kind: FACE.trim, col, top: FACE.trim, occlude: false });
+      });
     }
   }
   /** A window set on the front at (x, y0, z): framed, arched or square, with a sill. */
@@ -219,6 +253,11 @@ export function createKit() {
     block(w + .1, h + .06, .05, C.ivory, x, y0, z - .02, { r: 0 });
     block(w, h, .05, c, x, y0, z, { r: 0 });
     block(w * .04, h * .28, .02, C.gold, x + w * .3, y0 + h * .42, z + .035, { r: 0 });
+    // A recessed lower panel and upper glazed leaf, both behind the existing projecting pull handle.
+    mb.detail(() => {
+      boxShape(mb, [S(x - w * .38), S(y0 + h * .12), S(z + .026), S(x + w * .38), S(y0 + h * .39), S(z + .034)], { c: 0, kind: FACE.trim, col: rgb(C.slate), top: FACE.trim, occlude: false });
+      boxShape(mb, [S(x - w * .36), S(y0 + h * .5), S(z + .026), S(x + w * .36), S(y0 + h * .89), S(z + .033)], { c: 0, kind: FACE.pane, col: rgb(C.glass), top: FACE.pane, bay: paneNumber(), occlude: false });
+    });
   }
   /** A sign on a board facing the front: the text on a canvas (assets/landmarks.ts). */
   function sign(text: string, x: number, y: number, z: number, w: number, color = C.ink) {

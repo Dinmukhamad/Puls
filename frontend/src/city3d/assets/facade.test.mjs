@@ -108,7 +108,7 @@ test('windows wrap round a cylinder in whole bays, and a unit model keeps its wa
 test('the facade material builds for copies, for unit copies and for meshes with a seed of their own', () => {
   for (const options of [{}, { unit: true }, { seed: f.float(7) }]) {
     const material = f.facadeMaterial(f.uniform(0), options);
-    assert.ok(material.isMeshStandardNodeMaterial && material.colorNode && material.emissiveNode && material.roughnessNode && material.metalnessNode && material.aoNode);
+    assert.ok(material.isMeshStandardNodeMaterial && material.colorNode && material.emissiveNode && material.roughnessNode && material.metalnessNode && material.aoNode && material.normalNode);
     assert.equal(material.vertexColors, false, 'the vertex colour is read once, by the colour node');
   }
 });

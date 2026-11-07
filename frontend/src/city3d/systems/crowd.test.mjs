@@ -71,6 +71,14 @@ test('one walker body: still trunk and head, limbs marked for the shader\'s join
   assert.ok(lowest.get(3) >= 0 && lowest.get(3) < .01 && highest.get(0) > 1.5 && highest.get(0) < 1.65, 'feet on the ground, head at the old height');
   const triangles = position.count / 3;
   assert.ok(triangles < 1100, `${triangles} triangles a walker`);
+  const shade = body.getAttribute('aShade');
+  assert.equal(shade.count, position.count);
+  assert.ok(Array.from(shade.array).every(v => Number.isFinite(v) && v >= .45 && v <= 1));
+  assert.ok(Math.min(...shade.array) < .55, 'soles and collar carry their own contact shade in the single mesh');
+  const headX = [];
+  for (let i = 0; i < part.count; i++) if (part.getX(i) === 0 && part.getY(i) === 1 && position.getY(i) > 1.38) headX.push(position.getX(i));
+  assert.ok(Math.max(...headX) - Math.min(...headX) < .24, 'adult head proportions replace the oversized spherical head');
+  for (const attribute of Object.values(body.attributes)) assert.ok(Array.from(attribute.array).every(Number.isFinite), 'all animated attributes stay finite');
   // The old walkers' clothes: shirt actor % 6, skin 5 actor % 6, trousers actor % 4; the step's phase 2.399 actor.
   for (const actor of [0, 1, 7, 23]) {
     const [phase, first, second] = city.codes(actor);
@@ -80,6 +88,6 @@ test('one walker body: still trunk and head, limbs marked for the shader\'s join
   }
   assert.ok([...Array(30).keys()].filter(actor => city.codes(actor)[2] >= 16).length === 10, 'a third in long sleeves');
   const material = city.walkerMaterial(city.uniformTime);
-  assert.ok(material.colorNode && material.userData.walkTime === city.uniformTime);
+  assert.ok(material.colorNode && material.roughnessNode && material.userData.walkTime === city.uniformTime);
   material.dispose(); body.dispose();
 });
