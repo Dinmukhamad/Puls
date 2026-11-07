@@ -101,9 +101,9 @@ export function groundMaterial(parameters: THREE.MeshStandardNodeMaterialParamet
   const is = (code: SurfaceCode) => float(1).sub(kind.sub(code).abs()).clamp(0, 1);
   const grey = vec3(dot(base, vec3(.299, .587, .114)));
 
-  // Grass: a meadow, warmer and deeper than the flat paint, with patches, dry streaks and blades.
-  const lawn = mix(base, grey, .1).mul(vec3(.86, .93, .74)).mul(mix(.78, 1.1, broad)).mul(mix(.9, 1.07, medium)).mul(mix(.92, 1.06, grain));
-  const grass = mix(lawn, lawn.mul(vec3(1.16, 1.06, .72)), smoothstep(.55, .9, patches).mul(.6));
+  // Fresh grass keeps rich green midtones; warmer meadow patches stay restrained rather than turning olive.
+  const lawn = base.mul(vec3(.72, 1.2, .74)).mul(mix(.88, 1.15, broad)).mul(mix(.94, 1.07, medium)).mul(mix(.95, 1.05, grain));
+  const grass = mix(lawn, lawn.mul(vec3(1.08, 1.04, .86)), smoothstep(.55, .9, patches).mul(.22));
   // Asphalt: neutral grey instead of the blue-grey paint, grain and darker repairs.
   const asphalt = mix(base, grey, .6).mul(.84).mul(mix(.88, 1.1, medium)).mul(mix(.9, 1.1, grain)).mul(float(1).sub(smoothstep(.7, .95, spots).mul(.12)));
   const pavement = base.mul(mix(.92, 1.05, medium)).mul(mix(.95, 1.05, grain));

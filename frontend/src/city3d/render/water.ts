@@ -145,7 +145,7 @@ export function createWater(ctx: CityContext): Water {
 
   // Colour by depth: turquoise shallows, deep blue in the middle; a light strip of lapping water at the walls.
   const deep = smoothstep(0, 1, shore);
-  const day = mix(color("#3bb3b0"), color("#0c5f84"), deep), dusk = mix(color("#2a6482"), color("#0e2945"), deep);
+  const day = mix(color("#28c7c5"), color("#087eaf"), deep), dusk = mix(color("#2a6482"), color("#0e2945"), deep);
   const lap = smoothstep(0, .14, shore).oneMinus();
   const froth = texture(groundNoise(), p.xz.mul(.42).add(vec2(time.mul(.02), time.mul(-.013)))).y;
   const bands = shore.mul(46).sub(time.mul(1.7)).add(froth.mul(5)).sin().mul(.5).add(.5);

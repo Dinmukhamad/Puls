@@ -59,10 +59,10 @@ export function fitPropEnvelope(geometry: THREE.BufferGeometry, [min, max]: [Vec
 
 export function vegetationGeometry(species: TreeSpecies, far = false) {
   const parts: THREE.BufferGeometry[] = [], detail = far ? 0 : 1;
-  const wood = species === "birch" ? "#d9d6c8" : species === "cone" ? "#725541" : "#77604b";
+  const wood = species === "birch" ? "#e9e5d5" : species === "cone" ? "#84583d" : "#8d6141";
   if (species === "cone") {
     parts.push(branch([0, 0, 0], [.015, 2.32, -.01], .095, wood));
-    const greens = ["#365d40", "#416d47", "#4c7750", "#5d8657", "#648c60"];
+    const greens = ["#286e48", "#338653", "#40965a", "#56a465", "#67b06f"];
     for (let tier = 0; tier < 5; tier++) {
       const y = .75 + tier * .31, radius = .57 - tier * .085;
       const geometry = new THREE.ConeGeometry(radius, .8 - tier * .065, 9, 2), p = geometry.getAttribute("position");
@@ -78,22 +78,22 @@ export function vegetationGeometry(species: TreeSpecies, far = false) {
     parts.push(branch([0, 0, 0], [-.035, 2.2, .02], .065, wood));
     for (const y of [.38, .73, 1.08, 1.39]) parts.push(paintProp(new THREE.CylinderGeometry(.061, .065, .028, 7).translate(-.012, y, 0), "#5d5b50", .86));
     const lobes: [Vec, Vec, string][] = [
-      [[-.14, 1.42, .08], [.33, .53, .3], "#80a35b"], [[.16, 1.65, -.11], [.33, .58, .29], "#8db067"],
-      [[-.14, 2.03, -.04], [.3, .5, .29], "#9ab875"], [[.11, 2.28, .08], [.26, .42, .25], "#a7c17f"],
-      [[.03, 1.93, .23], [.25, .44, .24], "#7d9f58"],
+      [[-.14, 1.42, .08], [.33, .53, .3], "#78b45d"], [[.16, 1.65, -.11], [.33, .58, .29], "#8ac669"],
+      [[-.14, 2.03, -.04], [.3, .5, .29], "#9bcf76"], [[.11, 2.28, .08], [.26, .42, .25], "#aed786"],
+      [[.03, 1.93, .23], [.25, .44, .24], "#70ac58"],
     ];
     lobes.forEach(([center, size, color], i) => { if (!far) parts.push(branch([0, .85 + i * .17, 0], center, .024, wood, 5)); parts.push(foliageGeometry(center, size, color, 11 + i, detail)); });
   } else {
     const oak = species === "oak", trunkTop = oak ? 1.1 : 1.08;
     parts.push(branch([0, 0, 0], [.025, trunkTop, -.01], oak ? .135 : .105, wood));
     const lobes: [Vec, Vec, string][] = oak ? [
-      [[-.42, 1.2, -.18], [.43, .43, .43], "#4d7142"], [[.4, 1.22, .14], [.5, .44, .44], "#587e46"],
-      [[-.18, 1.6, .23], [.47, .43, .43], "#638a4f"], [[.25, 1.66, -.21], [.48, .43, .43], "#729454"],
-      [[-.43, 1.52, -.32], [.38, .38, .39], "#567a43"], [[.03, 1.84, .02], [.43, .31, .4], "#789b5a"],
+      [[-.42, 1.2, -.18], [.43, .43, .43], "#3b8147"], [[.4, 1.22, .14], [.5, .44, .44], "#48964e"],
+      [[-.18, 1.6, .23], [.47, .43, .43], "#5ca657"], [[.25, 1.66, -.21], [.48, .43, .43], "#71b55f"],
+      [[-.43, 1.52, -.32], [.38, .38, .39], "#438b49"], [[.03, 1.84, .02], [.43, .31, .4], "#7cbd68"],
     ] : [
-      [[-.31, 1.06, -.1], [.38, .37, .38], "#63834e"], [[.3, 1.1, .12], [.4, .38, .36], "#718e58"],
-      [[-.15, 1.48, .16], [.4, .42, .39], "#7a995f"], [[.23, 1.45, -.2], [.37, .4, .38], "#6c8d53"],
-      [[-.07, 1.72, -.05], [.37, .28, .36], "#87a267"],
+      [[-.31, 1.06, -.1], [.38, .37, .38], "#4d9455"], [[.3, 1.1, .12], [.4, .38, .36], "#61a85e"],
+      [[-.15, 1.48, .16], [.4, .42, .39], "#72b665"], [[.23, 1.45, -.2], [.37, .4, .38], "#589f58"],
+      [[-.07, 1.72, -.05], [.37, .28, .36], "#87c46f"],
     ];
     lobes.forEach(([center, size, color], i) => { if (!far || i < 2) parts.push(branch([.015, .65 + i * .06, 0], center, oak ? .055 : .037, wood, 6)); parts.push(foliageGeometry(center, size, color, 23 + i, detail)); });
     if (!far) for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + .3; parts.push(branch([0, .16, 0], [Math.cos(a) * .22, .02, Math.sin(a) * .22], oak ? .045 : .032, wood, 5)); }

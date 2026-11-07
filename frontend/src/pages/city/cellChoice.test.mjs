@@ -41,5 +41,5 @@ test("the shop's tabs hold every thing once, in the order operators asked for", 
   assert.equal(C.firstTab({ cells: line(["free", "free"]), family: null }), "roads");
   assert.equal(C.firstTab({ cells: line(["free"]), family: null }), "houses");
   assert.equal(C.firstTab(null), "houses");
-  assert.equal(C.shopPicture("alley"), "/city/shop/v5/alley.webp");
+  assert.equal(C.shopPicture("alley"), "/city/shop/v6/alley.webp");
 });

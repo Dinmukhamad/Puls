@@ -16,14 +16,14 @@ import { NURLY_TAU_RISE, NURLY_TAU_WIDTH, OFFICE_BUILDINGS, type OfficeBuilding 
 /** Metres in one of the tables' model units: a house is drawn 1.35 times bigger, an office twice, a unit is about 4 m. */
 const HOUSE_METRES = 4 * 1.35, OFFICE_METRES = 4 * 2;
 const FINISH: Record<typeof FINISHES[number], { wall: V3; plinth: V3; door: V3 }> = {
-  brick: { wall: rgb("#a85c45"), plinth: rgb("#6f625a"), door: rgb("#2f4f66") },
-  stone: { wall: rgb("#dcd3c2"), plinth: rgb("#8f8a82"), door: rgb("#6b3b2a") },
+  brick: { wall: rgb("#b85f3b"), plinth: rgb("#80654f"), door: rgb("#225e84") },
+  stone: { wall: rgb("#f0ddbd"), plinth: rgb("#a3947a"), door: rgb("#8c4930") },
 };
 const ROOF: Record<ReadyHouse, V3> = {
-  carport: rgb("#4f565e"), bungalow: rgb("#a3553f"), attic: rgb("#3f444b"), modern: rgb("#eceae4"), bayhouse: rgb("#7b4b3b"), terrace: rgb("#5a6168"),
+  carport: rgb("#426a86"), bungalow: rgb("#c65c39"), attic: rgb("#415a7a"), modern: rgb("#f6eddb"), bayhouse: rgb("#a85139"), terrace: rgb("#356c83"),
 };
-const TRIM = rgb("#f1eee8"), DARK = rgb("#2a2e33"), PAVING = rgb("#b2ada3"), GARAGE = rgb("#e4e1da");
-const ZINC = rgb("#87918f"), ANODIZED = rgb("#56666b"), VENT = rgb("#3b474b");
+const TRIM = rgb("#fff5df"), DARK = rgb("#273e4f"), PAVING = rgb("#c6b9a0"), GARAGE = rgb("#ece9df");
+const ZINC = rgb("#a0afb4"), ANODIZED = rgb("#49738a"), VENT = rgb("#3b474b");
 
 interface House { W: number; D: number; H: number; door: [number, number]; garage: [number, number] | null; wall: V3; plinth: V3; doorColour: V3; roof: V3 }
 
@@ -240,15 +240,15 @@ interface Tower {
   chamfer?: number; ring?: boolean;
 }
 const TOWERS: Record<Exclude<OfficeBuilding, "officej" | "officek" | "officel">, Tower> = {
-  officea: { glass: rgb("#7da7c2"), stone: rgb("#d9d4cb"), tiers: [[0, .16, "stone"], [1, 1, "glass"]] },
-  officeb: { glass: rgb("#9cb4c4"), stone: rgb("#cfc6b8"), tiers: [[0, .86, "stone"], [1.4, 1, "stone"]] },
-  officec: { glass: rgb("#86a9b8"), stone: rgb("#d5d0c6"), tiers: [[0, .55, "glass"], [1.6, .8, "glass"], [3.2, 1, "glass"]] },
-  officed: { glass: rgb("#5d7a8e"), stone: rgb("#cfd3d6"), tiers: [[0, .12, "stone"], [.6, 1, "glass"]], chamfer: 2.4 },
-  officee: { glass: rgb("#8fb3c4"), stone: rgb("#b9a99a"), tiers: [[0, .42, "stone"], [.8, 1, "glass"]] },
-  officef: { glass: rgb("#4f6f80"), stone: rgb("#c9c5bd"), tiers: [[0, .14, "stone"], [.5, 1, "glass"]], ring: true },
-  officeg: { glass: rgb("#7fa2b3"), stone: rgb("#d2cabd"), tiers: [[0, .2, "stone"], [.9, 1, "glass"]] },
-  officeh: { glass: rgb("#9ab3c9"), stone: rgb("#d6cfc2"), tiers: [[0, .38, "glass"], [2.2, 1, "glass"]] },
-  officei: { glass: rgb("#6f97ac"), stone: rgb("#e0dbd1"), tiers: [[0, .1, "stone"], [.6, 1, "glass"]], chamfer: .9, ring: true },
+  officea: { glass: rgb("#76bce5"), stone: rgb("#f1dfbd"), tiers: [[0, .16, "stone"], [1, 1, "glass"]] },
+  officeb: { glass: rgb("#a1c4df"), stone: rgb("#edc9a3"), tiers: [[0, .86, "stone"], [1.4, 1, "stone"]] },
+  officec: { glass: rgb("#76c5ce"), stone: rgb("#e4e6d0"), tiers: [[0, .55, "glass"], [1.6, .8, "glass"], [3.2, 1, "glass"]] },
+  officed: { glass: rgb("#4a93bd"), stone: rgb("#d5e6f0"), tiers: [[0, .12, "stone"], [.6, 1, "glass"]], chamfer: 2.4 },
+  officee: { glass: rgb("#8bc8de"), stone: rgb("#dcbca2"), tiers: [[0, .42, "stone"], [.8, 1, "glass"]] },
+  officef: { glass: rgb("#416f9f"), stone: rgb("#e8d7bd"), tiers: [[0, .14, "stone"], [.5, 1, "glass"]], ring: true },
+  officeg: { glass: rgb("#67b6c9"), stone: rgb("#ebd7b5"), tiers: [[0, .2, "stone"], [.9, 1, "glass"]] },
+  officeh: { glass: rgb("#9bbce7"), stone: rgb("#e5d5ed"), tiers: [[0, .38, "glass"], [2.2, 1, "glass"]] },
+  officei: { glass: rgb("#5cacc8"), stone: rgb("#f4e6c9"), tiers: [[0, .1, "stone"], [.6, 1, "glass"]], chamfer: .9, ring: true },
 };
 
 /**
@@ -261,7 +261,7 @@ function pyramidTower(): THREE.BufferGeometry {
   const model = OFFICE_BUILDINGS.officej, k = OFFICE_METRES;
   const W = model.width * k, D = model.depth * k, top = model.height * k, hw = W / 2;
   const FLOOR = 3.6, PODIUM = 2 * FLOOR, back = -D / 2, front = D / 2 - 1.6;
-  const GRANITE = rgb("#765a4a"), BRONZE = rgb("#8c7a5e"), STEEL = rgb("#46535e");
+  const GRANITE = rgb("#8b6650"), BRONZE = rgb("#8c7a5e"), STEEL = rgb("#4b6d83");
   const mb = new MeshBuilder();
   /** Mirror-glass floors from the podium up on a rectangle of the plan, three rows of panes to a floor; returns the roof's height. */
   const tier = (x0: number, x1: number, z0: number, z1: number, floors: number, tint: string, c = .9) => {
@@ -273,28 +273,28 @@ function pyramidTower(): THREE.BufferGeometry {
   // The plan is three rows of three: the core in the middle, the volumes stepping down by a floor or two round it and
   // by more to the front and the corners, so the mass stays broad and its top edge is notched.
   const xi = 4.6, zf = 2.8, zb = -6.4;
-  const core = tier(-xi, xi, zb, zf, 10, "#a3c2d6", 2.2);
-  const block = tier(-xi, xi, zf, front, 6, "#aac6d8");
-  const west = tier(-hw, -xi, zb, zf, 8, "#93b3c9", 1.2);
-  const east = tier(xi, hw, zb, zf, 9, "#88a8c0", 1.2);
-  tier(-hw, -xi, zf, front - 1.2, 4, "#9dbad0");
-  tier(xi, hw, zf, front - .6, 5, "#9dbad0");
-  tier(-xi, xi, back, zb, 8, "#829fb6", 1.2);
-  tier(-hw, -xi, back, zb, 6, "#8fadc3");
-  tier(xi, hw, back, zb, 7, "#8fadc3");
+  const core = tier(-xi, xi, zb, zf, 10, "#91c7e1", 2.2);
+  const block = tier(-xi, xi, zf, front, 6, "#a1d0e5");
+  const west = tier(-hw, -xi, zb, zf, 8, "#80b9d7", 1.2);
+  const east = tier(xi, hw, zb, zf, 9, "#73accd", 1.2);
+  tier(-hw, -xi, zf, front - 1.2, 4, "#8bc2dd");
+  tier(xi, hw, zf, front - .6, 5, "#8bc2dd");
+  tier(-xi, xi, back, zb, 8, "#699cbd", 1.2);
+  tier(-hw, -xi, back, zb, 6, "#80b0d0");
+  tier(xi, hw, back, zb, 7, "#80b0d0");
   // The crown: a collar of dark steel, the pyramid, a mast with its red light, and a pinnacle on each shoulder.
   const zc = (zb + zf) / 2, collar = core + 1.4;
   box(mb, [-3.5, core - .8, zc - 3.5, 3.5, collar, zc + 3.5], { c: .25, kind: FACE.trim, col: STEEL, top: FACE.trim, topCol: rgb("#3a444d") });
   const apex = collar + 7.4;
-  pyramid(mb, { x0: -3.2, x1: 3.2, z0: zc - 3.2, z1: zc + 3.2, y: collar, h: apex - collar, roof: rgb("#a3bccf"), kind: FACE.spire, win: [1.2, 1.2, 0, 0] });
+  pyramid(mb, { x0: -3.2, x1: 3.2, z0: zc - 3.2, z1: zc + 3.2, y: collar, h: apex - collar, roof: rgb("#a2cde3"), kind: FACE.spire, win: [1.2, 1.2, 0, 0] });
   box(mb, [-.14, apex - .4, zc - .14, .14, top - .5, zc + .14], { c: .03, kind: FACE.trim, col: rgb("#aab0b5"), top: FACE.trim, occlude: false });
   box(mb, [-.25, top - .5, zc - .25, .25, top, zc + .25], { c: .04, kind: FACE.light, col: rgb("#ff3a2a"), top: FACE.light, occlude: false });
   for (const [side, roof] of [[-1, west], [1, east]] as const) {
     const x = side * 6.9;
-    pyramid(mb, { x0: x - 1.2, x1: x + 1.2, z0: -.6, z1: 1.8, y: roof, h: 2.6, roof: rgb("#a3bccf"), kind: FACE.spire, win: [.9, .9, 0, 0] });
+    pyramid(mb, { x0: x - 1.2, x1: x + 1.2, z0: -.6, z1: 1.8, y: roof, h: 2.6, roof: rgb("#a2cde3"), kind: FACE.spire, win: [.9, .9, 0, 0] });
   }
   // A glass pyramid over the stair on the roof of the block in front of the core.
-  pyramid(mb, { x0: -1.4, x1: 1.4, z0: 3.9, z1: 6.5, y: block, h: 1.8, roof: rgb("#a3bccf"), kind: FACE.spire, win: [.8, .8, 0, 0] });
+  pyramid(mb, { x0: -1.4, x1: 1.4, z0: 3.9, z1: 6.5, y: block, h: 1.8, roof: rgb("#a2cde3"), kind: FACE.spire, win: [.8, .8, 0, 0] });
   // Shop windows in bronze between the piers of the podium's four walls.
   const shop = (box6: [number, number, number, number, number, number]) => box(mb, box6, { c: .02, kind: FACE.curtain, col: BRONZE, top: FACE.trim, bay: 1.4, floor: 2.9, occlude: false });
   for (const [x0, x1] of [[-8.4, -5], [5, 8.4]]) shop([x0, .5, front, x1, 6.3, front + .14]);
@@ -303,7 +303,7 @@ function pyramidTower(): THREE.BufferGeometry {
   // The entrance: a glass lobby, a canopy over it, and a little glass pyramid on the canopy.
   box(mb, [-3.2, 0, front - .1, 3.2, 4.2, front + .15], { c: .03, kind: FACE.glass, top: FACE.glass, occlude: false });
   box(mb, [-4, 4.3, front - .1, 4, 4.6, D / 2], { c: .05, kind: FACE.trim, col: DARK, top: FACE.trim });
-  pyramid(mb, { x0: -1.3, x1: 1.3, z0: front + .1, z1: D / 2 - .1, y: 4.6, h: 1.7, roof: rgb("#8fb0c6"), kind: FACE.spire, win: [.7, .7, 0, 0] });
+  pyramid(mb, { x0: -1.3, x1: 1.3, z0: front + .1, z1: D / 2 - .1, y: 4.6, h: 1.7, roof: rgb("#8fc3df"), kind: FACE.spire, win: [.7, .7, 0, 0] });
   officeEntrance(mb, front);
   roofPlant(mb, -6.8, back + 2, PODIUM + 6 * FLOOR + .04, 1.6, 1.2, .8);
   roofPlant(mb, 6.8, back + 2, PODIUM + 7 * FLOOR + .04, 1.6, 1.2, .8);
@@ -323,7 +323,7 @@ function pyramidTower(): THREE.BufferGeometry {
  */
 function empireState(): THREE.BufferGeometry {
   const model = OFFICE_BUILDINGS.officek, M = 130.4 / model.width, top = model.height * M;
-  const STONE = rgb("#dcd4c2"), CROWN = rgb("#e2dbca"), ALUMINIUM = rgb("#687272"), BRONZE = rgb("#76664a"), STEEL = rgb("#7d8786");
+  const STONE = rgb("#e8d9b9"), CROWN = rgb("#f2e6ca"), ALUMINIUM = rgb("#718c96"), BRONZE = rgb("#98713f"), STEEL = rgb("#91a8ad");
   const mb = new MeshBuilder();
   /** A limestone volume with its windows: half its width and depth, from y0 to y1. */
   const stone = (hx: number, hz: number, y0: number, y1: number, col = STONE) =>
@@ -444,7 +444,7 @@ function sweptPlan([x, z, w, d, c, sag, turn]: Volume, n = 4): Plan {
  */
 function nurlyTau(): THREE.BufferGeometry {
   const model = OFFICE_BUILDINGS.officel, M = NURLY_TAU_WIDTH / model.width, up = (y: number) => y * NURLY_TAU_RISE;
-  const GLASS = ["#93abad", "#89a2a5", "#9cb3b4"].map(rgb), ROOF = rgb("#a9bcc0"), GRANITE = rgb("#765a4a"), STEEL = rgb("#46535e");
+  const GLASS = ["#8dbbc4", "#75a5b1", "#a0cbd1"].map(rgb), ROOF = rgb("#b2d5dd"), GRANITE = rgb("#8b6650"), STEEL = rgb("#4b6d83");
   const mb = new MeshBuilder();
   const all = [...NURLY_TAU.towers, ...NURLY_TAU.slabs, ...NURLY_TAU.blocks, ...NURLY_TAU.links];
   all.forEach((v, i) => {
