@@ -414,6 +414,59 @@ export function torus(mb: MeshBuilder, o: { x: number; y: number; z: number; R: 
   }
 }
 
+/** A plan: points in x and z, either way round, every one seen from its middle (a convex or gently curved outline). */
+export type Plan = [number, number][];
+/** The plan going clockwise seen from above (the way the walls of a box go round), and its middle. */
+function clockwise(plan: Plan): { ring: Plan; mid: [number, number] } {
+  let area = 0;
+  for (let i = 0; i < plan.length; i++) { const [x0, z0] = plan[i], [x1, z1] = plan[(i + 1) % plan.length]; area += x0 * z1 - x1 * z0; }
+  const mid: [number, number] = [plan.reduce((a, p) => a + p[0], 0) / plan.length, plan.reduce((a, p) => a + p[1], 0) / plan.length];
+  return { ring: area > 0 ? [...plan].reverse() : plan, mid };
+}
+export interface ExtrudeOptions {
+  kind?: Face; col?: V3;
+  /** The roof's kind (null for none) and colour. */
+  top?: Face | null; topCol?: V3;
+  bay?: number; floor?: number; winW?: number; winH?: number; occlude?: boolean;
+}
+/**
+ * A prism over a plan from y0 to y1: a wall on every edge, the wall coordinates running round it in metres (so windows go
+ * on from wall to wall, a whole number of bays on each), and a flat roof.
+ */
+export function extrude(mb: MeshBuilder, plan: Plan, y0: number, y1: number, o: ExtrudeOptions = {}) {
+  const { ring, mid } = clockwise(plan), kind = o.kind ?? FACE.wall, col = o.col ?? WHITE, target = o.bay ?? 2.8;
+  let u = 0;
+  for (let i = 0; i < ring.length; i++) {
+    const [ax, az] = ring[i], [bx, bz] = ring[(i + 1) % ring.length], run = Math.hypot(bx - ax, bz - az);
+    if (run < 1e-6) continue;
+    const win: [number, number, number, number] = [run / Math.max(1, Math.round(run / target)), o.floor ?? 2.9, o.winW ?? .44, o.winH ?? .48];
+    mb.quad([[ax, y0, az], [bx, y0, bz], [bx, y1, bz], [ax, y1, az]], { kind, col, u0: u, win });
+    u += run;
+  }
+  if (o.top !== null) for (let i = 0; i < ring.length; i++) {
+    const a = ring[i], b = ring[(i + 1) % ring.length];
+    mb.tri([[mid[0], y1, mid[1]], [a[0], y1, a[1]], [b[0], y1, b[1]]], { kind: o.top ?? FACE.deck, col: o.topCol ?? col, n: [0, 1, 0], uv: [mid, a, b] });
+  }
+  if (o.occlude !== false) {
+    const xs = ring.map(p => p[0]), zs = ring.map(p => p[1]);
+    mb.occlude([Math.min(...xs), y0, Math.min(...zs), Math.max(...xs), y1, Math.max(...zs)]);
+  }
+}
+/**
+ * A tent roof over a plan: a slope from every edge at y up to one apex over its middle. The wall coordinates run along
+ * the eaves and up the slope in metres, so `win` draws a grid of panes or a curtain wall's mullions on it.
+ */
+export function tent(mb: MeshBuilder, plan: Plan, y: number, apex: number, o: { kind?: Face; col?: V3; win?: [number, number, number, number] } = {}) {
+  const { ring, mid } = clockwise(plan), top: V3 = [mid[0], apex, mid[1]];
+  for (let i = 0; i < ring.length; i++) {
+    const a: V3 = [ring[i][0], y, ring[i][1]], b: V3 = [ring[(i + 1) % ring.length][0], y, ring[(i + 1) % ring.length][1]];
+    const edge = sub(b, a), run = length(edge);
+    if (run < 1e-6) continue;
+    const along = ((top[0] - a[0]) * edge[0] + (top[2] - a[2]) * edge[2]) / run, foot: V3 = [a[0] + edge[0] / run * along, y, a[2] + edge[2] / run * along];
+    mb.tri([a, b, top], { kind: o.kind ?? FACE.roof, col: o.col ?? WHITE, uv: [[0, 0], [run, 0], [along, length(sub(top, foot))]], win: o.win });
+  }
+}
+
 /**
  * A four-sided pyramid roof over x0…x1 × z0…z1 from y, its apex h higher; eaves `overhang` out with a soffit. `win` is
  * the grid a curtain wall draws on its slopes (bay and floor in metres along the eaves and up the slope).

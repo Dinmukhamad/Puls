@@ -21,8 +21,11 @@ function catalogue(name) {
   if (name === 'PLOT_FAMILIES') {
     const office = text.match(/\*\*\{[\s\S]*?for key, \(name, _price\) in OFFICE_TOWERS\.items\(\)/)?.[0];
     assert.ok(office, 'the server adds every source office to its plot catalogue');
-    const size = office.match(/"size": \((\d), (\d)\)/), levels = (office.slice(office.indexOf('"levels": [')).split(']')[0].match(/\(name,/g) ?? []).length;
-    for (const family of Object.keys(SERVER_OFFICES)) families[family] = { size: [Number(size[1]), Number(size[2])], levels };
+    // A tower's 2 × 2 unless OFFICE_SIZES gives the office more.
+    const size = office.match(/"size": OFFICE_SIZES\.get\(key, \((\d), (\d)\)\)/), levels = (office.slice(office.indexOf('"levels": [')).split(']')[0].match(/\(name,/g) ?? []).length;
+    const sizes = server.slice(server.indexOf('OFFICE_SIZES = {'), server.indexOf('}', server.indexOf('OFFICE_SIZES = {')));
+    const larger = Object.fromEntries([...sizes.matchAll(/"(\w+)": \((\d), (\d)\)/g)].map(([, family, cols, rows]) => [family, [Number(cols), Number(rows)]]));
+    for (const family of Object.keys(SERVER_OFFICES)) families[family] = { size: larger[family] ?? [Number(size[1]), Number(size[2])], levels };
   }
   return families;
 }
@@ -152,22 +155,25 @@ test('a house grows at every stage: one storey, two, a wing, a garage, a three-s
   assert.ok(E.plotLayout(on('park'), 'park', 2, 3).placements.some(p => p.kind === 'fountain'), 'a fountain in the park\'s second stage');
 });
 
-test('all eleven offices are finished purchases on 2 × 2 cells and fit them anywhere, facing any side, with an entrance plaza', () => {
+test('all twelve offices are finished purchases on their cells and fit them anywhere, facing any side, towers with an entrance plaza', () => {
   assert.deepEqual(Object.keys(SERVER_OFFICES), Object.keys(E.OFFICE_BUILDINGS));
-  assert.equal(Object.keys(SERVER_OFFICES).length, 11);
+  assert.equal(Object.keys(SERVER_OFFICES).length, 12);
   assert.ok(!E.isOfficeBuilding('house') && !E.isOfficeBuilding('toString'));
-  assert.equal(new Set(Array.from({ length: 11 }, (_, v) => E.officeModelName(v))).size, 11);
+  assert.equal(new Set(Array.from({ length: 12 }, (_, v) => E.officeModelName(v))).size, 12);
   assert.equal(E.officeModelName(8), 'office-building-9');
   assert.equal(E.officeModelName(9), 'office-building-10');
   assert.equal(E.officeModelName(10), 'office-building-11');
+  assert.equal(E.officeModelName(11), 'office-building-12');
   const costs = Object.values(SERVER_OFFICES).map(m => m.price);
   assert.ok(costs.every((price, i) => price > 0 && (i === 0 || price > costs[i - 1])));
   assert.match(server, /\*\*\{key: \[price\] for key, \(_name, price\) in OFFICE_TOWERS\.items\(\)\}/);
   for (const [family, model] of Object.entries(E.OFFICE_BUILDINGS)) {
     assert.equal(model.name, SERVER_OFFICES[family].name);
     assert.equal(E.PLOT_LEVELS[family], 1);
-    for (const rotation of [0, 1, 2, 3]) assert.deepEqual(E.plotFootprint(family, rotation), [2, 2]);
-    for (const frame of plotFrames(2)) {
+    // A tower on 2 × 2 cells; the complex on 4 × 4, centred, a margin all round.
+    const n = model.ensemble ? 4 : 2;
+    for (const rotation of [0, 1, 2, 3]) assert.deepEqual(E.plotFootprint(family, rotation), [n, n]);
+    for (const frame of plotFrames(n)) {
       const layout = E.plotLayout(frame, family, 1, 19), offices = layout.placements.filter(p => p.kind === 'office-building');
       assert.equal(offices.length, 1);
       const [office] = offices, at = local(frame, office), front = at.w + office.depth / 2;
@@ -175,11 +181,17 @@ test('all eleven offices are finished purchases on 2 × 2 cells and fit them any
       assert.equal(office.rotation, frame.rotation);
       assert.equal(office.scale, E.officeBuildingScale(family, frame.width, frame.depth));
       assert.ok(office.scale > 0 && office.scale <= E.OFFICE_SCALE);
-      assert.ok(Math.abs(at.u) + office.width / 2 <= frame.width / 2 - .499, `${family} clear of side boundaries`);
-      assert.ok(at.w - office.depth / 2 >= -frame.depth / 2 + .499, `${family} clear of back boundary`);
-      assert.ok(frame.depth / 2 - front >= 1.799, `${family} leaves its entrance plaza`);
       const path = layout.surfaces.find(s => s.kind === 'slab'), pathAt = local(frame, path);
-      assert.ok(Math.abs(pathAt.w - path.width / 2 - front) < 1e-6 && Math.abs(pathAt.w + path.width / 2 - (frame.depth / 2 - .2)) < 1e-6, `${family} entrance paving reaches plot front`);
+      if (model.ensemble) {
+        assert.ok(Math.abs(at.u) < 1e-9 && Math.abs(at.w) < 1e-9, `${family} in the middle of its plot`);
+        assert.ok(office.width / 2 <= frame.width / 2 - E.ENSEMBLE_MARGIN + 1e-6 && office.depth / 2 <= frame.depth / 2 - E.ENSEMBLE_MARGIN + 1e-6, `${family} a margin in from every side`);
+        assert.ok(layout.placements.some(p => p.kind === 'fountain'), `${family} has its alley's fountain`);
+      } else {
+        assert.ok(Math.abs(at.u) + office.width / 2 <= frame.width / 2 - .499, `${family} clear of side boundaries`);
+        assert.ok(at.w - office.depth / 2 >= -frame.depth / 2 + .499, `${family} clear of back boundary`);
+        assert.ok(frame.depth / 2 - front >= 1.799, `${family} leaves its entrance plaza`);
+      }
+      assert.ok(Math.abs(pathAt.w - path.width / 2 - front) < 1e-6 && Math.abs(pathAt.w + path.width / 2 - (frame.depth / 2 - .2)) < 1e-6, `${family} paving reaches plot front`);
     }
   }
 });

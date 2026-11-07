@@ -209,7 +209,7 @@ test('ready houses: each house in each finish its own model, built in code on th
   catalogue.dispose(); assert.equal(disposed, 1, 'the catalogue owns the built houses');
 });
 
-test('all eleven ready offices are built in code at the table\'s proportions, grounded and centred in their plot, with one lit facade', () => {
+test('all twelve ready offices are built in code at the table\'s proportions, grounded and centred in their plot, with one lit facade', () => {
   const catalogue = city.createCatalogue(new Map(), city.createNight()), matrix = new THREE.Matrix4();
   const position = new THREE.Vector3(), rotation = new THREE.Quaternion(), scale = new THREE.Vector3();
   const resolved = Object.values(city.OFFICE_BUILDINGS).map(definition => {
@@ -222,13 +222,14 @@ test('all eleven ready offices are built in code at the table\'s proportions, gr
     assert.ok(Math.abs(actual.min.y - .2) < 1e-6 && Math.abs(position.x - placement.x) < 1e-6 && Math.abs(position.z - placement.z) < 1e-6, 'grounded on and centred within its footprint');
     for (const [k, value] of [['x', definition.width], ['y', definition.height], ['z', definition.depth]]) assert.ok(Math.abs(extent[k] - value) < .2, `${definition.name}: ${k} ${extent[k].toFixed(3)} for ${value}`);
     const [part] = model.lods[0].parts;
-    assert.ok(surfaceVertices(part.geometry, city.FACE.curtain).length + surfaceVertices(part.geometry, city.FACE.window).length > 0, 'glass or windowed facades');
-    assert.ok(part.geometry.index.count / 3 < 1500 && model.lods.every(level => level === model.lods[0]));
+    assert.ok([city.FACE.curtain, city.FACE.mirror, city.FACE.window].some(kind => surfaceVertices(part.geometry, kind).length > 0), 'glass or windowed facades');
+    // A tower within 1500 triangles; the complex of fourteen buildings within 2500.
+    assert.ok(part.geometry.index.count / 3 < (definition.ensemble ? 2500 : 1500) && model.lods.every(level => level === model.lods[0]));
     assert.ok(part.material.emissiveNode, 'lit at night');
     return model;
   });
-  assert.equal(new Set(resolved.map(model => model.lods[0].parts[0].material)).size, 1, 'one facade material for all eleven');
-  assert.equal(new Set(resolved.map(model => model.lods[0].parts[0].geometry)).size, 11, 'eleven towers');
+  assert.equal(new Set(resolved.map(model => model.lods[0].parts[0].material)).size, 1, 'one facade material for all twelve');
+  assert.equal(new Set(resolved.map(model => model.lods[0].parts[0].geometry)).size, 12, 'twelve offices');
   const counts = { lit: 0, geometry: 0 };
   resolved[0].lods[0].parts[0].material.addEventListener('dispose', () => counts.lit++);
   resolved[0].lods[0].parts[0].geometry.addEventListener('dispose', () => counts.geometry++);

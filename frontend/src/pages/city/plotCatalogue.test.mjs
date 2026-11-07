@@ -17,6 +17,9 @@ async function load(path) {
 
 const { splitPlotCatalogue, estateRows, plotEconomyName } = await load("./plotCatalogue.ts");
 const { OFFICE_BUILDINGS } = await load("../../city3d/world/officeBuildings.ts");
+const { PLOT_SIZE } = await load("../../city3d/world/estateGrid.ts");
+/** An office's side in cells: 2 for a tower, 4 for the complex. */
+const side = family => PLOT_SIZE[family][0];
 const { CityEstateDock } = await load("./CityEstateDock.tsx");
 const { CitySandboxDock } = await load("./CitySandboxDock.tsx");
 const { ShopCatalogue } = await load("./CityShop.tsx");
@@ -41,12 +44,12 @@ const shelf = (tab, price = () => "цена") => renderToStaticMarkup(React.crea
 const tab = (html, title) => html.match(new RegExp(`<ul class="estate-shop__items" role="tabpanel" aria-label="${title}">(.*?)</ul>`, "s"))?.[1] ?? assert.fail(`Missing the ${title} tab`);
 
 test("catalogue separates every office from ready houses and excludes gathered parks", () => {
-  assert.equal(officeFamilies.length, 11);
+  assert.equal(officeFamilies.length, 12);
   const grouped = splitPlotCatalogue(catalogue);
   assert.deepEqual(grouped.options.map(c => c.family), ["square", "house"]);
   assert.deepEqual(grouped.houses.map(c => c.family), ["carport"]);
   assert.deepEqual(grouped.offices.map(c => c.family), officeFamilies);
-  assert.equal(new Set([...grouped.options, ...grouped.houses, ...grouped.offices].map(c => c.family)).size, 14);
+  assert.equal(new Set([...grouped.options, ...grouped.houses, ...grouped.offices].map(c => c.family)).size, 15);
   assert.deepEqual(splitPlotCatalogue([]), { options: [], houses: [], offices: [] });
 });
 
@@ -61,16 +64,16 @@ test("economy groups office prices once with readable names, keeping staged buil
   assert.equal(plotEconomyName("unknown"), "unknown");
 });
 
-test("paid purchase shows offices as one-price buildings on 2 × 2 cells with their land added and affordability enforced", () => {
+test("paid purchase shows offices as one-price buildings on their cells with their land added and affordability enforced", () => {
   const rich = { ...mine, available: 2000 };
   const officeSection = tab(shelf("offices"), "Офисы"), houseSection = tab(shelf("houses"), "Дома");
   for (const office of offices) {
-    const price = office.levels[0].price + 4 * 200;
-    assert.ok(officeSection.includes(`<strong>${office.name}</strong><small>2 × 2 клетки · цена</small><small>готовое здание</small>`), `${office.family} is on the offices shelf`);
+    const n = side(office.family), cells = n * n, price = office.levels[0].price + cells * 200;
+    assert.ok(officeSection.includes(`<strong>${office.name}</strong><small>${n} × ${n} клетки · цена</small><small>готовое здание</small>`), `${office.family} is on the offices shelf`);
     assert.ok(!houseSection.includes(`<strong>${office.name}</strong>`));
     const chosen = render(CityEstateDock, { mine: rich, land: district, build: choosing(office.family, { col: 0, row: 0, problem: null }) });
-    assert.ok(chosen.includes(`<strong>${office.name}</strong><span>2 × 2 клетки</span><b>◈\u00a0${price.toLocaleString("ru-RU")}</b>`), `${office.family} includes its four cells of land`);
-    assert.ok(chosen.includes(`Земля 4 × ◈ 200 = ◈ 800 + `), `${office.family} shows its land`);
+    assert.ok(chosen.includes(`<strong>${office.name}</strong><span>${n} × ${n} клетки</span><b>◈\u00a0${price.toLocaleString("ru-RU")}</b>`), `${office.family} includes the land of its cells`);
+    assert.ok(chosen.includes(`Земля ${cells} × ◈ 200 = ◈ ${(cells * 200).toLocaleString("ru-RU")} + `), `${office.family} shows its land`);
     const button = chosen.match(/<button type="button" class="city-action"([^>]*)>(Купить|Не хватает)[^<]*<\/button>/);
     assert.ok(button, `${office.family} can be bought once chosen`);
     assert.equal(button[1].includes('disabled=""'), price > rich.available);
@@ -82,8 +85,9 @@ test("sandbox exposes all offices separately and builds them for free", () => {
   const sandbox = build => render(CitySandboxDock, { city: "support", state: { city: "support", sandbox: true, districts: [district] }, mine, build });
   const free = shelf("offices", () => "бесплатно");
   for (const office of offices) {
-    assert.ok(free.includes(`aria-label="${office.name}: 2 × 2 клетки, бесплатно"`));
-    assert.match(sandbox(choosing(office.family)), new RegExp(`<strong>${office.name}</strong><span>2 × 2 клетки</span><b>бесплатно</b>`));
+    const n = side(office.family);
+    assert.ok(free.includes(`aria-label="${office.name}: ${n} × ${n} клетки, бесплатно"`));
+    assert.match(sandbox(choosing(office.family)), new RegExp(`<strong>${office.name}</strong><span>${n} × ${n} клетки</span><b>бесплатно</b>`));
   }
   // A cell tapped before choosing: the sandbox's shelves, every price free.
   const shop = sandbox({ ...selectedPlot });

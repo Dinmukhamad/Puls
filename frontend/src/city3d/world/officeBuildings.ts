@@ -1,11 +1,17 @@
 /**
- * Ready office towers for district plots: eleven towers drawn in code by assets/readyBuildings.ts (docs/CITY_V4.md),
+ * Ready office towers for district plots: eleven towers and one business complex drawn in code by assets/readyBuildings.ts (docs/CITY_V4.md),
  * each centred on x/z, grounded on y = 0 and facing +z. Dimensions are in model units; the city keeps their
  * proportions and shrinks them uniformly only when a plot is narrower.
  */
-export type OfficeBuilding = "officea" | "officeb" | "officec" | "officed" | "officee" | "officef" | "officeg" | "officeh" | "officei" | "officej" | "officek";
-export interface OfficeBuildingModel { model: number; name: string; width: number; depth: number; height: number }
+export type OfficeBuilding = "officea" | "officeb" | "officec" | "officed" | "officee" | "officef" | "officeg" | "officeh" | "officei" | "officej" | "officek" | "officel";
+export interface OfficeBuildingModel {
+  model: number; name: string; width: number; depth: number; height: number;
+  /** A complex of several buildings on a larger plot: the camera frames the whole of it. */
+  ensemble?: boolean;
+}
 
+/** Nurly Tau, the business complex, in its metres: across and from the back to the front (assets/readyBuildings.ts). */
+export const NURLY_TAU_WIDTH = 238, NURLY_TAU_DEPTH = 267;
 export const OFFICE_SCALE = 2;
 /** Towers sit slightly behind the plot's centre, leaving room for their entrance plaza. */
 export const OFFICE_SETBACK = -.65;
@@ -23,15 +29,23 @@ export const OFFICE_BUILDINGS: Record<OfficeBuilding, OfficeBuildingModel> = {
   officej: { model: 10, name: "Башня с пирамидой", width: 2.3, depth: 2.3, height: 6.8 },
   // The owner's model of the Empire State Building, its proportions kept: 130.4 × 66 × 443.2 m (assets/readyBuildings.ts, empireState).
   officek: { model: 11, name: "Эмпайр-стейт-билдинг", width: 2.4, depth: 2.4 * 66 / 130.4, height: 2.4 * 443.2 / 130.4 },
+  // The owner's model of the Nurly Tau complex in Almaty, its proportions kept: 238 × 267 m, 133.3 m to the lights on its
+  // pyramids (assets/readyBuildings.ts, nurlyTau).
+  officel: { model: 12, name: "Нурлы Тау", width: 8, depth: 8 * NURLY_TAU_DEPTH / NURLY_TAU_WIDTH, height: 8 * 133.3 / NURLY_TAU_WIDTH, ensemble: true },
 };
 
 export const isOfficeBuilding = (family: string): family is OfficeBuilding => Object.prototype.hasOwnProperty.call(OFFICE_BUILDINGS, family);
 /** Placement variant is the source body's number minus one. */
 export const officeVariant = (variant: number) => Math.max(0, Math.floor(variant)) % Object.keys(OFFICE_BUILDINGS).length;
 export const officeModelName = (variant: number) => `office-building-${officeVariant(variant) + 1}`;
-/** Half a unit behind, 1.8 units for the entrance plaza, and half a unit at either side. */
+/** An ensemble stands in the middle of its plot, this far in from every side. */
+export const ENSEMBLE_MARGIN = 1;
+/** How far behind its plot's centre a tower stands: towers leave room for their entrance plaza, ensembles none. */
+export const officeSetback = (family: OfficeBuilding) => OFFICE_BUILDINGS[family].ensemble ? 0 : OFFICE_SETBACK;
+/** Half a unit behind, 1.8 units for the entrance plaza, and half a unit at either side; an ensemble a unit all round. */
 export function officeBuildingScale(family: OfficeBuilding, width: number, depth: number) {
   const model = OFFICE_BUILDINGS[family];
+  if (model.ensemble) return Math.min(OFFICE_SCALE, Math.max(.1, width - 2 * ENSEMBLE_MARGIN) / model.width, Math.max(.1, depth - 2 * ENSEMBLE_MARGIN) / model.depth);
   return Math.min(OFFICE_SCALE, Math.max(.1, width - 1) / model.width, Math.max(.1, depth - 2.3) / model.depth);
 }
 
@@ -41,8 +55,8 @@ type OfficePlot = { x: number; z: number; rotation: number; width: number; depth
 export function officeBuildingBounds(family: OfficeBuilding, frame: OfficePlot) {
   const model = OFFICE_BUILDINGS[family], scale = officeBuildingScale(family, frame.width, frame.depth);
   return {
-    x: frame.x + Math.sin(frame.rotation) * OFFICE_SETBACK,
-    z: frame.z + Math.cos(frame.rotation) * OFFICE_SETBACK,
+    x: frame.x + Math.sin(frame.rotation) * officeSetback(family),
+    z: frame.z + Math.cos(frame.rotation) * officeSetback(family),
     rotation: frame.rotation, width: model.width * scale, depth: model.depth * scale, height: model.height * scale,
   };
 }
