@@ -41,7 +41,7 @@ export interface Sky {
 }
 
 /** The day's sky at the horizon (also the haze) and overhead; the water reflects them too (render/water.ts). */
-export const HORIZON = "#c8eaff", ZENITH = "#459ee9";
+export const HORIZON = "#95c6e9", ZENITH = "#2e82ce";
 const SUN = "#ffe9c8", SUN_INTENSITY = 3.3;
 /** The haze starts past the city's flat land and is still light on the ridges (relief ends at 3.1 radii). */
 export const FOG_NEAR = 1.6, FOG_FAR = 6;
@@ -73,7 +73,7 @@ const MOON_AZIMUTH = 1.19, MOON_ELEVATION = .25, MOON_RADIUS = .0125;
 /** The disc's colour and brightness: bright enough to glow softly at night's bloom, not to burn out white. */
 const MOON_DISC = "#fff3de", MOON_BRIGHTNESS = 1.5;
 /** Clouds: the noise image's tile spans this many units of the cloud layer; their shaded and sunlit colours. */
-const CLOUD_SCALE = .26, CLOUD_SHADE = "#b4c2d2", CLOUD_LIT = "#fdfeff";
+const CLOUD_SCALE = .26, CLOUD_SHADE = "#9fb7d1", CLOUD_LIT = "#ffffff";
 /** Stars: cells of about 5 px at 1440 × 900, a star in every 36th of them. */
 const STAR_GRID = 260, STAR_SHARE = .028;
 
@@ -162,7 +162,7 @@ export function createSky(ctx: CityContext): Sky {
     const toward = max(dot(direction, sunDisc), float(0));
     const shade = mix(color(CLOUD_SHADE), color(CLOUD_LIT), lit).add(color(SUN).mul(pow(toward, float(6)).mul(lit).mul(.25)));
     const cover = smoothstep(.6, .76, here).mul(smoothstep(.02, .13, direction.y)).mul(.92);
-    return mix(base, mix(shade, base, exp(direction.y.mul(-11)).mul(.55)), cover);
+    return mix(base, mix(shade, base, exp(direction.y.mul(-11)).mul(.38)), cover);
   }) as unknown as (direction: Vec3Node, base: Vec3Node) => Vec3Node;
   /** A pale disc with soft grey seas and a faint halo of moonlight around it. */
   const moonDisc = Fn(([direction]: [Vec3Node]) => {
