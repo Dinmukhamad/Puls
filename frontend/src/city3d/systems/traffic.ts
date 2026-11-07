@@ -122,14 +122,17 @@ export interface TrafficOptions {
 
 /** Keep the first frame immediate; atomically replace lightweight traffic when the collection has decoded. */
 export function createTraffic(ctx: CityContext, options: TrafficOptions = {}): Traffic {
-  let active = createFallbackTraffic(ctx), disposed = false, enabled = !ctx.reducedMotion;
+  // Departments reparent the current scene children when they initialize. Keep later downloads inside this
+  // stable owner, so Support traffic cannot escape its hidden city and appear over the Sales landscape.
+  const root = new THREE.Group(); root.name = "city-transport-root"; ctx.scene.add(root);
+  let active = createFallbackTraffic(ctx, root), disposed = false, enabled = !ctx.reducedMotion;
   let collection: Map<string, TransportModel> | undefined;
   const controller = new AbortController(), dataset = ctx.renderer.domElement.dataset;
   dataset.transport = "loading";
   const ready = (options.loadCollection ?? loadTrafficCollection)({ signal: controller.signal }).then(models => {
     if (disposed) { disposeTrafficCollection(models); return false; }
     collection = models;
-    const next = createCollectionTraffic(ctx, models, options.random ?? Math.random);
+    const next = createCollectionTraffic(ctx, models, options.random ?? Math.random, root);
     next.setEnabled(enabled); active.dispose(); active = next; dataset.transport = "collection";
     return true;
   }).catch(() => {
@@ -143,14 +146,14 @@ export function createTraffic(ctx: CityContext, options: TrafficOptions = {}): T
     get movers() { return active.movers; },
     dispose() {
       if (disposed) return;
-      disposed = true; controller.abort(); active.dispose();
+      disposed = true; controller.abort(); active.dispose(); root.removeFromParent();
       if (collection) { disposeTrafficCollection(collection); collection = undefined; }
     },
   };
 }
 
-function createFallbackTraffic(ctx: CityContext): Traffic {
-  const group = new THREE.Group(); group.name = "city-traffic"; ctx.scene.add(group);
+function createFallbackTraffic(ctx: CityContext, parent: THREE.Object3D): Traffic {
+  const group = new THREE.Group(); group.name = "city-traffic"; parent.add(group);
   const blobGeometry = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), blobs = blobMaterial();
   const level = ctx.night.level, fog = ctx.scene.fog instanceof THREE.Fog ? ctx.scene.fog : null;
   // Glow fades with the fog, as the cars under it do.
@@ -172,10 +175,10 @@ function createFallbackTraffic(ctx: CityContext): Traffic {
   const lampMatrices = copyMatrices(carCount).setUsage(THREE.DynamicDrawUsage), white = copyTints(carCount);
   const lamps = copyMesh(carLamps(), lampMaterial, lampMatrices, white), beams = copyMesh(beamGeometry(), beamMaterial, lampMatrices, white);
   lamps.name = "city-traffic-lamps"; beams.name = "city-traffic-beams";
-  for (const mesh of [lamps, beams]) ctx.scene.add(mesh);
+  for (const mesh of [lamps, beams]) parent.add(mesh);
   // Contact shadows: one per car, in a buffer of their own.
   const blobMatrices = copyMatrices(carCount).setUsage(THREE.DynamicDrawUsage), shadows = copyMesh(blobGeometry, blobs, blobMatrices, white);
-  shadows.name = "city-traffic-shadows"; ctx.scene.add(shadows);
+  shadows.name = "city-traffic-shadows"; parent.add(shadows);
   let fleets: Fleet[] = [], boatGlow: CopyMesh | null = null;
   let enabled = !ctx.reducedMotion, dirty = true, clock = 0, crowd = ctx.quality.crowd, lit = false;
   /** Night meshes are drawn only while the level is above 0; the lamp matrices are written only then. */
@@ -211,7 +214,7 @@ function createFallbackTraffic(ctx: CityContext): Traffic {
       if (k.lights) {
         // Glow casts no shadow, so it stays out of the movers group.
         boatGlow = copyMesh(k.lights, lampMaterial, matrices, list.length > carCount ? copyTints(list.length) : white); boatGlow.name = "city-traffic-boat-lights";
-        ctx.scene.add(boatGlow); meshes.push(boatGlow); show();
+        parent.add(boatGlow); meshes.push(boatGlow); show();
       }
       fleets.push({ kind: k, vehicles: list, matrices, tints, owners: new Int32Array(list.length).fill(-1), meshes });
     });

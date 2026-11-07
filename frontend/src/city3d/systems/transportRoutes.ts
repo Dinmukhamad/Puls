@@ -86,6 +86,9 @@ export function createTransportPlans(world: WorldData, random: () => number = Ma
     return [{ ...plan, cars: Math.ceil(plan.cars / 2) }, { ...plan, route: reverse, cars: Math.floor(plan.cars / 2) }];
   });
   const boats = world.routes.filter(plan => plan.boats), { quay, bank } = world.spec;
+  // The lake city supplies courses checked against its rectangular campus and shore (salesTraffic.ts).
+  // Its quay/bank values describe a narrow decorative rim, not the navigable open lake.
+  if (world.spec.name === "sales") return [...roads, ...boats.map(plan => ({ ...plan }))];
   if (!boats.length || bank - quay < 7 || !world.water.annuli.some(a => a.inner <= quay && a.outer >= bank)) return roads;
 
   const radius = (quay + bank) / 2, turn = Math.min(1.2, (bank - quay) / 2 - HULL_REACH - SHORE_MARGIN);
