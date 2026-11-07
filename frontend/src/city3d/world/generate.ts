@@ -336,6 +336,8 @@ function parkedCars(plan: CityPlan): Placement[] {
   return cars;
 }
 
+/** The hill forests stand from 4 to this many units past the horizon (render/mountains.ts keeps its haze off them). */
+export const FOREST_REACH = 234;
 /**
  * Forests on the hills past the horizon: clumps of mostly spruce, standing on the relief (lift), none up on the
  * rock, in the railway's cutting or on the hill right over its portal.
@@ -348,7 +350,7 @@ function hillForest(plan: CityPlan, line: RailLine | undefined): Placement[] {
     return !onRailway(line, p, 6) && !(Math.abs(u - line.length) < 9 && Math.abs(w) < 14) && groundHeight(land, p.x, p.z) - groundHeight(land, p.x, p.z, line) < .2;
   };
   for (let k = 0; k < count; k++) {
-    const a = random() * TAU, r = s.horizon + 4 + Math.pow(random(), 1.3) * 230, p = polar(r, a), spruce = random() < .7, scale = 1.6 + random() * 1.4;
+    const a = random() * TAU, r = s.horizon + 4 + Math.pow(random(), 1.3) * (FOREST_REACH - 4), p = polar(r, a), spruce = random() < .7, scale = 1.6 + random() * 1.4;
     const lift = groundHeight(land, p.x, p.z, line);
     if (lift > 40 || fbm(p.x / 38 + 5, p.z / 38 - 2, 2) < .47 || !clear(p)) continue;
     trees.push({ kind: spruce ? "tree-cone" : "tree-round", variant: k, x: p.x, z: p.z, rotation: a * 7.3, scale, width: 0, lift });

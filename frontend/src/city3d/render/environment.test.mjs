@@ -117,6 +117,11 @@ test("the ranges: one mesh painted in its shader, smooth on the hills, in layers
   assert.ok(sharp > 0 && sharp < seen.size * .35, `${sharp} of ${seen.size} points on a fold, the rest shaded smooth`);
   assert.ok(city.HAZE_START >= city.FOG_NEAR, 'the city and its hills stay clear of the haze');
   assert.ok(city.HAZE_MAX < 1 && city.EDGE > 0 && city.EDGE < .5, 'the ranges keep their shapes in the haze, only the last stretch dissolves');
+  // The forests on the hills stand where the haze stays off: they take only the scene's fog, as the ground under them.
+  const forests = ctx.world.placements.filter(p => p.kind.startsWith('tree-') && (p.lift ?? 0) > 0);
+  assert.ok(forests.length > 100, `${forests.length} hill trees`);
+  const farthest = Math.max(...forests.map(p => Math.hypot(p.x, p.z)));
+  assert.ok(farthest <= city.forestReach(ctx.world), `trees out to ${farthest.toFixed(0)}, the haze stays off to ${city.forestReach(ctx.world)}`);
   mountains.dispose(); sky.dispose();
   assert.equal(ctx.scene.children.length, 0);
 });

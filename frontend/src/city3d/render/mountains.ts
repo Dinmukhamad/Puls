@@ -11,13 +11,16 @@
  *   (the strata fade to their average once they are finer than a pixel), snow by height on the gentler faces of
  *   the peaks, its line wandering with the noise;
  * - layers of haze: it thickens with the distance from the camera and more in the valleys than on the crests, so
- *   each range stands paler behind the one before; it takes the sky's colour round each ridge (render/sky.ts
+ *   each range stands paler behind the one before (none on the hills the forests stand on, so the trees never hang
+ *   in it); it takes the sky's colour round each ridge (render/sky.ts
  *   skyHaze, with the sun's halo), and the last stretch of the relief dissolves into the sky entirely, so the
  *   edge of the map never shows. Day and night follow the sky's uniforms.
  */
 import * as THREE from "three/webgpu";
 import { cameraPosition, clamp, color, exp, float, fwidth, max, mix, normalWorld, output, positionWorld, smoothstep, texture, vec2, vec4 } from "three/tsl";
 import type { CityContext } from "../engine/context";
+import type { WorldData } from "../world/types";
+import { FOREST_REACH } from "../world/generate";
 import { flatLand, groundHeight, landEdge, RELIEF_END, type FlatLand } from "../world/relief";
 import { PORTAL_HOLE, RAIL_TOP, portalHole, railLocal, railPoint, type RailLine } from "../world/railway";
 import { groundNoise } from "./ground";
@@ -34,6 +37,13 @@ const CREASE = 50 * Math.PI / 180;
  * fades into the sky completely.
  */
 export const HAZE_START = FOG_NEAR, HAZE_DEPTH = 1.15, HAZE_MAX = .82, HAZE_HEIGHT = 55, EDGE = .2;
+/**
+ * The haze stays off the hills the forests stand on (world/generate.ts FOREST_REACH): the trees are copies with the
+ * scene's fog only, and on hazed ground they would hang in the haze. It sets in past them over this share of a radius.
+ */
+export const FOREST_FADE = .3;
+/** How far from the centre the haze stays off: the hill forests' reach. */
+export const forestReach = (world: Pick<WorldData, "spec">) => world.spec.horizon + FOREST_REACH;
 /** The face's rings, along the track from the face: the cutting's last, the hole's bottom, the hill's first, then the slope over the portal. */
 const FACE_RINGS = [-.2, -.1, .1, 1.5, 3, 5, 7.5, 10.5];
 
@@ -176,8 +186,9 @@ function mountainMaterial(ctx: CityContext, end: number) {
   const toward = p.sub(cameraPosition), distance = toward.length();
   const depth = max(distance.sub(radius * HAZE_START), 0).div(radius * HAZE_DEPTH);
   const valley = exp(max(height, 0).div(-HAZE_HEIGHT)).mul(.5).add(.5);
-  const haze = float(1).sub(exp(depth.mul(valley).negate())).mul(HAZE_MAX);
-  const veil = max(haze, smoothstep(end * (1 - EDGE), end, vec2(p.x, p.z).length()));
+  const reach = forestReach(ctx.world), fromCentre = vec2(p.x, p.z).length();
+  const haze = float(1).sub(exp(depth.mul(valley).negate())).mul(HAZE_MAX).mul(smoothstep(reach, reach + radius * FOREST_FADE, fromCentre));
+  const veil = max(haze, smoothstep(end * (1 - EDGE), end, fromCentre));
   material.outputNode = vec4(mix(output.rgb, skyHaze(look, toward.div(distance)), veil), output.a);
   return material;
 }
