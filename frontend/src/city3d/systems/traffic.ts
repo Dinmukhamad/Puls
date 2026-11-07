@@ -1,6 +1,8 @@
 /**
- * Traffic (TZ §7.1): cars drive the generator's loops and boats the canal, moved on the CPU. The vehicles are the
- * city's own (assets/vehicles.ts, docs/CITY_V4.md stage 4): each kind is one geometry, drawn as one copy mesh
+ * Traffic lifecycle: the original lightweight vehicles draw immediately. Once the compact collection loads,
+ * collectionTraffic.ts replaces them with all 20 models, randomized lanes, safe boat courses and three LODs.
+ * A failed or cancelled optional download never blocks the city. The fallback below uses assets/vehicles.ts:
+ * each kind is one geometry, drawn as one copy mesh
  * (render/copies.ts) in the vehicles' shared material, its paint from the kind's palette per vehicle. Every frame the
  * vehicles in view are packed to the front of their kind's buffers and the instance count cuts the rest, so far
  * and off-screen cars cost the GPU nothing and draw calls do not grow with the city: one per kind on the screen.
@@ -19,6 +21,8 @@ import { sampleRoute } from "../world/generate";
 import type { Route } from "../world/types";
 import { COPY_STRIDE, copyMatrices, copyMesh, copyTints } from "../render/copies";
 import { skyLook } from "../render/sky";
+import { loadTrafficCollection, disposeTrafficCollection, type TransportModel } from "../assets/transportCollection";
+import { createCollectionTraffic } from "./collectionTraffic";
 
 /** The vehicles are built 1.5 units wide, as the Car Kit's were; this makes them fit a one-unit lane. */
 export const CAR_SCALE = .5, BOAT_SCALE = .75;
@@ -42,6 +46,8 @@ type CopyMesh = ReturnType<typeof copyMesh>;
 interface Fleet { kind: Kind; vehicles: Vehicle[]; matrices: THREE.InstancedInterleavedBuffer; tints: THREE.InstancedBufferAttribute; owners: Int32Array; meshes: CopyMesh[] }
 
 export interface Traffic {
+  /** Optional detail arrives after the first frame; false means the lightweight traffic remains available. */
+  readonly ready?: Promise<boolean>;
   setEnabled(enabled: boolean): void;
   /** Objects for the dynamic shadow map: the group of vehicle meshes. */
   movers: THREE.Object3D[];
@@ -109,7 +115,41 @@ function blobMaterial() {
 /** Whether vehicle `rank` of a loop stays at this crowd share: every n-th one goes, so the rest stay evenly spread. */
 export const activeAt = (rank: number, share: number) => Math.floor((rank + 1) * share) > Math.floor(rank * share);
 
-export function createTraffic(ctx: CityContext): Traffic {
+export interface TrafficOptions {
+  random?: () => number;
+  loadCollection?: typeof loadTrafficCollection;
+}
+
+/** Keep the first frame immediate; atomically replace lightweight traffic when the collection has decoded. */
+export function createTraffic(ctx: CityContext, options: TrafficOptions = {}): Traffic {
+  let active = createFallbackTraffic(ctx), disposed = false, enabled = !ctx.reducedMotion;
+  let collection: Map<string, TransportModel> | undefined;
+  const controller = new AbortController(), dataset = ctx.renderer.domElement.dataset;
+  dataset.transport = "loading";
+  const ready = (options.loadCollection ?? loadTrafficCollection)({ signal: controller.signal }).then(models => {
+    if (disposed) { disposeTrafficCollection(models); return false; }
+    collection = models;
+    const next = createCollectionTraffic(ctx, models, options.random ?? Math.random);
+    next.setEnabled(enabled); active.dispose(); active = next; dataset.transport = "collection";
+    return true;
+  }).catch(() => {
+    if (!disposed) dataset.transport = "fallback";
+    if (collection) { disposeTrafficCollection(collection); collection = undefined; }
+    return false;
+  });
+  return {
+    ready,
+    setEnabled(next) { enabled = next; active.setEnabled(next); },
+    get movers() { return active.movers; },
+    dispose() {
+      if (disposed) return;
+      disposed = true; controller.abort(); active.dispose();
+      if (collection) { disposeTrafficCollection(collection); collection = undefined; }
+    },
+  };
+}
+
+function createFallbackTraffic(ctx: CityContext): Traffic {
   const group = new THREE.Group(); group.name = "city-traffic"; ctx.scene.add(group);
   const blobGeometry = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), blobs = blobMaterial();
   const level = ctx.night.level, fog = ctx.scene.fog instanceof THREE.Fog ? ctx.scene.fog : null;

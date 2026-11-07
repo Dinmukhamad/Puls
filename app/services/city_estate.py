@@ -70,7 +70,8 @@ SMALL_TEAM = 3
 #: photographs of a glass business complex; the eleventh, the Empire State Building, after the
 #: owner's model of it. Every tower is bought finished on 2 × 2 cells, like a ready house. After
 #: them, the Nurly Tau business complex, drawn after the owner's model of it: fourteen buildings
-#: bought at once, on the larger plot of OFFICE_SIZES.
+#: bought at once. The landmarks stand on the larger plots of OFFICE_SIZES, so that they stand over
+#: the city's ordinary buildings as they do in life.
 OFFICE_TOWERS = {
     "officea": ("Офисная башня A", 900),
     "officeb": ("Офисная башня B", 980),
@@ -88,7 +89,7 @@ OFFICE_TOWERS = {
 #: Office buildings on more cells than a tower's 2 × 2 (frontend world/estateGrid.ts PLOT_SIZE), and
 #: what the shop says of those that are not a single tower.
 OFFICE_ABOUT_TOWER = "Готовое высотное офисное здание. Покупается целиком."
-OFFICE_SIZES = {"officel": (4, 4)}
+OFFICE_SIZES = {"officek": (4, 4), "officel": (8, 8)}
 OFFICE_ABOUT = {
     "officel": "Деловой комплекс целиком: четыре башни с пирамидами, две башни-пластины и восемь "
     "корпусов под стеклянными шатрами вдоль аллеи с фонтаном. Покупается целиком.",
