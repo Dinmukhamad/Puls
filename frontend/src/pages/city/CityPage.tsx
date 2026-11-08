@@ -118,7 +118,7 @@ export function CityPage() {
   const salesLand = useQuery({ queryKey: ["city-estates", "sales"], queryFn: ({ signal }) => cityEstate.city("sales", signal), retry: retryCityRead, enabled: department === "sales" && !sandboxOn && !historyOn, refetchInterval: landPoll, refetchOnWindowFocus: true });
   const sandboxLand = useQuery({ queryKey: ["city-sandbox", department], queryFn: ({ signal }) => citySandbox.city(department, signal), retry: retryCityRead, enabled: sandboxOn, refetchInterval: landPoll, refetchOnWindowFocus: true });
   const supportFull = useFullCity(fullOn ? supportLand.data : undefined), salesFull = useFullCity(fullOn ? salesLand.data : undefined);
-  const estateViews = useMemo(() => {
+  const freshViews = useMemo(() => {
     const views: Partial<Record<DepartmentId, CityEstateView>> = {};
     // A past city is only looked at: its land as it stood on the season's last day.
     if (historyOn) {
@@ -138,6 +138,17 @@ export function CityPage() {
     if (salesLand.data) views.sales = { state: salesLand.data };
     return views;
   }, [historyOn, historyLand.data, sandboxOn, department, sandboxLand.data, fullOn, supportFull, salesFull, supportLand.data, salesLand.data]);
+  // One { state } wrapper per state, the first made for it, kept while the state is: a render for anything else (the
+  // other city's poll, the real land polled under «Весь город») hands the map the same views, so it looks at nothing again.
+  const [wrappers] = useState(() => new WeakMap<CityEstateView["state"], CityEstateView>());
+  const estateViews = useMemo(() => {
+    const views: Partial<Record<DepartmentId, CityEstateView>> = {};
+    for (const [city, view] of Object.entries(freshViews) as [DepartmentId, CityEstateView][]) {
+      const kept = wrappers.get(view.state);
+      if (kept) views[city] = kept; else { wrappers.set(view.state, view); views[city] = view; }
+    }
+    return views;
+  }, [wrappers, freshViews]);
   const [building, setBuilding] = useState<BuildState | null>(null), [estateFocus, setEstateFocus] = useState<EstateTarget & { at: number }>();
   // Which way of the cells is up the screen now, for the arrows that move small things (decorArrange.ts).
   const [screen, setScreen] = useState<ScreenWays>(DEFAULT_SCREEN);

@@ -33,7 +33,7 @@ import { districtMainFrame, districtMainLayout, landmarkHeight, landmarkBounds, 
 import { districtGarden, type Garden } from "../world/districtGarden";
 import type { Placement, Surface } from "../world/types";
 import type { CellState, ChosenCell, CityBuildView, CityEstateView, EstatePick, EstateTarget, PlotAddress } from "../types";
-import type { DistrictEstate, PublicObject } from "../../api/cityEstate";
+import type { CityEstates, DistrictEstate, PublicObject } from "../../api/cityEstate";
 import { plural } from "../../utils/format";
 
 /** Signs over projects show only this close. */
@@ -63,6 +63,10 @@ export interface EstateFocusView {
 }
 
 export interface Estates {
+  /**
+   * The land to show. A new state is worked out and drawn again only where it changed; the same state object again (in
+   * a new { state } wrapper or not) only refreshes the signs and the build view, as any set does.
+   */
   set(view: CityEstateView | null): void;
   setCatalogue(catalogue: Catalogue): void;
   setBuild(view: CityBuildView | null): void;
@@ -253,11 +257,22 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
   // Gardens, trees and paving stay out of these volumes so adjacent free cells remain selectable.
   const houseBodies: { pick: EstatePick; bounds: THREE.Box3; matrix: THREE.Matrix4; inverse: THREE.Matrix4 }[] = [];
   const seen = new Map<number, number>();
+  /**
+   * The state the small things, the cells taken and the land's key were last worked out from. The same state again (a
+   * new wrapper round it, a page rendering for something else) needs none of that again: for the full city it is
+   * 8–10 ms on a phone-class CPU before the key could say nothing changed.
+   */
+  let derivedFrom: CityEstates | null = null, landKey = "";
   function rebuild() {
     rebuildSquares();
-    decor = decorMap(view?.state.districts ?? []);
-    taken = takenCells();
-    const key = view ? JSON.stringify(view.state.districts.map(d => [d.id, d.version, d.landmark && [d.landmark.status, d.landmark.level, d.landmark.u, d.landmark.v, d.landmark.w, d.landmark.h], d.objects.map(o => [o.id, o.family, o.level, o.module, o.u, o.v, o.rotation]), d.projects.map(p => [p.id, p.module, p.u, p.v, p.rotation]), Object.entries(d.decor ?? {}).map(([k, v]) => [k, v.length])])) : "";
+    const state = view?.state ?? null;
+    if (state !== derivedFrom) {
+      derivedFrom = state;
+      decor = decorMap(state?.districts ?? []);
+      taken = takenCells();
+      landKey = state ? JSON.stringify(state.districts.map(d => [d.id, d.version, d.landmark && [d.landmark.status, d.landmark.level, d.landmark.u, d.landmark.v, d.landmark.w, d.landmark.h], d.objects.map(o => [o.id, o.family, o.level, o.module, o.u, o.v, o.rotation]), d.projects.map(p => [p.id, p.module, p.u, p.v, p.rotation]), Object.entries(d.decor ?? {}).map(([k, v]) => [k, v.length])])) : "";
+    }
+    const key = landKey;
     if (key === builtKey && (pools || !catalogue)) { recolour(); refreshSigns(); refreshBuild(); return; }
     builtKey = key;
     houseBodies.length = 0;

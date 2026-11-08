@@ -722,6 +722,37 @@ test('a building chosen for the one cell shows its cells round it, green where f
   s.estates.dispose();
 });
 
+test('the same state again, in a new wrapper or not, is not worked out anew; a new state is, and rebuilds only if it changed', () => {
+  const s = setup(), b = home.block;
+  s.ctx.quality = { lodDistances: [120, 260, 600] }; s.ctx.onQuality = () => () => {};
+  s.estates.setCatalogue({ resolve() { return null; } });
+  // A district that counts how often its small things are read: their map, the cells taken and the land's key read them.
+  let reads = 0;
+  const counted = decor => new Proxy({ id: districtId, name: 'Тестовый район', number: frame.district, objects: [object('house')], projects: [], land: { open_band: grid.bands }, version: 1, decor }, {
+    get(target, key) { if (key === 'decor') reads++; return Reflect.get(target, key); },
+  });
+  const road = { road: [[b, frame.col + 4, frame.row, 1], [b, frame.col + 4, frame.row + 1, 1]], lamp: [[b, frame.col + 5, frame.row, 1]] };
+  const state = { city: 'support', districts: [counted(road)] };
+  s.estates.set({ state });
+  const roads = s.ctx.scene.getObjectByName('district-roads'), lamps = s.ctx.scene.getObjectByName('district-lamp-pools');
+  assert.ok(roads && lamps && reads >= 2, `${reads} reads`);
+  reads = 0;
+  s.estates.set({ state }); s.estates.set({ state });
+  assert.equal(reads, 0, 'the same state: nothing read again');
+  assert.equal(s.ctx.scene.getObjectByName('district-roads'), roads, 'nothing rebuilt');
+  // What the map knows of the state is as it was: the road's cell is one's own, the house's taken.
+  s.build(null); s.aim(cellPoint(frame.col + 4, frame.row)); s.picks.length = 0;
+  s.tap(cellPoint(frame.col + 4, frame.row)); assert.deepEqual(states(s.picks), ['own']);
+  s.tap(cellPoint(frame.col + 1, frame.row + 1)); assert.equal(s.picks.at(-1).kind, 'object');
+  // A new state just like it is read again, and builds nothing new; one with another road rebuilds.
+  s.estates.set({ state: { ...state, districts: [counted(road)] } });
+  assert.ok(reads >= 2);
+  assert.equal(s.ctx.scene.getObjectByName('district-roads'), roads);
+  s.estates.set({ state: { ...state, districts: [counted({ ...road, road: road.road.slice(0, 1) })] } });
+  assert.notEqual(s.ctx.scene.getObjectByName('district-roads'), roads);
+  s.estates.dispose();
+});
+
 test('a rebuild keeps the yards\' and the lamps\' materials, so the next frame builds no new shaders; they go with the estates', () => {
   const s = setup(), b = home.block, freed = [];
   s.ctx.quality = { lodDistances: [120, 260, 600] }; s.ctx.onQuality = () => () => {};
