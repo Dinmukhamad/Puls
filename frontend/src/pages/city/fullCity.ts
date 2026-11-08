@@ -20,20 +20,40 @@ const BAND_ROWS = 3, PARKS_EVERY = 4;
 
 export interface FullDistrict { objects: PublicObject[]; decor: Partial<Record<DecorFamily, DecorCell[]>>; cells: number; next: number }
 
+/**
+ * A block's cells not for sale, 1 in a typed array column by column (column × rows + row), and how many are for sale:
+ * worked out once per block, as a grid never changes once it is made (freeDistrictPlot.ts keeps one per city and
+ * layout), so every look at the full city starts from a copy.
+ */
+const LAND = new WeakMap<LandBlock, { skipped: Uint8Array; forSale: number }>();
+function landOf(block: LandBlock) {
+  let land = LAND.get(block);
+  if (!land) {
+    const skipped = new Uint8Array(block.cols * block.rows);
+    let forSale = 0;
+    for (let c = 0; c < block.cols; c++) for (let r = 0; r < block.rows; r++) {
+      if (block.skip.has(`${c}:${r}`)) skipped[c * block.rows + r] = 1; else forSale++;
+    }
+    LAND.set(block, land = { skipped, forSale });
+  }
+  return land;
+}
+
 /** District `number`'s blocks built up, its objects numbered from `first`. */
 export function fullDistrict(blocks: readonly LandBlock[], number: number, first: number): FullDistrict {
   const objects: PublicObject[] = [], decor: Partial<Record<DecorFamily, DecorCell[]>> = {};
   let id = first, k = number * 7, green = number, cells = 0;
   const lay = (family: DecorFamily, block: number, c: number, r: number) => (decor[family] ??= []).push([block, c, r, 0]);
   for (const block of [...blocks].sort((a, b) => a.block - b.block)) {
-    const taken = new Set<string>(), key = (c: number, r: number) => `${c}:${r}`;
-    for (let c = 0; c < block.cols; c++) for (let r = 0; r < block.rows; r++) if (!block.skip.has(key(c, r))) cells++;
+    // The block's cells that are not free, column by column: not for sale, or taken by what is laid here.
+    const land = landOf(block), rows = block.rows, used = land.skipped.slice();
+    cells += land.forSale;
     const free = (c0: number, r0: number, w: number, h: number) => {
-      if (c0 < 0 || r0 < 0 || c0 + w > block.cols || r0 + h > block.rows) return false;
-      for (let c = c0; c < c0 + w; c++) for (let r = r0; r < r0 + h; r++) if (block.skip.has(key(c, r)) || taken.has(key(c, r))) return false;
+      if (c0 < 0 || r0 < 0 || c0 + w > block.cols || r0 + h > rows) return false;
+      for (let c = c0; c < c0 + w; c++) for (let r = r0; r < r0 + h; r++) if (used[c * rows + r]) return false;
       return true;
     };
-    const take = (c0: number, r0: number, w: number, h: number) => { for (let c = c0; c < c0 + w; c++) for (let r = r0; r < r0 + h; r++) taken.add(key(c, r)); };
+    const take = (c0: number, r0: number, w: number, h: number) => { for (let c = c0; c < c0 + w; c++) for (let r = r0; r < r0 + h; r++) used[c * rows + r] = 1; };
     const put = (family: PlotFamily, level: number, c: number, r: number, rotation: number) => {
       const [w, h] = PLOT_SIZE[family], [fw, fh] = rotation % 2 ? [h, w] : [w, h];
       if (!free(c, r, fw, fh)) return 0;
