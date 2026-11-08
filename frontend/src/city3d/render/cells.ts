@@ -1,14 +1,17 @@
 /**
  * CPU culling and detail levels for the instance pools (render/instances.ts), with no three.js so Node
- * tests can check it. Copies are binned into a square grid; an update tests the cells' boxes against the
- * camera frustum pushed out by a margin (so shadow casters just outside the view stay), picks a detail
- * level per copy of every visible cell by distance with hysteresis, and says whether the drawn set changed
- * (the static shadow map is then redrawn). The work per update grows with the visible copies, and the
- * number of draw calls not at all: it only decides which instances each pool writes.
+ * tests can check it. Copies are binned into a square grid; an update tests the cells' boxes and then each copy's
+ * bounding sphere against the camera frustum pushed out by a margin — a fixed one for the static shadow map's
+ * casters, or a small one growing with the distance for what the frame draws (TIGHT_MARGIN, TIGHT_TURN) — picks a
+ * detail level per copy by distance with hysteresis (small things are hidden sooner: View.small), and says whether
+ * the drawn set changed. The work per update grows with the visible copies, and the number of draw calls not at
+ * all: it only decides which instances each pool writes.
  */
 
 /** Cell edge in world units: a few blocks, so a cell test replaces dozens of copy tests. */
 export const CELL_SIZE = 32;
+/** A copy whose bounding sphere is smaller than this is a small thing (flowerbed, bench, bush, lamp, planter, hedge). */
+export const SMALL_RADIUS = .9;
 /** Levels 0…2 are LOD0…LOD2; HIDDEN lies beyond the last distance (impostors come in stage 3). */
 export const HIDDEN = 3;
 /** Relative band around every switch distance a copy has to cross before it changes level. */
@@ -97,26 +100,42 @@ export interface View {
   /** Camera position. */
   x: number; y: number; z: number;
   planes: ArrayLike<number>;
-  /** How far the frustum is pushed out, in world units. */
-  margin: number;
+  /**
+   * How far the frustum is pushed out: `margin` world units, plus `turn` per unit of distance from the camera (a
+   * turn shifts far things more than near ones; 0 keeps the push-out the same everywhere).
+   */
+  margin: number; turn?: number;
   distances: readonly number[];
+  /** Small things (bounding radius under SMALL_RADIUS) are hidden beyond this, or beyond the last distance if nearer. */
+  small?: number;
 }
+
+/**
+ * The frame's push-out (render/instances.ts): the moves an update may lag behind — under 2 units, or a turn under 2°
+ * at the copy's distance — with a little slack, so nothing pops in at the screen's edges between two updates.
+ */
+export const TIGHT_MARGIN = MOVE + .5, TIGHT_TURN = Math.tan(TURN) * 1.25;
 
 /** Fills `selector.current` with the copies to draw; returns true if the set or any level changed. */
 export function select(grid: Grid, copies: Copies, selector: Selector, view: View) {
   const done = selector.previous;
   selector.previous = selector.current; selector.current = done;
-  const out = selector.current, { levels } = selector;
+  const out = selector.current, { levels } = selector, { planes, margin } = view, turn = view.turn ?? 0;
+  // Small things' levels end at their own distance: every switch distance is cut to it.
+  const reach = view.small ?? Infinity, small = view.distances.map(d => Math.min(d, reach));
   let n = 0;
   for (const cell of grid.cells) {
-    if (boxOutside(view.planes, cell, view.margin)) continue;
+    // The cell's push-out at its farthest point from the camera.
+    const cx = (cell.minX + cell.maxX) / 2 - view.x, cy = (cell.minY + cell.maxY) / 2 - view.y, cz = (cell.minZ + cell.maxZ) / 2 - view.z;
+    const far = Math.sqrt(cx * cx + cy * cy + cz * cz) + Math.hypot(cell.maxX - cell.minX, cell.maxY - cell.minY, cell.maxZ - cell.minZ) / 2;
+    if (boxOutside(planes, cell, margin + turn * far)) continue;
     copy: for (const i of cell.items) {
-      const radius = copies.radius[i] + view.margin;
+      const dx = copies.x[i] - view.x, dy = copies.y[i] - view.y, dz = copies.z[i] - view.z, distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      const radius = copies.radius[i] + margin + turn * distance;
       for (let p = 0; p < 24; p += 4) {
-        if (view.planes[p] * copies.x[i] + view.planes[p + 1] * copies.y[i] + view.planes[p + 2] * copies.z[i] + view.planes[p + 3] < -radius) continue copy;
+        if (planes[p] * copies.x[i] + planes[p + 1] * copies.y[i] + planes[p + 2] * copies.z[i] + planes[p + 3] < -radius) continue copy;
       }
-      const dx = copies.x[i] - view.x, dy = copies.y[i] - view.y, dz = copies.z[i] - view.z;
-      const level = lodLevel(Math.sqrt(dx * dx + dy * dy + dz * dz), levels[i], view.distances);
+      const level = lodLevel(distance, levels[i], copies.radius[i] < SMALL_RADIUS ? small : view.distances);
       levels[i] = level;
       if (level === HIDDEN) continue;
       out.copies[n] = i; out.levels[n] = level; n++;

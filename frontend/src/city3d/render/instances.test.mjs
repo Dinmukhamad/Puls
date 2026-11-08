@@ -129,3 +129,39 @@ test('camera updates are throttled to 100 ms unless it moved 2 units, turned 2°
   assert.equal(cells.shouldUpdate(last, pose({ time: 16, qy: Math.sin(more), qw: Math.cos(more) })), true);
   assert.equal(cells.shouldUpdate(last, pose({ time: 16, projection: 2 })), true);
 });
+
+/** Copies every `step` units over ±half with bounding radius `radius`, centres 1.5 above the ground. */
+function grid(half, step, radius) {
+  const points = [];
+  for (let x = -half; x <= half; x += step) for (let z = -half; z <= half; z += step) points.push([x, z]);
+  const copies = cells.createCopies(points.length);
+  points.forEach(([x, z], i) => { copies.x[i] = x; copies.y[i] = 1.5; copies.z[i] = z; copies.radius[i] = radius; });
+  return copies;
+}
+
+test('the frame\'s push-out grows with the distance from the camera, as a turn shifts far things more', () => {
+  const copies = grid(300, 6, 1.8), selector = cells.createSelector(copies.count);
+  // The camera at the origin, the box's edge at x = 50. With 0.05 per unit of distance, a copy about 200 units away
+  // is kept about 10 units past the edge, one 60 away only 3: the copies at x = 60 reach 8.2 past it.
+  cells.select(cells.buildGrid(copies), copies, selector, { x: 0, y: 1.5, z: 0, planes: boxPlanes(-300, 50, -300, 300), margin: 0, turn: .05, distances: [1e4, 1e4, 1e4] });
+  const set = new Set(selector.current.copies.subarray(0, selector.current.count));
+  const at = (x, z) => { for (let i = 0; i < copies.count; i++) if (copies.x[i] === x && copies.z[i] === z) return i; };
+  assert.ok(set.has(at(60, 198)), 'far: 8 units past the edge is kept');
+  assert.ok(!set.has(at(60, 0)), 'near: 8 units past the edge is not');
+  assert.ok(cells.TIGHT_MARGIN >= cells.MOVE && cells.TIGHT_TURN > Math.tan(cells.TURN));
+});
+
+test('small things are hidden beyond their own distance, everything else by its levels', () => {
+  const view = { x: 0, y: 30, z: 0, planes: boxPlanes(-1e4, 1e4, -1e4, 1e4), margin: 0, distances: DISTANCES, small: 100 };
+  const big = grid(400, 8, 1.8), bigSelector = cells.createSelector(big.count);
+  cells.select(cells.buildGrid(big), big, bigSelector, view);
+  const far = (copies, i) => Math.hypot(copies.x[i], copies.y[i] - 30, copies.z[i]);
+  const bigOnes = [...bigSelector.current.copies.subarray(0, bigSelector.current.count)];
+  assert.ok(bigOnes.some(i => far(big, i) > 150) && bigOnes.every(i => far(big, i) < 250));
+  const small = grid(400, 8, cells.SMALL_RADIUS - .1), smallSelector = cells.createSelector(small.count);
+  cells.select(cells.buildGrid(small), small, smallSelector, view);
+  const smallOnes = [...smallSelector.current.copies.subarray(0, smallSelector.current.count)];
+  assert.ok(smallOnes.length > 0 && smallOnes.every(i => far(small, i) < 100));
+  // Nearer than the small distance they keep their levels as before.
+  for (let k = 0; k < smallSelector.current.count; k++) assert.equal(smallSelector.current.levels[k], cells.lodLevel(far(small, smallSelector.current.copies[k]), -1, DISTANCES));
+});

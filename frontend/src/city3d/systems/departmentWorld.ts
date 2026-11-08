@@ -32,6 +32,8 @@ import type { CityBuildView, CityEstateView, EstatePick, EstateTarget } from "..
 export interface DepartmentWorld {
   show(id: DepartmentId): void; setConfig(config: CityWorld): void;
   frame(dt: number, now: number, moved: boolean): void;
+  /** Just before the static shadow map is redrawn (index.ts): the lake city's pools, when it is on screen. */
+  shadowRedraw(): void;
   setNight(night: boolean): void; setTraffic(active: boolean): void;
   point(id: string): THREE.Vector3 | undefined;
   railway(progress: number): THREE.Vector3;
@@ -355,10 +357,11 @@ export function createDepartmentWorld(ctx: CityContext, catalogue: Catalogue, on
 
   function salesRoot() {
     const scene = new THREE.Scene(); scene.name = "sales-city"; ctx.scene.add(scene);
-    const frames = new Set<(dt: number, now: number) => void>(), moves = new Set<() => void>();
+    const frames = new Set<(dt: number, now: number) => void>(), moves = new Set<() => void>(), shadows = new Set<() => void>();
     const world = generateSalesWorld();
     const context: CityContext = { ...ctx, scene, world, overlay: salesLabels, get quality() { return ctx.quality; },
-      onFrame(cb) { frames.add(cb); return () => { frames.delete(cb); }; }, onCameraMove(cb) { moves.add(cb); return () => { moves.delete(cb); }; } };
+      onFrame(cb) { frames.add(cb); return () => { frames.delete(cb); }; }, onCameraMove(cb) { moves.add(cb); return () => { moves.delete(cb); }; },
+      onShadowRedraw(cb) { shadows.add(cb); return () => { shadows.delete(cb); }; } };
     const terrain = createTerrain(context), water = createWater(context), pools = createInstancePools(context, catalogue, world.placements);
     const cars = createTraffic(context); cars.setEnabled(traffic);
     const crowd = createCrowd(context); crowd.setEnabled(traffic); water.setNight(night);
@@ -377,7 +380,7 @@ export function createDepartmentWorld(ctx: CityContext, catalogue: Catalogue, on
     const count = layoutOf(views.sales), grid = gridOf("sales", world, count)!; grids.sales = grid; layouts.sales = count;
     const land3d = createEstates(context, grid, onEstate); land3d.setCatalogue(catalogue);
     estates.sales = land3d; land3d.set(views.sales ?? null); land3d.setBuild(build && cityOf(build.district) === "sales" ? build : null);
-    return { scene, frames, moves, terrain, water, hills, pools, cars, crowd, campus, teams, rail, land3d, context, world, line: world.railway ?? RAIL_LINES.sales };
+    return { scene, frames, moves, shadows, terrain, water, hills, pools, cars, crowd, campus, teams, rail, land3d, context, world, line: world.railway ?? RAIL_LINES.sales };
   }
   const cityOf = (district: string): DepartmentId => district.startsWith("sales-") ? "sales" : "support";
   /** A label over a place of the city; a team district's in the district's own colour (world/estateGrid.ts). */
@@ -435,6 +438,7 @@ export function createDepartmentWorld(ctx: CityContext, catalogue: Catalogue, on
       for (const city of ["support", "sales"] as const) estates[city]?.setBuild(view && cityOf(view.district) === city ? view : null);
     },
     focusEstate: (target, distance, polar) => estates[cityOf(target.district)]?.focus(target, distance, polar) ?? null,
+    shadowRedraw() { if (active === "sales" && sales) sales.shadows.forEach(cb => cb()); },
     frame(dt, now, moved) {
       if (active === "sales" && sales) { if (moved) sales.moves.forEach(cb => cb()); sales.frames.forEach(cb => cb(dt, now)); }
       const w = ctx.overlay.clientWidth, h = ctx.overlay.clientHeight;

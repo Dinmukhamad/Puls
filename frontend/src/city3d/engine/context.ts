@@ -25,6 +25,11 @@ export interface CityContext {
   onQuality(cb: (q: QualitySettings) => void): () => void;
   /** Static shadow casters changed (models arrived, a district grew): redraw the static shadow map. */
   requestShadowUpdate(): void;
+  /**
+   * Fires just before the static shadow map is redrawn, in the frame that draws it, so instance pools can put the
+   * copies the map needs in place for that one frame (render/instances.ts). Bare contexts (tests) may leave it out.
+   */
+  onShadowRedraw?(cb: () => void): () => void;
   /** The HTML layer above the canvas, for labels (TZ §9.2). */
   overlay: HTMLElement;
   /** Night level 0…1 for every light: TSL `night.level` in materials, `night.level.value` on the CPU. */

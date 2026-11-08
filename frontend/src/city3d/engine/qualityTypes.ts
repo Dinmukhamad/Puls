@@ -21,4 +21,9 @@ export interface QualitySettings {
   lodDistances: [number, number, number];
   /** Traffic and pedestrians density share, 0…1. */
   crowd: number;
+  /**
+   * How far small things (flowerbeds, benches, bushes, lamps, planters, hedges: render/cells.ts SMALL_RADIUS) are
+   * drawn, in world units; beyond it they are a few pixels across. Their shadows reach less far (render/instances.ts).
+   */
+  smallReach: number;
 }

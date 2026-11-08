@@ -214,7 +214,9 @@ export function createSky(ctx: CityContext): Sky {
   /** Map size from quality; the bias follows the texel size, so bigger maps keep crisp contact shadows. */
   function shadowSize(q: QualitySettings) {
     const size = q.staticShadowSize, texel = reach * 2 / size;
-    if (sun.shadow.mapSize.x !== size) { sun.shadow.mapSize.setScalar(size); requestShadowRedraw(sun); }
+    // A new size redraws at once (the map is blank otherwise), and again once the camera rests, with every caster
+    // the pools put in place for that frame (render/instances.ts).
+    if (sun.shadow.mapSize.x !== size) { sun.shadow.mapSize.setScalar(size); requestShadowRedraw(sun); ctx.requestShadowUpdate(); }
     sun.shadow.normalBias = .02 + texel * .6; sun.shadow.bias = -.0004;
   }
   shadowSize(ctx.quality);

@@ -23,7 +23,7 @@ export interface QualityOptions {
 
 export interface QualityControl {
   readonly settings: QualitySettings;
-  /** Concessions the adaptation made, for the stats overlay and telemetry (e.g. ["ao", "water:sky"]). */
+  /** Concessions the adaptation made, for the stats overlay and telemetry (e.g. ["ao", "small:near"]). */
   readonly concessions: string[];
   /** The tier picked for this device, and the manual choice if there is one. */
   readonly auto: QualityTier;

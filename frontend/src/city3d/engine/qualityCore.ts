@@ -53,6 +53,12 @@ export function initialTier(device: DeviceInfo): QualityTier {
   return device.backend === "webgl2" ? atMost(tier, "high") : tier;
 }
 
+/**
+ * How far small things are drawn (render/cells.ts SMALL_RADIUS): out to ~200 units they are more than a few pixels
+ * across; the "small:near" concession brings them in to 120 on a device that cannot keep up.
+ */
+export const SMALL_REACH = 200, SMALL_REACH_NEAR = 120;
+
 /** Settings of each tier (TZ §8.1 table; LOD distances from TZ §5.3). */
 export function settingsFor(tier: QualityTier): QualitySettings {
   const top = tier === "ultra" || tier === "high";
@@ -64,6 +70,7 @@ export function settingsFor(tier: QualityTier): QualitySettings {
     waterReflections: tier === "ultra" ? "planar" : tier === "high" ? "ssr" : "sky",
     lodDistances: tier === "ultra" ? [50, 150, 300] : tier === "high" ? [40, 120, 250] : tier === "medium" ? [26, 75, 220] : [22, 50, 180],
     crowd: tier === "low" ? .5 : 1,
+    smallReach: SMALL_REACH,
   };
 }
 
@@ -75,13 +82,17 @@ export function baseSettings(tier: QualityTier, device: Pick<DeviceInfo, "mobile
   return settings;
 }
 
-/** One concession of TZ §8.2. Each sets a ceiling, so nested steps (2048 → 1024 → 0) combine in any order. */
+/**
+ * One concession of TZ §8.2. Each sets a ceiling, so nested steps (4096 → 2048 → 1024) combine in any order. Each
+ * step changes something the city draws: small things nearer (and their shadows: render/instances.ts), a smaller
+ * static shadow map (render/sky.ts), fewer cars and walkers, 30 frames a second, nearer far detail, fewer pixels.
+ */
 export interface Step { id: string; apply: (s: QualitySettings) => void }
 export const STEPS: Step[] = [
   { id: "ao", apply: s => { s.ao = false; } },
-  { id: "water:sky", apply: s => { s.waterReflections = "sky"; } },
-  { id: "shadows:1024", apply: s => { s.dynamicShadowSize = Math.min(s.dynamicShadowSize, 1024) as 0 | 1024; } },
-  { id: "shadows:0", apply: s => { s.dynamicShadowSize = 0; } },
+  { id: "small:near", apply: s => { s.smallReach = Math.min(s.smallReach, SMALL_REACH_NEAR); } },
+  { id: "shadows:2048", apply: s => { s.staticShadowSize = Math.min(s.staticShadowSize, 2048) as 1024 | 2048; } },
+  { id: "shadows:1024", apply: s => { s.staticShadowSize = 1024; } },
   { id: "crowd:0.5", apply: s => { s.crowd = Math.min(s.crowd, .5); } },
   { id: "fps:30", apply: s => { s.fps = 30; } },
   { id: "detail:far", apply: s => { s.lodDistances = [Math.min(s.lodDistances[0], 22), Math.min(s.lodDistances[1], 38), s.lodDistances[2]]; s.bloom = false; s.staticShadowSize = 1024; } },
@@ -94,7 +105,7 @@ export const WINDOW = 1000, SLOW = 1.45, SMOOTH = 1.12, CALM_WINDOWS = 3, RETRY 
 
 export interface Adapter {
   readonly settings: QualitySettings;
-  /** Concessions in effect, in table order (e.g. ["ao", "water:sky"]). */
+  /** Concessions in effect, in table order (e.g. ["ao", "small:near"]). */
   readonly concessions: string[];
   /** Feeds one drawn frame; returns true when the settings changed. */
   frame(gap: number, now: number, busy?: boolean): boolean;
@@ -203,7 +214,7 @@ function compose(base: QualitySettings, steps: Step[]): QualitySettings {
 }
 
 function differs(a: QualitySettings, b: QualitySettings) {
-  return a.ao !== b.ao || a.waterReflections !== b.waterReflections || a.dynamicShadowSize !== b.dynamicShadowSize ||
+  return a.ao !== b.ao || a.smallReach !== b.smallReach || a.dynamicShadowSize !== b.dynamicShadowSize ||
     a.crowd !== b.crowd || a.fps !== b.fps || a.resolution !== b.resolution || a.bloom !== b.bloom ||
     a.staticShadowSize !== b.staticShadowSize || a.lodDistances.join() !== b.lodDistances.join();
 }

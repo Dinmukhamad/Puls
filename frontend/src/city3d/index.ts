@@ -165,7 +165,7 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
     let loading = true, drawing = false, shadowWanted = false, lastMove = 0;
     const quality = own(createQuality({ backend, mobile, gpu: handle.gpu, busy: () => loading }));
 
-    const frameCallbacks = new Set<(dt: number, now: number) => void>(), moveCallbacks = new Set<() => void>();
+    const frameCallbacks = new Set<(dt: number, now: number) => void>(), moveCallbacks = new Set<() => void>(), shadowCallbacks = new Set<() => void>();
     let sun: THREE.DirectionalLight | null = null;
     const night = createNight(timeOfDay === "night");
     const ctx: CityContext = {
@@ -173,6 +173,7 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
       get quality() { return quality.settings; },
       onFrame(cb) { frameCallbacks.add(cb); return () => frameCallbacks.delete(cb); },
       onCameraMove(cb) { moveCallbacks.add(cb); return () => moveCallbacks.delete(cb); },
+      onShadowRedraw(cb) { shadowCallbacks.add(cb); return () => { shadowCallbacks.delete(cb); }; },
       onQuality(cb) { return quality.onChange(cb); },
       requestShadowUpdate() { shadowWanted = true; },
     };
@@ -249,7 +250,13 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
         night.step(dt);
         if (department === "support") frameCallbacks.forEach(cb => cb(dt, now));
         parts?.departments?.frame(dt, now, moved);
-        if (shadowWanted && sun && now - lastMove > SHADOW_REST_MS) { shadowWanted = false; requestShadowRedraw(sun); }
+        if (shadowWanted && sun && now - lastMove > SHADOW_REST_MS) {
+          // The pools put the copies the map needs in place for this frame (render/instances.ts); what they ask for
+          // meanwhile is drawn now.
+          if (department === "support") shadowCallbacks.forEach(cb => cb());
+          parts?.departments?.shadowRedraw();
+          shadowWanted = false; requestShadowRedraw(sun);
+        }
         post.render();
         stats.endFrame();
         if (!ready && !loading) {
