@@ -721,3 +721,39 @@ test('a building chosen for the one cell shows its cells round it, green where f
   s.estates.setBuild(null); assert.deepEqual(shown(s), []);
   s.estates.dispose();
 });
+
+test('a rebuild keeps the yards\' and the lamps\' materials, so the next frame builds no new shaders; they go with the estates', () => {
+  const s = setup(), b = home.block, freed = [];
+  s.ctx.quality = { lodDistances: [120, 260, 600] }; s.ctx.onQuality = () => () => {};
+  s.estates.setCatalogue({ resolve() { return null; } });
+  const land = (level, row, extra = {}) => s.state([object('house', { level })], false, { decor: { road: [[b, frame.col + 4, frame.row + row, 1]], lamp: [[b, frame.col + 5, frame.row + row, 1]] }, ...extra });
+  const names = ['city-patches', 'district-lamp-pools', 'district-lamp-halos', 'district-lamp-garden-pools', 'district-lamp-garden-halos'];
+  const meshes = () => names.map(name => s.ctx.scene.getObjectByName(name));
+  land(1, 0);
+  const first = meshes();
+  assert.ok(first.every(Boolean), 'the yards, the district\'s lamps and the gardens\' lamps');
+  for (const mesh of first) {
+    mesh.geometry.addEventListener('dispose', () => freed.push(`${mesh.name} geometry`));
+    mesh.material.addEventListener('dispose', () => freed.push(`${mesh.name} material`));
+  }
+  // The district lamps and the gardens' lamps each have their own glow.
+  assert.notEqual(first[1].material, first[3].material);
+  // The house a level up and the lamp a row on: the yards and the lamps are laid anew, on the same materials.
+  land(2, 1);
+  const second = meshes();
+  for (const i of [0, 1, 2]) {
+    assert.notEqual(second[i], first[i], `${names[i]} laid anew`);
+    assert.equal(second[i].material, first[i].material, `${names[i]} keeps its material`);
+  }
+  assert.deepEqual(freed.sort(), ['city-patches geometry', 'district-lamp-halos geometry', 'district-lamp-pools geometry']);
+  // An old square beside the main building: its patches share the yards' material; the gardens' lamps keep theirs.
+  freed.length = 0;
+  land(2, 1, { landmark: { status: 'legacy_occupied', level: 1, module: 0, u: 0, v: 0, w: 12, h: 12, rotation: 0 } });
+  const patches = []; s.ctx.scene.traverse(o => { if (o.name === 'city-patches') patches.push(o); });
+  assert.equal(patches.length, 2, 'the yards and the old square');
+  assert.ok(patches.every(o => o.material === first[0].material));
+  assert.equal(meshes()[3].material, first[3].material);
+  assert.ok(freed.every(item => item.endsWith('geometry')), freed.join(', '));
+  s.estates.dispose();
+  for (const name of names) assert.ok(freed.includes(`${name} material`), `${name}'s material goes with the estates`);
+});

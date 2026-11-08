@@ -107,6 +107,33 @@ test('nothing is drawn in the day; the lights show while the night level is abov
   assert.equal(ctx.scene.children.length, 0); assert.equal(ctx.listeners, 0); assert.equal(freed, 4);
 });
 
+test('lights made again on kept materials share them, fade over the fog as it is when they are made, and leave them to their owner', () => {
+  const ctx = context(worlds.v1, true), looks = city.lampMaterials(ctx), lamps = worlds.v1.placements.filter(p => p.kind === 'lamp');
+  let freed = 0;
+  for (const material of [looks.pools, looks.halos]) material.addEventListener('dispose', () => freed++);
+  // The glow fades over the fog's range: uniforms the lights set, read in both glows.
+  assert.ok(uses(looks.pools.opacityNode, looks.fog.near) && uses(looks.halos.opacityNode, looks.fog.far));
+  const first = city.createLampLights(ctx, lamps.slice(0, 10), 'district-lamp', looks);
+  assert.equal(first.pools.material, looks.pools); assert.equal(first.halos.material, looks.halos);
+  assert.equal(first.pools.geometry.instanceCount, 10);
+  assert.ok(first.pools.visible && first.halos.visible, 'night: lit at once');
+  first.dispose();
+  assert.equal(freed, 0, 'the materials stay with whoever made them');
+  // Zoomed out, the fog reaches further (render/sky.ts setViewDistance): lights made now fade over the new range.
+  const { near, far } = ctx.scene.fog;
+  assert.equal(looks.fog.near.value, near); assert.equal(looks.fog.far.value, far);
+  ctx.scene.fog.near = near + 40; ctx.scene.fog.far = far + 40;
+  const second = city.createLampLights(ctx, lamps.slice(5, 20), 'district-lamp', looks);
+  assert.equal(second.pools.material, looks.pools);
+  assert.equal(looks.fog.near.value, near + 40); assert.equal(looks.fog.far.value, far + 40);
+  assert.deepEqual(ctx.scene.children.map(o => o.name), ['district-lamp-pools', 'district-lamp-halos']);
+  second.dispose(); assert.equal(freed, 0);
+  looks.dispose(); assert.equal(freed, 2);
+  // Under no fog the glow does not fade.
+  const clear = { ...context(worlds.v1), scene: new THREE.Scene() };
+  assert.equal(city.lampMaterials(clear).fog, null);
+});
+
 test('a city that starts at night shows the lights on its first frame', () => {
   const ctx = context(worlds.v1, true), { pools, halos, dispose } = city.createLampLights(ctx);
   assert.ok(pools.visible && halos.visible);

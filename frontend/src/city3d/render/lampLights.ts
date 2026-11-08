@@ -6,7 +6,7 @@
  * check a frame. The bulbs themselves glow in the catalogue's lamp material, with the same level.
  */
 import * as THREE from "three/webgpu";
-import { abs, attribute, cameraPosition, cameraWorldMatrix, color, float, int, max, mix, positionGeometry, positionView, positionWorld, rangeFogFactor, smoothstep, uv, vec2 } from "three/tsl";
+import { abs, attribute, cameraPosition, cameraWorldMatrix, color, float, int, max, mix, positionGeometry, positionView, positionWorld, rangeFogFactor, smoothstep, uniform, uv, vec2 } from "three/tsl";
 import type { CityContext } from "../engine/context";
 import type { Placement, Road, WorldData } from "../world/types";
 import { BRIDGE_HALF, segmentDistance } from "../world/generate";
@@ -56,6 +56,64 @@ export function poolGround(world: WorldData, x: number, z: number): [number, num
 /** Additive glow: never darkens, never hides what is behind, takes no fog colour (it fades by itself). */
 const glowMaterial = () => new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false });
 
+/** The fog over a scene: its own, or the nearest one up (a scene of its own, a city's districts, sits in the city's). */
+function fogOver(scene: THREE.Object3D): THREE.Fog | null {
+  let holder: THREE.Object3D | null = scene;
+  while (holder && !(holder instanceof THREE.Scene && holder.fog)) holder = holder.parent;
+  return holder instanceof THREE.Scene && holder.fog instanceof THREE.Fog ? holder.fog : null;
+}
+
+/**
+ * The two glow materials of a context's lamp lights, to keep across rebuilds: lights made again with the same
+ * materials need no new shaders (systems/estates.ts lays its districts' lamps anew with every change of the land, and
+ * a new material would be built again on the next frame). `fog` is the fog's range the glow fades over, as it was when
+ * the lights were last made: createLampLights sets it, as it always read the range then. Whoever makes the materials
+ * disposes them, after the lights that use them.
+ */
+export interface LampMaterials {
+  pools: THREE.MeshBasicNodeMaterial; halos: THREE.MeshBasicNodeMaterial;
+  fog: { near: ReturnType<typeof uniform<number>>; far: ReturnType<typeof uniform<number>> } | null;
+  dispose(): void;
+}
+export function lampMaterials(ctx: CityContext): LampMaterials {
+  const level = ctx.night.level, fog = fogOver(ctx.scene);
+  const range = fog ? { near: uniform(fog.near), far: uniform(fog.far) } : null;
+  // Glow fades with the fog, as the ground and lamps under it do.
+  const clear = range ? rangeFogFactor(range.near, range.far).oneMinus() : float(1);
+  // 1 at the centre of a quad, 0 at its inscribed circle and beyond, smooth at both ends.
+  const falloff = smoothstep(0, 1, uv().sub(.5).length().mul(2).oneMinus());
+  // Attribute names are prefixed so they never meet a GLSL or WGSL word or one of three's own.
+  const at = attribute("lampAt", "vec3"), shade = attribute("lampShade", "vec3");
+
+  // Pools: flat quads on the ground, cut at the quay walls (the land ring) unless on a bridge deck.
+  const pools = glowMaterial();
+  const ground = attribute("lampGround", "vec4"), r = positionWorld.xz.length();
+  // Edges ascending: smoothstep is undefined for edge0 ≥ edge1 in GLSL and WGSL.
+  const onLand = smoothstep(ground.x, ground.x.add(.1), r).mul(smoothstep(ground.y.sub(.1), ground.y, r).oneMinus());
+  const normal = vec2(ground.z.cos(), ground.z.sin()), onDeck = smoothstep(BRIDGE_HALF - .1, BRIDGE_HALF, abs(positionGeometry.xz.dot(normal).sub(ground.w))).oneMinus();
+  pools.positionNode = at.add(positionGeometry);
+  pools.colorNode = color(POOL_WARM).mul(shade);
+  // A central lamp's pool fits inside the nearest real shore in every direction. This conservative cut uses
+  // one float per lamp, not a polygon test in every fragment, and keeps the total vertex buffers below eight.
+  const centralCut = ctx.world.center ? smoothstep(attribute("lampLandRadius", "float").sub(.1).max(0), attribute("lampLandRadius", "float").max(.0001), positionGeometry.xz.length()).oneMinus() : float(1);
+  pools.opacityNode = falloff.mul(falloff).mul(max(onLand, onDeck)).mul(centralCut).mul(level).mul(clear).mul(POOL_STRENGTH);
+  // Just above the paving; the offset keeps it ahead of the street tops at any distance.
+  pools.polygonOffset = true; pools.polygonOffsetFactor = -2; pools.polygonOffsetUnits = -2;
+
+  // Halos face the camera: every corner (±1) spans the camera's right and up around its bulb, a little in front
+  // of it, so the shade stays a dark cap over the glow.
+  const halos = glowMaterial();
+  const toCamera = cameraPosition.sub(at), right = cameraWorldMatrix.element(int(0)).xyz, up = cameraWorldMatrix.element(int(1)).xyz;
+  halos.positionNode = at.add(toCamera.normalize().mul(HALO_PULL))
+    .add(right.mul(positionGeometry.x).add(up.mul(positionGeometry.y)).mul(max(float(HALO_RADIUS), toCamera.length().mul(HALO_SPREAD))));
+  // A halo grown for distance spreads the same light: dimmer, but not so dim that far lamps vanish.
+  const grown = float(HALO_RADIUS).div(max(float(HALO_RADIUS), positionView.z.negate().mul(HALO_SPREAD)));
+  halos.colorNode = color(HALO_WARM).mul(shade);
+  halos.opacityNode = falloff.pow(3).mul(mix(1, grown, .5)).mul(level).mul(clear.mul(.7).add(.3)).mul(HALO_STRENGTH);
+
+  return { pools, halos, fog: range, dispose() { pools.dispose(); halos.dispose(); } };
+}
+
 /**
  * One copy of `quad` per lamp, all in one draw call: `lampAt` (vec3) is where a copy goes, `lampShade` its
  * tint and `extra` more per-lamp data. A plain mesh with instanced attributes, not an InstancedMesh: its
@@ -73,19 +131,16 @@ function lampQuads(quad: THREE.BufferGeometry, lamps: Placement[], y: number | (
   return geometry;
 }
 
-/** The world's street lamps, or the lamps given (the ones operators put on their districts' cells, systems/estates.ts). */
-export function createLampLights(ctx: CityContext, lamps: Placement[] = ctx.world.placements.filter(p => p.kind === "lamp"), name = "city-lamp"): LampLights {
-  const level = ctx.night.level;
-  // A scene of its own (a city's districts) sits in the city's: the fog is the nearest one up.
-  let holder: THREE.Object3D | null = ctx.scene;
-  while (holder && !(holder instanceof THREE.Scene && holder.fog)) holder = holder.parent;
-  const fog = holder instanceof THREE.Scene && holder.fog instanceof THREE.Fog ? holder.fog : null;
-  // Glow fades with the fog, as the ground and lamps under it do.
-  const clear = fog ? rangeFogFactor(float(fog.near), float(fog.far)).oneMinus() : float(1);
-  // 1 at the centre of a quad, 0 at its inscribed circle and beyond, smooth at both ends.
-  const falloff = smoothstep(0, 1, uv().sub(.5).length().mul(2).oneMinus());
-  // Attribute names are prefixed so they never meet a GLSL or WGSL word or one of three's own.
-  const at = attribute("lampAt", "vec3"), shade = attribute("lampShade", "vec3");
+/**
+ * The world's street lamps, or the lamps given (the ones operators put on their districts' cells, systems/estates.ts).
+ * `materials`: glow materials kept by the caller across rebuilds (lampMaterials), left to the caller to dispose; by
+ * default the lights make their own and dispose them with themselves.
+ */
+export function createLampLights(ctx: CityContext, lamps: Placement[] = ctx.world.placements.filter(p => p.kind === "lamp"), name = "city-lamp", materials?: LampMaterials): LampLights {
+  const level = ctx.night.level, looks = materials ?? lampMaterials(ctx);
+  // The glow fades over the fog's range as it is now, while these lights stand.
+  const fog = fogOver(ctx.scene);
+  if (looks.fog && fog) { looks.fog.near.value = fog.near; looks.fog.far.value = fog.far; }
 
   // Pools: flat quads on the ground, cut at the quay walls (the land ring) unless on a bridge deck.
   const grounds = new Float32Array(lamps.length * 4);
@@ -95,30 +150,8 @@ export function createLampLights(ctx: CityContext, lamps: Placement[] = ctx.worl
   const poolHeight = (lamp: Placement) => center && Math.abs(lamp.x - center.plaza.x) <= center.plaza.width / 2 && Math.abs(lamp.z - center.plaza.z) <= center.plaza.depth / 2 ? .316 : POOL_Y;
   const extras: Record<string, [Float32Array, number]> = { lampGround: [grounds, 4] };
   if (radii) extras.lampLandRadius = [radii, 1];
-  const pools = new THREE.Mesh(lampQuads(new THREE.PlaneGeometry(POOL_RADIUS * 2, POOL_RADIUS * 2).rotateX(-Math.PI / 2), lamps, poolHeight, extras), glowMaterial());
-  const ground = attribute("lampGround", "vec4"), r = positionWorld.xz.length();
-  // Edges ascending: smoothstep is undefined for edge0 ≥ edge1 in GLSL and WGSL.
-  const onLand = smoothstep(ground.x, ground.x.add(.1), r).mul(smoothstep(ground.y.sub(.1), ground.y, r).oneMinus());
-  const normal = vec2(ground.z.cos(), ground.z.sin()), onDeck = smoothstep(BRIDGE_HALF - .1, BRIDGE_HALF, abs(positionGeometry.xz.dot(normal).sub(ground.w))).oneMinus();
-  pools.material.positionNode = at.add(positionGeometry);
-  pools.material.colorNode = color(POOL_WARM).mul(shade);
-  // A central lamp's pool fits inside the nearest real shore in every direction. This conservative cut uses
-  // one float per lamp, not a polygon test in every fragment, and keeps the total vertex buffers below eight.
-  const centralCut = radii ? smoothstep(attribute("lampLandRadius", "float").sub(.1).max(0), attribute("lampLandRadius", "float").max(.0001), positionGeometry.xz.length()).oneMinus() : float(1);
-  pools.material.opacityNode = falloff.mul(falloff).mul(max(onLand, onDeck)).mul(centralCut).mul(level).mul(clear).mul(POOL_STRENGTH);
-  // Just above the paving; the offset keeps it ahead of the street tops at any distance.
-  pools.material.polygonOffset = true; pools.material.polygonOffsetFactor = -2; pools.material.polygonOffsetUnits = -2;
-
-  // Halos face the camera: every corner (±1) spans the camera's right and up around its bulb, a little in front
-  // of it, so the shade stays a dark cap over the glow.
-  const halos = new THREE.Mesh(lampQuads(new THREE.PlaneGeometry(2, 2), lamps, BULB_Y), glowMaterial());
-  const toCamera = cameraPosition.sub(at), right = cameraWorldMatrix.element(int(0)).xyz, up = cameraWorldMatrix.element(int(1)).xyz;
-  halos.material.positionNode = at.add(toCamera.normalize().mul(HALO_PULL))
-    .add(right.mul(positionGeometry.x).add(up.mul(positionGeometry.y)).mul(max(float(HALO_RADIUS), toCamera.length().mul(HALO_SPREAD))));
-  // A halo grown for distance spreads the same light: dimmer, but not so dim that far lamps vanish.
-  const grown = float(HALO_RADIUS).div(max(float(HALO_RADIUS), positionView.z.negate().mul(HALO_SPREAD)));
-  halos.material.colorNode = color(HALO_WARM).mul(shade);
-  halos.material.opacityNode = falloff.pow(3).mul(mix(1, grown, .5)).mul(level).mul(clear.mul(.7).add(.3)).mul(HALO_STRENGTH);
+  const pools = new THREE.Mesh(lampQuads(new THREE.PlaneGeometry(POOL_RADIUS * 2, POOL_RADIUS * 2).rotateX(-Math.PI / 2), lamps, poolHeight, extras), looks.pools);
+  const halos = new THREE.Mesh(lampQuads(new THREE.PlaneGeometry(2, 2), lamps, BULB_Y), looks.halos);
 
   for (const mesh of [pools, halos]) {
     mesh.name = mesh === pools ? `${name}-pools` : `${name}-halos`;
@@ -136,7 +169,8 @@ export function createLampLights(ctx: CityContext, lamps: Placement[] = ctx.worl
     dispose() {
       offFrame();
       ctx.scene.remove(pools, halos);
-      for (const mesh of [pools, halos]) { mesh.geometry.dispose(); mesh.material.dispose(); }
+      pools.geometry.dispose(); halos.geometry.dispose();
+      if (!materials) looks.dispose();
     },
   };
 }

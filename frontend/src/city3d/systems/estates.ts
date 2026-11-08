@@ -19,7 +19,7 @@ import type { Catalogue } from "../assets/catalogue";
 import { createInstancePools, type InstancePools } from "../render/instances";
 import { createPatches } from "../render/terrain";
 import { groundMaterial, surfaceOf, surfacesOfColours } from "../render/ground";
-import { createLampLights, type LampLights } from "../render/lampLights";
+import { createLampLights, lampMaterials, type LampLights, type LampMaterials } from "../render/lampLights";
 import { TAP_DISTANCE, TAP_TIME } from "../engine/input";
 import { CELL, MODULE_CELLS, cellPoint, footprintAt, itemFootprint, moduleGround, objectLayout, pointCell, siteLayout, squareProblem, plotFootprint, projectFootprint, type ProjectFamily } from "../world/estates";
 import { WAYS, areaCorners, areaFrame, areaPoint, areaSpan, blockCell, cellUnder, cellsBetween, cellsWithin, districtBorders, homeSide, sideOf, type CellRef, type DistrictCentre, type Frame, type LandBlock, type LandGrid, type Way } from "../world/land";
@@ -244,6 +244,11 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
   // ---- buildings and small things ----
   let pools: InstancePools | null = null, patches: THREE.Mesh | null = null, paving: THREE.Mesh | null = null, lights: LampLights | null = null, builtKey = "";
   const pavingMaterial = groundMaterial({ polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
+  // The yards' patches (the old squares' too) and the lamps' glow keep their materials across rebuilds, so the first
+  // frame after one builds no new shaders; disposed with the estates. The district lamps and the gardens' each have
+  // their own glow: each fades over the fog's range as it was when they were laid (render/lampLights.ts).
+  const patchMaterial = groundMaterial();
+  let lampLooks: LampMaterials | null = null, gardenLampLooks: LampMaterials | null = null;
   // The same catalogue transforms that draw houses also define their selectable bodies.
   // Gardens, trees and paving stay out of these volumes so adjacent free cells remain selectable.
   const houseBodies: { pick: EstatePick; bounds: THREE.Box3; matrix: THREE.Matrix4; inverse: THREE.Matrix4 }[] = [];
@@ -259,7 +264,6 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
     pools?.dispose(); pools = null;
     lights?.dispose(); lights = null;
     for (const mesh of [patches, paving]) if (mesh) { ctx.scene.remove(mesh); mesh.geometry.dispose(); }
-    if (patches) (patches.material as THREE.Material).dispose();
     patches = paving = null;
     const placements: Placement[] = [], surfaces: Surface[] = [];
     for (const district of view?.state.districts ?? []) {
@@ -297,10 +301,10 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
       paving = flatMesh(small.ground, pavingMaterial, "district-roads");
       paving.receiveShadow = true; ctx.scene.add(paving);
     }
-    if (small.lamps.length) lights = createLampLights(ctx, small.lamps, "district-lamp");
+    if (small.lamps.length) lights = createLampLights(ctx, small.lamps, "district-lamp", lampLooks ??= lampMaterials(ctx));
     seen.clear();
     for (const district of view?.state.districts ?? []) for (const obj of district.objects) seen.set(obj.id, obj.level);
-    if (surfaces.length) { patches = createPatches(surfaces); ctx.scene.add(patches); }
+    if (surfaces.length) { patches = createPatches(surfaces, patchMaterial); ctx.scene.add(patches); }
     if (catalogue && placements.length) pools = createInstancePools(ctx, catalogue, placements);
     ctx.requestShadowUpdate();
     recolour(); refreshSigns(); refreshBuild();
@@ -896,7 +900,7 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
     squareKey = key;
     squarePools?.dispose(); squarePools = null;
     squareLights?.dispose(); squareLights = null;
-    if (squarePatches) { ctx.scene.remove(squarePatches); squarePatches.geometry.dispose(); (squarePatches.material as THREE.Material).dispose(); squarePatches = null; }
+    if (squarePatches) { ctx.scene.remove(squarePatches); squarePatches.geometry.dispose(); squarePatches = null; }
     const placements: Placement[] = [], surfaces: Surface[] = [], lamps: Placement[] = [];
     grid.centres.forEach((c, i) => {
       if (view?.state.districts.find(d => d.number === c.district)?.landmark?.status === "legacy_occupied") {
@@ -906,9 +910,9 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
       }
       placements.push(...gardens[i].placements); lamps.push(...gardens[i].lamps);
     });
-    if (surfaces.length) { squarePatches = createPatches(surfaces); ctx.scene.add(squarePatches); }
+    if (surfaces.length) { squarePatches = createPatches(surfaces, patchMaterial); ctx.scene.add(squarePatches); }
     if (catalogue) squarePools = createInstancePools(ctx, catalogue, placements);
-    if (lamps.length) squareLights = createLampLights(ctx, lamps, "district-lamp-garden");
+    if (lamps.length) squareLights = createLampLights(ctx, lamps, "district-lamp-garden", gardenLampLooks ??= lampMaterials(ctx));
   }
 
   recolour();
@@ -984,15 +988,16 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
       canvas.removeEventListener("pointerdown", onPress, { capture: true });
       canvas.removeEventListener("pointerdown", onDown); canvas.removeEventListener("pointerup", onUp); canvas.removeEventListener("pointermove", onMove); canvas.removeEventListener("pointerleave", onLeave);
       layer.remove(); sizeLabel.remove(); squarePools?.dispose(); squareLights?.dispose(); pools?.dispose(); lights?.dispose();
-      for (const mesh of [ground.mesh, ground.centreMesh, squarePatches, patches]) if (mesh) { ctx.scene.remove(mesh); mesh.geometry.dispose(); (mesh.material as THREE.Material).dispose(); }
-      if (paving) { ctx.scene.remove(paving); paving.geometry.dispose(); }
+      lampLooks?.dispose(); gardenLampLooks?.dispose();
+      for (const mesh of [ground.mesh, ground.centreMesh]) { ctx.scene.remove(mesh); mesh.geometry.dispose(); (mesh.material as THREE.Material).dispose(); }
+      for (const mesh of [squarePatches, patches, paving]) if (mesh) { ctx.scene.remove(mesh); mesh.geometry.dispose(); }
       if (chosen) { ctx.scene.remove(chosen); chosen.geometry.dispose(); }
       if (turns) { ctx.scene.remove(turns); turns.geometry.dispose(); }
       ctx.scene.remove(borders.band, borders.posts); borders.dispose();
       for (const item of veils.splice(0)) { ctx.scene.remove(item.mesh); (item.mesh.material as THREE.Material).dispose(); }
       ctx.scene.remove(cells, ghost, selection, front);
       cells.geometry.dispose(); ghost.geometry.dispose(); edges.geometry.dispose(); selection.geometry.dispose(); front.geometry.dispose();
-      [lineMaterial, ghostMaterial, edgeMaterial, selectMaterial, veilMaterial, frontMaterial, pickMaterial, turnMaterial, pavingMaterial].forEach(m => m.dispose());
+      [lineMaterial, ghostMaterial, edgeMaterial, selectMaterial, veilMaterial, frontMaterial, pickMaterial, turnMaterial, pavingMaterial, patchMaterial].forEach(m => m.dispose());
     },
   };
 }
