@@ -34,8 +34,13 @@ export function createQuests(ctx: CityContext, options: { states: CityQuestInfo[
       if (!m.shown) m.el.style.visibility = "hidden";
     });
   }
+  // The overlay's size, kept by a ResizeObserver (read once here, then on every resize, after the browser's layout):
+  // project() runs every frame, twice while the camera moves, and a read of the layout there, after the frame's own
+  // style writes, made the browser recalculate its styles on the spot.
+  let width = ctx.overlay.clientWidth, height = ctx.overlay.clientHeight;
+  const resize = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => { width = ctx.overlay.clientWidth; height = ctx.overlay.clientHeight; project(); });
+  resize?.observe(ctx.overlay);
   const project = () => {
-    const width = ctx.overlay.clientWidth, height = ctx.overlay.clientHeight;
     if (!width || !height) return;
     ctx.camera.updateMatrixWorld();
     const focal = ctx.camera.projectionMatrix.elements[5] * height / 2;
@@ -57,6 +62,6 @@ export function createQuests(ctx: CityContext, options: { states: CityQuestInfo[
   return {
     set,
     spot: slot => markers[slot]?.point,
-    dispose() { offFrame(); offMove(); layer.remove(); },
+    dispose() { offFrame(); offMove(); resize?.disconnect(); layer.remove(); },
   };
 }

@@ -679,9 +679,16 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
     place();
   }
   const scratch = new THREE.Vector3();
+  // The sign layer's size, kept by a ResizeObserver on the layer and on the city's label container (read once here,
+  // then on every resize, after the browser's layout): place() runs every frame, twice while the camera moves, and a
+  // read of the layout there, after the frame's own style writes, made the browser recalculate its styles on the spot.
+  // The sign layer covers the screen; the city's own label container may have no height of its own.
+  let width = 0, height = 0;
+  const measure = () => { width = layer.clientWidth || ctx.overlay.clientWidth; height = layer.clientHeight || ctx.overlay.clientHeight; };
+  measure();
+  const resize = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => { measure(); place(); });
+  resize?.observe(layer); resize?.observe(ctx.overlay);
   function place() {
-    // The sign layer covers the screen; the city's own label container may have no height of its own.
-    const width = layer.clientWidth || ctx.overlay.clientWidth, height = layer.clientHeight || ctx.overlay.clientHeight;
     if (!width || !height || !active) return;
     ctx.camera.updateMatrixWorld();
     const focal = ctx.camera.projectionMatrix.elements[5] * height / 2;
@@ -999,7 +1006,7 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
       return { point: new THREE.Vector3(place.x, y, place.z), azimuth: place.rotation + .55, ...(bounds ? { bounds } : {}) };
     },
     dispose() {
-      offFrame(); offMove(); if (frame) cancelAnimationFrame(frame);
+      offFrame(); offMove(); resize?.disconnect(); if (frame) cancelAnimationFrame(frame);
       canvas.removeEventListener("pointerdown", onPress, { capture: true });
       canvas.removeEventListener("pointerdown", onDown); canvas.removeEventListener("pointerup", onUp); canvas.removeEventListener("pointermove", onMove); canvas.removeEventListener("pointerleave", onLeave);
       layer.remove(); sizeLabel.remove(); squarePools?.dispose(); squareLights?.dispose(); pools?.dispose(); lights?.dispose();
