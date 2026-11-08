@@ -240,6 +240,40 @@ test('neighbouring cells meet on their shared edge, across a block\'s edge too, 
   }
 });
 
+test('a cell\'s neighbours are worked out once per grid: the same answer every time, and each grid keeps its own', () => {
+  const plain = list => list.map(n => ({ district: n.block.district, block: n.block.block, col: n.col, row: n.row, from: n.from, to: n.to, meet: n.meet }));
+  for (const [city, grid] of Object.entries(GRIDS)) {
+    // The same land made again: other objects, nothing worked out yet. Every answer is the first grid's, asked twice.
+    const again = L.landGrid(CITIES[city]), blockOf = (g, c) => g.blocks.find(b => b.district === c.district && b.block === c.block);
+    let checked = 0;
+    for (const c of CELLS[city].filter((c, i) => i % 7 === 0)) for (const way of L.WAYS) {
+      const first = L.neighbours(grid, blockOf(grid, c), c.col, c.row, way);
+      assert.equal(L.neighbours(grid, blockOf(grid, c), c.col, c.row, way), first, `${city}: worked out once`);
+      assert.deepEqual(plain(L.neighbours(again, blockOf(again, c), c.col, c.row, way)), plain(first), `${city}: ${c.block}:${c.col}:${c.row} ${way}`);
+      checked++;
+    }
+    assert.ok(checked > 1000, `${city}: ${checked} cells and ways`);
+    // Off the block there is nothing to keep: worked out each time, the same.
+    const block = grid.blocks[0];
+    assert.deepEqual(plain(L.neighbours(grid, block, -1, 0, 'col-')), plain(L.neighbours(again, again.blocks[0], -1, 0, 'col-')));
+  }
+  // A grid of one of the island city's blocks alone: its cells at the seam with the next band have no neighbour there,
+  // while the city's grid, with the same block, keeps its own (asked before and after).
+  const grid = GRIDS.support;
+  const seam = (() => {
+    for (const block of grid.blocks) for (let col = 0; col < block.cols; col++) for (let row = 0; row < block.rows; row++) for (const way of L.WAYS) {
+      if (block.skip.has(`${col}:${row}`)) continue;
+      const found = L.neighbours(grid, block, col, row, way);
+      if (found.length && found[0].block !== block) return { block, col, row, way, found };
+    }
+  })();
+  assert.ok(seam, 'a cell with its neighbour in another block');
+  const alone = { city: 'support', bands: grid.bands, blocks: [seam.block], centres: [] };
+  assert.deepEqual(L.neighbours(alone, seam.block, seam.col, seam.row, seam.way), [], 'no other block, no neighbour there');
+  assert.equal(L.neighbours(grid, seam.block, seam.col, seam.row, seam.way), seam.found, 'the city\'s grid keeps its own');
+  assert.deepEqual(L.neighbours(alone, seam.block, seam.col, seam.row, seam.way), []);
+});
+
 test('a road is laid along the land\'s lines: every cell between two, through one corner, of the first one\'s district', () => {
   for (const [city, grid] of Object.entries(GRIDS)) {
     for (const block of grid.blocks.filter(b => b.skip.size === 0 && b.cols >= 12 && b.rows >= 6)) {

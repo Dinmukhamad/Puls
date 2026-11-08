@@ -244,9 +244,29 @@ export function cellAt(grid: LandGrid, p: Point): { block: LandBlock; col: numbe
  * of another size, so there can be two). `from`/`to` say where on the cell's own edge they meet (0…1 along it) and
  * `meet` is the middle of that stretch: a road from both cells joins there exactly. A district's border and land not
  * for sale have no neighbours.
+ *
+ * A grid's blocks never change once it is made, so a cell's neighbours are worked out once per grid and kept
+ * (NEIGHBOURS_OF): laying out the small things asks for the same cells' neighbours many times over, every road cell
+ * walking the run it lies on both ways (world/decor.ts areaPlace). The arrays and the neighbours in them are shared
+ * between the callers: read them, never change them.
  */
 export interface Neighbour { block: LandBlock; col: number; row: number; from: number; to: number; meet: Point }
-export function neighbours(grid: LandGrid, block: LandBlock, col: number, row: number, way: Way): Neighbour[] {
+export function neighbours(grid: LandGrid, block: LandBlock, col: number, row: number, way: Way): readonly Neighbour[] {
+  if (!(Number.isInteger(col) && Number.isInteger(row) && col >= 0 && row >= 0 && col < block.cols && row < block.rows)) return neighboursOf(grid, block, col, row, way);
+  let blocks = NEIGHBOURS_OF.get(grid);
+  if (!blocks) NEIGHBOURS_OF.set(grid, blocks = new Map());
+  let cells = blocks.get(block);
+  if (!cells) blocks.set(block, cells = new Array(block.cols * block.rows * 4));
+  const slot = (row * block.cols + col) * 4 + WAY_SLOT[way];
+  return cells[slot] ??= neighboursOf(grid, block, col, row, way);
+}
+/** Every cell's neighbours asked for so far, by grid and block: a cell's four ways side by side (WAY_SLOT). */
+const NEIGHBOURS_OF = new WeakMap<LandGrid, Map<LandBlock, (readonly Neighbour[] | undefined)[]>>();
+const WAY_SLOT: Record<Way, number> = { "row-": 0, "row+": 1, "col-": 2, "col+": 3 };
+/** No neighbours: one array for every cell that has none on a way. */
+const NONE: readonly Neighbour[] = Object.freeze([]);
+
+function neighboursOf(grid: LandGrid, block: LandBlock, col: number, row: number, way: Way): readonly Neighbour[] {
   const dc = way === "col-" ? -1 : way === "col+" ? 1 : 0, dr = way === "row-" ? -1 : way === "row+" ? 1 : 0, c = col + dc, r = row + dr;
   const on = c >= 0 && r >= 0 && c < block.cols && r < block.rows, corners = areaCorners(block, col, row);
   const meet = () => way === "row-" ? areaPoint(corners, .5, 0) : way === "row+" ? areaPoint(corners, .5, 1) : way === "col-" ? areaPoint(corners, 0, .5) : areaPoint(corners, 1, .5);
@@ -254,7 +274,7 @@ export function neighbours(grid: LandGrid, block: LandBlock, col: number, row: n
   // The same square of the lattice for sale in another of the district's blocks: where the island city's bands meet.
   const there = latticeCell(grid, block, c, r);
   if (there) return [{ ...there, from: 0, to: 1, meet: meet() }];
-  if (on) return [];
+  if (on) return NONE;
   const out: Neighbour[] = [], s = block.shape, EPS = 1e-6;
   for (const other of grid.blocks) {
     if (other === block || other.district !== block.district) continue;
@@ -282,7 +302,7 @@ export function neighbours(grid: LandGrid, block: LandBlock, col: number, row: n
       out.push({ block: other, col: oc, row: or, from: (a - lo) / (hi - lo), to: (b - lo) / (hi - lo), meet: at((a + b) / 2) });
     }
   }
-  return out;
+  return out.length ? out : NONE;
 }
 
 /**
