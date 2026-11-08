@@ -49,7 +49,7 @@ export const TURN_SIDES: readonly BlockSide[] = ["z1", "x1", "z0", "x0"];
 export function decorSide(grid: LandGrid, map: DecorMap, block: LandBlock, col: number, row: number): BlockSide {
   const at = map.get(decorKey(block.district, block.block, col, row));
   if (at?.turn !== undefined) return TURN_SIDES[((at.turn % 4) + 4) % 4];
-  const road = roadside(grid, map, block, col, row, areaPoint(areaCorners(block, col, row), .5, .5));
+  const road = roadside(grid, lookupOf(map), block, col, row, areaPoint(areaCorners(block, col, row), .5, .5));
   return road ? sideOf(block, road.way) : homeSide(block, col, row);
 }
 /** The turn a quarter turn from `side`: `step` +1 counterclockwise seen from above, -1 clockwise. */
@@ -59,13 +59,43 @@ export const turnFrom = (side: BlockSide, step: number) => (((TURN_SIDES.indexOf
 const JOINS: Partial<Record<DecorFamily, readonly DecorFamily[]>> = { road: ["road"], path: ["path", "alley", "road"], alley: ["alley", "path", "road"], hedge: ["hedge"] };
 const ROADLIKE: readonly DecorFamily[] = ["road", "path", "alley"];
 
+/** What stands on a cell, by its address: district, block, column and row. */
+type DecorLookup = (district: number, block: number, col: number, row: number) => DecorAt | undefined;
+/** Looked up by the map's own keys. */
+const lookupOf = (map: DecorMap): DecorLookup => (district, block, col, row) => map.get(decorKey(district, block, col, row));
+/** An address as one small whole number (district and block below 64, column and row below 512), or -1 for any other. */
+function cellNumber(district: number, block: number, col: number, row: number) {
+  return Number.isInteger(district) && Number.isInteger(block) && Number.isInteger(col) && Number.isInteger(row) && district >= 0 && district < 64
+    && block >= 0 && block < 64 && col >= 0 && col < 512 && row >= 0 && row < 512 ? ((district * 64 + block) * 512 + col) * 512 + row : -1;
+}
+/**
+ * The map indexed by number for a whole layout, which asks what stands on the same cells many times over (every road
+ * cell walks the run it lies on, both ways): a number for each address instead of a new string each time, the same
+ * answers. A map with a key of any other shape (none the server sends) is looked up by its keys.
+ */
+function indexOf(map: DecorMap): DecorLookup {
+  const index = new Map<number, DecorAt>();
+  for (const [key, at] of map) {
+    const [district, block, col, row] = key.split(":").map(Number), number = cellNumber(district, block, col, row);
+    if (number < 0 || key !== decorKey(district, block, col, row)) return lookupOf(map);
+    index.set(number, at);
+  }
+  return (district, block, col, row) => {
+    const number = cellNumber(district, block, col, row);
+    return number < 0 ? map.get(decorKey(district, block, col, row)) : index.get(number);
+  };
+}
+
 /** The neighbours a cell's small thing joins, way by way. */
 export function joins(grid: LandGrid, map: DecorMap, block: LandBlock, col: number, row: number, family: DecorFamily): { way: Way; to: Neighbour }[] {
+  return joinsBy(grid, lookupOf(map), block, col, row, family);
+}
+function joinsBy(grid: LandGrid, look: DecorLookup, block: LandBlock, col: number, row: number, family: DecorFamily): { way: Way; to: Neighbour }[] {
   const kinds = JOINS[family];
   if (!kinds) return [];
   const out: { way: Way; to: Neighbour }[] = [];
   for (const way of WAYS) for (const to of neighbours(grid, block, col, row, way)) {
-    const there = map.get(decorKey(block.district, to.block.block, to.col, to.row));
+    const there = look(block.district, to.block.block, to.col, to.row);
     if (there && kinds.includes(there.family)) out.push({ way, to });
   }
   return out;
@@ -102,21 +132,21 @@ function jitter(block: LandBlock, col: number, row: number, salt: number) {
  */
 export function decorLayout(grid: LandGrid, map: DecorMap): DecorLayout {
   const ground: GroundQuad[] = [], placements: Placement[] = [], lamps: Placement[] = [];
-  const blocks = new Map(grid.blocks.map(b => [`${b.district}:${b.block}`, b]));
+  const blocks = new Map(grid.blocks.map(b => [`${b.district}:${b.block}`, b])), look = indexOf(map), walk = walker(grid, look);
   for (const [key, at] of map) {
     const [district, blockNumber, col, row] = key.split(":").map(Number), block = blocks.get(`${district}:${blockNumber}`);
     if (!block || col >= block.cols || row >= block.rows) continue;
-    const corners = areaCorners(block, col, row), centre = areaPoint(corners, .5, .5), links = joins(grid, map, block, col, row, at.family);
+    const corners = areaCorners(block, col, row), centre = areaPoint(corners, .5, .5), links = joinsBy(grid, look, block, col, row, at.family);
     if (at.family === "road" || at.family === "path" || at.family === "alley") {
       const half = at.family === "road" ? ROAD_HALF : PATH_HALF, surface = at.family === "road" ? ASPHALT : at.family === "alley" ? GRAVEL : FOOTPATH;
-      const area = areaPlace(grid, map, block, col, row, at.family), wide = area.width >= 2;
+      const area = areaPlace(walk, block, col, row, at.family), wide = area.width >= 2;
       if (at.family === "road") ground.push({ points: corners, ...PAVEMENT });
       if (at.family === "alley" && wide && area.along) {
         // A boulevard: a walk down each row of cells, crossing to the next only every fourth cell, grass between.
         const { lo, hi } = sidesOf(area.along), cross = area.at % 4 === 1;
         paving(ground, corners, links.filter(l => cross || (l.way !== lo && l.way !== hi)), half, surface);
         boulevard(placements, block, col, row, corners, links, area, cross);
-      } else paving(ground, corners, links, half, surface, inside(grid, map, block, links, at.family));
+      } else paving(ground, corners, links, half, surface, inside(grid, look, block, links, at.family));
       if (at.family === "road") { lane(ground, corners, links); if (wide) roadMarks(ground, corners, links, area); }
       if (at.family === "path" && wide) pathSquare(ground, placements, block, col, row, corners, links, area);
       if (at.family === "alley") alleyTrees(placements, block, col, row, corners, links);
@@ -124,7 +154,7 @@ export function decorLayout(grid: LandGrid, map: DecorMap): DecorLayout {
     }
     // Where its owner turned it, else where the nearest road or footpath beside the cell is: for a lamp at that edge
     // and a bench facing it.
-    const toward = at.turn !== undefined && isTurning(at.family) ? edgeToward(block, col, row, centre, TURN_SIDES[((at.turn % 4) + 4) % 4]) : roadside(grid, map, block, col, row, centre);
+    const toward = at.turn !== undefined && isTurning(at.family) ? edgeToward(block, col, row, centre, TURN_SIDES[((at.turn % 4) + 4) % 4]) : roadside(grid, look, block, col, row, centre);
     if (at.family === "hedge") { hedge(placements, col, row, corners, centre, links); continue; }
     const tree = TREES[at.family];
     if (tree) {
@@ -149,14 +179,36 @@ export function decorLayout(grid: LandGrid, map: DecorMap): DecorLayout {
 /** Where a cell lies in an area of its kind: the way the area runs, how wide it is across that and where in it the cell is. */
 interface AreaPlace { along: "col" | "row" | null; width: number; across: number; at: number }
 type CellAt = { block: LandBlock; col: number; row: number };
+/** The next cell on a way that has a small thing of a kind, if there is one. */
+type Walk = (at: CellAt, way: Way, family: DecorFamily) => CellAt | undefined;
+const WAY_INDEX: Record<Way, number> = { "row-": 0, "row+": 1, "col-": 2, "col+": 3 };
+/**
+ * A layout's steps along the runs of small things, each worked out once for the layout: every cell of a road walks the
+ * run it lies on both ways (areaPlace), so the same steps come up again and again. A step never leaves its district
+ * (world/land.ts neighbours), so a cell's own district is its run's.
+ */
+function walker(grid: LandGrid, look: DecorLookup): Walk {
+  const order = new Map(grid.blocks.map((b, i) => [b, i])), kept = new Map<DecorFamily, Map<number, CellAt | null>>();
+  const next = (at: CellAt, way: Way, family: DecorFamily) => neighbours(grid, at.block, at.col, at.row, way).find(nb => look(at.block.district, nb.block.block, nb.col, nb.row)?.family === family);
+  return (at, way, family) => {
+    const i = order.get(at.block);
+    if (i === undefined || i >= 64 || !(Number.isInteger(at.col) && Number.isInteger(at.row) && at.col >= 0 && at.row >= 0 && at.col < 512 && at.row < 512)) return next(at, way, family);
+    let steps = kept.get(family);
+    if (!steps) kept.set(family, steps = new Map());
+    const key = ((i * 512 + at.col) * 512 + at.row) * 4 + WAY_INDEX[way];
+    let found = steps.get(key);
+    if (found === undefined) steps.set(key, found = next(at, way, family) ?? null);
+    return found ?? undefined;
+  };
+}
 /**
  * A cell's place in the area of its kind it belongs to. The area runs along the longer of the two runs of that kind
  * through the cell; `width` counts the rows of it side by side across that, each running along too (a road turning a
  * corner is no wider for it), `across` is the cell's place among them and `at` its place along. A square has no way
  * it runs, and is wide only where four cells of the kind meet.
  */
-function areaPlace(grid: LandGrid, map: DecorMap, block: LandBlock, col: number, row: number, family: DecorFamily): AreaPlace {
-  const step = (at: CellAt, way: Way): CellAt | undefined => neighbours(grid, at.block, at.col, at.row, way).find(nb => map.get(decorKey(block.district, nb.block.block, nb.col, nb.row))?.family === family);
+function areaPlace(walk: Walk, block: LandBlock, col: number, row: number, family: DecorFamily): AreaPlace {
+  const step = (at: CellAt, way: Way) => walk(at, way, family);
   const count = (way: Way, along?: readonly [Way, Way]) => {
     let n = 0, at: CellAt = { block, col, row };
     for (let next = step(at, way); next && n < 24 && (!along || step(next, along[0]) || step(next, along[1])); next = step(at, way)) { n++; at = next; }
@@ -260,13 +312,13 @@ function boulevard(placements: Placement[], block: LandBlock, col: number, row: 
  * The corners of a cell inside an area of its kind (a road two or three cells wide, a square of footpath): where the
  * cells beside it on both sides of the corner and the one across the corner join it too. There the paving runs on.
  */
-function inside(grid: LandGrid, map: DecorMap, block: LandBlock, links: { way: Way; to: Neighbour }[], family: DecorFamily): [Way, Way][] {
+function inside(grid: LandGrid, look: DecorLookup, block: LandBlock, links: { way: Way; to: Neighbour }[], family: DecorFamily): [Way, Way][] {
   const kinds = JOINS[family] ?? [], out: [Way, Way][] = [];
   for (const across of ["row-", "row+"] as const) for (const along of ["col-", "col+"] as const) {
     const a = links.find(l => l.way === across);
     if (!a || !links.some(l => l.way === along)) continue;
     const corner = neighbours(grid, a.to.block, a.to.col, a.to.row, along).some(n => {
-      const there = map.get(decorKey(block.district, n.block.block, n.col, n.row));
+      const there = look(block.district, n.block.block, n.col, n.row);
       return !!there && kinds.includes(there.family);
     });
     if (corner) out.push([across, along]);
@@ -340,9 +392,9 @@ function hedge(placements: Placement[], col: number, row: number, corners: Point
 }
 
 /** The direction from a cell's middle to the nearest road or footpath beside it and the way to it, or null. */
-function roadside(grid: LandGrid, map: DecorMap, block: LandBlock, col: number, row: number, centre: Point): (Point & { way: Way }) | null {
+function roadside(grid: LandGrid, look: DecorLookup, block: LandBlock, col: number, row: number, centre: Point): (Point & { way: Way }) | null {
   for (const way of WAYS) for (const to of neighbours(grid, block, col, row, way)) {
-    const there = map.get(decorKey(block.district, to.block.block, to.col, to.row));
+    const there = look(block.district, to.block.block, to.col, to.row);
     if (!there || !ROADLIKE.includes(there.family)) continue;
     const dx = to.meet.x - centre.x, dz = to.meet.z - centre.z, l = Math.hypot(dx, dz) || 1;
     return { x: dx / l, z: dz / l, way };
