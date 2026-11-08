@@ -41,6 +41,7 @@ class Mesher {
     this.positions.push(x, y, z); this.normals.push(nx, ny, nz); this.colors.push(this.paint.r, this.paint.g, this.paint.b); this.surfaces.push(this.surface);
     return this.count++;
   }
+  tri(a: number, b: number, c: number) { this.indices.push(a, b, c); }
   quad(a: number, b: number, c: number, d: number) { this.indices.push(a, b, c, a, c, d); }
   /** Appends a three geometry, moved by `matrix`, in the current colour. */
   add(geometry: THREE.BufferGeometry, matrix: THREE.Matrix4) {
@@ -75,6 +76,20 @@ function ring(m: Mesher, r0: number, r1: number, y: number, cx = 0, cz = 0) {
     if (i === 0) { firstIn = vIn; firstOut = vOut; } else m.quad(prevIn, vIn, vOut, prevOut);
     prevIn = vIn; prevOut = vOut;
   }
+}
+/**
+ * A flat disc facing up at height y, centred at (cx, cz), as a fan from its middle: the same triangles as ring() with
+ * r0 = 0, in the same order, without the other half of a ring's, which have no area (two corners in the middle).
+ */
+function disc(m: Mesher, r: number, y: number, cx = 0, cz = 0) {
+  const n = segmentsFor(r), middle = m.vertex(cx, y, cz, 0, 1, 0);
+  let first = -1, prev = -1;
+  for (let i = 0; i < n; i++) {
+    const a = i / n * Math.PI * 2, c = Math.cos(a), s = Math.sin(a), v = m.vertex(cx + c * r, y, cz + s * r, 0, 1, 0);
+    if (i === 0) first = v; else m.tri(middle, v, prev);
+    prev = v;
+  }
+  m.tri(middle, first, prev);
 }
 /** A vertical circular wall; `outward` walls face away from the centre (islets), the others towards it (banks). */
 function wall(m: Mesher, r: number, y0: number, y1: number, outward: boolean, cx = 0, cz = 0) {
@@ -243,22 +258,29 @@ function polygonWall(m: Mesher, outline: readonly Point[], bottom: number, top: 
   }
 }
 
-/** Ground patches that change while the city is open (the operator's plots): one mesh in the terrain's colours. */
-export function createPatches(surfaces: readonly Surface[]): THREE.Mesh {
+/**
+ * Ground patches that change while the city is open (the operator's plots, the districts' yards): one mesh in the
+ * terrain's colours, its round plazas drawn as fans (disc), the same ground with half the triangles. `material` is
+ * one the caller keeps across rebuilds (systems/estates.ts), so a new mesh needs no new shader; without it the mesh
+ * gets a ground material of its own, to dispose with it.
+ */
+export function createPatches(surfaces: readonly Surface[], material: THREE.Material = groundMaterial()): THREE.Mesh {
   const flat = new Mesher();
-  paint(surfaces, flat);
-  const mesh = new THREE.Mesh(flat.build(), groundMaterial());
+  paint(surfaces, flat, true);
+  const mesh = new THREE.Mesh(flat.build(), material);
   mesh.receiveShadow = true; mesh.matrixAutoUpdate = false; mesh.name = "city-patches";
   return mesh;
 }
 
 /** The paving, lawns, playgrounds and courts of the residential complexes. */
 function yards(world: WorldData, flat: Mesher) { paint(world.surfaces, flat); }
-function paint(surfaces: readonly Surface[], flat: Mesher) {
+/** Surfaces into the mesher; `fans`: round ones as fans from their middle (disc) rather than rings round it. */
+function paint(surfaces: readonly Surface[], flat: Mesher, fans = false) {
   for (const s of surfaces) {
     const [color, lift] = SURFACES[s.kind];
     flat.color(color);
-    if (s.round) ring(flat, 0, s.length / 2, TOP + lift, s.x, s.z);
+    if (s.round && fans) disc(flat, s.length / 2, TOP + lift, s.x, s.z);
+    else if (s.round) ring(flat, 0, s.length / 2, TOP + lift, s.x, s.z);
     else mark(flat, s.x, s.z, s.angle, s.width, s.length, TOP + lift);
   }
 }
