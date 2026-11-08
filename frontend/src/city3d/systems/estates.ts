@@ -23,7 +23,7 @@ import { createLampLights, type LampLights } from "../render/lampLights";
 import { TAP_DISTANCE, TAP_TIME } from "../engine/input";
 import { CELL, MODULE_CELLS, cellPoint, footprintAt, itemFootprint, moduleGround, objectLayout, pointCell, siteLayout, squareProblem, plotFootprint, projectFootprint, type ProjectFamily } from "../world/estates";
 import { WAYS, areaCorners, areaFrame, areaPoint, areaSpan, blockCell, cellUnder, cellsBetween, cellsWithin, districtBorders, homeSide, sideOf, type CellRef, type DistrictCentre, type Frame, type LandBlock, type LandGrid, type Way } from "../world/land";
-import { buildingFacing, decorKey, decorLayout, decorMap, decorSide, edgeToward, isTurning, type DecorMap, type GroundQuad } from "../world/decor";
+import { buildingFacing, decorKey, decorLayout, decorMap, decorSide, edgeToward, isTurning, type DecorMap } from "../world/decor";
 import { createBorders } from "../render/borders";
 import { plotLayout } from "../world/landLayouts";
 import { districtColour, isDecorFamily, type DecorFamily, type PlotFamily } from "../world/estateGrid";
@@ -85,21 +85,39 @@ function inset(corners: { x: number; z: number }[], by = INSET) {
   return corners.map(p => { const dx = p.x - cx, dz = p.z - cz, l = Math.hypot(dx, dz) || 1, k = Math.max(0, l - by * Math.SQRT2) / l; return { x: cx + dx * k, z: cz + dz * k }; });
 }
 
-/** Flat quads into one indexed mesh, each facing up whichever way round its corners go. */
-function flatMesh(quads: { points: { x: number; z: number }[]; y: number; colour: THREE.Color }[], material: THREE.Material, name: string) {
-  const positions: number[] = [], colours: number[] = [], surfaces: number[] = [], index: number[] = [];
-  for (const q of quads) {
-    const base = positions.length / 3, [a, b, c] = q.points, surface = surfaceOf(q.colour);
-    for (const p of q.points) { positions.push(p.x, q.y, p.z); colours.push(q.colour.r, q.colour.g, q.colour.b); surfaces.push(surface); }
+/**
+ * Flat quads (four corners each) into one indexed mesh, each facing up whichever way round its corners go; a colour as
+ * a hex string or a three.js colour. The buffers are filled in place and each colour's linear value and surface
+ * (render/ground.ts surfaceOf) are worked out once: the district roads come to tens of thousands of quads in a
+ * handful of colours.
+ */
+function flatMesh(quads: readonly { points: readonly { x: number; z: number }[]; y: number; colour: string | THREE.Color }[], material: THREE.Material, name: string) {
+  const n = quads.length, vertices = n * 4, paint = new THREE.Color(), looks = new Map<string | THREE.Color, [number, number, number, number]>();
+  const position = new Float32Array(vertices * 3), normal = new Float32Array(vertices * 3), colour = new Float32Array(vertices * 3), surface = new Float32Array(vertices);
+  const index = vertices > 65535 ? new Uint32Array(n * 6) : new Uint16Array(n * 6);
+  for (let q = 0; q < n; q++) {
+    const quad = quads[q], [a, b, c] = quad.points, base = q * 4, i = q * 6;
+    let look = looks.get(quad.colour);
+    if (!look) {
+      const value = typeof quad.colour === "string" ? paint.set(quad.colour) : quad.colour;
+      looks.set(quad.colour, look = [value.r, value.g, value.b, surfaceOf(value)]);
+    }
+    for (let k = 0; k < 4; k++) {
+      const p = quad.points[k], v = (base + k) * 3;
+      position[v] = p.x; position[v + 1] = quad.y; position[v + 2] = p.z; normal[v + 1] = 1;
+      colour[v] = look[0]; colour[v + 1] = look[1]; colour[v + 2] = look[2]; surface[base + k] = look[3];
+    }
     const up = (b.z - a.z) * (c.x - a.x) - (b.x - a.x) * (c.z - a.z) > 0;
-    index.push(...(up ? [base, base + 1, base + 2, base, base + 2, base + 3] : [base, base + 2, base + 1, base, base + 3, base + 2]));
+    index[i] = index[i + 3] = base;
+    if (up) { index[i + 1] = base + 1; index[i + 2] = index[i + 4] = base + 2; index[i + 5] = base + 3; }
+    else { index[i + 1] = index[i + 5] = base + 2; index[i + 2] = base + 1; index[i + 4] = base + 3; }
   }
   const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
-  geometry.setAttribute("normal", new THREE.Float32BufferAttribute(positions.map((_, i) => i % 3 === 1 ? 1 : 0), 3));
-  geometry.setAttribute("color", new THREE.Float32BufferAttribute(colours, 3));
-  geometry.setAttribute("surface", new THREE.Float32BufferAttribute(surfaces, 1));
-  geometry.setIndex(positions.length / 3 > 65535 ? new THREE.Uint32BufferAttribute(index, 1) : new THREE.Uint16BufferAttribute(index, 1));
+  geometry.setAttribute("position", new THREE.BufferAttribute(position, 3));
+  geometry.setAttribute("normal", new THREE.BufferAttribute(normal, 3));
+  geometry.setAttribute("color", new THREE.BufferAttribute(colour, 3));
+  geometry.setAttribute("surface", new THREE.BufferAttribute(surface, 1));
+  geometry.setIndex(new THREE.BufferAttribute(index, 1));
   geometry.computeBoundingSphere();
   const mesh = new THREE.Mesh(geometry, material);
   mesh.matrixAutoUpdate = false; mesh.name = name;
@@ -276,8 +294,7 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
     const small = decorLayout(grid, decor);
     placements.push(...small.placements);
     if (small.ground.length) {
-      const c = new THREE.Color();
-      paving = flatMesh(small.ground.map((q: GroundQuad) => ({ points: q.points, y: q.y, colour: c.set(q.colour).clone() })), pavingMaterial, "district-roads");
+      paving = flatMesh(small.ground, pavingMaterial, "district-roads");
       paving.receiveShadow = true; ctx.scene.add(paving);
     }
     if (small.lamps.length) lights = createLampLights(ctx, small.lamps, "district-lamp");
