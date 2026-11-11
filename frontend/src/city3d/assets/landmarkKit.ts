@@ -124,8 +124,10 @@ export function createKit() {
   }
   /** A disc r across and t thick facing the front, its middle at (x, y, z): a clock's dial, a round window. */
   function disc(r: number, t: number, c: string, x: number, y: number, z: number, seg = 20) {
-    const s = surface(c);
+    const s = surface(c), start = mb.count, id = s.kind === FACE.curtain ? paneNumber() : 99;
     mb.detail(() => mb.frame([S(x), S(y), S(z - t / 2)], [1, 0, 0], [0, 0, 1], [0, -1, 0], () => cylinder(mb, { x: 0, z: 0, y0: 0, y1: S(t), r: S(r), seg, kind: s.kind === FACE.curtain ? FACE.pane : s.kind, col: s.col, top: s.kind === FACE.curtain ? FACE.pane : s.kind, occlude: false })));
+    // A glass disc is an authored round room window (the recording studio), not an unlit roof dome.
+    if (id < 1) for (let v = start; v < mb.count; v++) if (mb.s[v * 4 + 2] === FACE.pane) mb.w[v * 4] = id;
   }
   /** A ring about (x, y, z): lying flat, or facing the front; `arc` from `start` for a part of it (facing the front, start π/2 and arc π is the upper half). */
   function torus(r: number, t: number, c: string, x: number, y: number, z: number, o: { front?: boolean; seg?: number; arc?: number; start?: number } = {}) {
@@ -259,7 +261,9 @@ export function createKit() {
     // A recessed lower panel and upper glazed leaf, both behind the existing projecting pull handle.
     mb.detail(() => {
       boxShape(mb, [S(x - w * .38), S(y0 + h * .12), S(z + .026), S(x + w * .38), S(y0 + h * .39), S(z + .034)], { c: 0, kind: FACE.trim, col: rgb(C.slate), top: FACE.trim, occlude: false });
-      boxShape(mb, [S(x - w * .36), S(y0 + h * .5), S(z + .026), S(x + w * .36), S(y0 + h * .89), S(z + .033)], { c: 0, kind: FACE.pane, col: rgb(C.glass), top: FACE.pane, bay: paneNumber(), occlude: false });
+      // The box builder interprets bay as a spacing, so it cannot carry a pane's occupancy seed.
+      // Only the visible front needs glazing; pass its stable window number directly in aWin.x.
+      mb.quad([[S(x - w * .36), S(y0 + h * .5), S(z + .033)], [S(x + w * .36), S(y0 + h * .5), S(z + .033)], [S(x + w * .36), S(y0 + h * .89), S(z + .033)], [S(x - w * .36), S(y0 + h * .89), S(z + .033)]], { kind: FACE.pane, col: rgb(C.glass), win: [paneNumber(), 0, 0, 0] });
     });
   }
   /** A sign on a board facing the front: the text on a canvas (assets/landmarks.ts). */

@@ -113,7 +113,7 @@ test('growing landmarks are drawn in the shared material: their windows follow n
   districts.dispose(); assert.equal(disposed, 1); assert.equal(ctx.listeners, 0);
 });
 
-test('at night floodlights wash every island and a ring of lights circles the plaza: instanced, additive, none by day', () => {
+test('night ground fixtures and the plaza ring remain instanced and additive without whole-facade emission', () => {
   const ctx = context(), districts = createDistricts(ctx, { levels });
   const fixtures = ctx.scene.getObjectByName('city-district-floodlights'), pools = ctx.scene.getObjectByName('city-district-light-pools');
   const islands = ctx.world.districts.length;
@@ -133,10 +133,11 @@ test('at night floodlights wash every island and a ring of lights circles the pl
     const d = ctx.world.districts[Math.floor(i / 4)], r = Math.hypot(p.setFromMatrixPosition((fixtures.getMatrixAt(i, matrix), matrix)).x - d.x, p.z - d.z);
     assert.ok(r > 5 && r < ctx.world.spec.islet - .5, `floodlight ${i} stands on its island, off the plot`);
   }
-  // The uplight rides on the landmarks' facade material, with its windows; the signs keep their plain finish.
+  // The shared facade keeps the sparse window shader; its base material and signs emit no global wash.
   const [shell] = shells(ctx.scene);
-  assert.ok(shell.emissiveNode, 'walls get the floodlights\' wash');
-  assert.ok(materials(ctx.scene).filter(material => material.map).every(material => !material.emissiveNode), 'signs take no wash');
+  assert.ok(shell.emissiveNode, 'landmark windows use the shared night shader');
+  assert.equal(shell.emissive.getHex(), 0, 'no whole-material emission');
+  assert.ok(materials(ctx.scene).filter(material => material.map).every(material => !material.emissiveNode), 'signs keep their unlit finish');
   let lights = 0; ctx.scene.traverse(object => { if (object.isLight) lights++; });
   assert.equal(lights, 0, 'no light sources');
   ctx.night.set(false, true); ctx.frame(32);
