@@ -18,11 +18,11 @@ export const BULB_Y = .2 + 1.35;
 export const POOL_Y = .276;
 export const POOL_RADIUS = 2.4;
 /** Halo radius up close; farther away it keeps at least HALO_SPREAD × distance (2–3 px), dimmer. */
-const HALO_RADIUS = .45, HALO_SPREAD = .0045, HALO_PULL = .05;
-const POOL_STRENGTH = .5, HALO_STRENGTH = .95;
-const POOL_WARM = "#ffd9a0", HALO_WARM = "#ffe2b4";
+const HALO_RADIUS = .5, HALO_SPREAD = .0045, HALO_PULL = .05;
+const POOL_STRENGTH = .58, HALO_STRENGTH = .82;
+const POOL_WARM = "#ffd590", HALO_WARM = "#ffe1a3";
 /** A few shades of warm white, so a row of lamps does not look stamped. */
-const SHADES = ["#ffffff", "#fff0d8", "#ffe4c0", "#fff7ea", "#ffeacc"];
+const SHADES = ["#ffffff", "#fff3db", "#ffe4b7", "#fff7e8", "#ffedca"];
 /** Deck offset of a lamp away from any bridge: its strip never reaches the pool. */
 const NO_DECK = 1e3;
 
@@ -97,6 +97,7 @@ export function lampMaterials(ctx: CityContext): LampMaterials {
   // one float per lamp, not a polygon test in every fragment, and keeps the total vertex buffers below eight.
   const centralCut = ctx.world.center ? smoothstep(attribute("lampLandRadius", "float").sub(.1).max(0), attribute("lampLandRadius", "float").max(.0001), positionGeometry.xz.length()).oneMinus() : float(1);
   pools.opacityNode = falloff.mul(falloff).mul(max(onLand, onDeck)).mul(centralCut).mul(level).mul(clear).mul(POOL_STRENGTH);
+  pools.userData.cityModelStyle = "cartoon-v1";
   // Just above the paving; the offset keeps it ahead of the street tops at any distance.
   pools.polygonOffset = true; pools.polygonOffsetFactor = -2; pools.polygonOffsetUnits = -2;
 
@@ -110,6 +111,7 @@ export function lampMaterials(ctx: CityContext): LampMaterials {
   const grown = float(HALO_RADIUS).div(max(float(HALO_RADIUS), positionView.z.negate().mul(HALO_SPREAD)));
   halos.colorNode = color(HALO_WARM).mul(shade);
   halos.opacityNode = falloff.pow(3).mul(mix(1, grown, .5)).mul(level).mul(clear.mul(.7).add(.3)).mul(HALO_STRENGTH);
+  halos.userData.cityModelStyle = "cartoon-v1";
 
   return { pools, halos, fog: range, dispose() { pools.dispose(); halos.dispose(); } };
 }

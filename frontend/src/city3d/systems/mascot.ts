@@ -36,22 +36,24 @@ function painted(parts: [THREE.BufferGeometry, string][], material: THREE.Materi
   mesh.castShadow = mesh.receiveShadow = true;
   return mesh;
 }
-const paint = () => surfaceMaterial({ vertexColors: true, finish: "paint", roughness: .42, metalness: .24 });
+const paint = () => surfaceMaterial({ vertexColors: true, finish: "paint", roughness: .58, metalness: .05 });
 const cylinder = (r: number, h: number, x: number, y: number, z: number, segments = 32) => new THREE.CylinderGeometry(r, r, h, segments).translate(x, y, z);
-const sphere = (r: number, x: number, y: number, z: number, sx = 1, sy = 1, sz = 1) => new THREE.SphereGeometry(r, 18, 14).scale(sx, sy, sz).translate(x, y, z);
+const sphere = (r: number, x: number, y: number, z: number, sx = 1, sy = 1, sz = 1) => new THREE.SphereGeometry(r, r < .1 ? 8 : 18, r < .1 ? 6 : 14).scale(sx, sy, sz).translate(x, y, z);
 
 function robot() {
   return painted([
-    [sphere(.55, 0, 1.05, 0, 1.1, .92, .8), "#b1b4b9"], [sphere(.42, 0, 1.08, .26, 1, .64, .35), "#22242a"],
-    [sphere(.08, -.16, 1.12, .4), "#9ff5ea"], [sphere(.08, .16, 1.12, .4), "#9ff5ea"],
-    [cylinder(.04, .32, 0, 1.6, 0), "#b6b9be"], [sphere(.09, 0, 1.8, 0), "#ffd976"], [sphere(.28, 0, .52, 0), "#9a9ea6"],
+    [sphere(.55, 0, 1.05, 0, 1.1, .92, .8), "#65c7e8"], [sphere(.42, 0, 1.08, .26, 1, .64, .35), "#243e68"],
+    [sphere(.09, -.16, 1.12, .4), "#fff09a"], [sphere(.09, .16, 1.12, .4), "#fff09a"],
+    [sphere(.018, -.18, 1.145, .478), "#ffffff"], [sphere(.018, .14, 1.145, .478), "#ffffff"],
+    [new THREE.TorusGeometry(.11, .012, 5, 16, Math.PI).rotateZ(Math.PI).translate(0, 1.07, .407), "#fff4d6"],
+    [cylinder(.04, .32, 0, 1.6, 0), "#fff5df"], [sphere(.09, 0, 1.8, 0), "#ffbd5e"], [sphere(.28, 0, .52, 0), "#65d4b0"],
     // Inset visor trim, acoustic grilles and a neck bearing; all stay inside the old assistant's silhouette.
-    [new THREE.TorusGeometry(.345, .016, 6, 30).scale(1.14, .7, 1).translate(0, 1.08, .34), "#607582"],
-    [cylinder(.285, .035, 0, .53, 0, 20), "#59646f"],
+    [new THREE.TorusGeometry(.345, .016, 6, 30).scale(1.14, .7, 1).translate(0, 1.08, .34), "#368cbb"],
+    [cylinder(.285, .035, 0, .53, 0, 20), "#3f7391"],
     ...[-1, 1].flatMap(side => [
-      [sphere(.065, side * .58, 1.03, .1, .38, 1.25, .8), "#6c7d88"],
-      [sphere(.026, side * .594, 1.06, .13, .35, .3, 1), "#293742"],
-      [sphere(.026, side * .594, 1.00, .13, .35, .3, 1), "#293742"],
+      [sphere(.065, side * .58, 1.03, .1, .38, 1.25, .8), "#f8e9bb"],
+      [sphere(.026, side * .594, 1.06, .13, .35, .3, 1), "#317da4"],
+      [sphere(.026, side * .594, 1.00, .13, .35, .3, 1), "#317da4"],
     ] as [THREE.BufferGeometry, string][]),
   ], paint());
 }
@@ -70,7 +72,7 @@ function headset(male: boolean) {
   return mesh;
 }
 
-/** Smooth normals, a matte finish and the Puls colours instead of the kit's red and orange. */
+/** Keep the chosen operator and skeleton, with rounded shading and bright cartoon workwear. */
 function dressOperator(model: THREE.Object3D, gender: "male" | "female") {
   model.traverse(o => {
     const mesh = o as THREE.Mesh;
@@ -81,12 +83,15 @@ function dressOperator(model: THREE.Object3D, gender: "male" | "female") {
     mesh.castShadow = mesh.receiveShadow = true;
     for (const material of [mesh.material].flat() as THREE.MeshStandardMaterial[]) {
       if (!material.isMeshStandardMaterial) continue;
-      material.roughness = .72;
-      if (["Red_Dark", "Orange"].includes(material.name)) material.color.set("#36596a");
-      if (material.name === "White") material.color.set("#e8e2d5");
+      material.roughness = .78; material.metalness = 0;
+      if (["Red_Dark", "Orange"].includes(material.name)) material.color.set(gender === "male" ? "#318fcf" : "#ef8465");
+      if (material.name === "White") material.color.set("#fff2d5");
     }
   });
-  model.getObjectByName("Head")?.add(headset(gender === "male"));
+  const head = model.getObjectByName("Head");
+  // A restrained larger head is shared by the skinned operator and their headset; bind weights and clips stay intact.
+  if ((head as THREE.Bone | undefined)?.isBone) head!.scale.multiplyScalar(1.12);
+  head?.add(headset(gender === "male"));
   mergeSkinned(model);
 }
 
@@ -116,7 +121,7 @@ function mergeSkinned(model: THREE.Object3D) {
 export function createMascot(ctx: CityContext, initial: CityMascot = { gender: null, name: "Пульсар" }): Mascot {
   const root = new THREE.Group(); root.name = "city-mascot";
   root.position.set(0, ROOT_Y, 0); root.scale.setScalar(ROOT_SCALE); ctx.scene.add(root);
-  root.add(painted([[cylinder(.91, .12, 0, .04, 0, 48), "#aa8752"], [cylinder(.86, .23, 0, .18, 0, 48), "#324751"], [cylinder(.81, .06, 0, .325, 0, 48), "#ede4cf"]], paint()));
+  root.add(painted([[cylinder(.91, .12, 0, .04, 0, 48), "#ffc867"], [cylinder(.86, .23, 0, .18, 0, 48), "#518fc9"], [cylinder(.81, .06, 0, .325, 0, 48), "#fff4d6"]], paint()));
   // The pedestal is a static caster.
   ctx.requestShadowUpdate();
   const figure = new THREE.Group(); figure.name = "city-mascot-figure"; root.add(figure);

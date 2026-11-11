@@ -12,8 +12,8 @@ import { createTransportPlans, MARINE_MODEL_IDS, ROAD_MODEL_IDS, shuffled } from
 import type { Traffic } from "./traffic";
 
 type CopyMesh = ReturnType<typeof copyMesh>;
-interface Vehicle { route: Route; distance: number; speed: number; rank: number; phase: number }
-interface Pack { matrices: THREE.InstancedInterleavedBuffer; mesh: CopyMesh; count: number }
+interface Vehicle { route: Route; distance: number; speed: number; rank: number; phase: number; paint: number }
+interface Pack { matrices: THREE.InstancedInterleavedBuffer; tints: THREE.InstancedBufferAttribute; painted: Int32Array; mesh: CopyMesh; count: number }
 interface Fleet { model: TransportModel; vehicles: Vehicle[]; packs: Pack[]; marine: boolean }
 const activeAt = (rank: number, share: number) => Math.floor((rank + 1) * share) > Math.floor(rank * share);
 
@@ -49,15 +49,16 @@ export function createCollectionTraffic(ctx: CityContext, models: Map<string, Tr
       const model = models.get(id)!;
       let fleet = fleets.get(id);
       if (!fleet) { fleet = { model, vehicles: [], packs: [], marine: !!plan.boats }; fleets.set(id, fleet); }
-      fleet.vehicles.push({ route: plan.route, distance: ((rank / plan.cars + start) % 1) * plan.route.length, speed, rank: plan.boats ? marineIndex - 1 : rank, phase: random() * Math.PI * 2 });
+      fleet.vehicles.push({ route: plan.route, distance: ((rank / plan.cars + start) % 1) * plan.route.length, speed, rank: plan.boats ? marineIndex - 1 : rank, phase: random() * Math.PI * 2, paint: fleet.vehicles.length % Math.max(1, model.paints.length) });
     }
   }
   for (const fleet of fleets.values()) fleet.packs = fleet.model.lods.map((geometry, lod) => {
     const matrices = copyMatrices(fleet.vehicles.length).setUsage(THREE.DynamicDrawUsage);
-    const mesh = copyMesh(geometry, material, matrices, copyTints(fleet.vehicles.length));
+    const tints = copyTints(fleet.vehicles.length).setUsage(THREE.DynamicDrawUsage);
+    const mesh = copyMesh(geometry, material, matrices, tints);
     mesh.name = `city-traffic-${fleet.model.id}-lod${lod}`; mesh.userData.model = fleet.model.id; mesh.userData.lod = lod;
     mesh.castShadow = false; mesh.receiveShadow = true; group.add(mesh);
-    return { matrices, mesh, count: 0 };
+    return { matrices, tints, painted: new Int32Array(fleet.vehicles.length).fill(-1), mesh, count: 0 };
   });
 
   const roadCount = Math.max(1, roadIndex), boatCount = Math.max(1, marineIndex);
@@ -81,6 +82,7 @@ export function createCollectionTraffic(ctx: CityContext, models: Map<string, Tr
   const beams = copyMesh(beamGeometry, beamMaterial, lampMatrices, copyTints(roadCount)); beams.name = "city-traffic-beams"; parent.add(beams);
   const frustum = new THREE.Frustum(), projection = new THREE.Matrix4(), sphere = new THREE.Sphere();
   const position = new THREE.Vector3(), center = new THREE.Vector3(), matrix = new THREE.Matrix4(), size = new THREE.Vector3(), turn = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0);
+  const white = new THREE.Color(1, 1, 1);
   let enabled = !ctx.reducedMotion, dirty = true, clock = 0, lit = false;
   const ringY = (x: number, z: number) => ctx.world.roads.rings.some(r => Math.abs(Math.hypot(x, z) - r) < 1.05) ? .215 : .26;
   function place(dt: number) {
@@ -104,9 +106,15 @@ export function createCollectionTraffic(ctx: CityContext, models: Map<string, Tr
         if (distance > far || !frustum.intersectsSphere(sphere.set(center, reach))) continue;
         let lod = distance < quality.lodDistances[0] ? 0 : distance < quality.lodDistances[1] ? 1 : 2;
         if (quality.tier === "low") lod = Math.max(1, lod);
-        const pack = packs[lod];
+        const pack = packs[lod], slot = pack.count++;
         turn.setFromAxisAngle(up, p.heading);
-        matrix.compose(position, turn, size.setScalar(scale)).multiply(model.base).toArray(pack.matrices.array, pack.count++ * 16);
+        matrix.compose(position, turn, size.setScalar(scale)).multiply(model.base).toArray(pack.matrices.array, slot * 16);
+        // The paint belongs to the logical vehicle, so culling/density/LOD packing cannot repaint it.
+        if (pack.painted[slot] !== vehicle.paint) {
+          pack.painted[slot] = vehicle.paint;
+          (model.paints[vehicle.paint] ?? white).toArray(pack.tints.array, slot * 3);
+          pack.tints.needsUpdate = true;
+        }
         if (marine) {
           if (night) {
             // Navigation lamps follow the hull at its waterline, independent of a tall sail's full height.

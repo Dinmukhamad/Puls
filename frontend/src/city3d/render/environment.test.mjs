@@ -13,6 +13,12 @@ function context() {
 }
 test('night changes sky, fog and fill, keeps moon above the city, and restores daylight without adding lights', () => {
   const ctx = context(), sky = city.createSky(ctx);
+  const clouds = ctx.scene.getObjectByName('city-clouds');
+  assert.ok(clouds?.isMesh && !clouds.castShadow && !clouds.receiveShadow, 'sculpted clouds stay in one shadow-free batch');
+  const cloudGeometry = clouds.geometry, triangles = cloudGeometry.index.count / 3;
+  assert.ok(triangles > 1000 && triangles <= 6500, `${triangles} triangles for the whole cloud ring`);
+  assert.ok(Object.values(cloudGeometry.attributes).every(a => Array.from(a.array).every(Number.isFinite)));
+  let cloudFreed = false; cloudGeometry.addEventListener('dispose', () => { cloudFreed = true; });
   const day = { sun: sky.sun.intensity, fog: ctx.scene.fog.color.getHex(), fill: sky.hemisphere.color.getHex() };
   const children = ctx.scene.children.length, background = ctx.scene.backgroundNode;
   sky.setTimeOfDay(22);
@@ -23,12 +29,13 @@ test('night changes sky, fog and fill, keeps moon above the city, and restores d
   assert.notEqual(ctx.scene.fog.color.getHex(), day.fog);
   assert.notEqual(sky.hemisphere.color.getHex(), day.fill);
   assert.equal(ctx.scene.children.length, children);
+  assert.equal(clouds.geometry, cloudGeometry, 'day/night only changes cloud colour, not its geometry');
   sky.setTimeOfDay(city.DEFAULT_HOURS);
   assert.equal(ctx.scene.fog.color.getHex(), day.fog);
   assert.equal(sky.hemisphere.color.getHex(), day.fill);
   assert.equal(sky.sun.intensity, day.sun);
   assert.ok(ctx.requests >= 3);
-  sky.dispose(); assert.equal(ctx.listeners, 0); assert.equal(ctx.scene.children.length, 0);
+  sky.dispose(); assert.ok(cloudFreed); assert.equal(ctx.listeners, 0); assert.equal(ctx.scene.children.length, 0);
 });
 test('water covers the expanded lagoon/canal and changing night keeps one geometry and shader', () => {
   const ctx = context(), water = city.createWater(ctx), { geometry, material } = water.mesh;
@@ -133,7 +140,7 @@ test('creased normals: smooth across a gentle fold, sharp across a steep one', (
 
 test("the ranges: one mesh painted in its shader, smooth on the hills, in layers of haze that swallow the map's edge", () => {
   const ctx = context(), sky = city.createSky(ctx), mountains = city.createMountains(ctx), { geometry, material } = mountains.mesh;
-  assert.equal(ctx.scene.children.filter(c => c.isMesh).length, 1, 'one draw call');
+  assert.equal(ctx.scene.children.filter(c => c.name === 'city-mountains').length, 1, 'ranges remain one draw call, independently of the sky clouds');
   assert.ok(geometry.getAttribute('normal') && !geometry.getAttribute('color'), 'painted in the shader, not per face');
   assert.ok(!material.vertexColors && material.colorNode && material.outputNode, 'the ground and the haze are nodes');
   const position = geometry.getAttribute('position'), normal = geometry.getAttribute('normal'), seen = new Map(), v = new city.THREE.Vector3();

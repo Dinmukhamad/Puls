@@ -13,8 +13,8 @@ import * as THREE from "three/webgpu";
 import { FACE, MeshBuilder, arch as archShape, box as boxShape, cylinder, dome as domeShape, gableRoof, prism as prismShape, pyramid as pyramidShape, rgb, rod as rodShape, sphere, torus as torusShape, type BoxOptions, type Face, type V3 } from "./facade";
 
 export const C = {
-  stone: '#f1d49b', ivory: '#fff0cd', trim: '#dbab55', ink: '#1d3b60', glass: '#419cc8', gold: '#f1ae24', roof: '#236d8e', leaf: '#378f4c', wood: '#ae652e',
-  steel: '#aabac2', concrete: '#d3cebe', red: '#e6462f', taxi: '#ffc52f', slate: '#35678d', lawn: '#64b342', white: '#fbf7ed',
+  stone: '#ffe0a0', ivory: '#fff4d9', trim: '#eead45', ink: '#294e78', glass: '#61c4e8', gold: '#ffbd32', roof: '#268cc2', leaf: '#38aa58', wood: '#cb7d3c',
+  steel: '#a8cbd9', concrete: '#e3d9c4', red: '#ff6550', taxi: '#ffd13d', slate: '#397db2', lawn: '#82cd4c', white: '#fff8ea',
 };
 /** The top of the island plinth every landmark stands on (5.7 × 5.3, front steps out to z = 3). */
 export const PLINTH = .275;
@@ -28,7 +28,7 @@ export type Side = 'front' | 'back' | 'left' | 'right';
 /** Windows in a wall: bay and floor in kit units, the window's width and height as shares of them. */
 export interface Grid { bay: number; floor: number; w?: number; h?: number; even?: boolean }
 export interface BlockOptions {
-  /** Chamfer in kit units; by default a small one on big volumes and none on small parts. */
+  /** Chamfer in kit units; large volumes use broad, smoothly shaded toy corners. Zero keeps a deliberately thin edge. */
   r?: number;
   /** Windows in its walls, or a curtain wall when its finish is glass. */
   win?: Grid;
@@ -65,7 +65,10 @@ export function createKit() {
   /** A box standing on y0, centred on (x, z). */
   function block(w: number, h: number, d: number, c: string, x: number, y0: number, z: number, o: BlockOptions = {}) {
     const s = surface(c), small = Math.min(w, h, d), big = small >= .22;
-    const r = o.r ?? (small >= .3 ? .035 : 0);
+    // Broaden the existing bevel strips instead of subdividing their shells. Thin rods/rails and
+    // explicitly sharp eaves keep their size.
+    const requested = o.r ?? (small >= .3 ? .07 : 0);
+    const r = requested > 0 ? Math.min(small * .24, Math.max(requested * 1.65, Math.min(.12, small * .08))) : 0;
     const options: BoxOptions = { c: S(r), kind: s.kind, col: s.col, faces: o.faces, bottom: o.bottom, occlude: big };
     if (o.top === "none") options.noTop = true;
     else if (o.top === "deck") options.top = FACE.deck;
@@ -86,8 +89,8 @@ export function createKit() {
     if (big) draw(); else mb.detail(draw);
     if (architectural) mb.detail(() => {
       const x0 = S(x - w / 2), x1 = S(x + w / 2), z0 = S(z - d / 2), z1 = S(z + d / 2), base = S(y0), top = S(y0 + h);
-      boxShape(mb, [x0, base, z0, x1, base + S(.085), z1], { c: 0, kind: FACE.wall, col: rgb(C.concrete), top: FACE.trim, occlude: false });
-      boxShape(mb, [x0, top - S(.045), z0, x1, top, z1], { c: 0, kind: FACE.trim, col: rgb(s.kind === FACE.curtain ? C.steel : C.ivory), top: options.top, topCol: options.topCol, noTop: options.noTop, occlude: false });
+      boxShape(mb, [x0, base, z0, x1, base + S(.085), z1], { c: S(.022), kind: FACE.wall, col: rgb(C.concrete), top: FACE.trim, occlude: false });
+      boxShape(mb, [x0, top - S(.06), z0, x1, top, z1], { c: S(.018), kind: FACE.trim, col: rgb(s.kind === FACE.curtain ? C.steel : C.ivory), top: options.top, topCol: options.topCol, noTop: options.noTop, occlude: false });
       if (s.kind === FACE.curtain) for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
         const px = S(x + sx * (w / 2 - .016)), pz = S(z + sz * (d / 2 - .016)), half = S(.016);
         boxShape(mb, [px - half, base + S(.085), pz - half, px + half, top - S(.045), pz + half], { c: 0, kind: FACE.metal, col: rgb(C.steel), top: FACE.metal, occlude: false });
@@ -212,7 +215,7 @@ export function createKit() {
    */
   function panes(face: Side, at: number, y0: number, along: readonly number[], w: number, h: number, frame: string = C.ivory) {
     const out = face === 'front' || face === 'right' ? 1 : -1, side = face === 'left' || face === 'right', col = rgb(frame);
-    const qw = w + .1, qh = h + .14, bay = S(qw), floor = S(qh), win: [number, number, number, number] = [bay, floor, w / qw, h / qh];
+    const qw = w + .13, qh = h + .17, bay = S(qw), floor = S(qh), win: [number, number, number, number] = [bay, floor, w / qw, h / qh];
     for (const a of along) {
       const k = ++number, c0 = (k * 5) % 23, row = 2 + (k % 3), u0 = c0 * bay, u1 = u0 + bay, v0 = row * floor, v1 = v0 + floor;
       // The material centres a window at 0.57 of its cell: the cell is placed so the glass spans y0…y0 + h.
@@ -227,10 +230,10 @@ export function createKit() {
         mb.quad(pts, { kind: FACE.window, col, win, uv });
         boxShape(mb, out > 0 ? [centre - half * .8, sill - S(.045), o - S(.01), centre + half * .8, sill + S(.005), o + S(.07)] : [centre - half * .8, sill - S(.045), o - S(.07), centre + half * .8, sill + S(.005), o + S(.01)], { c: 0, kind: FACE.trim, col: rgb(C.stone), occlude: false });
       }
-      // Three shallow reveals give every individual window a real edge and shadow at close range. The
-      // glazing and its finer frame remain the material's grid, so distant windows do not multiply meshes.
+      // Chunky cream reveals read as a painted toy window even at the normal city camera distance.
+      // Glazing stays in the material, so distant windows do not multiply meshes.
       mb.detail(() => {
-        const low = S(y0 - .015), high = S(y0 + h + .015), depth0 = o - S(out > 0 ? .005 : .035), depth1 = o + S(out > 0 ? .035 : .005), t = S(.025), ww = S(w / 2 + .018);
+        const low = S(y0 - .025), high = S(y0 + h + .025), depth0 = o - S(out > 0 ? .005 : .045), depth1 = o + S(out > 0 ? .045 : .005), t = S(.042), ww = S(w / 2 + .025);
         for (const sign of [-1, 1]) {
           const a0 = centre + sign * ww - t / 2, a1 = a0 + t;
           boxShape(mb, side ? [depth0, low, a0, depth1, high, a1] : [a0, low, depth0, a1, high, depth1], { c: 0, kind: FACE.trim, col, top: FACE.trim, occlude: false });
@@ -250,9 +253,9 @@ export function createKit() {
   }
   /** A door on the front, its foot at y0: a panelled leaf in a frame, a step before it. */
   function door(w: number, h: number, x: number, y0: number, z: number, c: string = C.ink) {
-    block(w + .1, h + .06, .05, C.ivory, x, y0, z - .02, { r: 0 });
-    block(w, h, .05, c, x, y0, z, { r: 0 });
-    block(w * .04, h * .28, .02, C.gold, x + w * .3, y0 + h * .42, z + .035, { r: 0 });
+    block(w + .13, h + .08, .05, C.ivory, x, y0, z - .02, { r: .012 });
+    block(w, h, .05, c, x, y0, z, { r: .012 });
+    block(w * .065, h * .28, .02, C.gold, x + w * .3, y0 + h * .42, z + .035, { r: 0 });
     // A recessed lower panel and upper glazed leaf, both behind the existing projecting pull handle.
     mb.detail(() => {
       boxShape(mb, [S(x - w * .38), S(y0 + h * .12), S(z + .026), S(x + w * .38), S(y0 + h * .39), S(z + .034)], { c: 0, kind: FACE.trim, col: rgb(C.slate), top: FACE.trim, occlude: false });

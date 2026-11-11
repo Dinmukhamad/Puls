@@ -19,7 +19,8 @@ import type { CityView } from "../types";
 export const DEFAULT_VIEW: CityView = { azimuth: -2.62, polar: .95, distance: 90, target: [0, 0, 1] };
 /** The old city's limits. Its world reached 150 units and its inner ring road 25; bigger worlds scale them. */
 const V1_RADIUS = 150, V1_RING = 25;
-export const MIN_DISTANCE = 18, MAX_DISTANCE = 140, MIN_POLAR = .18, MAX_POLAR = 1.3, PAN_RADIUS = 40;
+// A low panorama also shows the sculpted clouds and sun above the mountain ridge.
+export const MIN_DISTANCE = 18, MAX_DISTANCE = 140, MIN_POLAR = .18, MAX_POLAR = 1.45, PAN_RADIUS = 40;
 /** A press that moves less than this (CSS px) stays a tap for the picker: it does not glide. */
 export const TAP_SLOP = 6;
 /** Mouse turning, radians per canvas height of drag (OrbitControls' 2π at rotateSpeed .75). */

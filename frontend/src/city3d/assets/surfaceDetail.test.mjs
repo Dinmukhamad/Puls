@@ -9,7 +9,7 @@ const built = await build({ stdin: { contents: `export * from './surfaceDetail.t
 } }] });
 const city = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`), { THREE } = city;
 
-test('a detailed imported material preserves maps, transparency, source colour and editable night emission', () => {
+test('a cartoon imported material preserves maps, transparency, source colour and editable night emission', () => {
   const map = new THREE.Texture(), source = new THREE.MeshStandardMaterial({ name: 'station-glass', map, color: '#426b79', transparent: true, opacity: .8, side: THREE.DoubleSide });
   source.userData = { imported: true };
   const material = city.detailedMaterialCopy(source);
@@ -17,7 +17,7 @@ test('a detailed imported material preserves maps, transparency, source colour a
   assert.equal(material.map, map); assert.equal(material.opacity, .8); assert.equal(material.transparent, true); assert.equal(material.side, THREE.DoubleSide);
   assert.equal(material.color.getHex(), source.color.getHex()); assert.equal(material.name, source.name);
   assert.notEqual(material.userData, source.userData); assert.deepEqual(source.userData, { imported: true });
-  assert.equal(material.userData.cityModelStyle, 'realistic-v1');
+  assert.equal(material.userData.cityModelStyle, 'cartoon-v1');
   material.emissive.set('#ffc77d'); assert.notEqual(material.emissive.getHex(), 0, 'station night controller can still light its glass');
   material.dispose(); source.dispose(); map.dispose();
 });
@@ -35,7 +35,7 @@ test('shared imported materials are replaced once and source maps live until the
   city.disposeModels(models); assert.equal(textureFreed, 1); assert.equal(geometryFreed, 1);
 });
 
-test('props carry physical surface nodes while their own emission remains black', () => {
+test('cartoon props retain one smooth surface material while their own emission remains black', () => {
   for (const finish of ['stone', 'wood', 'metal', 'paint', 'glass', 'cloth', 'foliage']) {
     const material = city.surfaceMaterial({ finish, vertexColors: true, properties: true });
     assert.ok(material.normalNode && material.colorNode && material.roughnessNode && material.metalnessNode);

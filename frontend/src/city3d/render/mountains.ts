@@ -1,23 +1,11 @@
 /**
- * Hills and mountains round the city (world/relief.ts): one mesh from the edge of the flat land (the island city's
- * horizon or the lake city's rectangle) out past the fog. One draw call; it only receives shadows (it lies beyond
- * the shadow map anyway). Over the railway's cutting the rays run four times closer; at the tunnel (world/railway.ts)
- * rings close together frame the portal: the hill's face has a hole the portal's hood fills, through which the bore
- * stays open, and the slope down to the hood keeps its shape.
- *
- * The look (docs/CITY_V4.md, stage 3), all in the shader, from the height, the slope and the ground's noise image:
- * - smooth shading over the rounded hills, sharp edges only where the ground folds (rock crests, the cutting);
- * - fresh meadow low down, forest green on the hills, blue-slate rock on steep and high slopes with layered strata and grit
- *   (the strata fade to their average once they are finer than a pixel), snow by height on the gentler faces of
- *   the peaks, its line wandering with the noise;
- * - layers of haze: it thickens with the distance from the camera and more in the valleys than on the crests, so
- *   each range stands paler behind the one before (none on the hills the forests stand on, so the trees never hang
- *   in it); it takes the sky's colour round each ridge (render/sky.ts
- *   skyHaze, with the sun's halo), and the last stretch of the relief dissolves into the sky entirely, so the
- *   edge of the map never shows. Day and night follow the sky's uniforms.
+ * Cartoon mountain ranges: rounded shading, broad green slopes, blue-grey rock and clean cream snow caps.
+ * Relief heights remain shared with the trees and railway cutting (world/relief.ts). The mesh still has one draw
+ * and the same low-device budget; broad painted zones replace grit and strata. Layered haze follows the sky's
+ * day/night colours and dissolves only the far map edge.
  */
 import * as THREE from "three/webgpu";
-import { cameraPosition, clamp, color, exp, float, fwidth, max, mix, normalWorld, output, positionWorld, smoothstep, texture, vec2, vec4 } from "three/tsl";
+import { cameraPosition, clamp, color, exp, float, max, mix, normalWorld, output, positionWorld, smoothstep, texture, vec2, vec4 } from "three/tsl";
 import type { CityContext } from "../engine/context";
 import type { WorldData } from "../world/types";
 import { FOREST_REACH } from "../world/generate";
@@ -27,9 +15,9 @@ import { groundNoise } from "./ground";
 import { FOG_NEAR, skyHaze, skyLook } from "./sky";
 
 const TOP = .2, TAU = Math.PI * 2;
-const MEADOW = "#78b960", DRY = "#a9b66c", FOREST = "#3d8754", ROCK = "#6c839a", ROCK_WARM = "#a09b88", SNOW = "#f1f8ff";
+const MEADOW = "#8bd46a", DRY = "#b4dc77", FOREST = "#54a96b", ROCK = "#7f9fbe", ROCK_WARM = "#a8bdce", SNOW = "#fffaf0";
 /** Faces meeting at more than this angle keep a sharp edge between them; gentler folds are shaded smooth. */
-const CREASE = 50 * Math.PI / 180;
+const CREASE = 60 * Math.PI / 180;
 /**
  * The haze over the ranges, in world radii of the camera's distance: none nearer than HAZE_START (where the scene's
  * fog begins, so the city and its hills stay clear), then thickening over every HAZE_DEPTH, up to HAZE_MAX; twice
@@ -38,7 +26,7 @@ const CREASE = 50 * Math.PI / 180;
  */
 export const HAZE_START = FOG_NEAR, HAZE_DEPTH = 1.15, HAZE_MAX = .82, HAZE_HEIGHT = 55, EDGE = .2;
 /** Clear daytime air keeps the nearest ridges' colour and contrast; night retains its deeper veil. */
-const DAY_HAZE_MAX = .65;
+const DAY_HAZE_MAX = .55;
 /**
  * The haze stays off the hills the forests stand on (world/generate.ts FOREST_REACH): the trees are copies with the
  * scene's fog only, and on hazed ground they would hang in the haze. It sets in past them over this share of a radius.
@@ -164,25 +152,21 @@ export function creasedGeometry(positions: ArrayLike<number>, indices: ArrayLike
 
 /** The ranges' material: ground painted by height and slope, then the layers of haze (see the top of the file). */
 function mountainMaterial(ctx: CityContext, end: number) {
-  const material = new THREE.MeshStandardNodeMaterial({ roughness: .94, metalness: 0 });
+  const material = new THREE.MeshStandardNodeMaterial({ roughness: 1, metalness: 0 });
   const p = positionWorld, height = p.y.sub(TOP), steep = float(1).sub(normalWorld.y), noise = groundNoise();
-  // Noise at three sizes: broad wander of the zones (cells of about 23 units, as the old painting's), patches of
-  // 6–24 units, and grit a fraction of a unit fine (the image's mip levels average it far away).
-  const jitter = texture(noise, p.xz.div(92)).x.sub(.5), patches = texture(noise, p.xz.div(170).add(.31)).y, grit = texture(noise, p.xz.div(29).add(.67)).z;
-  const forest = clamp(height.sub(2.5).div(9).add(jitter.mul(.6)), 0, 1).mul(patches.mul(.5).add(.75)).min(1);
-  const green = mix(mix(color(MEADOW), color(DRY), smoothstep(.55, .75, patches).mul(.6)), color(FOREST), forest);
-  // Rock: tilted strata a few units apart, bent by the noise, fading to their average once finer than a pixel; grit on top.
-  const rockLine = jitter.mul(30).add(48), layer = height.mul(1.1).add(p.x.mul(.17)).sub(p.z.mul(.11)).add(patches.mul(12));
-  const strata = layer.sin().mul(float(1).sub(smoothstep(.5, 1.6, fwidth(layer)))).mul(.06);
-  const scrub = max(float(.35).sub(steep), 0).mul(float(1).sub(smoothstep(rockLine.add(14), rockLine.add(26), height)));
-  const rock = mix(mix(color(ROCK), color(ROCK_WARM), patches), color(FOREST), scrub).mul(strata.add(.92).add(grit.mul(.16)));
-  const rocky = max(smoothstep(rockLine.sub(8), rockLine.add(8), height), smoothstep(.38, .52, steep));
-  // Snow from about 118 up (± 20 with the noise), only where the face is gentle enough to hold it; steeper as it rises.
-  const snowLine = jitter.mul(40).add(118).add(grit.sub(.5).mul(10)), hold = smoothstep(150, 175, height).mul(.12);
-  const snow = smoothstep(snowLine.sub(6), snowLine.add(6), height).mul(float(1).sub(smoothstep(hold.add(.5), hold.add(.6), steep)));
-  const ground = mix(mix(green, rock, rocky), color(SNOW).mul(grit.mul(.06).add(.97)), snow);
-  material.colorNode = ground.mul(jitter.mul(.1).add(1));
-  material.roughnessNode = mix(.95, .62, snow);
+  // Broad painted zones follow the rounded relief. Fine strata and photographic grit disappear in the toy world.
+  const jitter = texture(noise, p.xz.div(150)).x.sub(.5), patches = texture(noise, p.xz.div(240).add(.31)).y;
+  const forest = clamp(height.sub(3).div(13).add(jitter.mul(.25)), 0, 1);
+  const green = mix(mix(color(MEADOW), color(DRY), smoothstep(.55, .85, patches).mul(.22)), color(FOREST), forest);
+  const rockLine = jitter.mul(20).add(56);
+  const scrub = max(float(.38).sub(steep), 0).mul(float(1).sub(smoothstep(rockLine.add(12), rockLine.add(28), height)));
+  const rock = mix(mix(color(ROCK), color(ROCK_WARM), patches), color(FOREST), scrub);
+  const rocky = max(smoothstep(rockLine.sub(12), rockLine.add(14), height), smoothstep(.44, .64, steep));
+  // Generous, scalloped cream snow caps read clearly on small screens, without noisy rock speckles.
+  const snowLine = jitter.mul(32).add(104), hold = smoothstep(140, 175, height).mul(.16);
+  const snow = smoothstep(snowLine.sub(4), snowLine.add(5), height).mul(float(1).sub(smoothstep(hold.add(.55), hold.add(.7), steep)));
+  material.colorNode = mix(mix(green, rock, rocky), color(SNOW), snow);
+  material.userData.cityModelStyle = "cartoon-v1";
   // Layers of haze over the lit, fogged colour (`output`): see HAZE_*; the sky's colour round each point.
   const radius = end / RELIEF_END, look = skyLook(ctx.scene);
   const toward = p.sub(cameraPosition), distance = toward.length();

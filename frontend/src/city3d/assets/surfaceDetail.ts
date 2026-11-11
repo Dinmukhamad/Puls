@@ -1,7 +1,6 @@
-/** Shared fine surface detail for props and imported models; no added textures or render passes. */
+/** Clean, softly lit cartoon surfaces for props and imported models, in the existing shared draw calls. */
 import * as THREE from "three/webgpu";
-import { attribute, bumpMap, cameraPosition, float, materialColor, materialEmissive, max, mix, normalWorld, positionWorld, reflect, smoothstep, texture, vec3, vertexColor } from "three/tsl";
-import { groundNoise } from "../render/ground";
+import { attribute, cameraPosition, float, materialColor, materialEmissive, max, normalView, normalWorld, positionWorld, reflect, smoothstep, vec3, vertexColor } from "three/tsl";
 import { skyGradient, type SkyLook } from "../render/sky";
 import type { Model } from "./loader";
 
@@ -12,28 +11,27 @@ interface DetailOptions extends THREE.MeshStandardMaterialParameters {
   /** Courtyard/vegetation models bake physical roughness and metalness per surface. */
   properties?: boolean;
 }
-const RELIEF: Record<SurfaceFinish, number> = { stone: .012, wood: .005, metal: .0015, paint: .002, glass: .0002, cloth: .004, foliage: .006 };
-
 function detail(material: THREE.MeshStandardNodeMaterial, finish: SurfaceFinish, look: SkyLook | null, properties: boolean) {
-  const grain = texture(groundNoise(), positionWorld.xz.add(positionWorld.y.mul(.37)).mul(finish === "wood" ? 3.4 : 2.8));
   const base = materialColor, rough = properties ? attribute("aProp", "vec2").x : float(material.roughness);
   const metal = properties ? attribute("aProp", "vec2").y : float(material.metalness);
-  material.colorNode = base.mul(mix(.965, 1.035, grain.g));
-  material.roughnessNode = rough.add(grain.b.sub(.5).mul(.035)).clamp(.06, .98);
-  material.metalnessNode = metal;
-  material.normalNode = bumpMap(grain.r.mul(RELIEF[finish]));
+  // Large colour areas and the model's rounded normals carry the shape. Removing tiny bump/grain also
+  // makes distant trees and station roofs stable while the camera moves on a small screen.
+  material.colorNode = base;
+  material.roughnessNode = finish === "glass" ? float(.3) : rough.max(.64).min(.94);
+  material.metalnessNode = metal.min(.24);
+  material.normalNode = normalView;
   const view = cameraPosition.sub(positionWorld).normalize(), facing = max(normalWorld.dot(view), 0);
   const fresnel = float(.04).add(facing.oneMinus().pow(5).mul(.96));
   const direction = reflect(view.negate(), normalWorld), sky = skyGradient(look, vec3(direction.x, max(direction.y, 0), direction.z));
-  const sheen = finish === "glass" ? float(.7) : metal.mul(.28).add(rough.oneMinus().mul(.12));
+  const sheen = finish === "glass" ? float(.3) : metal.mul(.12).add(rough.oneMinus().mul(.05));
   let reflected = materialEmissive.add(sky.mul(fresnel).mul(sheen));
   if (finish === "foliage" && material.vertexColors) {
     // Broad, restrained leaf light; brown trunks and soil keep their opaque shading.
     const c = vertexColor().xyz, green = smoothstep(.015, .1, c.g.sub(max(c.r, c.b)));
-    reflected = reflected.add(c.mul(green).mul(.055));
+    reflected = reflected.add(c.mul(green).mul(.025));
   }
   material.emissiveNode = reflected;
-  material.userData.cityModelStyle = "realistic-v1";
+  material.userData.cityModelStyle = "cartoon-v1";
   material.userData.citySurfaceEmission = "reflected-light";
   return material;
 }

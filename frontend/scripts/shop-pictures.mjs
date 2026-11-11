@@ -1,7 +1,7 @@
 /**
  * The pictures of the district shop (src/pages/city/CityShop.tsx): every thing it sells, rendered from the city's own
  * models and layouts (world/landLayouts.ts, world/decor.ts, assets/catalogue.ts) on a tile of grass, in a headless
- * browser, and written to public/city/shop/v7 as small WebP files the shop loads only when it shows them. Run it
+ * browser, and written to public/city/shop/v8 as small WebP files the shop loads only when it shows them. Run it
  * again when a model or a layout changes (and bump the folder's version, so browsers take the new pictures):
  *
  *   cd frontend && node scripts/shop-pictures.mjs
@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 import { createServer } from "vite";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
-const OUT = fileURLToPath(new URL("../public/city/shop/v7/", import.meta.url));
+const OUT = fileURLToPath(new URL("../public/city/shop/v8/", import.meta.url));
 const { chromium } = await import(process.env.PLAYWRIGHT ?? "playwright").catch(() => {
   throw new Error("Playwright is needed: npm i -D playwright, or PLAYWRIGHT=<path to playwright/index.mjs>");
 });
@@ -90,11 +90,11 @@ async function main() {
   const out = document.createElement("canvas"); out.width = WIDTH; out.height = HEIGHT;
   const draw = out.getContext("2d"); draw.imageSmoothingQuality = "high";
   const camera = new THREE.PerspectiveCamera(28, WIDTH / HEIGHT, .5, 500);
-  const grass = new THREE.MeshStandardNodeMaterial({ color: "#9fcb78", roughness: .95 }), soil = new THREE.MeshStandardNodeMaterial({ color: "#8a6b4c", roughness: 1 });
+  const grass = new THREE.MeshStandardNodeMaterial({ color: "#8acb63", roughness: .95 }), soil = new THREE.MeshStandardNodeMaterial({ color: "#ba8b59", roughness: 1 });
   const images = {};
   for (const family of ITEMS) {
     const scene = new THREE.Scene(), { cols, rows, placements, surfaces, ground } = stage(family);
-    scene.add(new THREE.HemisphereLight("#e0f0ff", "#7d9565", 1.22));
+    scene.add(new THREE.HemisphereLight("#e8f5ff", "#91ad72", 1.45));
     const width = cols * CELL + 1.2, depth = rows * CELL + 1.2;
     const tile = new THREE.Mesh(new THREE.BoxGeometry(width, .6, depth).translate(0, TOP - .3, 0), [soil, soil, grass, soil, soil, soil]);
     tile.receiveShadow = true; scene.add(tile);
@@ -110,7 +110,7 @@ async function main() {
     const look = new THREE.Vector3().setFromSphericalCoords(1, 1.0, .62), fov = THREE.MathUtils.degToRad(camera.fov) / 2;
     const reach = sphere.radius / Math.sin(Math.min(fov, Math.atan(Math.tan(fov) * camera.aspect))) * 1.02;
     camera.position.copy(sphere.center).addScaledVector(look, reach); camera.lookAt(sphere.center); camera.updateMatrixWorld(true);
-    const sun = new THREE.DirectionalLight("#ffe9c8", 3.3);
+    const sun = new THREE.DirectionalLight("#fff0cf", 2.8);
     sun.position.copy(sphere.center).add(new THREE.Vector3(-52, 46, 34).normalize().multiplyScalar(sphere.radius * 3)); sun.target.position.copy(sphere.center);
     sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -.0004; sun.shadow.normalBias = .02;
     Object.assign(sun.shadow.camera, { left: -sphere.radius * 1.3, right: sphere.radius * 1.3, top: sphere.radius * 1.3, bottom: -sphere.radius * 1.3, near: .1, far: sphere.radius * 6 });

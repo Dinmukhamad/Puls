@@ -1,5 +1,5 @@
 /**
- * The stretched buildings of the city in its v4 style (docs/CITY_V4.md, stage 2b): residential sections, the floors
+ * The city's rounded cartoon buildings (docs/CITY_V4.md, stage 2b): residential sections, the floors
  * over an arch, cottages and their garages, gabled roofs, office towers and the plain blocks of the first city. Each
  * is a unit model (assets/facade.ts MeshBuilder.build({ unit })): drawn at a nominal size in metres, handed over in
  * the unit box (x and z in ±0.5, y 0…1), and stretched by every copy to its width, depth and height, as the layouts
@@ -10,7 +10,7 @@
 import type * as THREE from "three/webgpu";
 import { FACE, MeshBuilder, bakeOcclusion, box, gableRoof, parapet, rgb, rod, type V3 } from "./facade";
 
-const WHITE: V3 = [1, 1, 1], TRIM = rgb("#fff1c9"), DARK = rgb("#24496d"), CONCRETE = rgb("#dbcca9"), RAIL = rgb("#83b8d2");
+const WHITE: V3 = [1, 1, 1], TRIM = rgb("#fff8dc"), DARK = rgb("#337b9e"), CONCRETE = rgb("#f2d495"), RAIL = rgb("#a3d9e8");
 /** A floor of the residential sections and cottages (world/complexes.ts FLOOR, 0.75 units), in metres. */
 const FLOOR = 3;
 /** A floor of the office towers (OFFICE_FLOOR, 0.9 units). */
@@ -21,9 +21,9 @@ function roofPlant(mb: MeshBuilder, x: number, y: number, z: number, w: number, 
   mb.detail(() => {
     box(mb, [x - w / 2 - .08, y, z - d / 2 - .08, x + w / 2 + .08, y + .08, z + d / 2 + .08], { c: 0, kind: FACE.trim, col: DARK, top: FACE.trim, occlude: false });
     box(mb, [x - w / 2, y + .08, z - d / 2, x + w / 2, y + h + .08, z + d / 2], { c: .04, kind: FACE.metal, col: RAIL, top: FACE.trim, topCol: DARK, occlude: false });
-    for (let k = 0; k < 4; k++) {
-      const xx = x - w * .38 + k * w * .22, yy = y + h + .082;
-      mb.quad([[xx, yy, z - d * .36], [xx, yy, z + d * .36], [xx + w * .06, yy, z + d * .36], [xx + w * .06, yy, z - d * .36]], { kind: FACE.metal, col: RAIL });
+    for (let k = 0; k < 2; k++) {
+      const xx = x - w * .28 + k * w * .44, yy = y + h + .082;
+      mb.quad([[xx, yy, z - d * .36], [xx, yy, z + d * .36], [xx + w * .12, yy, z + d * .36], [xx + w * .12, yy, z - d * .36]], { kind: FACE.metal, col: RAIL });
     }
   });
 }
@@ -31,8 +31,8 @@ function roofPlant(mb: MeshBuilder, x: number, y: number, z: number, w: number, 
 /** Recessed wall grille; small planar slats give depth cues without tessellating an entire facade. */
 function wallVent(mb: MeshBuilder, x: number, y: number, z: number, w: number, h: number, side = 1) {
   mb.detail(() => {
-    for (let k = 0; k < 3; k++) {
-      const yy = y + k * h / 3, points: V3[] = [[x - w / 2, yy, z], [x + w / 2, yy, z], [x + w / 2, yy + h * .18, z], [x - w / 2, yy + h * .18, z]];
+    for (let k = 0; k < 2; k++) {
+      const yy = y + k * h / 2, points: V3[] = [[x - w / 2, yy, z], [x + w / 2, yy, z], [x + w / 2, yy + h * .28, z], [x - w / 2, yy + h * .28, z]];
       mb.quad(side > 0 ? points : points.reverse(), { kind: FACE.metal, col: DARK });
     }
   });
@@ -46,7 +46,7 @@ function wallVent(mb: MeshBuilder, x: number, y: number, z: number, w: number, h
  */
 export function sectionGeometry(floors: number): THREE.BufferGeometry {
   const W = 12.8, D = 9.6, H = floors * FLOOR, mb = new MeshBuilder(), x = W / 2, z = D / 2;
-  box(mb, [-x, 0, -z, x, H, z], { c: .15, kind: FACE.window, col: WHITE, top: FACE.deck, bay: W / 3, floor: FLOOR, winW: .5, winH: .52, door: ["+z", "-z"] });
+  box(mb, [-x, 0, -z, x, H, z], { c: .44, kind: FACE.window, col: WHITE, top: FACE.deck, bay: W / 3, floor: FLOOR, winW: .58, winH: .6, door: ["+z", "-z"] });
   for (const side of [-1, 1]) {
     const front = side * z, out = side * (z + .62);
     // The canopy over the entrance.
@@ -67,18 +67,18 @@ export function sectionGeometry(floors: number): THREE.BufferGeometry {
   box(mb, [1.2, H, -2, 4.4, H + 2.4, 2], { c: .08, kind: FACE.wall, col: WHITE, top: FACE.deck });
   roofPlant(mb, -2.6, H + .02, -.4, 2.0, 2.2, .55);
   wallVent(mb, 2.8, H + .5, 2.005, 1.2, .8);
-  bakeOcclusion(mb, { rays: 16 });
+  bakeOcclusion(mb, { strength: .64, rays: 16 });
   return mb.build({ unit: [W, H, D] });
 }
 
 /** The floors over an arch: the section's walls and parapet, closed underneath (the arch's ceiling), nominally two floors. */
 export function archGeometry(): THREE.BufferGeometry {
   const W = 12.8, D = 9.6, H = 2 * FLOOR, mb = new MeshBuilder(), x = W / 2, z = D / 2;
-  box(mb, [-x + .04, 0, -z + .04, x - .04, H, z - .04], { c: .15, kind: FACE.window, col: WHITE, top: FACE.deck, bay: W / 3, floor: FLOOR, winW: .5, winH: .52, bottom: true });
+  box(mb, [-x + .04, 0, -z + .04, x - .04, H, z - .04], { c: .44, kind: FACE.window, col: WHITE, top: FACE.deck, bay: W / 3, floor: FLOOR, winW: .58, winH: .6, bottom: true });
   box(mb, [-x, FLOOR - .06, -z, x, FLOOR + .04, z], { c: 0, kind: FACE.trim, col: TRIM, top: FACE.trim, occlude: false });
   parapet(mb, -x, -z, x, z, H, .45, .25, WHITE);
   roofPlant(mb, 2.0, H + .01, -.6, 1.8, 1.6, .23);
-  bakeOcclusion(mb, { rays: 16, ground: 0 });
+  bakeOcclusion(mb, { strength: .64, rays: 16, ground: 0 });
   return mb.build({ unit: [W, H, D] });
 }
 
@@ -91,25 +91,25 @@ export function cottageGeometry(): THREE.BufferGeometry {
   const W = 12, D = 9.6, H = FLOOR, mb = new MeshBuilder(), x = W / 2, z = D / 2;
   // A masonry plinth and projecting fascia remain in the old envelope; only the wall is slightly recessed.
   box(mb, [-x, 0, -z, x, .18, z], { c: 0, kind: FACE.trim, col: CONCRETE, top: FACE.trim });
-  box(mb, [-x + .06, .16, -z + .06, x - .06, H, z - .06], { c: .14, kind: FACE.window, col: WHITE, top: FACE.trim, topCol: TRIM, noTop: true, bay: 3.3, floor: FLOOR, winW: .42, winH: .5, door: ["+z"] });
+  box(mb, [-x + .06, .16, -z + .06, x - .06, H, z - .06], { c: .32, kind: FACE.window, col: WHITE, top: FACE.trim, topCol: TRIM, noTop: true, bay: 3.3, floor: FLOOR, winW: .52, winH: .6, door: ["+z"] });
   box(mb, [-x, H - .1, -z, x, H, z], { c: 0, kind: FACE.trim, col: TRIM, top: FACE.trim, occlude: false });
-  bakeOcclusion(mb, { rays: 16 });
+  bakeOcclusion(mb, { strength: .64, rays: 16 });
   return mb.build({ unit: [W, H, D] });
 }
 
 /** A garage beside a house (a one-floor cottage in the garage's graphite, world/landLayouts.ts): its up-and-over door to the front, plain walls. */
 export function garageGeometry(): THREE.BufferGeometry {
   const W = 7.6, D = 9.6, H = FLOOR, mb = new MeshBuilder(), x = W / 2, z = D / 2;
-  box(mb, [-x, 0, -z, x, H, z], { c: .12, kind: FACE.wall, col: WHITE, top: FACE.trim, topCol: TRIM });
+  box(mb, [-x, 0, -z, x, H, z], { c: .32, kind: FACE.wall, col: WHITE, top: FACE.trim, topCol: TRIM });
   mb.detail(() => {
-    box(mb, [-2.7, 0, z - .02, 2.7, 2.45, z + .06], { c: 0, kind: FACE.trim, col: rgb("#e2e0da"), top: FACE.trim, occlude: false });
-    for (let k = 1; k < 5; k++) box(mb, [-2.6, k * .49 - .02, z + .06, 2.6, k * .49 + .02, z + .09], { c: 0, kind: FACE.trim, col: rgb("#b9b8b2"), top: FACE.trim, occlude: false });
+    box(mb, [-2.7, 0, z - .02, 2.7, 2.45, z + .06], { c: 0, kind: FACE.trim, col: rgb("#fff0ca"), top: FACE.trim, occlude: false });
+    for (let k = 1; k < 5; k++) box(mb, [-2.6, k * .49 - .02, z + .06, 2.6, k * .49 + .02, z + .09], { c: 0, kind: FACE.trim, col: rgb("#d6bb8d"), top: FACE.trim, occlude: false });
     box(mb, [-2.85, 2.45, z - .02, 2.85, 2.6, z + .12], { c: 0, kind: FACE.trim, col: TRIM, top: FACE.trim, occlude: false });
     for (const xx of [-2.76, 2.76]) box(mb, [xx - .045, 0, z + .075, xx + .045, 2.5, z + .11], { c: 0, kind: FACE.metal, col: RAIL, top: FACE.metal, occlude: false });
     box(mb, [-.3, 1.14, z + .085, .3, 1.21, z + .115], { c: 0, kind: FACE.metal, col: DARK, top: FACE.metal, occlude: false });
   });
   wallVent(mb, 0, 2.66, z + .006, 1.8, .2);
-  bakeOcclusion(mb, { rays: 16 });
+  bakeOcclusion(mb, { strength: .64, rays: 16 });
   return mb.build({ unit: [W, H, D] });
 }
 
@@ -120,11 +120,11 @@ export function garageGeometry(): THREE.BufferGeometry {
  */
 export function roofGeometry(): THREE.BufferGeometry {
   const W = 13.2, D = 10.8, H = 4, ov = .6, mb = new MeshBuilder();
-  gableRoof(mb, { a0: -D / 2 + ov, a1: D / 2 - ov, b0: -W / 2 + ov, b1: W / 2 - ov, y: H * ov / (W / 2), pitch: H / (W / 2), overhang: ov, axis: "z", roof: WHITE, wall: rgb("#ece6d9"), soffit: rgb("#e6e1d6") });
+  gableRoof(mb, { a0: -D / 2 + ov, a1: D / 2 - ov, b0: -W / 2 + ov, b1: W / 2 - ov, y: H * ov / (W / 2), pitch: H / (W / 2), overhang: ov, axis: "z", roof: WHITE, wall: rgb("#fff1cf"), soffit: rgb("#f1d9b2") });
   // The gables under the eaves line, down to the roof's foot (the house's walls end at y = 0).
   for (const side of [-1, 1]) {
     const zz = side * (D / 2 - ov), y = H * ov / (W / 2), xx = W / 2 - ov;
-    mb.quad(side > 0 ? [[-xx, 0, zz], [xx, 0, zz], [xx, y, zz], [-xx, y, zz]] : [[xx, 0, zz], [-xx, 0, zz], [-xx, y, zz], [xx, y, zz]], { kind: FACE.trim, col: rgb("#ece6d9") });
+    mb.quad(side > 0 ? [[-xx, 0, zz], [xx, 0, zz], [xx, y, zz], [-xx, y, zz]] : [[xx, 0, zz], [-xx, 0, zz], [-xx, y, zz], [xx, y, zz]], { kind: FACE.trim, col: rgb("#fff1cf") });
   }
   mb.detail(() => {
     for (const side of [-1, 1]) for (const end of [-1, 1]) rod(mb, [side * W / 2, -.02, end * D / 2], [0, H + .02, end * D / 2], .16, { kind: FACE.trim, col: TRIM });
@@ -136,7 +136,7 @@ export function roofGeometry(): THREE.BufferGeometry {
   });
   // Gables and soffits keep their own colours: the copy's shade is the roof's (facade material, unit models).
   for (let v = 0; v < mb.count; v++) if (mb.s[v * 4 + 2] === FACE.wall) mb.s[v * 4 + 2] = FACE.trim;
-  bakeOcclusion(mb, { rays: 16, ground: 0, reach: 2 });
+  bakeOcclusion(mb, { strength: .64, rays: 16, ground: 0, reach: 2 });
   return mb.build({ unit: [W, H, D] });
 }
 
@@ -147,12 +147,12 @@ export function roofGeometry(): THREE.BufferGeometry {
  */
 export function officeGeometry(floors: number): THREE.BufferGeometry {
   const W = 36, D = 28, H = floors * OFFICE, mb = new MeshBuilder(), x = W / 2, z = D / 2;
-  box(mb, [-x, 0, -z, x, H, z], { c: .35, kind: FACE.curtain, col: WHITE, top: FACE.deck, bay: 1.5, floor: OFFICE });
+  box(mb, [-x, 0, -z, x, H, z], { c: 1.05, kind: FACE.curtain, col: WHITE, top: FACE.deck, bay: 2.25, floor: OFFICE });
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) box(mb, [sx * x - .45, 0, sz * z - .45, sx * x + .45, H + .3, sz * z + .45], { c: .08, kind: FACE.trim, col: TRIM, top: FACE.trim });
   if (floors > 4) for (const side of [-1, 1]) box(mb, side > 0 ? [-x, H - 3.2, z - .1, x, H - 2.4, z + .25] : [-x, H - 3.2, -z - .25, x, H - 2.4, -z + .1], { c: 0, kind: FACE.trim, col: TRIM, top: FACE.trim, occlude: false });
   for (const side of [-1, 1]) box(mb, side > 0 ? [-6, 3.4, z, 6, 3.7, z + 4] : [-6, 3.4, -z - 4, 6, 3.7, -z], { c: 0, kind: FACE.trim, col: DARK, top: FACE.trim, bottom: true, occlude: false });
   for (const side of [-1, 1]) {
-    box(mb, side > 0 ? [-4.2, 0, z - .04, 4.2, 3.35, z + 2.6] : [-4.2, 0, -z - 2.6, 4.2, 3.35, -z + .04], { c: .06, kind: FACE.curtain, col: rgb("#b8cbd2"), top: FACE.trim, bay: 1.4, floor: 3.35, occlude: false });
+    box(mb, side > 0 ? [-4.2, 0, z - .04, 4.2, 3.35, z + 2.6] : [-4.2, 0, -z - 2.6, 4.2, 3.35, -z + .04], { c: .06, kind: FACE.curtain, col: rgb("#91cfe1"), top: FACE.trim, bay: 1.4, floor: 3.35, occlude: false });
     for (const xx of [-5.6, 5.6]) box(mb, [xx - .08, 0, side * (z + 3.5) - .08, xx + .08, 3.4, side * (z + 3.5) + .08], { c: 0, kind: FACE.metal, col: RAIL, top: FACE.metal, occlude: false });
   }
   parapet(mb, -x, -z, x, z, H, .9, .45, TRIM);
@@ -163,7 +163,7 @@ export function officeGeometry(floors: number): THREE.BufferGeometry {
   wallVent(mb, 9.5, H + .5, -1.994, 3.0, 1.2);
   // Plant and walls take no glass shade.
   for (let v = 0; v < mb.count; v++) if (mb.s[v * 4 + 2] === FACE.wall) mb.s[v * 4 + 2] = FACE.trim;
-  bakeOcclusion(mb, { rays: 16, reach: 5 });
+  bakeOcclusion(mb, { strength: .64, rays: 16, reach: 5 });
   return mb.build({ unit: [W, H, D] });
 }
 
@@ -173,12 +173,12 @@ export function officeGeometry(floors: number): THREE.BufferGeometry {
  */
 export function blockGeometry(floors: number, glass: boolean): THREE.BufferGeometry {
   const W = 12, D = 12, H = floors * FLOOR, mb = new MeshBuilder(), x = W / 2, z = D / 2;
-  if (glass) box(mb, [-x, 0, -z, x, H, z], { c: .2, kind: FACE.curtain, col: WHITE, top: FACE.deck, bay: 1.5, floor: FLOOR });
-  else box(mb, [-x, 0, -z, x, H, z], { c: .15, kind: FACE.window, col: WHITE, top: FACE.deck, bay: 3, floor: FLOOR, winW: .48, winH: .5, door: ["+z"] });
+  if (glass) box(mb, [-x, 0, -z, x, H, z], { c: .48, kind: FACE.curtain, col: WHITE, top: FACE.deck, bay: 2.25, floor: FLOOR });
+  else box(mb, [-x, 0, -z, x, H, z], { c: .44, kind: FACE.window, col: WHITE, top: FACE.deck, bay: 3, floor: FLOOR, winW: .56, winH: .6, door: ["+z"] });
   parapet(mb, -x, -z, x, z, H, .5, .3, glass ? TRIM : WHITE);
   box(mb, [-3, H, -2, 1.5, H + 2.2, 2.5], { c: .08, kind: FACE.trim, col: CONCRETE, top: FACE.deck });
   roofPlant(mb, 3.4, H + .02, -2.4, 1.5, 1.8, .55);
   wallVent(mb, -.75, H + .5, 2.506, 2.5, .9);
-  bakeOcclusion(mb, { rays: 16 });
+  bakeOcclusion(mb, { strength: .64, rays: 16 });
   return mb.build({ unit: [W, H, D] });
 }

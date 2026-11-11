@@ -1,14 +1,14 @@
-/** Six pedestrian silhouettes on the city's shared shader rig; no skeletons, textures or per-frame CPU animation. */
+/** Six rounded cartoon pedestrian silhouettes on the city's shared shader rig; no skeletons, textures or per-frame CPU animation. */
 import * as THREE from "three/webgpu";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 
 export const PEOPLE = [
-  { id: "casual-jacket", name: "Горожанин в куртке", outfit: "Куртка и джинсы", description: "Короткая стрижка, куртка с воротником, джинсы и светлые кеды.", palette: { shirt: "#287b9e", skin: "#d19b77", trousers: "#354b68", hair: "#292520", shoes: "#e8e5dc", accent: "#d5aa69" } },
-  { id: "trench-bag", name: "Горожанка в плаще", outfit: "Плащ и сумка", description: "Приталенный плащ, волосы до плеч, пояс и небольшая сумка через плечо.", palette: { shirt: "#c6a276", skin: "#e9bc99", trousers: "#4b515b", hair: "#432e25", shoes: "#654533", accent: "#854d32" } },
-  { id: "sporty-ponytail", name: "Горожанка в худи", outfit: "Худи и кроссовки", description: "Спортивная одежда, собранные волосы, худи с капюшоном и контрастные кроссовки.", palette: { shirt: "#8262ae", skin: "#976543", trousers: "#343e4b", hair: "#272322", shoes: "#f1ede4", accent: "#54b79f" } },
-  { id: "business-suit", name: "Горожанин в костюме", outfit: "Костюм и галстук", description: "Пиджак с лацканами, светлая рубашка, галстук и аккуратная короткая причёска.", palette: { shirt: "#354d66", skin: "#bd8965", trousers: "#344154", hair: "#332a26", shoes: "#342d29", accent: "#a64d51" } },
-  { id: "silver-coat", name: "Горожанин в пальто", outfit: "Пальто и шарф", description: "Седые волосы, свободное пальто, шарф и удобная обувь.", palette: { shirt: "#597563", skin: "#dfb391", trousers: "#5b5754", hair: "#c5c6c2", shoes: "#58483e", accent: "#c1a56b" } },
-  { id: "backpack-cap", name: "Горожанин с рюкзаком", outfit: "Футболка, кепка и рюкзак", description: "Футболка с короткими рукавами, кепка с козырьком и небольшой городской рюкзак.", palette: { shirt: "#d97a49", skin: "#b7805c", trousers: "#42666a", hair: "#302923", shoes: "#e2ded2", accent: "#325872" } },
+  { id: "casual-jacket", name: "Горожанин в куртке", outfit: "Куртка и джинсы", description: "Короткая стрижка, куртка с воротником, джинсы и светлые кеды.", palette: { shirt: "#269ee2", skin: "#d19b77", trousers: "#354b68", hair: "#292520", shoes: "#e8e5dc", accent: "#ffe16b" } },
+  { id: "trench-bag", name: "Горожанка в плаще", outfit: "Плащ и сумка", description: "Приталенный плащ, волосы до плеч, пояс и небольшая сумка через плечо.", palette: { shirt: "#f5bc5b", skin: "#e9bc99", trousers: "#4b515b", hair: "#432e25", shoes: "#654533", accent: "#dc6653" } },
+  { id: "sporty-ponytail", name: "Горожанка в худи", outfit: "Худи и кроссовки", description: "Спортивная одежда, собранные волосы, худи с капюшоном и контрастные кроссовки.", palette: { shirt: "#975bda", skin: "#976543", trousers: "#343e4b", hair: "#272322", shoes: "#f1ede4", accent: "#4bd1af" } },
+  { id: "business-suit", name: "Горожанин в костюме", outfit: "Костюм и галстук", description: "Пиджак с лацканами, светлая рубашка, галстук и аккуратная короткая причёска.", palette: { shirt: "#3b6fb1", skin: "#bd8965", trousers: "#344154", hair: "#332a26", shoes: "#342d29", accent: "#ff765e" } },
+  { id: "silver-coat", name: "Горожанин в пальто", outfit: "Пальто и шарф", description: "Седые волосы, свободное пальто, шарф и удобная обувь.", palette: { shirt: "#36aa83", skin: "#dfb391", trousers: "#5b5754", hair: "#c5c6c2", shoes: "#58483e", accent: "#ffd465" } },
+  { id: "backpack-cap", name: "Горожанин с рюкзаком", outfit: "Футболка, кепка и рюкзак", description: "Футболка с короткими рукавами, кепка с козырьком и небольшой городской рюкзак.", palette: { shirt: "#ff9457", skin: "#b7805c", trousers: "#42666a", hair: "#302923", shoes: "#e2ded2", accent: "#386cbb" } },
 ] as const;
 
 export type PersonDetail = "near" | "far";
@@ -17,12 +17,12 @@ const SLOT = { shirt: 0, skin: 1, trousers: 2, hair: 3, shoes: 4, sleeve: 5, acc
 const HIP = .71, KNEE = .41, ANKLE = .09, SHOULDER = 1.166, ELBOW = .921;
 interface Shape { shoulder: number; waist: number; hem: number; bottom: number; depth: number; arm: number; leg: number; head: number; style: "short" | "bob" | "pony" | "part" | "silver" | "cap" }
 const SHAPES: Shape[] = [
-  { shoulder: .202, waist: .154, hem: .155, bottom: .80, depth: .69, arm: .062, leg: .064, head: .104, style: "short" },
-  { shoulder: .177, waist: .127, hem: .198, bottom: .59, depth: .66, arm: .054, leg: .056, head: .098, style: "bob" },
-  { shoulder: .184, waist: .145, hem: .154, bottom: .835, depth: .70, arm: .055, leg: .059, head: .099, style: "pony" },
-  { shoulder: .194, waist: .148, hem: .165, bottom: .785, depth: .66, arm: .059, leg: .060, head: .103, style: "part" },
-  { shoulder: .196, waist: .168, hem: .182, bottom: .665, depth: .73, arm: .061, leg: .062, head: .105, style: "silver" },
-  { shoulder: .181, waist: .145, hem: .152, bottom: .835, depth: .69, arm: .054, leg: .058, head: .101, style: "cap" },
+  { shoulder: .202, waist: .154, hem: .155, bottom: .80, depth: .69, arm: .062, leg: .064, head: .132, style: "short" },
+  { shoulder: .177, waist: .127, hem: .198, bottom: .59, depth: .66, arm: .054, leg: .056, head: .125, style: "bob" },
+  { shoulder: .184, waist: .145, hem: .154, bottom: .835, depth: .70, arm: .055, leg: .059, head: .127, style: "pony" },
+  { shoulder: .194, waist: .148, hem: .165, bottom: .785, depth: .66, arm: .059, leg: .060, head: .131, style: "part" },
+  { shoulder: .196, waist: .168, hem: .182, bottom: .665, depth: .73, arm: .061, leg: .062, head: .134, style: "silver" },
+  { shoulder: .181, waist: .145, hem: .152, bottom: .835, depth: .69, arm: .054, leg: .058, head: .129, style: "cap" },
 ];
 
 /** A closed coat at distance: keep the shoulder breadth without subpixel folds. */
@@ -74,7 +74,7 @@ export function personGeometry(variant = 0, detail: PersonDetail = "near"): THRE
   };
   if (far) add(coarseJacket(shape), BONE.body, SLOT.shirt);
   else {
-    const profile = [[0, shape.bottom], [shape.hem, shape.bottom], [shape.waist, .9], [shape.shoulder, 1.12], [shape.shoulder * .92, 1.195], [.078, 1.24], [0, 1.24]].map(([r, y]) => new THREE.Vector2(r, y));
+    const profile = [[0, shape.bottom], [shape.hem * .86, shape.bottom], [shape.hem, shape.bottom + .035], [shape.waist, .9], [shape.shoulder, 1.12], [shape.shoulder * .92, 1.195], [.078, 1.24], [0, 1.24]].map(([r, y]) => new THREE.Vector2(r, y));
     const g = new THREE.LatheGeometry(profile, 10); g.scale(1, 1, shape.depth); add(g, BONE.body, SLOT.shirt);
   }
   if (shape.bottom > .73) {
@@ -82,18 +82,21 @@ export function personGeometry(variant = 0, detail: PersonDetail = "near"): THRE
     else { const g = new THREE.CapsuleGeometry(.125, .13, 2, 8); g.rotateZ(Math.PI / 2); g.scale(.82, .78, .82); g.translate(0, .769, 0); add(g, BONE.body, SLOT.trousers); }
   }
   const neck = new THREE.CylinderGeometry(.047, .054, .105, far ? 4 : 6, 1, true); neck.translate(0, 1.2825, 0); add(neck, BONE.body, SLOT.skin);
-  const head = far ? new THREE.OctahedronGeometry(1) : new THREE.SphereGeometry(1, 8, 6);
+  // A broad rounded head and large readable features give all six models the same cartoon language.
+  const head = far ? new THREE.IcosahedronGeometry(1) : new THREE.SphereGeometry(1, 10, 8);
   const hp = head.getAttribute("position");
-  for (let i = 0; i < hp.count; i++) { const y = hp.getY(i), jaw = y < 0 ? 1 + y * .12 : 1; hp.setX(i, hp.getX(i) * jaw); }
-  head.scale(shape.head, .119, .102).translate(0, 1.429, 0); head.computeVertexNormals(); add(head, BONE.body, SLOT.skin);
+  for (let i = 0; i < hp.count; i++) { const y = hp.getY(i), jaw = y < 0 ? 1 + y * .07 : 1; hp.setX(i, hp.getX(i) * jaw); }
+  head.scale(shape.head, .133, .122).translate(0, 1.429, 0); head.computeVertexNormals(); add(head, BONE.body, SLOT.skin);
   if (!far) {
-    const nose = new THREE.ConeGeometry(.012, .03, 4); nose.rotateX(Math.PI / 2); nose.translate(0, 1.423, .105); add(nose, BONE.body, SLOT.skin);
+    const nose = new THREE.SphereGeometry(.017, 6, 4); nose.scale(.85, .82, 1.2); nose.translate(0, 1.423, .119); add(nose, BONE.body, SLOT.skin);
     for (const side of [-1, 1]) {
-      sphere(.014, side * (shape.head - .003), 1.426, -.004, SLOT.skin, .55, 1.2, .7);
-      strip(.012, .0045, side * .034, 1.447, .097, SLOT.eyes);
-      strip(.021, .003, side * .034, 1.459, .096, SLOT.hair);
+      sphere(.018, side * (shape.head - .003), 1.426, -.004, SLOT.skin, .55, 1.2, .7);
+      sphere(.012, side * .042, 1.452, .115, SLOT.eyes, .72, 1, .45);
+      sphere(.0035, side * .042 - .002, 1.456, .1205, SLOT.white, .9, 1, .35);
+      strip(.026, .004, side * .042, 1.472, .116, SLOT.hair, side * -.09);
     }
-    strip(.022, .0028, 0, 1.39, .099, SLOT.skin, 0, .72);
+    // Two short strokes form a soft smile, embedded just in front of the rounded cheeks.
+    for (const side of [-1, 1]) strip(.015, .0038, side * .006, 1.395, .117, SLOT.eyes, side * .23);
   }
   // Hair is geometry, not a painted face: each style retains its own visible silhouette in the far prototype.
   const hairAngle = Math.PI * (shape.style === "bob" ? .72 : .55);
@@ -107,13 +110,13 @@ export function personGeometry(variant = 0, detail: PersonDetail = "near"): THRE
     hairPoints.setXYZ(i, x * ring, Math.cos(angle) * .113, z * ring);
   }
   hair.computeVertexNormals();
-  hair.rotateX(-.16); hair.scale(shape.head / .104, 1.04, .95); hair.translate(0, 1.436, -.008); add(hair, BONE.body, SLOT.hair);
-  if (shape.style === "bob") box(.18, .17, .056, 0, 1.358, -.075, SLOT.hair);
-  if (shape.style === "pony") sphere(.048, 0, 1.391, -.137, SLOT.hair, .78, 1.8, .82);
+  hair.rotateX(-.16); hair.scale(shape.head / .104 * 1.04, 1.24, 1.28); hair.translate(0, 1.441, -.008); add(hair, BONE.body, SLOT.hair);
+  if (shape.style === "bob") box(.225, .175, .062, 0, 1.36, -.093, SLOT.hair);
+  if (shape.style === "pony") sphere(.055, 0, 1.397, -.155, SLOT.hair, .78, 1.8, .82);
   if (shape.style === "cap") {
     // The textile crown lies over the hair, and the thin visor extends forward.
-    const cap = new THREE.SphereGeometry(.117, far ? 4 : 8, far ? 2 : 3, 0, Math.PI * 2, 0, Math.PI * .48); cap.scale(.98, .64, 1).translate(0, 1.503, -.004); add(cap, BONE.body, SLOT.accent);
-    box(far ? .15 : .17, .012, .12, 0, 1.511, .103, SLOT.accent);
+    const cap = new THREE.SphereGeometry(.145, far ? 4 : 8, far ? 2 : 3, 0, Math.PI * 2, 0, Math.PI * .48); cap.scale(.98, .70, 1).translate(0, 1.519, -.004); add(cap, BONE.body, SLOT.accent);
+    box(far ? .18 : .196, .012, .145, 0, 1.531, .12, SLOT.accent);
   }
   const armX = shape.shoulder + .028;
   for (const side of [-1, 1]) {
@@ -128,15 +131,15 @@ export function personGeometry(variant = 0, detail: PersonDetail = "near"): THRE
     limb(shape.leg, HIP, KNEE, left ? BONE.thighL : BONE.thighR, SLOT.trousers, x);
     limb(shape.leg * .86, KNEE, ANKLE, left ? BONE.shinL : BONE.shinR, SLOT.trousers, x, .88);
     const foot = left ? BONE.footL : BONE.footR;
-    if (far) box(.108, .086, .18, x, .047, .035, SLOT.shoes, foot);
+    if (far) box(.122, .10, .19, x, .052, .035, SLOT.shoes, foot);
     else {
-      const g = new THREE.CapsuleGeometry(.056, .09, 1, 6); g.rotateX(Math.PI / 2); g.scale(1, .88, 1); g.translate(x, .049, .035); add(g, foot, SLOT.shoes);
-      box(.105, .013, .175, x, .01005, .035, SLOT.shoes, foot, .55);
+      const g = new THREE.CapsuleGeometry(.064, .09, 1, 6); g.rotateX(Math.PI / 2); g.scale(1, .88, 1); g.translate(x, .057, .035); add(g, foot, SLOT.shoes);
+      box(.121, .013, .19, x, .01005, .035, SLOT.shoes, foot, .55);
     }
     const upper = left ? BONE.armL : BONE.armR, fore = left ? BONE.foreL : BONE.foreR;
     limb(shape.arm, SHOULDER, ELBOW, upper, SLOT.shirt, ax);
     limb(.041, ELBOW, ELBOW - .225, fore, SLOT.sleeve, ax, .7);
-    sphere(.043, ax, ELBOW - .241, .003, SLOT.skin, .72, 1.05, .62, fore);
+    sphere(.051, ax, ELBOW - .241, .003, SLOT.skin, .72, 1.05, .62, fore);
   }
   // Garment seams and accessories stay on the torso's bone; no extra animated meshes or material groups.
   if (index === 0) {
@@ -156,7 +159,8 @@ export function personGeometry(variant = 0, detail: PersonDetail = "near"): THRE
         strap.translate((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2); add(strap, BONE.body, SLOT.accent);
       }
     }
-    box(.105, .16, .075, .278, .763, -.008, SLOT.accent);
+    if (far) box(.105, .16, .075, .278, .763, -.008, SLOT.accent);
+    else sphere(.08, .278, .763, -.008, SLOT.accent, .78, 1.1, .55);
   } else if (index === 2) {
     if (far) box(.14, .105, .075, 0, 1.227, -.088, SLOT.shirt);
     else { sphere(.09, 0, 1.223, -.063, SLOT.shirt, 1, .73, .72); strip(.065, .045, 0, 1.08, .134, SLOT.accent); for (const side of [-1, 1]) strip(.007, .09, side * .029, 1.185, .108, SLOT.white, side * .06); }
@@ -168,11 +172,13 @@ export function personGeometry(variant = 0, detail: PersonDetail = "near"): THRE
     box(.12, .07, .12, 0, 1.26, .015, SLOT.accent);
     if (!far) { strip(.06, .26, -.042, 1.1, .15, SLOT.accent, -.10); for (const y of [.82, .94, 1.06]) sphere(.009, .025, y, .143, SLOT.eyes, 1, 1, .4); }
   } else {
-    box(.205, .27, .105, 0, 1.012, -.153, SLOT.accent);
+    if (far) box(.205, .27, .105, 0, 1.012, -.153, SLOT.accent);
+    else sphere(.13, 0, 1.012, -.153, SLOT.accent, .85, 1.12, .65);
     if (!far) { box(.155, .10, .036, 0, .952, -.222, SLOT.accent, BONE.body, .76); for (const side of [-1, 1]) strip(.024, .25, side * .124, 1.082, .124, SLOT.accent, side * -.08); }
   }
   const geometry = mergeGeometries(parts)!; parts.forEach(part => part.dispose());
   geometry.computeBoundingBox(); geometry.computeBoundingSphere();
   geometry.name = `person-${PEOPLE[index].id}-${detail}`;
+  geometry.userData.cityModelStyle = "cartoon-v1";
   return geometry;
 }
