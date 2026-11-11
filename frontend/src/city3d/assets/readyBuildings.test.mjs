@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
 
-const built = await build({ stdin: { contents: `export * from './readyBuildings.ts'; export * from '../world/familyHouses.ts'; export * from '../world/officeBuildings.ts'; export { FACE } from './facade.ts';`, resolveDir: fileURLToPath(new URL('.', import.meta.url)) }, bundle: true, platform: 'node', format: 'esm', write: false, logLevel: 'error' });
+const built = await build({ stdin: { contents: `export * from './readyBuildings.ts'; export * from '../world/familyHouses.ts'; export * from '../world/officeBuildings.ts'; export { FACE } from './facade.ts'; export * as THREE from 'three/webgpu';`, resolveDir: fileURLToPath(new URL('.', import.meta.url)) }, bundle: true, platform: 'node', format: 'esm', write: false, logLevel: 'error' });
 const city = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
 
 // Existing geometry envelopes, including the eaves and entrance canopies that the parcel layouts already allow.
@@ -76,5 +76,29 @@ test('the houses retain both finishes and place new entrance hardware at the exi
     for (let i = 0; i < p.count; i++) if (kind.getZ(i) === city.FACE.metal && Math.abs(p.getX(i) - definition.door[0]) < .2 && Math.abs(p.getZ(i) - front) < .1 && p.getY(i) > .03 && p.getY(i) < .5) hardware = true;
     assert.ok(hardware, `${family}: entrance follows its existing path`);
     brick.dispose(); stone.dispose();
+  }
+});
+
+test('dormer room panes are visible above the main roof and carry stable lighting identities', () => {
+  const { THREE } = city;
+  for (const family of ['carport', 'attic', 'bayhouse']) {
+    const geometry = city.readyHouseGeometry(family, 'brick'), p = geometry.attributes.position, surf = geometry.attributes.aSurf, win = geometry.attributes.aWin;
+    const panes = new Map();
+    for (let i = 0; i < p.count; i++) if (surf.getZ(i) === city.FACE.pane) {
+      const id = win.getX(i);
+      assert.ok(id > 0 && id < 1, `${family}: actual room pane has a valid fixed identity`);
+      if (!panes.has(id)) panes.set(id, new THREE.Box3());
+      panes.get(id).expandByPoint(new THREE.Vector3(p.getX(i), p.getY(i), p.getZ(i)));
+    }
+    assert.equal(panes.size, family === 'attic' ? 2 : 1, `${family}: every dormer has one room window`);
+    const material = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }), mesh = new THREE.Mesh(geometry, material); mesh.updateMatrixWorld();
+    for (const bounds of panes.values()) {
+      // Sample away from the centre mullion and sill. A roof intersection would be the nearest face here.
+      const x = bounds.min.x + (bounds.max.x - bounds.min.x) * .25, y = bounds.min.y + (bounds.max.y - bounds.min.y) * .4;
+      const ray = new THREE.Raycaster(new THREE.Vector3(x, y, geometry.boundingBox.max.z + 1), new THREE.Vector3(0, 0, -1));
+      const hit = ray.intersectObject(mesh, false)[0];
+      assert.ok(hit && surf.getZ(hit.face.a) === city.FACE.pane, `${family}: the main roof does not cut across the dormer glazing`);
+    }
+    geometry.dispose(); material.dispose();
   }
 });

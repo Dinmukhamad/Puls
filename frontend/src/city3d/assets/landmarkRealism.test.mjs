@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
 
-const compiled = await build({ stdin: { contents: `export * from './landmarks.ts'; export * from './port.ts'; export * as THREE from 'three/webgpu';`, resolveDir: fileURLToPath(new URL('.', import.meta.url)) }, bundle: true, platform: 'node', format: 'esm', write: false, logLevel: 'error' });
+const compiled = await build({ stdin: { contents: `export * from './landmarks.ts'; export * from './port.ts'; export { createKit, C } from './landmarkKit.ts'; export { MeshBuilder, FACE } from './facade.ts'; export * as THREE from 'three/webgpu';`, resolveDir: fileURLToPath(new URL('.', import.meta.url)) }, bundle: true, platform: 'node', format: 'esm', write: false, logLevel: 'error' });
 const city = await import(`data:text/javascript;base64,${Buffer.from(compiled.outputFiles[0].text).toString('base64')}`);
 const noop = () => {};
 const context = new Proxy({}, { get: () => noop, set: () => true });
@@ -68,4 +68,24 @@ test('port rooflights, crane bogies and container door hardware preserve all fiv
     assert.ok(Array.from(geometry.getAttribute('aSurf').array).some((value, i) => i % 4 === 2 && value === 7), 'hardware uses metal finish');
     healthy(geometry); geometry.dispose();
   });
+});
+
+test('authored room glazing has occupancy identities while decorative glass roofs remain unlit', () => {
+  const shapes = [
+    ['arched window', true, k => k.window(0, 0, 0, .6, 1, true)],
+    ['door glazing', true, k => k.door(.8, 1.3, 0, 0, 0)],
+    ['round room window', true, k => k.disc(.4, .05, city.C.glass, 0, 1, 0)],
+    ['glass dome', false, k => k.dome(1, city.C.glass, 0, 1, 0)],
+    ['glass pyramid', false, k => k.pyramid(2, 2, 1, city.C.glass, 0, 1, 0)],
+    ['glass vault', false, k => k.vault(1, 2, city.C.glass, 0, 1, 0)],
+  ];
+  for (const [name, occupied, draw] of shapes) {
+    const mb = new city.MeshBuilder(), kit = city.createKit(); kit.begin(mb, [], 13); draw(kit);
+    const g = mb.build(1), surf = g.getAttribute('aSurf'), win = g.getAttribute('aWin'), ids = [];
+    for (let i = 0; i < surf.count; i++) if (surf.getZ(i) === city.FACE.pane) ids.push(win.getX(i));
+    assert.ok(ids.length, `${name}: glazing is represented`);
+    assert.ok(ids.every(id => occupied ? id > 0 && id < 1 : id > 1), `${name}: only real room windows carry lightable identities`);
+    if (occupied) assert.equal(new Set(ids).size, 1, `${name}: the entire room pane shares one stable occupancy choice`);
+    g.dispose();
+  }
 });

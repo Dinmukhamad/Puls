@@ -8,14 +8,12 @@
  * The landmarks are drawn in the city's v4 style (docs/CITY_V4.md): one facade material for all of them
  * (assets/facade.ts), whose windows setNight() switches on and off; only the signs have materials of their own.
  *
- * At night (TZ §6.7) the windows light up, warm floodlights on every island wash its building from below
- * and a ring of small lights circles the plaza's pedestal. The light is faked, as for the street lamps:
- * glowing fixtures and additive pools on the ground (two instanced draw calls, hidden in the day) and an
- * uplight in the landmarks' own emissive, scaled by ctx.night.level.
+ * At night some windows light up, with warm ground fixtures and a ring of small lights round the
+ * plaza's pedestal. Facades do not emit a yellow wash: light comes only from occupied window panes.
  */
 import * as THREE from "three/webgpu";
 import { skyLook } from "../render/sky";
-import { color, exp, float, normalWorld, positionWorld, rangeFogFactor, smoothstep, uniform, uv, vertexColor, type ShaderNodeObject } from "three/tsl";
+import { color, float, rangeFogFactor, smoothstep, uniform, uv, type ShaderNodeObject } from "three/tsl";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import type { DistrictId } from "../../api/city";
 import { createArchitecture } from "../assets/landmarks";
@@ -34,14 +32,11 @@ const RING_COLOR = "#e9bf69", RING_Y = .45;
 const GROW_DELAY = 500, GROW_TIME = 1300, CONFETTI_DELAY = 1300, CONFETTI_LIFE = 3.2, CONFETTI_COUNT = 160;
 const CONFETTI_COLORS = ["#ffcf4d", "#ff6b9a", "#7b5cff", "#5bd6ff", "#6be38a"];
 /** The share of a landmark's windows lit at night: public buildings, busier than the homes round them. */
-const WINDOWS_LIT = .62;
-type Level = CityContext["night"]["level"];
+const WINDOWS_LIT = .28;
 
 /** Floodlights in a landmark's frame, world units from its centre (+z is its front, the plot is ±5 × ±4.6): two flank the entrance, one lights each side. */
 const FLOODLIGHTS: [number, number][] = [[-2.5, 5.55], [2.5, 5.55], [-5.85, -.9], [5.85, -.9]];
 const FLOOD = "#ffc88a", FIXTURE_GLOW = 2.4, POOL_STRENGTH = .6;
-/** The uplight on the walls: strongest at the plinth, half as strong WASH_HEIGHT × ln 2 higher up. */
-const WASH = "#ffcf96", WASH_STRENGTH = .42, WASH_HEIGHT = 2.2;
 /** The pedestal of systems/mascot.ts (radius 0.86, its dark band 0.37…0.6 high) on the plaza paving (0.31). */
 const PEDESTAL_R = .88, PEDESTAL_Y = .48, PEDESTAL_LIGHTS = 16, PLAZA_Y = .31, PLAZA_LIGHTS = 24;
 
@@ -92,11 +87,10 @@ export function createDistricts(ctx: CityContext, { levels, grown = [] }: Distri
   const { spec } = ctx.world, scale = spec.districtScale;
   const root = new THREE.Group(); root.name = "city-districts"; ctx.scene.add(root);
   // Every landmark, growing or merged, and the construction sites share one facade material: its windows light
-  // with `windows` (setNight), its walls take the floodlights' uplight (0 in the day). The window pattern is fixed
+  // with `windows` (setNight), without making the walls self-illuminated. The window pattern is fixed
   // per building (assets/landmarks.ts shifts every wall's), so the material needs no seed from a copy.
   const windows = uniform(0);
   const shell = facadeMaterial(windows as unknown as Parameters<typeof facadeMaterial>[0], { seed: float(0), lit: WINDOWS_LIT, look: skyLook(ctx.scene) });
-  shell.emissiveNode = (shell.emissiveNode as ShaderNodeObject<THREE.Node>).add(uplight(ctx.night.level));
   shell.name = "city-district-landmarks"; shell.userData.districtNight = windows;
   const architecture = createArchitecture(shell);
   const pickables: THREE.Object3D[] = [], anchors = new Map<string, THREE.Vector3>();
@@ -301,15 +295,6 @@ function disposeMaterial(material: THREE.Material) {
   const textures = new Set<THREE.Texture>();
   for (const value of Object.values(material)) if ((value as THREE.Texture | null)?.isTexture) textures.add(value);
   textures.forEach(texture => texture.dispose()); material.dispose();
-}
-
-/**
- * Floodlight on the walls, as emissive: the surface's own colour, warm, on walls only (not roofs), fading
- * with height above the island. Uniform around the building: light bounced off the pools and the plinth.
- */
-function uplight(level: Level) {
-  const height = positionWorld.y.sub(GROUND).max(0), walls = float(1).sub(normalWorld.y.abs());
-  return vertexColor().xyz.mul(color(WASH)).mul(exp(height.div(-WASH_HEIGHT))).mul(walls).mul(level).mul(WASH_STRENGTH);
 }
 
 /**

@@ -72,7 +72,10 @@ function body(mb: MeshBuilder, h: House, [x0, z0, x1, z1]: [number, number, numb
 /** A window set into a wall or a dormer: white frame, glass. `z` is the face it sits on, facing +z. */
 function pane(mb: MeshBuilder, x: number, y0: number, y1: number, z: number, width: number) {
   box(mb, [x - width / 2 - .1, y0 - .1, z - .02, x + width / 2 + .1, y1 + .1, z + .06], { c: .02, kind: FACE.trim, col: TRIM, top: FACE.trim, occlude: false });
-  box(mb, [x - width / 2, y0, z + .04, x + width / 2, y1, z + .09], { c: .01, kind: FACE.glass, top: FACE.glass, occlude: false });
+  // A real room window, not the decorative glass used by balcony rails. Its stable seed lets the
+  // shared night shader light this pane independently; one front quad replaces a hidden glass box.
+  const seed = ((Math.round((x + 30) * 11 + y0 * 17 + z * 7) % 31) + 31) % 31;
+  mb.quad([[x - width / 2, y0, z + .09], [x + width / 2, y0, z + .09], [x + width / 2, y1, z + .09], [x - width / 2, y1, z + .09]], { kind: FACE.pane, col: rgb("#64b8d7"), win: [(seed + .5) / 31, 0, 0, 0] });
   mb.detail(() => {
     box(mb, [x - .025, y0, z + .085, x + .025, y1, z + .13], { c: 0, kind: FACE.trim, col: TRIM, top: FACE.trim, occlude: false });
     box(mb, [x - width / 2 - .17, y0 - .16, z + .04, x + width / 2 + .17, y0 - .09, z + .23], { c: 0, kind: FACE.trim, col: TRIM, top: FACE.trim, occlude: false });
@@ -80,7 +83,9 @@ function pane(mb: MeshBuilder, x: number, y0: number, y1: number, z: number, wid
 }
 /** A dormer on a front slope: a little gabled box with a window, its face `inset` behind the eaves line `front`. */
 function dormer(mb: MeshBuilder, h: House, x: number, front: number, eaves: number, inset = .7) {
-  const width = 1.8, z1 = front - inset, z0 = z1 - 2.4, top = eaves + 1.5;
+  // The main roof is intentionally continuous. Put the dormer face at its low eaves instead of
+  // burying the lower window behind the slope; its roof still joins the same main roof volume.
+  const width = 1.8, z1 = front - Math.min(inset, .08), z0 = z1 - 2.4, top = eaves + 1.5;
   box(mb, [x - width / 2, eaves - .4, z0, x + width / 2, top, z1], { c: .06, kind: FACE.wall, col: h.wall, top: FACE.trim });
   gableRoof(mb, { a0: z0, a1: z1, b0: x - width / 2, b1: x + width / 2, y: top, pitch: .75, overhang: .2, axis: "z", roof: h.roof, wall: h.wall });
   pane(mb, x, eaves + .1, top - .25, z1, .9);

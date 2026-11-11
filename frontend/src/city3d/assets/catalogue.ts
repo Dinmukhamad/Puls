@@ -146,7 +146,14 @@ export function createCatalogue(models: Map<string, Model>, night: Night = creat
       const kit = part.material as THREE.MeshStandardMaterial;
       if ((kit as unknown as THREE.NodeMaterial).isNodeMaterial || !kit.isMeshStandardMaterial || !kit.map || !markWindows(part.geometry, kit.map, pixels)) continue;
       let lit = litKits.get(kit);
-      if (!lit) { lit = own(nodeCopy(kit, look)); lit.emissiveNode = kenneyLight; litKits.set(kit, lit); }
+      if (!lit) {
+        lit = own(nodeCopy(kit, look));
+        const glass = varying(step(1e-3, attribute(WINDOW, "float")));
+        // Texture-marked panes become black glass at night; walls retain their source colours.
+        // Only the sparse window emission below supplies yellow, never a blue facade-wide wash.
+        lit.colorNode = mix(lit.colorNode as Node, color("#000000"), glass.mul(nightLevel));
+        lit.emissiveNode = kenneyLight; litKits.set(kit, lit);
+      }
       part.material = lit;
     }
   }
@@ -423,10 +430,9 @@ function treeGeometry(round: boolean, far: boolean) {
 type Node = ShaderNodeObject<THREE.Node>;
 /** Kenney parts: 0 off the glass, a random 0 < w ≤ 1 per window on it. */
 const WINDOW = "windowSeed";
-/** Share of lit windows per building: from a sleepy one to an all-awake one, ~60% on average. */
-const LIT_SHARE: [number, number] = [.4, .85];
-/** Warm shades of lit windows; brighter than white, so the bloom picks them up when it is on. */
-const WARM_LOW = "#ffd48a", WARM_HIGH = "#fff1c9", WINDOW_GLOW = 1.2;
+/** Sparse occupied rooms; a building keeps its own share and pattern when the pools refill. */
+const LIT_SHARE: [number, number] = [.12, .3];
+const WARM_WINDOW = "#ffd06f", WINDOW_GLOW = .9;
 
 /** Hash without sine (D. Hoskins): 0…1 from a vec2, the same on every GPU and both backends. */
 function hash(p: Node): Node {
@@ -437,7 +443,7 @@ function hash(p: Node): Node {
 const litShare = (seed: Node) => mix(LIT_SHARE[0], LIT_SHARE[1], seed);
 /** One window at full night: on when its hash is under the share, in a shade and brightness of its own. */
 function windowLight(h: Node, share: Node): Node {
-  return mix(color(WARM_LOW), color(WARM_HIGH), h.mul(7.31).fract()).mul(step(h, share)).mul(h.mul(3.17).fract().mul(.4).add(.6)).mul(WINDOW_GLOW);
+  return color(WARM_WINDOW).mul(step(h, share)).mul(h.mul(3.17).fract().mul(.25).add(.75)).mul(WINDOW_GLOW);
 }
 /** The night level for one window: windows switch on one by one while the level eases in, not all at once (TZ §6.7); 0 by day, 1 at night. */
 function stagger(h: Node, level: Node): Node {

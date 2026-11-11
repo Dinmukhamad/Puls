@@ -1,7 +1,7 @@
 /** Two departmental roots share the renderer, sky, camera and catalogue. Only the active root ticks. */
 import * as THREE from "three/webgpu";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
-import { float, uniform } from "three/tsl";
+import { color, float, floor, fract, fwidth, hash, materialColor, max, mix, normalGeometry, positionGeometry, smoothstep, step, uniform, vec2, type ShaderNodeObject } from "three/tsl";
 import type { CityWorld, DepartmentId } from "../../api/cityWorld";
 import type { CityContext } from "../engine/context";
 import type { Catalogue } from "../assets/catalogue";
@@ -47,10 +47,32 @@ export interface DepartmentWorld {
 }
 const WALL = "#fff0cb", GLASS = "#64c2e4", DARK = "#365f83", GOLD = "#ffc24a", GREEN = "#67bd58";
 const materialSets = new WeakMap<THREE.Object3D, Map<string, THREE.MeshStandardNodeMaterial>>();
-function builder(root: THREE.Object3D, look: SkyLook | null = null) {
+/** Static room grid on station glass; walls and the train's own lamps do not enter this material. */
+function stationWindows(material: THREE.MeshStandardNodeMaterial) {
+  if (material.userData.windowNight) return material;
+  const level = uniform(0), side = step(.5, normalGeometry.x.abs());
+  const q = vec2(mix(positionGeometry.x, positionGeometry.z, side).div(1.4), positionGeometry.y.div(1.6));
+  const cell = floor(q), f = fract(q), aa = max(fwidth(q.x), fwidth(q.y));
+  const h = hash(cell.x.mul(37).add(cell.y.mul(113)).add(19));
+  const pane = smoothstep(.07, .12, f.x).mul(float(1).sub(smoothstep(.88, .93, f.x)))
+    .mul(smoothstep(.09, .15, f.y)).mul(float(1).sub(smoothstep(.85, .91, f.y)))
+    .mul(float(1).sub(step(.5, normalGeometry.y.abs())))
+    .mul(float(1).sub(smoothstep(.2, .55, aa)));
+  const day = (material.colorNode ?? materialColor) as ShaderNodeObject<THREE.Node>;
+  const dayEmission = material.emissiveNode as ShaderNodeObject<THREE.Node> | null;
+  material.colorNode = mix(day, color("#000000"), level);
+  const rooms = color("#ffd06f").mul(step(.79, h)).mul(pane).mul(level).mul(.9);
+  material.emissiveNode = dayEmission ? dayEmission.mul(level.oneMinus()).add(rooms) : rooms;
+  material.userData.windowNight = level;
+  return material;
+}
+function builder(root: THREE.Object3D, look: SkyLook | null = null, rooms = false) {
   const materials = materialSets.get(root) ?? new Map<string, THREE.MeshStandardNodeMaterial>(); materialSets.set(root, materials);
   return (w: number, h: number, d: number, x: number, y: number, z: number, color: string) => {
-    if (!materials.has(color)) materials.set(color, surfaceMaterial({ color, look, finish: color === GLASS ? "glass" : "paint", roughness: color === GLASS ? .32 : .82, metalness: color === GLASS ? .04 : .02 }));
+    if (!materials.has(color)) {
+      const material = surfaceMaterial({ color, look, finish: color === GLASS ? "glass" : "paint", roughness: color === GLASS ? .32 : .82, metalness: color === GLASS ? .04 : .02 });
+      materials.set(color, rooms && color === GLASS ? stationWindows(material) : material);
+    }
     const geometry = Math.min(w, h, d) > .28 ? new RoundedBoxGeometry(w, h, d, 1, Math.min(.18, w / 7, h / 7, d / 7)) : new THREE.BoxGeometry(w, h, d);
     const mesh = new THREE.Mesh(geometry, materials.get(color)!);
     mesh.position.set(x, y, z); mesh.castShadow = mesh.receiveShadow = true; root.add(mesh); return mesh;
@@ -180,7 +202,7 @@ function station(line: RailLine, city: DepartmentId, look: SkyLook | null) {
  * canopy, on the floor slab across the end of the track. Its own materials, freed with it.
  */
 function drawnBuilding(line: RailLine, look: SkyLook | null) {
-  const group = new THREE.Group(), b = builder(group, look), G = GROUND_Y + STATION.floor, side = line.side;
+  const group = new THREE.Group(), b = builder(group, look, true), G = GROUND_Y + STATION.floor, side = line.side;
   const box = (across: number, height: number, along: number, w: number, y: number, u: number, color: string) => b(across, height, along, -side * w, y, u, color);
   box(17, 4.8, 8.5, 4, G + 2.4, -5.75, WALL); box(15.6, 3.2, .12, 4, G + 2.3, -10.02, GLASS);
   for (const w of [-4.2, -.2, 3.8, 7.8, 12.2]) box(.32, 4.8, .3, w, G + 2.4, -10.1, WALL);
@@ -198,10 +220,11 @@ function drawnBuilding(line: RailLine, look: SkyLook | null) {
 function litWindows(models: Map<string, Model>, look: SkyLook | null) {
   for (const model of models.values()) for (const part of model.parts) {
     const source = part.material as THREE.MeshStandardMaterial;
-    if (source.name !== "station-glass" || source instanceof THREE.MeshStandardNodeMaterial) continue;
-    // The fallback must retain the shared cartoon paint/glass treatment as well as night emission.
-    part.material = detailedMaterialCopy(source, look);
-    source.dispose();
+    if (source.name !== "station-glass") continue;
+    const refined = source instanceof THREE.MeshStandardNodeMaterial;
+    const material = refined ? source : detailedMaterialCopy(source, look);
+    part.material = stationWindows(material);
+    if (!refined) source.dispose();
   }
 }
 /**
@@ -344,14 +367,17 @@ export function createDepartmentWorld(ctx: CityContext, catalogue: Catalogue, on
   const elements = { support: new Map<string, HTMLElement>(), sales: new Map<string, HTMLElement>() };
   let night = false, traffic = true;
   // The lake city's campus offices share one facade material; setNight lights their windows.
-  const campusNight = uniform(0), campusMaterial = facadeMaterial(campusNight as unknown as Parameters<typeof facadeMaterial>[0], { seed: float(0), lit: .55, look: skyLook(ctx.scene) });
+  const campusNight = uniform(0), campusMaterial = facadeMaterial(campusNight as unknown as Parameters<typeof facadeMaterial>[0], { seed: float(0), lit: .2, look: skyLook(ctx.scene) });
   function illuminate(root: THREE.Object3D) {
     root.traverse(object => {
       if (!(object instanceof THREE.Mesh)) return;
       const materials = Array.isArray(object.material) ? object.material : [object.material];
-      // The drawn buildings' glass, and the station model's windows (litWindows).
-      for (const material of materials) if (material instanceof THREE.MeshStandardNodeMaterial && (material.name === "station-glass" || material.color.getHexString() === GLASS.slice(1))) {
-        material.emissive.set(night ? "#ffd182" : "#000000"); material.emissiveIntensity = .65;
+      for (const material of materials) if (material instanceof THREE.MeshStandardNodeMaterial) {
+        // Window masks update one uniform on a mode change; ordinary lamps keep their existing switch.
+        if (material.userData.windowNight) material.userData.windowNight.value = night ? 1 : 0;
+        else if (material.name === "station-glass" || material.color.getHexString() === GLASS.slice(1)) {
+          material.emissive.set(night ? "#ffd182" : "#000000"); material.emissiveIntensity = .65;
+        }
       }
     });
   }

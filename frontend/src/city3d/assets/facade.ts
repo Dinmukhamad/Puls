@@ -15,7 +15,7 @@
  * stretched copy and fits a whole number of bays into every wall, whatever its width.
  */
 import * as THREE from "three/webgpu";
-import { abs, attribute, cameraPosition, dot, float, floor, fract, fwidth, hash, max, min, mix, normalView, normalWorld, positionWorld, pow, reflect, round, smoothstep, step, varying, varyingProperty, vec2, vec3, vec4, vertexColor } from "three/tsl";
+import { Fn, If, abs, attribute, cameraPosition, dot, float, floor, fract, fwidth, hash, max, min, mix, normalView, normalWorld, positionWorld, pow, reflect, round, smoothstep, step, varying, varyingProperty, vec2, vec3, vec4, vertexColor } from "three/tsl";
 import { skyGradient, type SkyLook } from "../render/sky";
 
 /**
@@ -583,7 +583,7 @@ export interface FacadeOptions {
   seed?: Node;
   /** Unit models stretched per copy (MeshBuilder.build({ unit })): wall coordinates measured on the copy, in metres. */
   unit?: boolean;
-  /** The share of windows lit at night (homes and offices about 0.42; public buildings more). */
+  /** The share of windows lit at night; defaults to 24% in homes and 16% in curtain-wall offices. */
   lit?: number;
   /** The city's shared sky uniforms, so glass and metal follow daylight, dusk and night without an environment map. */
   look?: SkyLook | null;
@@ -633,6 +633,9 @@ export function facadeMaterial(night: Node, options: FacadeOptions = {}): THREE.
     const jitter = hash(seed.add(71)).mul(.24).add(.88);
     shares = mix(vec2(win.z.mul(jitter).min(.9), win.w), vec2(.8, .66), shopFloor);
   }
+  // Individual pane IDs and non-window surfaces may carry zero/unused grid components. They still run
+  // through this shared material: keep every intermediate finite before the surface masks select its colour.
+  grid = max(grid, vec2(.001));
 
   const tint = options.unit ? varyingProperty("vec3", "vInstanceColor") : vec3(1);
   const plantedGlass = options.unit ? step(.035, tint.y.sub(max(tint.x, tint.z))) : float(0);
@@ -649,7 +652,7 @@ export function facadeMaterial(night: Node, options: FacadeOptions = {}): THREE.
 
   // Windows in a wall: the grid of bays and floors, frame, sill, glass, lit at night.
   const q = at.div(grid), cell = floor(q), f = fract(q);
-  const aa = max(fwidth(q.x), fwidth(q.y));
+  const aa = max(.00001, max(fwidth(q.x), fwidth(q.y)));
   const half = shares.mul(.5), d = abs(f.sub(vec2(.5, .57))).sub(half), sd = max(d.x, d.y), soft = aa.mul(1.2);
   const above = smoothstep(.35, .55, at.y).mul(doorCell.oneMinus());
   const pane = smoothstep(soft.negate(), soft, sd).oneMinus().mul(above);
@@ -660,20 +663,24 @@ export function facadeMaterial(night: Node, options: FacadeOptions = {}): THREE.
   const insetLeft = smoothstep(0, float(.12).div(grid.x).add(aa), f.x.sub(float(.5).sub(half.x))).oneMinus();
   const insetTop = smoothstep(0, float(.14).div(grid.y).add(aa), float(.57).add(half.y).sub(f.y)).oneMinus();
   const reveal = max(insetLeft, insetTop).mul(pane).mul(smoothstep(.12, .45, aa).oneMinus());
-  const blind = step(.8, pick(cell.x, cell.y, 3));
-  const sky = smoothstep(0, 1, f.y.sub(float(.57).sub(half.y)).div(half.y.mul(2)));
-  const glass = mix(lin(.19, .42, .57), lin(.42, .72, .83), sky.mul(.64))
+  const sky = smoothstep(0, 1, f.y.sub(float(.57).sub(half.y)).div(max(.001, half.y.mul(2))));
+  const dayGlass = mix(lin(.19, .42, .57), lin(.42, .72, .83), sky.mul(.64))
     .mul(mix(.9, 1.04, pick(cell.x, cell.y, 1))).mul(reveal.mul(.2).oneMinus());
-  const share = 1 - (options.lit ?? .42);
-  const lit = step(share, pick(cell.x, cell.y, 5)), warm = mix(vec3(1, .66, .3), vec3(.78, .86, 1), step(.82, pick(cell.x, cell.y, 9)));
+  const share = 1 - THREE.MathUtils.clamp(options.lit ?? .24, 0, 1);
+  const lit = step(share, pick(cell.x, cell.y, 5)), warm = vec3(1, .66, .24);
+  // The mask belongs to whole window cells, never to time or camera position. Subpixel windows fade out
+  // instead of replacing the wall by an average yellow emission (which made every office glow).
+  const lightDetail = smoothstep(.16, .44, aa).oneMinus();
+  const darkGlass = lin(.018, .022, .03), warmGlass = lin(.65, .39, .11);
+  const glass = mix(dayGlass, mix(darkGlass, warmGlass, lit.mul(lightDetail)), night);
   const far = smoothstep(.2, .6, aa), cover = shares.x.mul(shares.y);
   const windowWall = mix(mix(mix(wall, glass, pane), lin(.96, .92, .79), frame.mul(.95)), lin(.85, .8, .67), sill.mul(pane.oneMinus()));
   // A door in its cell: a panelled leaf 2.3 m high in a light frame, a glazed top light.
   const doorLeaf = doorCell.mul(step(abs(f.x.sub(.5)), .22)).mul(step(at.y, 2.3)), doorFrame = doorCell.mul(step(abs(f.x.sub(.5)), .27)).mul(step(at.y, 2.42)).sub(doorLeaf).max(0);
   const doorColour = mix(lin(.3, .22, .16), lin(.2, .26, .3), step(1.75, at.y));
   const withDoor = mix(mix(windowWall, lin(.9, .89, .86), doorFrame), doorColour, doorLeaf);
-  const windowColour = mix(withDoor, mix(base, lin(.25, .48, .6), cover), far);
-  const windowGlow = mix(warm.mul(lit).mul(pane).mul(blind.mul(.3).oneMinus()), vec3(1, .7, .36).mul(cover.mul(.42)), far).mul(night).mul(.8);
+  const windowColour = mix(withDoor, mix(base, mix(lin(.25, .48, .6), darkGlass, night), cover), far);
+  const windowGlow = warm.mul(lit).mul(pane).mul(lightDetail).mul(night).mul(.75);
   const windowRough = mix(mix(.86, .3, pane), .65, far);
 
   // Curtain walls: mullions, a spandrel at every floor, tinted glass by floor, lit floors at night. Mirror glass has the
@@ -681,16 +688,19 @@ export function facadeMaterial(night: Node, options: FacadeOptions = {}): THREE.
   const spire = is(FACE.spire), mirror = is(FACE.mirror).add(spire), curtain = is(FACE.curtain).add(mirror);
   const mullionHalf = mix(.042, .03, mirror), band = mix(.21, .09, mirror);
   const mullion = smoothstep(mullionHalf, aa.add(mullionHalf), min(f.x, f.x.oneMinus())).oneMinus();
-  const spandrel = smoothstep(0, aa, f.y).mul(smoothstep(band, aa.add(band), f.y).oneMinus());
-  const solid = max(mullion, spandrel.mul(.92));
+  const spandrel = smoothstep(band, aa.add(band), f.y).oneMinus();
+  const solid = max(mullion, spandrel);
   const shade = pick(float(0), cell.y, 11).mul(.6).add(.2);
   // Adjacent panels vary subtly, as real coatings and interiors do, without a hash per pixel.
   const panelShade = pick(cell.x, cell.y, 17).mul(.12).add(.94);
   const tinted = base.mul(mix(.78, 1.02, shade)).mul(panelShade)
     .add(lin(.32, .62, .75).mul(smoothstep(.15, 1, f.y).mul(.16)));
   const ribs = mix(lin(.86, .9, .88), lin(.17, .36, .44), mirror);
-  const curtainColour = mix(mix(tinted, ribs, solid), mix(tinted, ribs, .3), far);
-  const curtainGlow = mix(vec3(1, .74, .42).mul(step(share + .02, pick(cell.x, cell.y, 13))).mul(solid.oneMinus()), vec3(1, .74, .42).mul(.28), far).mul(night).mul(.6);
+  const officeShare = 1 - THREE.MathUtils.clamp(options.lit ?? .16, 0, 1);
+  const officeLit = step(officeShare, pick(cell.x, cell.y, 13)).mul(spire.oneMinus());
+  const officeGlass = mix(tinted, mix(darkGlass, warmGlass, officeLit.mul(lightDetail)), night);
+  const curtainColour = mix(mix(officeGlass, ribs, solid), mix(mix(tinted, darkGlass, night), ribs, .3), far);
+  const curtainGlow = warm.mul(officeLit).mul(solid.oneMinus()).mul(lightDetail).mul(night).mul(.75);
   const glazed = mix(solid.oneMinus(), .7, far);
 
   // Roof tiles in rows along the slope; flat decks in gravel.
@@ -702,13 +712,18 @@ export function facadeMaterial(night: Node, options: FacadeOptions = {}): THREE.
   const leaf = base.mul(mix(.9, 1.1, canopy));
 
   // A single pane: the tint of its glass with a sheen up it, lit at night by its own number.
-  const sheet = base.mul(.76).add(lin(.4, .7, .83).mul(smoothstep(0, 1, fract(at.y.div(3))).mul(.13)));
-  const sheetGlow = vec3(1, .72, .4).mul(step(share, win.x)).mul(night).mul(.55);
+  const paneId = win.x;
+  // Only authored individual windows have a 0..1 identifier. Decorative glazing keeps NO_WINDOWS=99:
+  // a glass dome, canopy or roof is never turned into one enormous illuminated pane.
+  const paneLit = step(0, paneId).mul(step(paneId, 1)).mul(step(share, hash(paneId.mul(997).add(seed.mul(7)).add(19))));
+  const sheetDay = base.mul(.76).add(lin(.4, .7, .83).mul(smoothstep(0, 1, fract(at.y.div(3))).mul(.13)));
+  const sheet = mix(sheetDay, mix(darkGlass, warmGlass, paneLit), night);
+  const sheetGlow = warm.mul(paneLit).mul(night).mul(.75);
 
   const metal = base;
   const colour = windowColour.mul(is(FACE.window)).add(wall.mul(is(FACE.wall))).add(roof.mul(is(FACE.roof))).add(deck.mul(is(FACE.deck)))
     .add(base.mul(is(FACE.trim))).add(curtainColour.mul(curtain)).add(base.mul(is(FACE.light))).add(metal.mul(is(FACE.metal)))
-    .add(lin(.18, .39, .51).mul(is(FACE.glass))).add(leaf.mul(is(FACE.leaf))).add(sheet.mul(is(FACE.pane)));
+    .add(mix(lin(.18, .39, .51), darkGlass, night).mul(is(FACE.glass))).add(leaf.mul(is(FACE.leaf))).add(sheet.mul(is(FACE.pane)));
   let shaded: Node = colour;
   if (options.unit) {
     // The plinth a shade darker and the cornice band lighter; the copy's tint (render/copies.ts) is for the walls and
@@ -724,10 +739,17 @@ export function facadeMaterial(night: Node, options: FacadeOptions = {}): THREE.
     shaded = mix(keep, shaded, wallShare.min(1));
   }
   material.colorNode = vec4(shaded.mul(mix(1, occlusion, .2)), 1);
-  const windowReflection = mix(pane.mul(blind.mul(.7).oneMinus()), cover.mul(.8), far).mul(is(FACE.window));
+  const windowReflection = mix(pane, cover.mul(.8), far).mul(is(FACE.window));
   const glazing = windowReflection.add(glazed.mul(curtain)).add(is(FACE.glass).mul(plantedGlass.oneMinus())).add(is(FACE.pane));
-  const sheen = reflectedSky.mul(fresnel.mul(.55).add(mirror.mul(.11).add(.04))).mul(glazing)
-    .add(reflectedSky.mul(fresnel.mul(.2).add(.06)).mul(is(FACE.metal)));
+  const sheen = Fn(() => {
+    const value = vec3(0).toVar();
+    // At full night skip the reflected-sky evaluation; it must not make the unoccupied windows blue or white.
+    If(night.lessThan(.999), () => {
+      value.assign(reflectedSky.mul(fresnel.mul(.55).add(mirror.mul(.11).add(.04))).mul(glazing)
+        .add(reflectedSky.mul(fresnel.mul(.2).add(.06)).mul(is(FACE.metal))).mul(night.oneMinus()));
+    });
+    return value;
+  })();
   material.emissiveNode = windowGlow.mul(is(FACE.window)).add(curtainGlow.mul(curtain).mul(spire.oneMinus())).add(base.mul(night.mul(1.6).add(.4)).mul(is(FACE.light)))
     .add(sheetGlow.mul(is(FACE.pane))).add(sheen.mul(occlusion));
   const wallRough = float(.88);
