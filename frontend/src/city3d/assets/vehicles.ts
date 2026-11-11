@@ -1,5 +1,5 @@
 /**
- * The city's vehicles, built in code in the v4 style (docs/CITY_V4.md, stage 4): every car of the traffic and of the
+ * The city's rounded cartoon vehicles, built in code in the v4 style (docs/CITY_V4.md, stage 4): every car of the traffic and of the
  * car parks, and the canal's motor boat, is one geometry, and all of them share one material (vehicleMaterial), so a
  * kind of vehicle is one draw call however many of it there are (render/copies.ts). The sizes are the old ones: the
  * Kenney Car Kit's (1.5 units wide; CAR_SCALE 0.5 fits a car to a one-unit lane), the traffic taxi's and the boat's.
@@ -11,7 +11,7 @@
  * small rounded boxes. The occlusion by the wheels and the ground is baked into the vertices (bakeOcclusion).
  */
 import * as THREE from "three/webgpu";
-import { abs, attribute, cameraPosition, color, dot, float, floor, fract, fwidth, max, min, mix, normalGeometry, normalWorld, positionGeometry, positionWorld, pow, reflect, sin, smoothstep, step, varyingProperty, vec2, vec3, vertexColor, type ShaderNodeObject } from "three/tsl";
+import { abs, attribute, cameraPosition, color, dot, float, floor, fract, fwidth, max, min, mix, normalGeometry, normalWorld, positionGeometry, positionWorld, pow, reflect, smoothstep, step, varyingProperty, vec2, vec3, vertexColor, type ShaderNodeObject } from "three/tsl";
 import { MeshBuilder, bakeOcclusion, box, cylinder, rgb, rod, type Face, type V3 } from "./facade";
 import { skyGradient, type SkyLook } from "../render/sky";
 
@@ -30,10 +30,10 @@ export type VehicleName = typeof VEHICLES[number];
 export const PARKED_TAXI_SCALE = 2.75 / 3.18;
 
 const C = {
-  white: rgb("#f3f3f0"), plastic: rgb("#2b2e33"), glass: rgb("#22313d"), rubber: rgb("#18191c"), chrome: rgb("#a9b0b7"),
-  head: rgb("#f6f2e4"), tail: rgb("#b3121b"), plate: rgb("#eceee8"), grille: rgb("#1d2024"), taxi: rgb("#ffc21f"),
-  police: rgb("#f4f6f8"), policeBlue: rgb("#1d3b86"), sign: rgb("#fff3c2"), cargo: rgb("#f1f0ea"), deck: rgb("#e6dfcf"),
-  hull: rgb("#fbfbf8"), stripe: rgb("#3c74d6"), blueLamp: rgb("#2f6dff"),
+  white: rgb("#fff9ed"), plastic: rgb("#354456"), glass: rgb("#458fb7"), rubber: rgb("#283444"), chrome: rgb("#c7dbe1"),
+  head: rgb("#fff4b4"), tail: rgb("#f15557"), plate: rgb("#eceee8"), grille: rgb("#1d2024"), taxi: rgb("#ffc21f"),
+  police: rgb("#f4f6f8"), policeBlue: rgb("#1d3b86"), sign: rgb("#fff3c2"), cargo: rgb("#f1f0ea"), deck: rgb("#e8b66c"),
+  hull: rgb("#fbfbf8"), stripe: rgb("#268ddd"), blueLamp: rgb("#2f6dff"),
 };
 const NONE: [number, number, number, number] = [99, 99, 0, 0];
 
@@ -83,7 +83,7 @@ function arc(points: Pt[], cx: number, cy: number, r: number, a0: number, a1: nu
  * segments: 0–1 and 14–15 the sills, 2 and 13 the lower body, 3–12 the upper body and the top.
  */
 function bodyRing(s: Section, band: number, mid: number): Pt[] {
-  const rb = Math.min(s.rb, (s.y1 - s.y0) / 3), rt = Math.min(s.rt, (s.y1 - s.y0) / 3, s.hw * .6);
+  const rb = Math.min(s.rb, (s.y1 - s.y0) / 3), rt = Math.min(s.rt * 1.4, (s.y1 - s.y0) / 3, s.hw * .6);
   const b = Math.min(Math.max(band, s.y0 + rb + .005), s.y1 - rt - .01), m = Math.min(Math.max(mid, b + .005), s.y1 - rt - .005), points: Pt[] = [];
   arc(points, s.hw - rb, s.y0 + rb, rb, -Math.PI / 2, 0, 1);
   points.push([s.hw, b], [s.hw, m]);
@@ -108,9 +108,9 @@ function rise(c: Cabin, z: number) {
  * edges, 4–5 the roof (or the windscreen and the rear window where it slopes).
  */
 function cabinRing(c: Cabin, f: number): Pt[] {
-  const yTop = c.yB + (c.yR - c.yB) * f, rr = c.rr * f, top = lerp(c.hwB, c.hwR, f), points: Pt[] = [[c.hwB, c.yB]];
+  const yTop = c.yB + (c.yR + .025 - c.yB) * f, rr = c.rr * 1.35 * f, top = lerp(c.hwB, c.hwR * 1.03, f), points: Pt[] = [[c.hwB, c.yB]];
   arc(points, top - rr, yTop - rr, rr, 0, Math.PI / 2, 3);
-  points.push([0, yTop + (c.crown ?? .015) * f]);
+  points.push([0, yTop + (c.crown ?? .025) * f]);
   arc(points, -top + rr, yTop - rr, rr, Math.PI / 2, Math.PI, 3);
   points.push([-c.hwB, c.yB]);
   return points;
@@ -244,7 +244,7 @@ function car(spec: Spec, paint: V3) {
       const y0 = Math.max(band + .04, panel.y0 + .04), y1 = c.yB - .055, seam = .004;
       const edge: V3[] = [[side * (panel.hw + .001), y0, pillar - seam], [side * (panel.hw + .001), y1, pillar - seam], [side * (panel.hw + .001), y1, pillar + seam], [side * (panel.hw + .001), y0, pillar + seam]];
       mb.quad(side > 0 ? edge : edge.reverse(), { kind: as(PART.plastic), col: C.grille, n: [side, 0, 0], win: NONE });
-      part(mb, [side * (widest + .02), c.yB + .1, c.z[3] - .1], [.08, .075, .13], upperPart, upperCol, .02);
+      part(mb, [side * (widest + .02), c.yB + .1, c.z[3] - .1], [.09, .09, .14], upperPart, upperCol, .02);
       const mx = side * (widest + .02), my = c.yB + .1, mz = c.z[3] - .164;
       mb.quad([[mx - .025, my - .023, mz], [mx - .025, my + .023, mz], [mx + .025, my + .023, mz], [mx + .025, my - .023, mz]], { kind: as(PART.glass), col: C.glass, n: [0, 0, -1], win: NONE });
     }
@@ -253,8 +253,8 @@ function car(spec: Spec, paint: V3) {
   // Bumpers: dark plastic across the lower front and rear.
   for (const [s, z] of [[front, L / 2 - .025], [rear, -L / 2 + .025]] as const) part(mb, [0, (s.y0 + band) / 2 + .02, z], [s.hw * 2 - .04, band - s.y0 + .02, .07], PART.plastic, C.plastic, .025);
   for (const side of [-1, 1]) {
-    part(mb, [side * (front.hw - lamp.inset), lamp.y, L / 2 - .012], [.26, .1, .04], PART.head, C.head);
-    part(mb, [side * (rear.hw - lamp.inset), lamp.y + .02, -L / 2 + .012], [.24, .11, .04], PART.tail, C.tail);
+    part(mb, [side * (front.hw - lamp.inset), lamp.y, L / 2 - .012], [.30, .15, .06], PART.head, C.head, .04);
+    part(mb, [side * (rear.hw - lamp.inset), lamp.y + .02, -L / 2 + .012], [.27, .13, .06], PART.tail, C.tail, .04);
   }
   part(mb, [0, (lamp.y + band) / 2, L / 2 - .006], [front.hw * .75, .11, .03], PART.plastic, C.grille);
   part(mb, [0, band - .005, L / 2 + .01], [.3, .085, .02], PART.fixed, C.plate);
@@ -324,7 +324,7 @@ function bed(mb: MeshBuilder, paint: V3) {
 /** The delivery truck's cargo box on its chassis, behind the cab. */
 function cargo(mb: MeshBuilder) {
   part(mb, [0, .42, -.55], [1.24, .34, 2.1], PART.plastic, C.plastic, .02);
-  mb.detail(() => box(mb, [-.75, .66, -1.625, .75, 1.65, .46], { c: .06, kind: as(PART.fixed), col: C.cargo, top: as(PART.fixed), occlude: true }));
+  mb.detail(() => box(mb, [-.75, .66, -1.625, .75, 1.65, .46], { c: .10, kind: as(PART.fixed), col: C.cargo, top: as(PART.fixed), occlude: true }));
   // A coloured band along its sides and its rear doors' seam.
   for (const side of [-1, 1]) part(mb, [side * .752, 1.2, -.58], [.012, .14, 1.9], PART.paint, C.white, .004);
   part(mb, [0, 1.15, -1.628], [.02, .9, .012], PART.plastic, C.plastic, .004);
@@ -336,7 +336,7 @@ function boat() {
   // Hull sections stern to bow: keel y0, sheer y1, half width; the bow narrows to a point and lifts.
   const hull = (z: number) => {
     const t = (z + 1.06) / 2.12, bow = Math.max(0, (t - .7) / .3);
-    return { y0: .02 + bow * bow * .2, y1: .36 + bow * bow * .05, hw: .5 * Math.sqrt(Math.max(.006, 1 - bow * bow * .97)) };
+    return { y0: .02 + bow * bow * .2, y1: .39 + bow * bow * .07, hw: .5 * Math.sqrt(Math.max(.006, 1 - bow * bow * .97)) };
   };
   const zs = stations([-1.06, -1.0, .45, .8, 1.06], .14);
   const rings: Pt[][] = zs.map(z => {
@@ -349,7 +349,7 @@ function boat() {
   mb.detail(() => {
     box(mb, [-.3, .37, -.6, .3, .5, .1], { c: .04, kind: as(PART.fixed), col: C.hull, top: as(PART.fixed), occlude: false });
     box(mb, [-.29, .5, -.58, .29, .63, .08], { c: .03, kind: as(PART.glass), col: C.glass, top: as(PART.glass), occlude: false });
-    box(mb, [-.31, .63, -.62, .31, .69, .1], { c: .03, kind: as(PART.fixed), col: C.hull, top: as(PART.fixed), occlude: false });
+    box(mb, [-.32, .63, -.62, .32, .72, .1], { c: .045, kind: as(PART.fixed), col: C.hull, top: as(PART.fixed), occlude: false });
   });
   mb.quad([[-.28, .5, .1], [.28, .5, .1], [.26, .63, .02], [-.26, .63, .02]], { kind: as(PART.glass), col: C.glass });
   part(mb, [0, .75, -.35], [.03, .14, .03], PART.chrome, C.chrome, .006);
@@ -396,7 +396,7 @@ export function vehicleGeometry(name: VehicleName): THREE.BufferGeometry {
     if (name === "truck") bed(mb, C.white);
     if (name === "delivery") cargo(mb);
   }
-  bakeOcclusion(mb, { reach: .45, ground: .5, strength: .85, rays: 16 });
+  bakeOcclusion(mb, { reach: .45, ground: .5, strength: .55, rays: 16 });
   geometry = mb.build(1);
   geometry.name = `vehicle-${name}`;
   cache.set(name, geometry);
@@ -406,12 +406,12 @@ export function vehicleGeometry(name: VehicleName): THREE.BufferGeometry {
 /** The vehicles' shades of paint: copy tints the paint takes (the rest keeps its colour). */
 export const PAINTS: Record<VehicleName, string[]> = {
   taxi: ["#ffffff"], police: ["#ffffff"], boat: ["#ffffff"],
-  sedan: ["#d1d9e0", "#1558a4", "#c82e2f", "#eeeeea", "#25282d", "#16865b", "#4685bd", "#d1a357"],
-  suv: ["#2f3236", "#f2f0e9", "#25804f", "#b72539", "#b2bec8", "#145e9e"],
-  "hatchback-sports": ["#e92f35", "#ffbe19", "#126ed0", "#ececea", "#f5660c", "#2b2d31"],
-  van: ["#f4f3ed", "#c4cfd6", "#1e6ca9", "#e3c89a"],
-  delivery: ["#e95621", "#0e79cd", "#18a766", "#ffba1b"],
-  truck: ["#16794e", "#ca3428", "#f0e9d8", "#365f83", "#205fa8"],
+  sedan: ["#70bedc", "#278fd4", "#ed6854", "#fff7df", "#786bb3", "#36b68a", "#6ea0ee", "#f2ba57"],
+  suv: ["#637caa", "#fff5d9", "#45b57b", "#ec705c", "#9cced4", "#368ecc"],
+  "hatchback-sports": ["#f05c58", "#ffd05d", "#318fe1", "#fff5e5", "#f68d40", "#8a77c5"],
+  van: ["#fff6df", "#98c9dd", "#3c9cc4", "#efb76f"],
+  delivery: ["#f58c43", "#388fd9", "#46bd87", "#ffc655"],
+  truck: ["#47b47f", "#ef7456", "#fff0cf", "#6e9bce", "#3b91d5"],
 };
 
 type Node = ShaderNodeObject<THREE.Node>;
@@ -422,7 +422,7 @@ type Node = ShaderNodeObject<THREE.Node>;
  * z, the arch's radius, the axle's height), with a soft edge one pixel wide.
  */
 export function vehicleMaterial(look: SkyLook | null = null): THREE.MeshStandardNodeMaterial {
-  const material = new THREE.MeshPhysicalNodeMaterial({ roughness: .5, metalness: 0, clearcoat: .9, clearcoatRoughness: .16 });
+  const material = new THREE.MeshPhysicalNodeMaterial({ roughness: .65, metalness: 0, clearcoat: .42, clearcoatRoughness: .35 });
   material.vertexColors = false; material.userData.copyTint = "own";
   const surf = attribute("aSurf", "vec4"), arch = attribute("aWin", "vec4"), kind = surf.z, ao = surf.w, base = vertexColor().xyz;
   const is = (part: Part): Node => float(1).sub(step(.5, abs(kind.sub(part))));
@@ -439,26 +439,22 @@ export function vehicleMaterial(look: SkyLook | null = null): THREE.MeshStandard
   const checker = mix(mix(vec3(.02, .02, .025), vec3(.92, .92, .9), squares), vec3(.47), blur);
   const painted = is(PART.paint), glass = is(PART.glass), chrome = is(PART.chrome), rubber = is(PART.rubber), wood = is(PART.wood);
   const lacquer = painted.add(is(PART.fixed)).add(is(PART.checker)).clamp(0, 1);
-  // Fine surface variation is filtered out at a distance, so parked cars and large collection models never sparkle.
-  const pixel = max(max(fwidth(p.x), fwidth(p.y)), fwidth(p.z));
-  const fine = float(1).sub(smoothstep(.006, .035, pixel));
-  const grain = sin(p.x.mul(71).add(p.z.mul(19))).mul(sin(p.y.mul(53).sub(p.z.mul(13)))).mul(.5).add(.5);
-  const dust = smoothstep(.12, .55, p.y).oneMinus().mul(side).mul(lacquer).mul(.055);
-  const timber = fract(p.x.mul(10)), joint = float(1).sub(smoothstep(.006, max(.018, fwidth(p.x.mul(10))), min(timber, timber.oneMinus()))).mul(fine).mul(wood);
-  const surface = mix(mix(mix(base, base.mul(tint), painted), checker, is(PART.checker)), color("#0d0e10"), well)
-    .mul(float(1).sub(joint.mul(.35))).mul(float(1).sub(dust));
-  material.colorNode = surface.mul(ao);
+  // Smooth toy paint, clear coloured glazing and large highlights stay readable at city scale.
+  // No dust, grain or teak micro-lines: the shapes and their colour blocks carry the design.
+  const surface = mix(mix(mix(base, base.mul(tint), painted), checker, is(PART.checker)), color("#24384a"), well);
+  const softAO = mix(.68, 1, ao);
+  material.colorNode = surface.mul(softAO);
   const lamp = is(PART.head).add(is(PART.tail)).add(is(PART.blue)).add(is(PART.sign));
-  const rough = mix(float(.66), float(.27), lacquer).sub(glass.mul(.57)).sub(chrome.mul(.49)).add(rubber.mul(.25)).sub(lamp.mul(.36)).add(wood.mul(.12));
-  material.roughnessNode = rough.add(grain.sub(.5).mul(fine).mul(.035)).add(dust.mul(1.8)).add(well.mul(.3)).clamp(.06, .96);
-  material.metalnessNode = chrome.mul(.88).add(painted.mul(.08));
-  material.clearcoatNode = lacquer.mul(.86).add(glass.mul(.92)).add(lamp.mul(.6)).mul(well.oneMinus()).clamp(0, 1);
-  material.clearcoatRoughnessNode = mix(float(.16), float(.08), glass).add(dust.mul(.8));
-  // The sky in the lacquer and the glass: Fresnel from the view's angle, the sky's gradient in the reflected direction.
+  const rough = mix(float(.78), float(.48), lacquer).sub(glass.mul(.33)).sub(chrome.mul(.27)).add(rubber.mul(.12)).sub(lamp.mul(.18)).add(wood.mul(.06));
+  material.roughnessNode = rough.add(well.mul(.18)).clamp(.22, .94);
+  material.metalnessNode = chrome.mul(.45).add(painted.mul(.025));
+  material.clearcoatNode = lacquer.mul(.42).add(glass.mul(.5)).add(lamp.mul(.2)).mul(well.oneMinus()).clamp(0, .7);
+  material.clearcoatRoughnessNode = mix(float(.35), float(.24), glass);
   const view = cameraPosition.sub(positionWorld).normalize(), facing = max(dot(normalWorld, view), 0);
-  const fresnel = float(.04).add(pow(facing.oneMinus(), 5).mul(.96)), reflected = reflect(view.negate(), normalWorld);
+  const fresnel = float(.08).add(pow(facing.oneMinus(), 3).mul(.62)), reflected = reflect(view.negate(), normalWorld);
   const sky = skyGradient(look, vec3(reflected.x, max(reflected.y, 0), reflected.z));
-  const gloss = lacquer.mul(.28).add(glass.mul(1.2)).add(chrome.mul(.95)).add(lamp.mul(.3)).mul(well.oneMinus());
-  material.emissiveNode = sky.mul(fresnel).mul(gloss).mul(ao);
+  const gloss = lacquer.mul(.08).add(glass.mul(.48)).add(chrome.mul(.28)).add(lamp.mul(.12)).mul(well.oneMinus());
+  material.emissiveNode = sky.mul(fresnel).mul(gloss).mul(softAO);
+  material.userData.cityModelStyle = "cartoon-v1";
   return material;
 }

@@ -1,18 +1,8 @@
 /**
- * The city's lagoon and canal (docs/CITY_V4.md, stage 3). One material, no reflection pass on any quality tier:
- * - waves: a small tileable normal map generated once (waveNormals, 128 × 128 with mip levels), read twice at
- *   different sizes and directions, drifting with time; the waves calm down with distance and the mip levels
- *   average them out, so far water never sparkles;
- * - the sky in the water: a Fresnel mix of the water's own colour and the sky's gradient in the reflected
- *   direction (render/sky.ts skyLook: the colours of the time of day), computed in the shader; below the
- *   ridge line round the city it mirrors the hazy hills instead (dark at night), so the far water never turns white;
- * - the sun's glints from the light itself on the low-roughness waves; at night the moon's path, where a wave
- *   turns the view onto the moon's disc;
- * - colour by depth from the shore attribute: turquoise over the shallows, deep blue in the middle, and a light
- *   strip of lapping water along every quay wall and islet;
- * - at night a deep palette, and the lamps, windows and bridges along the shores mirrored in it as warm streaks
- *   (a noise term × ctx.night.level in the emissive, no extra pass).
- * The surface stays at y = -1.25 beneath the existing quays and bridges.
+ * Smooth turquoise cartoon water for the canal, lagoon and civic pools. One shared normal-map sample gives
+ * broad calm ripples; simplified pale shore ribbons and broad sky sheen avoid tiny photographic sparkles.
+ * Indigo/teal night water carries warm reflections from shores and bridges in the same material/draw call.
+ * Geometry, water level, shore depth and bridge masks stay aligned with the city's existing quays.
  */
 import * as THREE from "three/webgpu";
 import { attribute, cameraPosition, cameraWorldMatrix, color, dot, float, int, max, mix, normalize, positionWorld, pow, reflect, smoothstep, texture, transformNormalToView, uniform, vec2, vec3 } from "three/tsl";
@@ -30,9 +20,9 @@ export const WATER_Y = -1.25;
 /** Shallow water fades into deep over this distance from the shore. */
 const SHELF = 4.5;
 /** Night reflections fade out this far from a shore or a bridge's edge; their colour and strength. */
-const REFLECTION_REACH = 3.2, REFLECTION = "#ffc684", REFLECTION_GLOW = .55;
-/** Wave tiles: the long swell and the short chop, in world units (a tile holds waves of 1/9 of it up to all of it). */
-const SWELL = 8, CHOP = 2.6;
+const REFLECTION_REACH = 3.2, REFLECTION = "#ffd690", REFLECTION_GLOW = .46;
+/** Broad wave tile, in world units (the shared normal map holds wavelengths of 1/9 of it up to all of it). */
+const SWELL = 12;
 /**
  * What the water mirrors low over the horizon: the hills and ridges round the city, hazed by day and dark at
  * night. Their crest stands between these elevations (sines), wandering round the circle.
@@ -126,22 +116,21 @@ export function waveNormals(): THREE.DataTexture {
 
 export function createWater(ctx: CityContext): Water {
   const time = uniform(0), night = uniform(0);
-  const material = new THREE.MeshStandardNodeMaterial({ roughness: .1, metalness: 0 });
+  const material = new THREE.MeshStandardNodeMaterial({ roughness: .32, metalness: 0 });
   const p = positionWorld, shore = attribute("shore", "float");
 
-  // Waves: the swell and the chop drift different ways; both calm down with distance (the mip levels do the rest).
+  // Broad, slow waves calm down with distance; the shared mip levels remove subpixel shimmer.
   const map = waveNormals(), slope = (at: Parameters<typeof texture>[1]) => texture(map, at).xy.mul(2).sub(1);
-  const swell = slope(p.xz.div(SWELL).add(vec2(time.mul(.011), time.mul(.007))));
-  const chop = slope(vec2(p.x.mul(.8).sub(p.z.mul(.6)), p.x.mul(.6).add(p.z.mul(.8))).div(CHOP).add(vec2(time.mul(-.019), time.mul(.024))));
+  const swell = slope(p.xz.div(SWELL).add(vec2(time.mul(.008), time.mul(.005))));
   const distance = cameraPosition.sub(p).length(), calm = smoothstep(20, 240, distance);
-  const tilt = swell.mul(.17).add(chop.mul(.13)).mul(mix(1, .3, calm));
+  const tilt = swell.mul(.065).mul(mix(1, .24, calm));
   const normal = normalize(vec3(tilt.x.negate(), 1, tilt.y.negate()));
   material.normalNode = transformNormalToView(normal);
 
   // The sky in the water: Fresnel from the view's angle to the wave, the sky's gradient in the reflected
   // direction; below the ridge line (a noise read round a circle, so it has no seam) the hazy hills instead.
   const view = cameraPosition.sub(p).normalize(), facing = max(dot(normal, view), 0);
-  const fresnel = float(.02).add(pow(facing.oneMinus(), 5).mul(.98));
+  const fresnel = float(.02).add(pow(facing.oneMinus(), 5).mul(.48));
   const reflected = reflect(view.negate(), normal), look = skyLook(ctx.scene);
   const sky = skyGradient(look, vec3(reflected.x, max(reflected.y, 0), reflected.z));
   const around = reflected.xz.div(max(reflected.xz.length(), 1e-4));
@@ -151,14 +140,14 @@ export function createWater(ctx: CityContext): Water {
 
   // Colour by depth: turquoise shallows, deep blue in the middle; a light strip of lapping water at the walls.
   const deep = smoothstep(0, 1, shore);
-  const day = mix(color("#28c7c5"), color("#087eaf"), deep), dusk = mix(color("#2a6482"), color("#0e2945"), deep);
+  const day = mix(color("#64ded1"), color("#159fca"), deep), dusk = mix(color("#328da7"), color("#204c7c"), deep);
   const lap = smoothstep(0, .14, shore).oneMinus();
-  const froth = texture(groundNoise(), p.xz.mul(.42).add(vec2(time.mul(.02), time.mul(-.013)))).y;
-  const bands = shore.mul(46).sub(time.mul(1.7)).add(froth.mul(5)).sin().mul(.5).add(.5);
-  const foam = lap.mul(smoothstep(.35, .8, froth.mul(.6).add(bands.mul(.55)))).mul(mix(.8, .35, night));
+  const froth = texture(groundNoise(), p.xz.mul(.18).add(vec2(time.mul(.009), time.mul(-.006)))).y;
+  const bands = shore.mul(27).sub(time.mul(.7)).add(froth.mul(2)).sin().mul(.5).add(.5);
+  const foam = lap.mul(smoothstep(.4, .85, bands)).mul(mix(.52, .25, night));
   const body = mix(day, dusk, night);
-  material.colorNode = mix(body.mul(fresnel.oneMinus()), color("#dcebec").mul(mix(1, .25, night)), foam);
-  material.roughnessNode = mix(mix(.09, .17, calm), .6, foam);
+  material.colorNode = mix(body.mul(fresnel.mul(.4).oneMinus()), color("#e3fbef").mul(mix(1, .35, night)), foam);
+  material.roughnessNode = mix(mix(.28, .38, calm), .68, foam);
 
   // Night reflections: light on rippled water stretches towards the viewer, so the streaks run along the
   // camera's heading (one frame for the whole view) and the ripples break them up; only near the shores
@@ -172,8 +161,9 @@ export function createWater(ctx: CityContext): Water {
   const lights = color(REFLECTION).mul(shores).mul(streak.mul(.85).add(.15)).mul(ctx.night.level).mul(REFLECTION_GLOW);
   // The moon's path: glints where a wave turns the view onto the moon's disc (the moonlight itself comes from
   // higher up, render/sky.ts); nothing by day (moonLight is black).
-  const moonPath = (look?.moonLight ?? vec3(0)).mul(pow(max(dot(reflected, look?.moon ?? vec3(0, 1, 0)), 0), 1800)).mul(fresnel).mul(2.5);
-  material.emissiveNode = mirrored.mul(fresnel).add(moonPath).mul(foam.oneMinus()).mul(.85).add(lights);
+  const moonPath = (look?.moonLight ?? vec3(0)).mul(pow(max(dot(reflected, look?.moon ?? vec3(0, 1, 0)), 0), 900)).mul(fresnel).mul(1.3);
+  material.emissiveNode = mirrored.mul(fresnel).add(moonPath).mul(foam.oneMinus()).mul(.4).add(lights).add(body.mul(.055));
+  material.userData.cityModelStyle = "cartoon-v1";
 
   const mesh = new THREE.Mesh(waterGeometry(ctx.world), material);
   mesh.name = "city-water"; mesh.receiveShadow = true; mesh.matrixAutoUpdate = false;

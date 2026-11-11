@@ -23,7 +23,7 @@ import { mergeStatic } from "../assets/landmarks";
 import { generateSalesWorld, SALES_CENTERS } from "../world/sales";
 import { landGrid, type LandGrid } from "../world/land";
 import { FIRST_LAYOUT, districtLayout, districtNumber } from "../world/estateGrid";
-import { refineModelSurfaces, surfaceMaterial } from "../assets/surfaceDetail";
+import { detailedMaterialCopy, refineModelSurfaces, surfaceMaterial } from "../assets/surfaceDetail";
 import { skyLook, type SkyLook } from "../render/sky";
 import { districtMainFrame, landmarkBounds } from "../world/districtLandmark";
 import { createEstates, type Estates, type EstateFocusView } from "./estates";
@@ -45,45 +45,45 @@ export interface DepartmentWorld {
   focusEstate(target: EstateTarget, distance: number, polar: number): EstateFocusView | null;
   dispose(): void;
 }
-const WALL = "#f0e8d6", GLASS = "#397181", DARK = "#39484b", GOLD = "#ddb04f", GREEN = "#728963";
+const WALL = "#fff0cb", GLASS = "#64c2e4", DARK = "#365f83", GOLD = "#ffc24a", GREEN = "#67bd58";
 const materialSets = new WeakMap<THREE.Object3D, Map<string, THREE.MeshStandardNodeMaterial>>();
 function builder(root: THREE.Object3D, look: SkyLook | null = null) {
   const materials = materialSets.get(root) ?? new Map<string, THREE.MeshStandardNodeMaterial>(); materialSets.set(root, materials);
   return (w: number, h: number, d: number, x: number, y: number, z: number, color: string) => {
-    if (!materials.has(color)) materials.set(color, surfaceMaterial({ color, look, finish: color === GLASS ? "glass" : color === GOLD || color === DARK ? "metal" : "stone", roughness: color === GLASS ? .15 : color === DARK ? .42 : .78, metalness: color === GOLD || color === DARK ? .62 : color === GLASS ? .08 : .02 }));
-    const geometry = Math.min(w, h, d) > .28 ? new RoundedBoxGeometry(w, h, d, 1, Math.min(.055, w / 12, h / 12, d / 12)) : new THREE.BoxGeometry(w, h, d);
+    if (!materials.has(color)) materials.set(color, surfaceMaterial({ color, look, finish: color === GLASS ? "glass" : "paint", roughness: color === GLASS ? .32 : .82, metalness: color === GLASS ? .04 : .02 }));
+    const geometry = Math.min(w, h, d) > .28 ? new RoundedBoxGeometry(w, h, d, 1, Math.min(.18, w / 7, h / 7, d / 7)) : new THREE.BoxGeometry(w, h, d);
     const mesh = new THREE.Mesh(geometry, materials.get(color)!);
     mesh.position.set(x, y, z); mesh.castShadow = mesh.receiveShadow = true; root.add(mesh); return mesh;
   };
 }
 /**
- * The lake city's campus office in the city's v4 style (assets/facade.ts), in world units on its 10 × 10 plaza: a
+ * The lake city's rounded cartoon campus office, in world units on its 10 × 10 plaza: a
  * white body with windows all round and curtain glass on its fronts between pilasters (gold on every other one), a
  * floor band every 1.25, a dark cornice under a green roof, a gold canopy over the doors, planters either side.
  */
 function campusOffice(mb: MeshBuilder, x: number, z: number, index: number) {
   const S = (v: number) => v * WORLD_METRES, h = 3.4 + (index % 3) * .7, wall = rgb(WALL), pilaster = rgb(index % 2 ? GOLD : WALL);
   const b = (w: number, hh: number, d: number, cx: number, y0: number, cz: number, o: BoxOptions) => box(mb, [S(cx - w / 2), S(y0), S(cz - d / 2), S(cx + w / 2), S(y0 + hh), S(cz + d / 2)], o);
-  b(10, .3, 10, x, .2, z, { c: .2, kind: FACE.trim, col: rgb("#d4cabb"), top: FACE.trim });
-  b(7.6, h, 6, x, .5, z, { c: .25, kind: FACE.window, col: wall, top: FACE.deck, bay: 3, floor: S(1.25), winW: .5, winH: .5, shift: index });
-  for (const side of [-1, 1]) b(6.8, h - .8, .12, x, .9, z + side * 3.03, { c: 0, kind: FACE.curtain, col: rgb("#6f98a6"), top: FACE.deck, bay: 1.5, floor: S(1.25), v0: -S(.9), shift: index + side, occlude: false });
+  b(10, .3, 10, x, .2, z, { c: .2, kind: FACE.trim, col: rgb("#f1d9b0"), top: FACE.trim });
+  b(7.6, h, 6, x, .5, z, { c: .75, kind: FACE.window, col: wall, top: FACE.deck, bay: 3, floor: S(1.25), winW: .6, winH: .6, shift: index });
+  for (const side of [-1, 1]) b(6.8, h - .8, .12, x, .9, z + side * 3.03, { c: 0, kind: FACE.curtain, col: rgb("#7bcce5"), top: FACE.deck, bay: 2.25, floor: S(1.25), v0: -S(.9), shift: index + side, occlude: false });
   for (const dx of [-3.5, -1.2, 1.2, 3.5]) b(.2, h, 6.3, x + dx, .5, z, { c: .04, kind: index % 2 ? FACE.metal : FACE.trim, col: pilaster, top: FACE.trim, occlude: false });
   mb.detail(() => { for (let y = 1; y < h; y += 1.25) b(7.6, .13, 6.3, x, .5 + y - .065, z, { c: 0, kind: FACE.trim, col: wall, top: FACE.trim, occlude: false }); });
   b(8.2, .35, 6.6, x, h + .425, z, { c: .06, kind: FACE.trim, col: rgb(DARK), top: FACE.deck });
   b(5.6, .3, 4, x, h + .7, z, { c: .05, kind: FACE.leaf, col: rgb(GREEN), top: FACE.leaf });
   mb.detail(() => {
     for (const dx of [-1.1, 1.1]) {
-      b(.8, .14, .8, x + dx, h + .78, z - .45, { c: .025, kind: FACE.metal, col: rgb("#9da8aa"), top: FACE.metal, occlude: false });
-      for (const offset of [-.24, 0, .24]) b(.055, .06, .65, x + dx + offset, h + .92, z - .45, { c: 0, kind: FACE.trim, col: rgb(DARK), top: FACE.trim, occlude: false });
+      b(.8, .14, .8, x + dx, h + .78, z - .45, { c: .025, kind: FACE.metal, col: rgb("#bad9df"), top: FACE.metal, occlude: false });
+      for (const offset of [-.2, .2]) b(.09, .06, .65, x + dx + offset, h + .92, z - .45, { c: 0, kind: FACE.trim, col: rgb(DARK), top: FACE.trim, occlude: false });
     }
-    b(2.25, .08, .42, x, .46, z + 3.45, { c: .02, kind: FACE.trim, col: rgb("#bdb7aa"), top: FACE.trim, occlude: false });
-    for (const dx of [-.37, .37]) b(.035, .33, .04, x + dx, 1.05, z + 3.29, { c: .008, kind: FACE.metal, col: rgb("#bbc1c0"), top: FACE.metal, occlude: false });
+    b(2.25, .08, .42, x, .46, z + 3.45, { c: .02, kind: FACE.trim, col: rgb("#eed6a8"), top: FACE.trim, occlude: false });
+    for (const dx of [-.37, .37]) b(.035, .33, .04, x + dx, 1.05, z + 3.29, { c: .008, kind: FACE.metal, col: rgb("#bee0e6"), top: FACE.metal, occlude: false });
   });
   b(3.1, .2, 1.9, x, 1.7, z + 3.5, { c: .03, kind: FACE.metal, col: rgb(GOLD), top: FACE.metal, bottom: true, occlude: false });
-  b(2, 1.4, .15, x, .45, z + 3.2, { c: 0, kind: FACE.curtain, col: rgb("#3c5660"), top: FACE.trim, bay: 1, floor: S(1.4), occlude: false });
-  for (const dx of [-3.2, 3.2]) { b(1.2, .5, 1.2, x + dx, .45, z + 3.8, { c: .04, kind: FACE.wall, col: wall, top: FACE.trim }); sphere(mb, { x: S(x + dx), y: S(1.15), z: S(z + 3.8), r: S(.55), rise: S(.42), seg: 10, rings: 3, kind: FACE.leaf, col: rgb(GREEN) }); }
+  b(2, 1.4, .15, x, .45, z + 3.2, { c: 0, kind: FACE.curtain, col: rgb("#4a9ac1"), top: FACE.trim, bay: 1, floor: S(1.4), occlude: false });
+  for (const dx of [-3.2, 3.2]) { b(1.2, .5, 1.2, x + dx, .45, z + 3.8, { c: .18, kind: FACE.wall, col: wall, top: FACE.trim }); sphere(mb, { x: S(x + dx), y: S(1.15), z: S(z + 3.8), r: S(.55), rise: S(.42), seg: 10, rings: 3, kind: FACE.leaf, col: rgb(GREEN) }); }
 }
-const STONE = "#a29c8f", STONE_DARK = "#7f7a70", TUNNEL = "#20282b", PULS = "#6b55c8", GROUND_Y = .2;
+const STONE = "#e6c58f", STONE_DARK = "#b99462", TUNNEL = "#283f5b", PULS = "#9670e6", GROUND_Y = .2;
 /** Lamps that shine day and night: the tunnel's lights, the signal, the buffer stop's lamp. */
 const glows = new Map<string, THREE.MeshBasicNodeMaterial>();
 function glow(color: string) {
@@ -106,22 +106,22 @@ function station(line: RailLine, city: DepartmentId, look: SkyLook | null) {
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(across, height, along), glow(color)); mesh.position.set(x(w), y, u); fixed.add(mesh);
   };
   // The forecourt with planters and two lamps.
-  box(17.5, .06, 5.4, 3.75, G + .03, -13.3, "#d9cfbf");
+  box(17.5, .06, 5.4, 3.75, G + .03, -13.3, "#f6dfb8");
   for (const w of [-3.4, 10.9]) { box(1.3, .5, 1.3, w, G + .25, -14.2, WALL); box(1.1, .3, 1.1, w, G + .62, -14.2, GREEN); }
   for (const w of [-1.4, 8.9]) { box(.12, 3, .12, w, G + 1.5, -15.2, DARK); box(.45, .3, .45, w, G + 3.1, -15.2, GLASS); }
   // The floor slab under the building out to the platform, a step up to it from the forecourt.
-  box(17, F, 9.2, 4, G + F / 2, -6, "#cfc6b5"); box(17, F / 2, .45, 4, G + F / 4, -10.82, "#cfc6b5");
+  box(17, F, 9.2, 4, G + F / 2, -6, "#edd5ab"); box(17, F / 2, .45, 4, G + F / 4, -10.82, "#edd5ab");
   // The platform along the track under its canopy, its edge marked yellow, two benches.
-  box(3.4, F, 22, 3.6, G + F / 2, 9.5, "#cfc6b5"); box(.14, .02, 22, 2.12, G + F + .01, 9.5, "#e2b33c");
+  box(3.4, F, 22, 3.6, G + F / 2, 9.5, "#edd5ab"); box(.14, .02, 22, 2.12, G + F + .01, 9.5, "#ffcb42");
   for (const u of [1, 6, 11, 16]) box(.16, 3.3, .16, 4.6, G + F + 1.65, u, GOLD);
   box(4.6, .25, 19.5, 3.7, G + F + 3.45, 8.5, DARK); box(.4, .06, 18.5, 3.2, G + F + 3.3, 8.5, GLASS);
-  for (const u of [3.5, 13.5]) box(.5, .4, 1.4, 4.6, G + F + .2, u, "#8b6a4b");
+  for (const u of [3.5, 13.5]) box(.5, .4, 1.4, 4.6, G + F + .2, u, "#d38b51");
   // The track from the buffer stop, through the cutting, into the tunnel.
   const along = L + 22.5, middle = (L + 21.5) / 2;
-  box(3.2, .18, along, 0, G + .09, middle, "#a59b8b");
+  box(3.2, .18, along, 0, G + .09, middle, "#d6bb8c");
   for (const w of [-.55, .55]) box(.1, .12, along, w, G + .24, middle, DARK);
-  for (let u = .3; u < L + 21; u += .9) box(2.3, .08, .26, 0, G + .2, u, "#786b5b");
-  box(2.2, .9, .4, 0, G + .65, -.3, "#c4423c"); lamp(.3, .3, .1, 0, G + 1.25, -.52, "#ff5a4e");
+  for (let u = .3; u < L + 21; u += .9) box(2.3, .08, .26, 0, G + .2, u, "#b78651");
+  box(2.2, .9, .4, 0, G + .65, -.3, "#eb705b"); lamp(.3, .3, .1, 0, G + 1.25, -.52, "#ff5a4e");
   // A signal on the far side before the portal: green above, red below.
   box(.15, 3.4, .15, -3.4, G + 1.7, L - 7, DARK); box(.5, 1.1, .35, -3.4, G + 3.6, L - 7, DARK);
   lamp(.22, .22, .06, -3.4, G + 3.85, L - 7.2, "#57d68d"); lamp(.22, .22, .06, -3.4, G + 3.35, L - 7.2, "#7a2a26");
@@ -137,7 +137,7 @@ function station(line: RailLine, city: DepartmentId, look: SkyLook | null) {
       }
     }
     t(1.05, .16, 1.2, 0, G + .64, u, DARK);
-    for (const du of [-.3, 0, .3]) t(.7, .065, .18, 0, G + 2.30, u + du, DARK);
+    for (const du of [-.24, .24]) t(.7, .065, .24, 0, G + 2.30, u + du, DARK);
     for (const side of [-1, 1]) {
       t(.045, 1.12, .045, side * .925, G + 1.17, u - 1.4, DARK);
       t(.045, 1.12, .045, side * .925, G + 1.17, u - .7, DARK);
@@ -149,7 +149,7 @@ function station(line: RailLine, city: DepartmentId, look: SkyLook | null) {
     for (const du of [-.1, 0, .1]) for (const side of [-1, 1]) t(.035, 1.36, .025, side * .735, G + 1.34, u + du, DARK);
   }
   t(1.5, .7, .08, 0, G + 1.6, 12.61, GLASS);
-  for (const side of [-1, 1]) t(.16, .1, .03, side * .56, G + 1.03, 12.63, "#f1e6c9");
+  for (const side of [-1, 1]) t(.16, .1, .03, side * .56, G + 1.03, 12.63, "#fff3cb");
   mergeOwned(fixed); mergeOwned(train);
   let building = drawnBuilding(line, look), portal = drawnPortal(line, look); root.add(building, portal);
   root.position.set(line.x, 0, line.z); root.rotation.y = railHeading(line);
@@ -187,7 +187,7 @@ function drawnBuilding(line: RailLine, look: SkyLook | null) {
   box(17.1, .35, 8.6, 4, G + 4.25, -5.75, PULS); box(17.6, .35, 9.1, 4, G + 4.95, -5.75, DARK);
   box(7, 2.8, 7.5, 4, G + 6.2, -5.75, WALL); box(7.6, .3, 8.1, 4, G + 7.75, -5.75, DARK);
   for (const w of [1.65, 6.35]) box(2.3, 1.9, .12, w, G + 6.1, -9.52, GLASS);
-  box(1.5, 1.5, .14, 4, G + 6.25, -9.55, "#f7f3e8"); box(.12, .62, .06, 4, G + 6.45, -9.64, DARK); box(.5, .12, .06, 4.2, G + 6.25, -9.64, DARK);
+  box(1.5, 1.5, .14, 4, G + 6.25, -9.55, "#fff9e2"); box(.12, .62, .06, 4, G + 6.45, -9.64, DARK); box(.5, .12, .06, 4.2, G + 6.25, -9.64, DARK);
   // The canopy's posts stand on the forecourt, in front of the floor slab.
   box(6.5, .2, 2.4, 4, G + 3.05, -11.2, DARK); for (const w of [1.2, 6.8]) box(.14, 2.95 + STATION.floor, .14, w, GROUND_Y + (2.95 + STATION.floor) / 2, -12.2, GOLD);
   box(2.6, 2.2, .14, 4, G + 1.1, -10.1, DARK);
@@ -195,11 +195,12 @@ function drawnBuilding(line: RailLine, look: SkyLook | null) {
   return group;
 }
 /** The station model's windows as a node material of their own, so night lights them as it does the drawn glass. */
-function litWindows(models: Map<string, Model>) {
+function litWindows(models: Map<string, Model>, look: SkyLook | null) {
   for (const model of models.values()) for (const part of model.parts) {
     const source = part.material as THREE.MeshStandardMaterial;
     if (source.name !== "station-glass" || source instanceof THREE.MeshStandardNodeMaterial) continue;
-    part.material = new THREE.MeshStandardNodeMaterial({ name: source.name, color: source.color, roughness: source.roughness, metalness: source.metalness });
+    // The fallback must retain the shared cartoon paint/glass treatment as well as night emission.
+    part.material = detailedMaterialCopy(source, look);
     source.dispose();
   }
 }
@@ -238,14 +239,14 @@ function drawnPortal(line: RailLine, look: SkyLook | null) {
   const wall = L - 1.2;
   for (const w of [-4.4, 4.4]) box(4.2, 8.4, 3.6, w, G + 4.2, wall, STONE);
   box(4.6, 2.8, 3.6, 0, G + 7, wall, STONE); box(13.6, .45, 4, 0, G + 8.6, wall, STONE_DARK);
-  box(5.4, .5, .3, 0, G + 5.85, L - 3.1, "#c9c2b4"); for (const w of [-2.5, 2.5]) box(.4, 5.6, .3, w, G + 2.8, L - 3.1, "#c9c2b4");
+  box(5.4, .5, .3, 0, G + 5.85, L - 3.1, "#ffe0a8"); for (const w of [-2.5, 2.5]) box(.4, 5.6, .3, w, G + 2.8, L - 3.1, "#ffe0a8");
   for (const sign of [-1, 1]) for (const [k, height] of [[0, 6], [1, 4.4], [2, 2.8]]) {
     const u = L - 4.3 - k * 2.7, w = sign * (6.8 + k * .65), piece = box(.8, height, 2.8, w, G + height / 2, u, STONE);
     piece.rotation.y = Math.atan2(sign * side * .65, 2.7);
   }
   for (const w of [-2.45, 2.45]) box(.3, 5.6, 25, w, G + 2.8, L + 9.5, TUNNEL);
-  box(5.2, .3, 25, 0, G + 5.75, L + 9.5, TUNNEL); box(5.2, .04, 25, 0, G + .02, L + 9.5, TUNNEL); box(5.2, 5.6, .3, 0, G + 2.8, L + 22, "#0e1416");
-  for (let u = L + 1.5; u < L + 20; u += 4) for (const w of [-2.26, 2.26]) lampAt(group, side, .1, .22, .6, w, G + 4.2, u, "#ffd38a");
+  box(5.2, .3, 25, 0, G + 5.75, L + 9.5, TUNNEL); box(5.2, .04, 25, 0, G + .02, L + 9.5, TUNNEL); box(5.2, 5.6, .3, 0, G + 2.8, L + 22, "#142a45");
+  for (let u = L + 1.5; u < L + 20; u += 4) for (const w of [-2.26, 2.26]) lampAt(group, side, .1, .22, .6, w, G + 4.2, u, "#ffdf98");
   mergeOwned(group);
   return group;
 }
@@ -265,14 +266,14 @@ function modelPortal(line: RailLine, model: Model) {
   const group = new THREE.Group(), place = new THREE.Group(), G = GROUND_Y, L = line.length;
   place.position.set(0, G + .3, L - PORTAL_AT); group.add(place);
   for (const part of model.parts) { const mesh = new THREE.Mesh(part.geometry, part.material); mesh.castShadow = part.castShadow; mesh.receiveShadow = true; place.add(mesh); }
-  const floor = new THREE.Mesh(new THREE.BoxGeometry(7.4, .04, 31), new THREE.MeshStandardNodeMaterial({ color: TUNNEL, roughness: .95 }));
+  const floor = new THREE.Mesh(new THREE.BoxGeometry(7.4, .04, 31), surfaceMaterial({ color: TUNNEL, finish: "paint", roughness: .95 }));
   floor.position.set(0, G + .02, L + 12.5); floor.receiveShadow = true; group.add(floor);
   group.updateMatrixWorld(true);
   const ray = new THREE.Raycaster(), parts = place.children, lamps = new THREE.Group();
   for (let u = L + 1.5; u < L + 24; u += 4) for (const side of [-1, 1] as const) {
     ray.set(new THREE.Vector3(0, G + 3.6, u), new THREE.Vector3(side, 0, 0));
     const hit = ray.intersectObjects(parts, false)[0];
-    if (hit) lampAt(lamps, -1, .1, .22, .6, side * (hit.distance - .1), G + 3.6, u, "#ffd38a");
+    if (hit) lampAt(lamps, -1, .1, .22, .6, side * (hit.distance - .1), G + 3.6, u, "#ffdf98");
   }
   if (lamps.children.length) { mergeOwned(lamps); group.add(lamps); }
   return group;
@@ -280,7 +281,7 @@ function modelPortal(line: RailLine, model: Model) {
 
 export function createDepartmentWorld(ctx: CityContext, catalogue: Catalogue, onPick: (id: string) => void, onEstate: (pick: EstatePick) => void = () => undefined): DepartmentWorld {
   let active: DepartmentId = "support", sales: ReturnType<typeof salesRoot> | undefined;
-  const supportNodes = [...ctx.scene.children].filter(n => !(n instanceof THREE.Light));
+  const supportNodes = [...ctx.scene.children].filter(n => !(n instanceof THREE.Light) && !n.userData.sharedEnvironment);
   const supportRoot = new THREE.Group(); supportRoot.name = "support-city";
   supportNodes.forEach(n => supportRoot.add(n)); ctx.scene.add(supportRoot);
   const supportOverlayNodes = [...ctx.overlay.children] as HTMLElement[];
@@ -296,7 +297,7 @@ export function createDepartmentWorld(ctx: CityContext, catalogue: Catalogue, on
   }).catch(() => undefined);
   void loadModels(stationUrl, { signal: assetController.signal }).then(models => {
     if (disposed || !models.has("railway-station")) { disposeModels(models); return; }
-    refineModelSurfaces(models, skyLook(ctx.scene)); litWindows(models); stationModels = models; supportRail.useBuilding(models); sales?.rail.useBuilding(models);
+    refineModelSurfaces(models, skyLook(ctx.scene)); litWindows(models, skyLook(ctx.scene)); stationModels = models; supportRail.useBuilding(models); sales?.rail.useBuilding(models);
     [supportRail.root, sales?.rail.root].forEach(root => { if (root) illuminate(root); });
     ctx.requestShadowUpdate();
   }).catch(() => undefined);
@@ -350,7 +351,7 @@ export function createDepartmentWorld(ctx: CityContext, catalogue: Catalogue, on
       const materials = Array.isArray(object.material) ? object.material : [object.material];
       // The drawn buildings' glass, and the station model's windows (litWindows).
       for (const material of materials) if (material instanceof THREE.MeshStandardNodeMaterial && (material.name === "station-glass" || material.color.getHexString() === GLASS.slice(1))) {
-        material.emissive.set(night ? "#ffc77d" : "#000000"); material.emissiveIntensity = .65;
+        material.emissive.set(night ? "#ffd182" : "#000000"); material.emissiveIntensity = .65;
       }
     });
   }
@@ -369,7 +370,7 @@ export function createDepartmentWorld(ctx: CityContext, catalogue: Catalogue, on
     // The campus offices: one facade mesh, its windows lit at night with campusNight.
     const offices = new MeshBuilder();
     SALES_CENTERS.forEach((p, i) => campusOffice(offices, p.x, p.z, i));
-    bakeOcclusion(offices, { rays: 16, reach: 5 });
+    bakeOcclusion(offices, { rays: 16, reach: 5, strength: .62 });
     const campusMesh = new THREE.Mesh(offices.build(1 / WORLD_METRES), campusMaterial);
     campusMesh.castShadow = campusMesh.receiveShadow = true; campusMesh.name = "sales-campus"; campus.add(campusMesh);
     // The hills round the lake city, out as far as the island city's, so the fog hides their edge the same way.

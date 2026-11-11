@@ -1,6 +1,6 @@
 /**
  * The ready houses and office towers the district shop sells (world/familyHouses.ts, world/officeBuildings.ts), built
- * in code in the city's v4 style (docs/CITY_V4.md): chamfered walls, gable roofs with eaves, porches, garages and
+ * in code as bright cartoon miniatures: broad rounded wall bevels, bold roof colours, porches, garages and
  * carports, glass lobbies and crowns, occlusion baked into the vertices, windows drawn by the facade material.
  *
  * Each is drawn in metres on its table's footprint (width and depth in model units times the metres in a unit),
@@ -16,14 +16,14 @@ import { NURLY_TAU_RISE, NURLY_TAU_WIDTH, OFFICE_BUILDINGS, type OfficeBuilding 
 /** Metres in one of the tables' model units: a house is drawn 1.35 times bigger, an office twice, a unit is about 4 m. */
 const HOUSE_METRES = 4 * 1.35, OFFICE_METRES = 4 * 2;
 const FINISH: Record<typeof FINISHES[number], { wall: V3; plinth: V3; door: V3 }> = {
-  brick: { wall: rgb("#bc542e"), plinth: rgb("#86552f"), door: rgb("#146b9e") },
-  stone: { wall: rgb("#f3d39b"), plinth: rgb("#b39160"), door: rgb("#a24727") },
+  brick: { wall: rgb("#f38d66"), plinth: rgb("#d39359"), door: rgb("#138bb2") },
+  stone: { wall: rgb("#ffe3a3"), plinth: rgb("#d8aa64"), door: rgb("#dc674d") },
 };
 const ROOF: Record<ReadyHouse, V3> = {
-  carport: rgb("#2e648b"), bungalow: rgb("#d04b29"), attic: rgb("#304e78"), modern: rgb("#fff0cc"), bayhouse: rgb("#b4482b"), terrace: rgb("#206c8b"),
+  carport: rgb("#247faa"), bungalow: rgb("#ee6040"), attic: rgb("#387eae"), modern: rgb("#fff6dc"), bayhouse: rgb("#e36345"), terrace: rgb("#238fa9"),
 };
-const TRIM = rgb("#fff5df"), DARK = rgb("#273e4f"), PAVING = rgb("#c6b9a0"), GARAGE = rgb("#ece9df");
-const ZINC = rgb("#a0afb4"), ANODIZED = rgb("#49738a"), VENT = rgb("#3b474b");
+const TRIM = rgb("#fff8de"), DARK = rgb("#31516c"), PAVING = rgb("#e5c69a"), GARAGE = rgb("#fff0cf");
+const ZINC = rgb("#b7d4de"), ANODIZED = rgb("#3c8aa8"), VENT = rgb("#477187");
 
 interface House { W: number; D: number; H: number; door: [number, number]; garage: [number, number] | null; wall: V3; plinth: V3; doorColour: V3; roof: V3 }
 
@@ -42,7 +42,7 @@ function door(mb: MeshBuilder, h: House, front: number) {
   });
 }
 function canopy(mb: MeshBuilder, x: number, front: number, width: number, depth: number, posts = true) {
-  box(mb, [x - width / 2, 2.75, front, x + width / 2, 2.95, front + depth], { c: .03, kind: FACE.trim, col: TRIM, top: FACE.trim });
+  box(mb, [x - width / 2, 2.64, front, x + width / 2, 2.95, front + depth], { c: .03, kind: FACE.trim, col: TRIM, top: FACE.trim });
   if (posts) for (const side of [-1, 1]) box(mb, [x + side * (width / 2 - .12) - .07, 0, front + depth - .18, x + side * (width / 2 - .12) + .07, 2.75, front + depth - .04], { c: .02, kind: FACE.trim, col: TRIM, top: FACE.trim });
 }
 function garageDoor(mb: MeshBuilder, x: number, front: number, width = 3) {
@@ -51,18 +51,18 @@ function garageDoor(mb: MeshBuilder, x: number, front: number, width = 3) {
   mb.detail(() => {
     for (const side of [-1, 1]) box(mb, [x + side * (width / 2 - .05) - .05, 0, front + .035, x + side * (width / 2 - .05) + .05, 2.3, front + .08], { c: 0, kind: FACE.metal, col: ZINC, top: FACE.metal, occlude: false });
     box(mb, [x - width / 2, 2.2, front + .035, x + width / 2, 2.3, front + .08], { c: 0, kind: FACE.metal, col: ZINC, top: FACE.metal, occlude: false });
-    for (const y of [.5, 1.05, 1.6]) box(mb, [x - width / 2 + .1, y, front + .04, x + width / 2 - .1, y + .025, front + .075], { c: 0, kind: FACE.trim, col: rgb("#aaa9a3"), top: FACE.trim, occlude: false });
+    for (const y of [.5, 1.05, 1.6]) box(mb, [x - width / 2 + .1, y, front + .04, x + width / 2 - .1, y + .025, front + .075], { c: 0, kind: FACE.trim, col: rgb("#d5c7a6"), top: FACE.trim, occlude: false });
     box(mb, [x - .17, .9, front + .04, x + .17, .95, front + .08], { c: 0, kind: FACE.metal, col: ANODIZED, top: FACE.metal, occlude: false });
   });
 }
 function chimney(mb: MeshBuilder, x: number, z: number, y0: number, y1: number) {
-  box(mb, [x - .42, y0, z - .42, x + .42, y1, z + .42], { c: .03, kind: FACE.trim, col: rgb("#8e5240"), top: FACE.trim });
-  box(mb, [x - .52, y1, z - .52, x + .52, y1 + .14, z + .52], { c: .02, kind: FACE.trim, col: rgb("#c8c3b8"), top: FACE.trim });
+  box(mb, [x - .42, y0, z - .42, x + .42, y1, z + .42], { c: .03, kind: FACE.trim, col: rgb("#d9835a"), top: FACE.trim });
+  box(mb, [x - .52, y1, z - .52, x + .52, y1 + .14, z + .52], { c: .02, kind: FACE.trim, col: rgb("#f5dfb3"), top: FACE.trim });
 }
 /** A body with its plinth: windows in every wall; `top` is what its roof face is (hidden under a pitched roof). */
 function body(mb: MeshBuilder, h: House, [x0, z0, x1, z1]: [number, number, number, number], height: number, o: { floor?: number; bay?: number; top?: typeof FACE.deck | typeof FACE.trim } = {}) {
   box(mb, [x0 - .08, 0, z0 - .08, x1 + .08, .45, z1 + .08], { c: .04, kind: FACE.trim, col: h.plinth, top: FACE.trim, occlude: false });
-  box(mb, [x0, 0, z0, x1, height, z1], { c: .15, kind: FACE.window, col: h.wall, top: o.top ?? FACE.trim, bay: o.bay ?? 2.7, floor: o.floor ?? 2.9, winW: .44, winH: .48, even: ["+z", "-z"] });
+  box(mb, [x0, 0, z0, x1, height, z1], { c: .42, kind: FACE.window, col: h.wall, top: o.top ?? FACE.trim, bay: o.bay ?? 2.7, floor: o.floor ?? 2.9, winW: .53, winH: .58, even: ["+z", "-z"] });
   mb.detail(() => {
     // Gutters sit under the eaves and the downpipe stays beside a corner, clear of doors and windows.
     box(mb, [x0 + .1, height - .12, z1 + .04, x1 - .1, height - .035, z1 + .15], { c: 0, kind: FACE.metal, col: ZINC, top: FACE.metal, occlude: false });
@@ -87,7 +87,7 @@ function dormer(mb: MeshBuilder, h: House, x: number, front: number, eaves: numb
 }
 /** A slab on the given cells with a glass railing round its open sides. */
 function balcony(mb: MeshBuilder, [x0, z0, x1, z1]: [number, number, number, number], y: number, open: ("+z" | "-z" | "+x" | "-x")[]) {
-  box(mb, [x0, y - .18, z0, x1, y, z1], { c: .03, kind: FACE.trim, col: rgb("#d8d4cb"), top: FACE.trim });
+  box(mb, [x0, y - .18, z0, x1, y, z1], { c: .03, kind: FACE.trim, col: rgb("#f8e6c8"), top: FACE.trim });
   const rail = (b: [number, number, number, number, number, number]) => box(mb, b, { c: .01, kind: FACE.glass, top: FACE.trim, topCol: DARK, occlude: false });
   if (open.includes("+z")) rail([x0, y, z1 - .06, x1, y + 1, z1]);
   if (open.includes("-z")) rail([x0, y, z0, x1, y + 1, z0 + .06]);
@@ -97,13 +97,13 @@ function balcony(mb: MeshBuilder, [x0, z0, x1, z1]: [number, number, number, num
 const post = (mb: MeshBuilder, x: number, z: number, height: number, thick = .14) =>
   box(mb, [x - thick, 0, z - thick, x + thick, height, z + thick], { c: thick * .3, kind: FACE.trim, col: TRIM, top: FACE.trim });
 
-/** A compact roof condenser: metal enclosure, recessed louvers and a real octagonal fan grille. */
+/** A compact toy condenser: two broad vents and one simple octagonal fan disc. */
 function roofPlant(mb: MeshBuilder, x: number, z: number, y: number, w = 1.7, d = 1.2, h = .65) {
   mb.detail(() => {
     box(mb, [x - w / 2, y, z - d / 2, x + w / 2, y + h, z + d / 2], { c: 0, kind: FACE.metal, col: ZINC, top: FACE.metal, occlude: false });
-    for (let i = 1; i <= 4; i++) {
-      const yy = y + h * (.12 + i * .15), front = z + d / 2 + .004;
-      mb.quad([[x - w * .4, yy, front], [x + w * .4, yy, front], [x + w * .4, yy + h * .045, front], [x - w * .4, yy + h * .045, front]], { kind: FACE.trim, col: VENT });
+    for (let i = 1; i <= 2; i++) {
+      const yy = y + h * (.12 + i * .27), front = z + d / 2 + .004;
+      mb.quad([[x - w * .4, yy, front], [x + w * .4, yy, front], [x + w * .4, yy + h * .085, front], [x - w * .4, yy + h * .085, front]], { kind: FACE.trim, col: VENT });
     }
     const radius = Math.min(w, d) * .32, top = y + h + .006;
     for (let i = 0; i < 8; i++) {
@@ -153,7 +153,7 @@ const HOUSES: Record<ReadyHouse, (mb: MeshBuilder, h: House) => void> = {
     door(mb, h, h.door[1]);
     for (const x of [porch[0] + .4, porch[1] - .4]) post(mb, x, h.D / 2 - .35, eaves, .2);
     const [gx, gz] = h.garage!;
-    box(mb, [split, 0, back + 1.2, h.W / 2, 3, gz], { c: .12, kind: FACE.wall, col: h.wall, top: FACE.trim, faces: ["+z", "-z", "+x"] });
+    box(mb, [split, 0, back + 1.2, h.W / 2, 3, gz], { c: .32, kind: FACE.wall, col: h.wall, top: FACE.trim, faces: ["+z", "-z", "+x"] });
     hipRoof(mb, { x0: split, x1: h.W / 2, z0: back + 1.2, z1: gz, y: 3, pitch: .45, overhang: .35, roof: h.roof });
     garageDoor(mb, gx, gz, 3.2);
   },
@@ -166,15 +166,15 @@ const HOUSES: Record<ReadyHouse, (mb: MeshBuilder, h: House) => void> = {
     chimney(mb, -h.W / 2 + 1.8, -2, eaves - .4, eaves + (h.door[1] + h.D / 2) / 2 * 1.05 + .6);
     door(mb, h, h.door[1]); canopy(mb, h.door[0], h.door[1], 2.2, 1.1, false);
     const [gx, gz] = h.garage!;
-    box(mb, [split, 0, -h.D / 2 + 2, h.W / 2, 3, gz], { c: .1, kind: FACE.wall, col: h.wall, top: FACE.deck });
+    box(mb, [split, 0, -h.D / 2 + 2, h.W / 2, 3, gz], { c: .3, kind: FACE.wall, col: h.wall, top: FACE.deck });
     parapet(mb, split, -h.D / 2 + 2, h.W / 2, gz, 3, .35, .22, h.wall);
     garageDoor(mb, gx, gz, 2.8);
   },
   // «Два этажа под плоской крышей, встроенный гараж и балкон во двор.»
   modern(mb, h) {
-    const front = h.door[1], back = -h.D / 2 + 1.3, white: V3 = rgb("#f2f0eb");
-    box(mb, [-h.W / 2, 0, back, h.W / 2, 3.4, front], { c: .1, kind: FACE.window, col: white, top: FACE.deck, bay: 3.6, floor: 3.4, winW: .62, winH: .58 });
-    box(mb, [-h.W / 2 + .8, 3.4, back, h.W / 2, 6.8, h.D / 2 - .4], { c: .1, kind: FACE.window, col: rgb("#33373c"), top: FACE.deck, bay: 3.4, floor: 3.4, winW: .66, winH: .6 });
+    const front = h.door[1], back = -h.D / 2 + 1.3, white: V3 = rgb("#fff6db");
+    box(mb, [-h.W / 2, 0, back, h.W / 2, 3.4, front], { c: .32, kind: FACE.window, col: white, top: FACE.deck, bay: 3.6, floor: 3.4, winW: .62, winH: .58 });
+    box(mb, [-h.W / 2 + .8, 3.4, back, h.W / 2, 6.8, h.D / 2 - .4], { c: .32, kind: FACE.window, col: rgb("#4b91ae"), top: FACE.deck, bay: 3.4, floor: 3.4, winW: .66, winH: .6 });
     // A recessed flat deck with coping rather than one featureless solid roof slab.
     box(mb, [-h.W / 2 + .6, 6.8, back - .2, h.W / 2 + .2, 6.9, h.D / 2], { c: .03, kind: FACE.trim, col: white, top: FACE.deck });
     const rx0 = -h.W / 2 + .6, rx1 = h.W / 2 + .2, rz0 = back - .2, rz1 = h.D / 2;
@@ -194,12 +194,12 @@ const HOUSES: Record<ReadyHouse, (mb: MeshBuilder, h: House) => void> = {
     dormer(mb, h, h.door[0] - 2.4, front, eaves);
     chimney(mb, side - 1.8, -2, eaves - .5, ridge + .6);
     const bx0 = side - 4, bx1 = side - .8;
-    box(mb, [bx0, 0, front - .2, bx1, 3.3, h.D / 2], { c: .2, kind: FACE.window, col: h.wall, top: FACE.trim, bay: 1.5, floor: 3.3, winW: .62, winH: .55 });
+    box(mb, [bx0, 0, front - .2, bx1, 3.3, h.D / 2], { c: .42, kind: FACE.window, col: h.wall, top: FACE.trim, bay: 1.5, floor: 3.3, winW: .62, winH: .55 });
     hipRoof(mb, { x0: bx0, x1: bx1, z0: front - .2, z1: h.D / 2, y: 3.3, pitch: .6, overhang: .15, roof: h.roof });
     balcony(mb, [side, -2.5, h.W / 2, 1.5], 3.2, ["+x", "+z", "-z"]);
     door(mb, h, front); canopy(mb, h.door[0], front, 2.2, 1.1, false);
     const [gx, gz] = h.garage!;
-    box(mb, [-h.W / 2, 0, -h.D / 2 + 1.5, split, 3.2, gz], { c: .12, kind: FACE.wall, col: h.wall, top: FACE.trim, faces: ["+z", "-z", "-x"] });
+    box(mb, [-h.W / 2, 0, -h.D / 2 + 1.5, split, 3.2, gz], { c: .32, kind: FACE.wall, col: h.wall, top: FACE.trim, faces: ["+z", "-z", "-x"] });
     gableRoof(mb, { a0: -h.D / 2 + 1.5, a1: gz, b0: -h.W / 2, b1: split, y: 3.2, pitch: .5, overhang: .35, axis: "z", roof: h.roof, wall: h.wall });
     garageDoor(mb, gx, gz, 3);
   },
@@ -227,7 +227,7 @@ export function readyHouseGeometry(family: ReadyHouse, finish: typeof FINISHES[n
   };
   const mb = new MeshBuilder();
   HOUSES[family](mb, h);
-  bakeOcclusion(mb);
+  bakeOcclusion(mb, { strength: .64 });
   return mb.build(1 / k);
 }
 
@@ -240,15 +240,15 @@ interface Tower {
   chamfer?: number; ring?: boolean;
 }
 const TOWERS: Record<Exclude<OfficeBuilding, "officej" | "officek" | "officel">, Tower> = {
-  officea: { glass: rgb("#53a8da"), stone: rgb("#f4d59d"), tiers: [[0, .16, "stone"], [1, 1, "glass"]] },
-  officeb: { glass: rgb("#7bacd4"), stone: rgb("#edb078"), tiers: [[0, .86, "stone"], [1.4, 1, "stone"]] },
-  officec: { glass: rgb("#4db9c8"), stone: rgb("#dfdfa6"), tiers: [[0, .55, "glass"], [1.6, .8, "glass"], [3.2, 1, "glass"]] },
-  officed: { glass: rgb("#287daf"), stone: rgb("#b8d9ee"), tiers: [[0, .12, "stone"], [.6, 1, "glass"]], chamfer: 2.4 },
-  officee: { glass: rgb("#61b7d6"), stone: rgb("#d9a77a"), tiers: [[0, .42, "stone"], [.8, 1, "glass"]] },
-  officef: { glass: rgb("#295f98"), stone: rgb("#ebca99"), tiers: [[0, .14, "stone"], [.5, 1, "glass"]], ring: true },
-  officeg: { glass: rgb("#3aa7bf"), stone: rgb("#edc788"), tiers: [[0, .2, "stone"], [.9, 1, "glass"]] },
-  officeh: { glass: rgb("#82a6df"), stone: rgb("#d5b8e7"), tiers: [[0, .38, "glass"], [2.2, 1, "glass"]] },
-  officei: { glass: rgb("#329bbb"), stone: rgb("#f8dfa8"), tiers: [[0, .1, "stone"], [.6, 1, "glass"]], chamfer: .9, ring: true },
+  officea: { glass: rgb("#53a8da"), stone: rgb("#ffe2a4"), tiers: [[0, .16, "stone"], [1, 1, "glass"]] },
+  officeb: { glass: rgb("#7bacd4"), stone: rgb("#f5ae7f"), tiers: [[0, .86, "stone"], [1.4, 1, "stone"]] },
+  officec: { glass: rgb("#4db9c8"), stone: rgb("#f7e1a2"), tiers: [[0, .55, "glass"], [1.6, .8, "glass"], [3.2, 1, "glass"]] },
+  officed: { glass: rgb("#287daf"), stone: rgb("#c2e8f3"), tiers: [[0, .12, "stone"], [.6, 1, "glass"]], chamfer: 2.4 },
+  officee: { glass: rgb("#61b7d6"), stone: rgb("#efbd8b"), tiers: [[0, .42, "stone"], [.8, 1, "glass"]] },
+  officef: { glass: rgb("#295f98"), stone: rgb("#ffe0a5"), tiers: [[0, .14, "stone"], [.5, 1, "glass"]], ring: true },
+  officeg: { glass: rgb("#3aa7bf"), stone: rgb("#ffd18b"), tiers: [[0, .2, "stone"], [.9, 1, "glass"]] },
+  officeh: { glass: rgb("#82a6df"), stone: rgb("#cdb5ed"), tiers: [[0, .38, "glass"], [2.2, 1, "glass"]] },
+  officei: { glass: rgb("#329bbb"), stone: rgb("#ffdf9e"), tiers: [[0, .1, "stone"], [.6, 1, "glass"]], chamfer: .9, ring: true },
 };
 
 /**
@@ -261,12 +261,12 @@ function pyramidTower(): THREE.BufferGeometry {
   const model = OFFICE_BUILDINGS.officej, k = OFFICE_METRES;
   const W = model.width * k, D = model.depth * k, top = model.height * k, hw = W / 2;
   const FLOOR = 3.6, PODIUM = 2 * FLOOR, back = -D / 2, front = D / 2 - 1.6;
-  const GRANITE = rgb("#8b6650"), BRONZE = rgb("#8c7a5e"), STEEL = rgb("#4b6d83");
+  const GRANITE = rgb("#cb9c71"), BRONZE = rgb("#edb965"), STEEL = rgb("#427f9e");
   const mb = new MeshBuilder();
   /** Mirror-glass floors from the podium up on a rectangle of the plan, three rows of panes to a floor; returns the roof's height. */
   const tier = (x0: number, x1: number, z0: number, z1: number, floors: number, tint: string, c = .9) => {
     const roof = PODIUM + floors * FLOOR;
-    box(mb, [x0, PODIUM, z0, x1, roof, z1], { c, kind: FACE.mirror, col: rgb(tint), top: FACE.deck, bay: 1.1, floor: FLOOR / 3, crisp: true });
+    box(mb, [x0, PODIUM, z0, x1, roof, z1], { c, kind: FACE.mirror, col: rgb(tint), top: FACE.deck, bay: 1.65, floor: FLOOR / 2 });
     return roof;
   };
   box(mb, [-hw, 0, back, hw, PODIUM, front], { c: .3, kind: FACE.wall, col: GRANITE, top: FACE.deck });
@@ -284,10 +284,10 @@ function pyramidTower(): THREE.BufferGeometry {
   tier(xi, hw, back, zb, 7, "#80b0d0");
   // The crown: a collar of dark steel, the pyramid, a mast with its red light, and a pinnacle on each shoulder.
   const zc = (zb + zf) / 2, collar = core + 1.4;
-  box(mb, [-3.5, core - .8, zc - 3.5, 3.5, collar, zc + 3.5], { c: .25, kind: FACE.trim, col: STEEL, top: FACE.trim, topCol: rgb("#3a444d") });
+  box(mb, [-3.5, core - .8, zc - 3.5, 3.5, collar, zc + 3.5], { c: .25, kind: FACE.trim, col: STEEL, top: FACE.trim, topCol: rgb("#3f6882") });
   const apex = collar + 7.4;
   pyramid(mb, { x0: -3.2, x1: 3.2, z0: zc - 3.2, z1: zc + 3.2, y: collar, h: apex - collar, roof: rgb("#a2cde3"), kind: FACE.spire, win: [1.2, 1.2, 0, 0] });
-  box(mb, [-.14, apex - .4, zc - .14, .14, top - .5, zc + .14], { c: .03, kind: FACE.trim, col: rgb("#aab0b5"), top: FACE.trim, occlude: false });
+  box(mb, [-.14, apex - .4, zc - .14, .14, top - .5, zc + .14], { c: .03, kind: FACE.trim, col: rgb("#a9cbd6"), top: FACE.trim, occlude: false });
   box(mb, [-.25, top - .5, zc - .25, .25, top, zc + .25], { c: .04, kind: FACE.light, col: rgb("#ff3a2a"), top: FACE.light, occlude: false });
   for (const [side, roof] of [[-1, west], [1, east]] as const) {
     const x = side * 6.9;
@@ -310,7 +310,7 @@ function pyramidTower(): THREE.BufferGeometry {
   mb.detail(() => {
     for (const x of [-xi + .2, xi - .2]) box(mb, [x - .05, PODIUM, zf + .015, x + .05, core - .12, zf + .12], { c: 0, kind: FACE.metal, col: ZINC, top: FACE.metal, occlude: false });
   });
-  bakeOcclusion(mb, { reach: 5 });
+  bakeOcclusion(mb, { reach: 5, strength: .64 });
   return mb.build(1 / k);
 }
 
@@ -323,11 +323,11 @@ function pyramidTower(): THREE.BufferGeometry {
  */
 function empireState(): THREE.BufferGeometry {
   const model = OFFICE_BUILDINGS.officek, M = 130.4 / model.width, top = model.height * M;
-  const STONE = rgb("#e8d9b9"), CROWN = rgb("#f2e6ca"), ALUMINIUM = rgb("#718c96"), BRONZE = rgb("#b47b29"), STEEL = rgb("#91a8ad");
+  const STONE = rgb("#ffe1a0"), CROWN = rgb("#fff0c8"), ALUMINIUM = rgb("#679cb5"), BRONZE = rgb("#ecb74c"), STEEL = rgb("#a4cdd9");
   const mb = new MeshBuilder();
   /** A limestone volume with its windows: half its width and depth, from y0 to y1. */
   const stone = (hx: number, hz: number, y0: number, y1: number, col = STONE) =>
-    box(mb, [-hx, y0, -hz, hx, y1, hz], { c: .8, kind: FACE.window, col, top: FACE.deck, bay: 2.4, floor: 3.8, winW: .4, winH: .84, crisp: true });
+    box(mb, [-hx, y0, -hz, hx, y1, hz], { c: 2.2, kind: FACE.window, col, top: FACE.deck, bay: 2.4, floor: 3.8, winW: .46, winH: .76 });
   stone(65.2, 29.2, 0, 21.5);
   stone(58.7, 26.2, 21.5, 35.5);
   stone(51.2, 24.2, 35.5, 58);
@@ -348,7 +348,7 @@ function empireState(): THREE.BufferGeometry {
   mast(7.35, 352.2, 354.3, FACE.trim, CROWN);
   mast(6.75, 354.3, 369, FACE.curtain, ALUMINIUM);
   mast(6, 369, 370, FACE.light, rgb("#fff1d6"));
-  mast(5.65, 370, 376.7, FACE.curtain, rgb("#4a5c5c"));
+  mast(5.65, 370, 376.7, FACE.curtain, rgb("#3b7e9f"));
   mast(5.5, 376.7, 377.4, FACE.trim, STEEL);
   mast(5.3, 377.4, 380.8, FACE.trim, CROWN);
   mast(2, 380.8, 381.1, FACE.trim, STEEL);
@@ -380,7 +380,7 @@ function empireState(): THREE.BufferGeometry {
     }
   });
   for (const x of [-61.5, 61.5]) roofPlant(mb, x, 0, 21.55, 2.3, 3, 1.7);
-  bakeOcclusion(mb, { reach: 12, ground: 8 });
+  bakeOcclusion(mb, { reach: 12, ground: 8, strength: .64 });
   return mb.build(1 / M);
 }
 
@@ -437,14 +437,14 @@ function sweptPlan([x, z, w, d, c, sag, turn]: Volume, n = 4): Plan {
 /**
  * Nurly Tau, the business complex in Almaty (world/officeBuildings.ts officel), after the owner's model of it: drawn in
  * its own metres, the complex centred and its low blocks to the front, every volume where that model has it
- * (NURLY_TAU). Silver-green mirror glass in a thin dark grid over a granite ground floor, glass tents and pyramids in
+ * (NURLY_TAU). Aqua cartoon glass with broad pane groups over a honey-coloured ground floor, glass tents and pyramids in
  * a grid of panes that never lights up at night, steel collars under the towers' pyramids with a red light on each,
  * and the long fountain pool of the alley. Every height is drawn NURLY_TAU_RISE times its metres (the walls' grid in
  * the metres drawn, so the panes keep their size).
  */
 function nurlyTau(): THREE.BufferGeometry {
   const model = OFFICE_BUILDINGS.officel, M = NURLY_TAU_WIDTH / model.width, up = (y: number) => y * NURLY_TAU_RISE;
-  const GLASS = ["#8dbbc4", "#75a5b1", "#a0cbd1"].map(rgb), ROOF = rgb("#b2d5dd"), GRANITE = rgb("#8b6650"), STEEL = rgb("#4b6d83");
+  const GLASS = ["#67c8de", "#439ec5", "#8cdfe8"].map(rgb), ROOF = rgb("#b4ecf3"), GRANITE = rgb("#cb9c71"), STEEL = rgb("#427f9e");
   const mb = new MeshBuilder();
   const all = [...NURLY_TAU.towers, ...NURLY_TAU.slabs, ...NURLY_TAU.blocks, ...NURLY_TAU.links];
   all.forEach((v, i) => {
@@ -452,7 +452,7 @@ function nurlyTau(): THREE.BufferGeometry {
     if (Array.isArray(top)) {
       // A tower's crown: the steel collar, the pyramid on it, the red light on the apex.
       const [peak, hx, hz] = top, apex = up(peak);
-      extrude(mb, plan, y0, y1, { kind: FACE.metal, col: STEEL, top: FACE.metal, topCol: rgb("#3a444d") });
+      extrude(mb, plan, y0, y1, { kind: FACE.metal, col: STEEL, top: FACE.metal, topCol: rgb("#3f6882") });
       pyramid(mb, { x0: x - hx, x1: x + hx, z0: z - hz, z1: z + hz, y: y1, h: apex - y1, roof: ROOF, kind: FACE.spire, win: [1.6, 1.6, 0, 0] });
       box(mb, [x - .5, apex - .4, z - .5, x + .5, apex + .8, z + .5], { c: .1, kind: FACE.light, col: rgb("#ff3a2a"), top: FACE.light, occlude: false });
       return;
@@ -460,7 +460,7 @@ function nurlyTau(): THREE.BufferGeometry {
     // Granite under the glass, one floor and a half on the tall ones; the bays high on the towers are glass alone.
     const plinth = from < 2 ? y0 + Math.min(7, (y1 - y0) * .3) : y0;
     if (plinth > y0) extrude(mb, plan, y0, plinth, { kind: FACE.wall, col: GRANITE, top: null });
-    extrude(mb, plan, plinth, y1, { kind: FACE.mirror, col: GLASS[i % GLASS.length], top: top ? null : FACE.deck, bay: 1.6, floor: 1.8 });
+    extrude(mb, plan, plinth, y1, { kind: FACE.mirror, col: GLASS[i % GLASS.length], top: top ? null : FACE.deck, bay: 2.35, floor: 2.7 });
     if (top) tent(mb, plan, y1, up(top), { kind: FACE.spire, col: ROOF, win: [1.6, 1.6, 0, 0] });
     if (from < 2) mb.detail(() => {
       // Entrances follow the bowed front of each real volume, in its own rotated frame.
@@ -476,9 +476,9 @@ function nurlyTau(): THREE.BufferGeometry {
   roofPlant(mb, 35, -75, up(91) + .05, 3.4, 2.8, 1.5);
   roofPlant(mb, -35, -65, up(86) + .05, 3.4, 2.8, 1.5);
   // The fountain pool down the middle of the alley: a granite kerb and the water.
-  box(mb, [-4.6, 0, 58.4, 4.6, .9, 81.6], { c: .2, kind: FACE.trim, col: rgb("#b9b2a2"), top: FACE.trim, occlude: false });
-  box(mb, [-4, .9, 59, 4, 1, 81], { kind: FACE.pane, col: rgb("#3d7f88"), noTop: false, occlude: false });
-  bakeOcclusion(mb, { reach: 12, ground: 8 });
+  box(mb, [-4.6, 0, 58.4, 4.6, .9, 81.6], { c: .2, kind: FACE.trim, col: rgb("#f1d09c"), top: FACE.trim, occlude: false });
+  box(mb, [-4, .9, 59, 4, 1, 81], { kind: FACE.pane, col: rgb("#34bad3"), noTop: false, occlude: false });
+  bakeOcclusion(mb, { reach: 12, ground: 8, strength: .64 });
   return mb.build(1 / M);
 }
 
@@ -496,8 +496,8 @@ export function officeTowerGeometry(family: OfficeBuilding): THREE.BufferGeometr
   for (const [step, share, skin] of t.tiers) {
     inset = step;
     const height = H * share, x0 = -W / 2 + inset, x1 = W / 2 - inset, z0 = back + inset, z1 = front - inset;
-    const c = t.chamfer && skin === "glass" ? t.chamfer : .25;
-    if (skin === "glass") box(mb, [x0, y, z0, x1, height, z1], { c, kind: FACE.curtain, col: t.glass, top: FACE.deck, bay: 1.5, floor: 3.6 });
+    const c = t.chamfer && skin === "glass" ? t.chamfer : 1.15;
+    if (skin === "glass") box(mb, [x0, y, z0, x1, height, z1], { c, kind: FACE.curtain, col: t.glass, top: FACE.deck, bay: 2.25, floor: 3.6 });
     else box(mb, [x0, y, z0, x1, height, z1], { c, kind: FACE.window, col: t.stone, top: FACE.deck, bay: 1.7, floor: 3.6, winW: .6, winH: .66 });
     mb.detail(() => {
       box(mb, [x0 + c, height - .08, z1 - .02, x1 - c, height + .12, z1 + .1], { c: 0, kind: FACE.metal, col: ZINC, top: FACE.metal, occlude: false });
@@ -511,8 +511,8 @@ export function officeTowerGeometry(family: OfficeBuilding): THREE.BufferGeometr
   // The crown: a parapet, the plant room, a mast with its red light; a lit band on some.
   const x0 = -W / 2 + inset, x1 = W / 2 - inset, z0 = back + inset, z1 = front - inset, zm = (back + front) / 2;
   parapet(mb, x0, z0, x1, z1, y, .9, .35, t.stone);
-  box(mb, [-W * .2, y, zm - D * .2, W * .2, y + 3.4, zm + D * .2], { c: .08, kind: FACE.wall, col: rgb("#c3c6c9"), top: FACE.trim });
-  box(mb, [W * .08 - .14, y + 3.4, zm + D * .08 - .14, W * .08 + .14, top - .5, zm + D * .08 + .14], { c: .03, kind: FACE.trim, col: rgb("#aab0b5"), top: FACE.trim, occlude: false });
+  box(mb, [-W * .2, y, zm - D * .2, W * .2, y + 3.4, zm + D * .2], { c: .08, kind: FACE.wall, col: rgb("#d9e6e6"), top: FACE.trim });
+  box(mb, [W * .08 - .14, y + 3.4, zm + D * .08 - .14, W * .08 + .14, top - .5, zm + D * .08 + .14], { c: .03, kind: FACE.trim, col: rgb("#a9cbd6"), top: FACE.trim, occlude: false });
   box(mb, [W * .08 - .25, top - .5, zm + D * .08 - .25, W * .08 + .25, top, zm + D * .08 + .25], { c: .04, kind: FACE.light, col: rgb("#ff3a2a"), top: FACE.light, occlude: false });
   if (t.ring) box(mb, [x0 - .05, y - 1.2, z0 - .05, x1 + .05, y - .7, z1 + .05], { c: .05, kind: FACE.light, col: rgb("#dcecff"), top: FACE.trim, occlude: false });
   // The entrance: a glass lobby and a canopy over it.
@@ -522,7 +522,7 @@ export function officeTowerGeometry(family: OfficeBuilding): THREE.BufferGeometr
   const plantX = Math.min(W * .29, (x1 - x0) / 2 - 1.2);
   roofPlant(mb, -plantX, zm - D * .18, y + .03);
   roofPlant(mb, plantX, zm + D * .18, y + .03);
-  bakeOcclusion(mb, { reach: 5 });
+  bakeOcclusion(mb, { reach: 5, strength: .64 });
   return mb.build(1 / k);
 }
 

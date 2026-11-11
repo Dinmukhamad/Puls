@@ -41,7 +41,7 @@ interface Pipeline { post: THREE.PostProcessing; nodes: THREE.Node[]; targets: T
 /** The corner shading fades out between these distances from the camera, in world radii (the city, then its hills). */
 export const AO_FADE = [.65, 1.25] as const;
 /** Bloom strength and threshold as the night falls and at full night: windows, lamps and headlights glow clearly. */
-export const BLOOM_DAY = { strength: .32, threshold: .92 }, BLOOM_NIGHT = { strength: .9, threshold: .6 };
+export const BLOOM_DAY = { strength: .26, threshold: .92 }, BLOOM_NIGHT = { strength: .65, threshold: .72 };
 
 export function createPost(ctx: CityContext, options: PostOptions = {}): Post {
   const { renderer, scene, camera } = ctx;
@@ -68,13 +68,13 @@ export function createPost(ctx: CityContext, options: PostOptions = {}): Post {
       // attachment throughout keeps quality changes valid and saves a normal buffer.
       const occlusion = depthAO(scenePass.getTextureNode("depth"), null, camera);
       occlusion.resolutionScale = .5;
-      occlusion.radius.value = 1.4; occlusion.thickness.value = 2; occlusion.distanceExponent.value = 1.4; occlusion.scale.value = 1.1; occlusion.samples.value = 12;
+      occlusion.radius.value = .9; occlusion.thickness.value = 2; occlusion.distanceExponent.value = 1.4; occlusion.scale.value = .8; occlusion.samples.value = 12;
       nodes.push(occlusion);
       // Corner shading belongs to the city: past it (AO_FADE world radii from the camera) its samples grow finer
       // than a pixel and only lay a grid of noise over the hazy hills, so it fades out there.
       const texel = scenePass.getTextureNode("output"), radius = ctx.world.radius;
       const near = smoothstep(radius * AO_FADE[0], radius * AO_FADE[1], scenePass.getViewZNode().negate()).oneMinus();
-      color = vec4(texel.rgb.mul(mix(1, occlusion.getTextureNode().r, near.mul(.85))), texel.a);
+      color = vec4(texel.rgb.mul(mix(1, occlusion.getTextureNode().r, near.mul(.5))), texel.a);
     }
     if (glowing) {
       // Glow is emitted light: extract it before occlusion dims the scene.

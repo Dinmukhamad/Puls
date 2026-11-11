@@ -1,5 +1,5 @@
 /**
- * The team's community building (world/districtLandmark.ts) in the city's v4 style (docs/CITY_V4.md): every part of
+ * The team's community building (world/districtLandmark.ts) as a warm, rounded cartoon miniature: every part of
  * its level drawn in its box with the facade builder (assets/facade.ts) — chamfered stone walls, gable and pyramid
  * roofs with eaves and tiles, curtain walls with mullions, columns, a dome, clocks and spires — and occlusion baked
  * into the vertices. One geometry per level, drawn with the catalogue's facade material: its windows are window cells
@@ -15,17 +15,17 @@ import { landmarkBoxes, type LandmarkBox, type LandmarkFinish } from "../world/d
 export const LANDMARK_METRES = 2;
 const M = LANDMARK_METRES;
 const FINISH: Record<LandmarkFinish, { kind: Face; col: V3 }> = {
-  stone: { kind: FACE.wall, col: rgb("#f3d69e") }, white: { kind: FACE.wall, col: rgb("#fff2d1") }, trim: { kind: FACE.trim, col: rgb("#e1b261") },
-  dark: { kind: FACE.trim, col: rgb("#1c4262") }, green: { kind: FACE.leaf, col: rgb("#3c9c4b") }, accent: { kind: FACE.trim, col: rgb("#7645d8") },
-  roof: { kind: FACE.roof, col: rgb("#1d779c") }, gold: { kind: FACE.metal, col: rgb("#efaa20") }, window: { kind: FACE.window, col: rgb("#f5e8cc") },
-  wood: { kind: FACE.trim, col: rgb("#b3662c") }, leaf: { kind: FACE.leaf, col: rgb("#36a451") }, glass: { kind: FACE.curtain, col: rgb("#69b7d9") },
+  stone: { kind: FACE.wall, col: rgb("#ffe1a0") }, white: { kind: FACE.wall, col: rgb("#fff8df") }, trim: { kind: FACE.trim, col: rgb("#efbb56") },
+  dark: { kind: FACE.trim, col: rgb("#306b98") }, green: { kind: FACE.leaf, col: rgb("#64bd50") }, accent: { kind: FACE.trim, col: rgb("#9959d9") },
+  roof: { kind: FACE.roof, col: rgb("#268fbd") }, gold: { kind: FACE.metal, col: rgb("#ffbd32") }, window: { kind: FACE.window, col: rgb("#fff2d0") },
+  wood: { kind: FACE.trim, col: rgb("#d68d45") }, leaf: { kind: FACE.leaf, col: rgb("#55bf56") }, glass: { kind: FACE.curtain, col: rgb("#76d4ed") },
 };
 
 /** A window box: a window cell on its outer face (front, or the side it stands out of), its frame, glass and blind drawn by the material. */
 function pane(mb: MeshBuilder, b: LandmarkBox, index: number) {
   const col = FINISH.window.col, sideways = b.depth > b.width, w = (sideways ? b.depth : b.width) * M, h = b.height * M;
   // The cell is the pane plus its frame; the material centres the glass at 0.57 of the cell's height.
-  const cw = w + .5, ch = h + .5, win: [number, number, number, number] = [cw, ch, w / cw, h / ch];
+  const cw = w + .58, ch = h + .58, win: [number, number, number, number] = [cw, ch, w / cw, h / ch];
   const column = Math.floor((b.glow ?? .5) * 97) + index * 3, row = 3 + (index % 4), u0 = column * cw, v0 = row * ch;
   const y = (b.y + b.height / 2) * M - .57 * ch, uv: [number, number][] = [[u0, v0], [u0 + cw, v0], [u0 + cw, v0 + ch], [u0, v0 + ch]];
   if (!sideways) {
@@ -68,7 +68,7 @@ function part(mb: MeshBuilder, b: LandmarkBox, index: number) {
         if (b.finish === "window") { pane(mb, b, index); return; }
         if (b.finish === "glass") {
           // Curtain walls: storeys of 3.2 m from the foot, mullions every 1.4 m.
-          box(mb, [x0, y0, z0, x1, y1, z1], { c: .12, kind: FACE.curtain, col: f.col, top: FACE.deck, bay: 1.4, floor: 3.2, v0: -y0 });
+          box(mb, [x0, y0, z0, x1, y1, z1], { c: .32, kind: FACE.curtain, col: f.col, top: FACE.deck, bay: 1.4, floor: 3.2, v0: -y0 });
           // A grounded sill and a transom give the glass wings a visible metal frame.
           if (b.height > 1.5 && b.width > 1) mb.detail(() => {
             box(mb, [x0 + .04, y0 + .02, z1 - .015, x1 - .04, y0 + .18, z1 + .025], { c: 0, kind: FACE.metal, col: FINISH.dark.col, top: FACE.metal, occlude: false });
@@ -79,7 +79,7 @@ function part(mb: MeshBuilder, b: LandmarkBox, index: number) {
         // Flat roofs and terraces paved in the stone of their walls, like the square.
         const plinth = (b.finish === "stone" || b.finish === "white") && b.width > 2.4 && b.depth > 2 && b.height > 1.5;
         const inset = plinth ? .055 : 0;
-        box(mb, [x0 + inset, y0, z0 + inset, x1 - inset, y1, z1 - inset], { c: small ? 0 : Math.min(.14, b.width * M / 8), kind: f.kind, col: f.col, top: f.kind, occlude: !small });
+        box(mb, [x0 + inset, y0, z0 + inset, x1 - inset, y1, z1 - inset], { c: small ? 0 : Math.min(.42, b.width * M / 6), kind: f.kind, col: f.col, top: f.kind, occlude: !small });
         if (plinth) box(mb, [x0, y0 + .02, z0, x1, y0 + .22, z1], { c: .02, kind: FACE.trim, col: FINISH.trim.col, top: FACE.trim, occlude: false });
         return;
       }
@@ -128,6 +128,6 @@ function part(mb: MeshBuilder, b: LandmarkBox, index: number) {
 export function landmarkGeometry(level: number): THREE.BufferGeometry {
   const mb = new MeshBuilder();
   landmarkBoxes(level).forEach((b, i) => part(mb, b, i));
-  bakeOcclusion(mb, { reach: 4.5, ground: 3.5, strength: .9, rays: 16 });
+  bakeOcclusion(mb, { reach: 4.5, ground: 3.5, strength: .62, rays: 16 });
   return mb.build(1 / M);
 }

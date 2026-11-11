@@ -27,7 +27,7 @@ const seedOf = (id: string) => [...id].reduce((h, ch) => (h * 31 + ch.charCodeAt
  * the building), front steps, lamps and shrubs either side, a gold gem per level; a barrier while the district is soon.
  */
 function base(k: LandmarkKit, stage: number, soon: boolean) {
-  k.block(5.7, .23, 5.3, '#9d9c91', 0, -.095, 0, { r: .12, top: 'none' });
+  k.block(5.7, .23, 5.3, '#c8b79b', 0, -.095, 0, { r: .12, top: 'none' });
   // The paved top fills the terrace inside its chamfer (.06, under the .068 a .15 high box allows).
   k.block(5.55, .15, 5.15, C.ivory, 0, .125, 0, { r: .06, top: 'none' });
   k.slab(5.55 - .12, 5.15 - .12, PLINTH, C.ivory, 12);
@@ -49,7 +49,7 @@ export function createArchitecture(material: THREE.Material) {
       kit.begin(mb, signs, seedOf(id) + level * 13);
       base(kit, level, soon);
       LANDMARK_MODELS[id]?.(kit, level);
-      bakeOcclusion(mb, { reach: 3.6, ground: 2.4, strength: .9, rays: 16 });
+      bakeOcclusion(mb, { reach: 3.6, ground: 2.4, strength: .55, rays: 16 });
       entry = { geometry: mb.build(1 / KIT_METRES), signs, height: LANDMARK_TOPS[id]?.[level - 1] ?? 3 };
       built.set(key, entry);
     }
@@ -68,9 +68,9 @@ export function createArchitecture(material: THREE.Material) {
    * scaffolding, a tower crane and a barrier; one geometry for every reserved island, `height` its top.
    */
   function site() {
-    const mb = new MeshBuilder(), k = kit, CRANE = '#e0a936', STEEL = C.steel, WOOD = C.wood, INK = C.ink;
+    const mb = new MeshBuilder(), k = kit, CRANE = '#ffc13c', STEEL = C.steel, WOOD = C.wood, INK = C.ink;
     k.begin(mb, [], 3);
-    k.block(5.7, .23, 5.3, '#9d9c91', 0, -.095, 0, { r: .12, top: 'none' });
+    k.block(5.7, .23, 5.3, '#c8b79b', 0, -.095, 0, { r: .12, top: 'none' });
     k.block(5.55, .15, 5.15, C.stone, 0, .125, 0, { r: .06, top: 'none' });
     k.slab(5.43, 5.03, PLINTH, C.stone, 10);
     // The ground floor in bare concrete, the next one begun.
@@ -99,7 +99,7 @@ export function createArchitecture(material: THREE.Material) {
     // A striped barrier along the front: the district is not open yet.
     for (const x of [-1.2, 1.2]) k.box(.07, .5, .07, INK, x, .52, 2.35, { r: 0 });
     for (let i = 0; i < 8; i++) k.box(.3, .08, .04, i % 2 ? INK : CRANE, -1.05 + i * .3, .66, 2.35, { r: 0 });
-    bakeOcclusion(mb, { reach: 3.6, ground: 2.4, strength: .9, rays: 16 });
+    bakeOcclusion(mb, { reach: 3.6, ground: 2.4, strength: .55, rays: 16 });
     return { geometry: mb.build(1 / KIT_METRES), height: 4.95 };
   }
   return { landmark, site, dispose() { built.forEach(entry => entry.geometry.dispose()); built.clear(); } };

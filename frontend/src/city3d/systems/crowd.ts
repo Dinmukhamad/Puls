@@ -7,7 +7,7 @@
  * the quality's share are as before.
  */
 import * as THREE from 'three/webgpu';
-import { abs, attribute, color, cos, float, floor, fwidth, max, mix, nodeObject, normalGeometry, normalLocal, positionGeometry, positionLocal, saturate, sin, smoothstep, step, transformNormal, uniform, uv, vec3, vec4, type ShaderNodeObject } from 'three/tsl';
+import { abs, attribute, color, cos, float, floor, max, mix, nodeObject, normalGeometry, normalLocal, positionGeometry, positionLocal, saturate, sin, step, transformNormal, uniform, uv, vec3, vec4, type ShaderNodeObject } from 'three/tsl';
 import { PEOPLE, personGeometry, type PersonDetail } from '../assets/people';
 import type { CityContext } from '../engine/context';
 import { COPY_STRIDE, copyGeometry, copyMatrices, copyMatrix, copyMesh, copyTints } from '../render/copies';
@@ -265,12 +265,11 @@ export function walkerMaterial(time: Node): THREE.MeshStandardNodeMaterial {
   const worn = shirt.mul(is(SLOT.shirt)).add(skin.mul(is(SLOT.skin))).add(trousers.mul(is(SLOT.trousers)))
     .add(hair.mul(is(SLOT.hair))).add(shoes.mul(is(SLOT.shoes))).add(mix(skin, shirt, sleeves).mul(is(SLOT.sleeve)))
     .add(accent.mul(is(SLOT.accent))).add(color('#f2eee5').mul(is(SLOT.white))).add(color('#24272c').mul(is(SLOT.eyes)));
-  const cloth = is(SLOT.shirt).add(is(SLOT.trousers)).add(is(SLOT.sleeve).mul(sleeves)).add(is(SLOT.accent)).add(is(SLOT.white));
   const skinPart = is(SLOT.skin).add(is(SLOT.sleeve).mul(sleeves.oneMinus()));
-  const weaveFade = float(1).sub(smoothstep(.006, .035, fwidth(positionGeometry).length()));
-  const weave = sin(positionGeometry.y.mul(95)).mul(sin(positionGeometry.x.mul(82))).mul(.018).mul(weaveFade).mul(cloth);
-  material.colorNode = worn.mul(attribute('aShade', 'float')).mul(float(1).add(weave));
-  material.roughnessNode = float(.88).sub(skinPart.mul(.28)).sub(is(SLOT.hair).mul(.13)).sub(is(SLOT.shoes).mul(.18)).sub(is(SLOT.eyes).mul(.3));
+  // Clean broad colour planes, with softly lifted contact shading instead of fabric micrograin.
+  material.colorNode = worn.mul(mix(.86, 1, attribute('aShade', 'float')));
+  material.userData.cityModelStyle = 'cartoon-v1';
+  material.roughnessNode = float(.82).sub(skinPart.mul(.13)).sub(is(SLOT.hair).mul(.1)).sub(is(SLOT.shoes).mul(.13)).sub(is(SLOT.eyes).mul(.28));
   material.userData.walkTime = time;
   return material;
 }

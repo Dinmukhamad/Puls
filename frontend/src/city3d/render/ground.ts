@@ -1,16 +1,10 @@
 /**
- * The look of every flat surface of the city (docs/CITY_V4.md, stage 1): grass, asphalt, pavement, paint, gravel and
- * stone. The geometry and its colours stay as the layouts paint them (render/terrain.ts, world/decor.ts); this
- * material only reads what kind of surface a colour stands for and gives it its texture.
- *
- * The texture is one small image of noise in four channels, sampled in world space at a few scales: meadow patches
- * and dry streaks on the grass, grain and repairs on the asphalt, wear on the paint. It is mipmapped, so where a pixel
- * covers many grains the image averages them by itself: the ground looks the same up close and from afar, with no
- * level of detail and no shimmer. Five samples of one 256 × 256 image per pixel on both backends; nothing is computed on
- * the CPU per frame.
+ * Smooth cartoon ground: vivid lawns, blue-grey roads and cream paving. The layout's surface codes and colours
+ * still define each tile. One broad mipmapped sample softens grass patches; asphalt and paint have no micrograin.
+ * The shared noise texture remains available to water/asset materials, without new uploads.
  */
 import * as THREE from "three/webgpu";
-import { attribute, dot, float, mix, positionWorld, smoothstep, texture, vec3, vec4, vertexColor } from "three/tsl";
+import { attribute, color, float, mix, positionWorld, smoothstep, texture, vec3, vec4, vertexColor } from "three/tsl";
 
 /** Surface kinds, stored per vertex in the `surface` attribute of every ground mesh. */
 export const SURFACE = { plain: 0, grass: 1, asphalt: 2, pavement: 3, paint: 4, gravel: 5, stone: 6 } as const;
@@ -91,31 +85,20 @@ export function groundNoise(): THREE.DataTexture {
  * Extra parameters (polygon offset for the layers over the ground) pass through.
  */
 export function groundMaterial(parameters: THREE.MeshStandardNodeMaterialParameters = {}): THREE.MeshStandardNodeMaterial {
-  const material = new THREE.MeshStandardNodeMaterial({ roughness: .85, metalness: .02, ...parameters, vertexColors: false });
-  const map = groundNoise(), p = positionWorld.xz;
-  // The octaves of each channel average towards the middle: stretched back to the full range.
-  const spread = (v: ReturnType<typeof float>) => smoothstep(.28, .72, v);
-  const broad = spread(texture(map, p.div(150)).x), patches = spread(texture(map, p.div(37)).x);
-  const medium = spread(texture(map, p.div(19)).y), grain = spread(texture(map, p.div(2.6)).z), spots = spread(texture(map, p.div(11)).w);
+  const material = new THREE.MeshStandardNodeMaterial({ roughness: .96, metalness: 0, ...parameters, vertexColors: false });
   const base = vertexColor().xyz, kind = attribute("surface", "float");
   const is = (code: SurfaceCode) => float(1).sub(kind.sub(code).abs()).clamp(0, 1);
-  const grey = vec3(dot(base, vec3(.299, .587, .114)));
-
-  // Fresh grass keeps rich green midtones; warmer meadow patches stay restrained rather than turning olive.
-  const lawn = base.mul(vec3(.72, 1.2, .74)).mul(mix(.88, 1.15, broad)).mul(mix(.94, 1.07, medium)).mul(mix(.95, 1.05, grain));
-  const grass = mix(lawn, lawn.mul(vec3(1.08, 1.04, .86)), smoothstep(.55, .9, patches).mul(.22));
-  // Asphalt: neutral grey instead of the blue-grey paint, grain and darker repairs.
-  const asphalt = mix(base, grey, .6).mul(.84).mul(mix(.88, 1.1, medium)).mul(mix(.9, 1.1, grain)).mul(float(1).sub(smoothstep(.7, .95, spots).mul(.12)));
-  const pavement = base.mul(mix(.92, 1.05, medium)).mul(mix(.95, 1.05, grain));
-  const paint = base.mul(mix(.8, 1, smoothstep(.25, .7, grain)));
-  const gravel = base.mul(mix(.84, 1.12, grain)).mul(mix(.94, 1.04, medium));
-  const stone = base.mul(mix(.9, 1.07, medium)).mul(mix(.96, 1.04, grain));
-  const plain = base.mul(mix(.96, 1.04, medium));
-
-  const rgb = plain.mul(is(SURFACE.plain)).add(grass.mul(is(SURFACE.grass))).add(asphalt.mul(is(SURFACE.asphalt)))
+  // One broad, mipmapped variation across the lawns: smooth toy surfaces have no gravel grain or worn paint.
+  const broad = smoothstep(.25, .75, texture(groundNoise(), positionWorld.xz.div(120)).x);
+  const lawn = mix(base.mul(vec3(.8, 1.55, .72)), color("#8bd569"), .3).mul(mix(.97, 1.025, broad));
+  const asphalt = mix(base, color("#657587"), .82);
+  const pavement = mix(base, color("#f3e5c5"), .4);
+  const paint = mix(base, color("#fff9e8"), .3);
+  const gravel = mix(base, color("#ddc79a"), .55);
+  const stone = mix(base, color("#ded4ba"), .3);
+  const rgb = base.mul(is(SURFACE.plain)).add(lawn.mul(is(SURFACE.grass))).add(asphalt.mul(is(SURFACE.asphalt)))
     .add(pavement.mul(is(SURFACE.pavement))).add(paint.mul(is(SURFACE.paint))).add(gravel.mul(is(SURFACE.gravel))).add(stone.mul(is(SURFACE.stone)));
   material.colorNode = vec4(rgb, 1);
-  material.roughnessNode = float(.85).mul(is(SURFACE.plain)).add(float(.96).mul(is(SURFACE.grass))).add(mix(.82, .94, grain).mul(is(SURFACE.asphalt)))
-    .add(float(.82).mul(is(SURFACE.pavement))).add(float(.7).mul(is(SURFACE.paint))).add(float(.95).mul(is(SURFACE.gravel))).add(float(.8).mul(is(SURFACE.stone)));
+  material.userData.cityModelStyle = "cartoon-v1";
   return material;
 }

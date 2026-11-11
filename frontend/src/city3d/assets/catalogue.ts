@@ -71,22 +71,22 @@ const MAX_FIT = 2.8;
 const GROUND = .2, PAD = .25;
 /** The old four plain blocks: floors, height, glass. Blocks use classes 0…2, towers 1…3 (Placement.variant). */
 const BLOCKS = [{ floors: 4, height: 3, glass: false }, { floors: 7, height: 5.2, glass: false }, { floors: 11, height: 8.4, glass: true }, { floors: 18, height: 13.6, glass: true }];
-const WALLS = ["#efc67d", "#9fc9eb", "#ee9c7d", "#a4d99d", "#c1afe2", "#ffe4a8"], GLASS = ["#5faedb", "#4eb0be", "#8d98d4", "#7ac8dc"];
-const TREE_TINTS = ["#ffffff", "#eaf6e2", "#f7ffe8", "#dfeed7", "#fff6dc"];
+const WALLS = ["#ffda87", "#91d5f2", "#ffb18a", "#ace18f", "#c8b5ef", "#ffedb7"], GLASS = ["#6ecbe9", "#56c8c5", "#91b3ec", "#8cdeed"];
+const TREE_TINTS = ["#ffffff", "#f0ffe4", "#fff8ca", "#e2f7df", "#f9ffd8"];
 /**
  * Residential walls, picked by index in world/complexes.ts: renders (0 ivory, 1 warm cream, 2 ochre, 3 lilac),
  * bricks (4 red, 5 terracotta, 6 sand, 7 brown), accents (8 graphite, 9 peach, 10 sky blue, 11 warm stone) and two
  * greens (12 sage, 13 mint) whose towers get planted balconies (sectionFacade tells them by their green cast).
  */
-const SECTION_TINTS = ["#fffde2", "#f7dfa7", "#efc875", "#bbb7e8", "#c6532b", "#d96d33", "#e8b354", "#a45a33", "#526e87", "#f49a7a", "#63acd3", "#c89760", "#6fb677", "#9ddca4"];
+const SECTION_TINTS = ["#fff7d6", "#ffe7a8", "#ffd16f", "#c4b5ee", "#ec8057", "#f5a162", "#f1cb7d", "#ca8e61", "#688eab", "#ffb091", "#80ccec", "#e1bd84", "#8bce8a", "#b6e6a3"];
 /** Townhouse roofs: blue slate, terracotta, brown, navy and zinc. */
-const ROOF_TINTS = ["#356486", "#c64b29", "#98532e", "#2d476d", "#75a8bd"];
+const ROOF_TINTS = ["#4e89ad", "#ed8257", "#c98b5e", "#456d9a", "#91c8d5"];
 /** Section floors in world units. */
 const SECTION_FLOOR = .75;
 /** The garages of the operators' houses are cottages in this shade (world/landLayouts.ts GARAGE): they get a garage of their own. */
 const GARAGE_TINT = 8;
 /** Office glass: white, cool blue, warm cream and pale teal tints of the towers' curtain walls (assets/residential.ts). */
-const OFFICE_TINTS = ["#ffffff", "#a2d3f4", "#ffe0a2", "#a6d9d6"];
+const OFFICE_TINTS = ["#f1fbff", "#a7e0f7", "#fff0b7", "#b7ece2"];
 const FURNITURE: FurnitureKind[] = ["bench", "slide", "swings", "climber", "sandbox", "goal", "hoop", "gazebo", "flowerbed", "bush", "hedge", "planter", "fountain"];
 
 /**
@@ -233,32 +233,32 @@ export function createCatalogue(models: Map<string, Model>, night: Night = creat
     let far: LodLevel | null = null;
     if (kind === "bush" || kind === "hedge") {
       nearGeometry.computeBoundingBox();
-      const b = nearGeometry.boundingBox!, shape = kind === "hedge" ? new THREE.BoxGeometry(1, 1, 1) : new THREE.OctahedronGeometry(1);
-      const geometry = fitPropEnvelope(paintProp(shape, "#5bb264", .94), [b.min.toArray(), b.max.toArray()]);
+      const b = nearGeometry.boundingBox!, shape = kind === "hedge" ? new THREE.SphereGeometry(1, 5, 3).scale(1, .8, .44) : new THREE.SphereGeometry(1, 5, 3);
+      const geometry = fitPropEnvelope(paintProp(shape, "#6dce64", .94), [b.min.toArray(), b.max.toArray()]);
       far = { parts: [{ geometry: own(geometry), material, castShadow: false }] };
     }
     return [kind, add(procedural(kind, [near, mid, far], (kind === "bush" || kind === "hedge") ? { tints: TREE_TINTS.map(c => new THREE.Color(c)), tintStep: 2 } : {}))];
   })) as Record<FurnitureKind, CatalogueModel>;
 
-  const poleMaterial = own(surfaceMaterial({ finish: "metal", look, color: "#54616a", roughness: .38, metalness: .68 }));
+  const poleMaterial = own(surfaceMaterial({ finish: "metal", look, color: "#4d7184", roughness: .58, metalness: .18 }));
   // Plain light-grey glass in the day; a warm glow × the night level, well above the bloom threshold at night.
-  const bulbMaterial = own(new THREE.MeshStandardNodeMaterial({ name: "lamp-bulb", color: "#dfe4ea", roughness: .3, metalness: .05 }));
+  const bulbMaterial = own(new THREE.MeshStandardNodeMaterial({ name: "lamp-bulb", color: "#fff1cf", roughness: .5, metalness: .02 }));
   bulbMaterial.emissiveNode = color("#ffcf85").mul(nightLevel).mul(3.2);
   // Pole and conical shade are one geometry (one draw call); the bulb hangs under the shade, its centre 1.35
-  // above the foot (render/lampLights.ts puts the halos there). At most 320 triangles including its fittings.
+  // above the foot (render/lampLights.ts puts the halos there). Rounded metalwork and glass remain in two shared parts.
   const lampLevel = (detail: boolean): LodLevel => ({ parts: [
     { geometry: own(merge([
       new THREE.CylinderGeometry(.035, .05, 1.45, detail ? 10 : 6).translate(0, .725, 0),
-      new THREE.ConeGeometry(.17, .12, detail ? 12 : 6, 1, true).translate(0, 1.44, 0),
+      new THREE.LatheGeometry([[.17, 1.382], [.17, 1.4], [.145, 1.455], [.09, 1.49], [0, 1.5]].map(([r, y]) => new THREE.Vector2(r, y)), detail ? 8 : 6),
       new THREE.CylinderGeometry(.072, .085, .09, 10).translate(0, .045, 0),
       new THREE.CylinderGeometry(.055, .055, .035, 10).translate(0, .17, 0),
-      new THREE.TorusGeometry(.145, .013, 4, 12).rotateX(Math.PI / 2).translate(0, 1.382, 0),
+      new THREE.TorusGeometry(.145, .017, 3, 10).rotateX(Math.PI / 2).translate(0, 1.382, 0),
     ])), material: poleMaterial, castShadow: true },
-    { geometry: own(detail ? new THREE.SphereGeometry(.09, 8, 6).translate(0, 1.35, 0) : new THREE.IcosahedronGeometry(.09, 0).translate(0, 1.35, 0)), material: bulbMaterial, castShadow: false },
+    { geometry: own(detail ? new THREE.SphereGeometry(.1, 8, 5).translate(0, 1.35, 0) : new THREE.SphereGeometry(.1, 5, 3).translate(0, 1.35, 0)), material: bulbMaterial, castShadow: false },
   ] });
   const farLamp: LodLevel = { parts: [
     { geometry: own(merge([new THREE.CylinderGeometry(.04, .05, 1.45, 4).translate(0, .725, 0), new THREE.ConeGeometry(.17, .12, 4, 1, true).translate(0, 1.44, 0)])), material: poleMaterial, castShadow: false },
-    { geometry: own(new THREE.OctahedronGeometry(.09).translate(0, 1.35, 0)), material: bulbMaterial, castShadow: false },
+    { geometry: own(new THREE.SphereGeometry(.1, 4, 2).translate(0, 1.35, 0)), material: bulbMaterial, castShadow: false },
   ] };
   const nearLamp = lampLevel(true), lamp = add(procedural("lamp", [nearLamp, nearLamp, farLamp]));
 
@@ -411,7 +411,7 @@ function texturePixels(texture: THREE.Texture, cache: Map<unknown, ImageData | n
 
 function merge(parts: THREE.BufferGeometry[]) { const merged = mergeGeometries(parts)!; parts.forEach(p => p.dispose()); return merged; }
 
-/** All four species share natural clustered crowns and the courtyard surface properties. */
+/** All four species share rounded storybook crowns and the courtyard surface properties. */
 function treeGeometry(round: boolean, far: boolean) {
   return vegetationGeometry(round ? "round" : "cone", far);
 }

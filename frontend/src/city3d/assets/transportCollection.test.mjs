@@ -71,6 +71,17 @@ test('active island city uses every collection model, with moving cars on roads 
   assert.equal(ctx.renderer.domElement.dataset.transport, 'collection');
   assert.equal(new Set(drawn(ctx).map(m => m.userData.model)).size, 20);
   assert.equal(count(ctx), 25, '19 road vehicles and six watercraft');
+  const paints = new Set();
+  for (const mesh of drawn(ctx)) {
+    assert.equal(mesh.material.userData.copyTint, 'own', 'the shared vehicle shader consumes the paint tint itself');
+    const tint = mesh.geometry.getAttribute('copyTint');
+    for (let i = 0; i < mesh.geometry.instanceCount; i++) {
+      const rgb = [tint.getX(i), tint.getY(i), tint.getZ(i)];
+      assert.ok(rgb.some(channel => channel < .9), `${mesh.userData.model}: live copy buffer has its authored paint, not default white`);
+      paints.add(rgb.map(channel => channel.toFixed(4)).join(','));
+    }
+  }
+  assert.ok(paints.size >= 10, 'the actual twenty-model moving fleet keeps a varied cartoon paint palette');
   assert.equal(ctx.scene.getObjectByName('city-traffic-shadows').geometry.instanceCount, 19);
   let water = 0, road = 0;
   const before = snapshot(ctx);

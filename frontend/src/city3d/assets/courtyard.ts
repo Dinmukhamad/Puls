@@ -1,5 +1,5 @@
 /**
- * Procedural models for the residential complexes (world/complexes.ts): the courtyard furniture and two more
+ * Rounded, painted storybook props for the residential complexes (world/complexes.ts): the courtyard furniture and two more
  * kinds of tree (the buildings are assets/residential.ts). Every model is painted boxes and cylinders merged into one geometry
  * with vertex colours and no uvs, so one material draws them all and each model is one pool (one draw
  * call) however many yards there are. Sizes go with the walkers (about 1.2 tall): a bench seat is 0.3 high,
@@ -21,7 +21,15 @@ function paint(geometry: THREE.BufferGeometry, color: string) {
 }
 const merge = mergePropGeometries;
 /** A box standing on y (its bottom), centred on x, z. */
-const cube = (w: number, h: number, d: number, x: number, y: number, z: number, color: string) => paint(new THREE.BoxGeometry(w, h, d).translate(x, y + h / 2, z), color);
+function cube(w: number, h: number, d: number, x: number, y: number, z: number, color: string) {
+  if (Math.min(w, d) < .05 || h < .025) return paint(new THREE.BoxGeometry(w, h, d).translate(x, y + h / 2, z), color);
+  // Eight broad corners soften the toy furniture without expensive subdivision.
+  const a = w / 2, b = d / 2, r = Math.min(w, d) * .18, shape = new THREE.Shape();
+  const points = [[-a + r, -b], [a - r, -b], [a, -b + r], [a, b - r], [a - r, b], [-a + r, b], [-a, b - r], [-a, -b + r]];
+  points.forEach(([px, pz], i) => i ? shape.lineTo(px, pz) : shape.moveTo(px, pz)); shape.closePath();
+  const geometry = new THREE.ExtrudeGeometry(shape, { depth: h, bevelEnabled: false, steps: 1 });
+  geometry.rotateX(-Math.PI / 2).translate(x, y, z); return paint(geometry, color);
+}
 const up = new THREE.Vector3(0, 1, 0);
 /** A round bar from a to b. */
 function bar(a: Vec, b: Vec, r: number, color: string, sides = 6) {
@@ -31,9 +39,9 @@ function bar(a: Vec, b: Vec, r: number, color: string, sides = 6) {
   g.translate((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2);
   return paint(g, color);
 }
-const ball = (r: number, x: number, y: number, z: number, color: string, detail = 0) => paint(new THREE.IcosahedronGeometry(r, detail).translate(x, y, z), color);
+const ball = (r: number, x: number, y: number, z: number, color: string, detail = 0) => paint(new THREE.SphereGeometry(r, detail ? 8 : 6, detail ? 5 : 4).translate(x, y, z), color);
 
-const WOOD = "#bb7337", IRON = "#455052", WHITE = "#f2efe3";
+const WOOD = "#d99850", IRON = "#465d70", WHITE = "#fff4d9";
 
 /** A park bench, 0.95 long: slats on two iron frames, the back towards -z. */
 function bench(detail = true) {
@@ -52,15 +60,15 @@ function bench(detail = true) {
     parts.push(bar([x, .28, .13], [x, .28, -.14], .023, IRON), bar([x, .28, -.14], [x, .59, -.17], .021, IRON));
     parts.push(bar([x, .43, .11], [x, .43, -.15], .018, IRON), bar([x, .31, .11], [x, .43, .11], .018, IRON));
   }
-  for (let i = 0; i < 4; i++) parts.push(cube(.95, .032, .063, 0, .3, -.105 + i * .07, i % 2 ? WOOD : "#d29953"));
+  for (let i = 0; i < 4; i++) parts.push(cube(.95, .032, .063, 0, .3, -.105 + i * .07, i % 2 ? WOOD : "#edb76a"));
   for (const y of [.4, .48, .56]) parts.push(cube(.95, .055, .032, 0, y, -.16, WOOD));
   return merge(parts);
 }
 
 /** A slide: a platform with a little roof and a ladder at the back, the chute running down to +z. */
 function slide() {
-  const post = "#e94f37", deck = "#f6bd27", ladder = "#167eae", parts: THREE.BufferGeometry[] = [];
-  for (const x of [-.3, .3]) for (const z of [-.9, -.3]) parts.push(cube(.06, 1.5, .06, x, 0, z, post));
+  const post = "#ff7655", deck = "#ffd54f", ladder = "#28a9cb", parts: THREE.BufferGeometry[] = [];
+  for (const x of [-.3, .3]) for (const z of [-.9, -.3]) parts.push(cube(.075, 1.5, .075, x, 0, z, post), ball(.055, x, 1.5, z, deck));
   parts.push(cube(.7, .06, .7, 0, .88, -.6, deck), paint(new THREE.ConeGeometry(.52, .35, 4, 1).rotateY(Math.PI / 4).translate(0, 1.67, -.6), ladder));
   for (const x of [-.18, .18]) parts.push(bar([x, 0, -1.2], [x, .92, -.95], .025, ladder, 5));
   for (let k = 1; k <= 4; k++) { const t = k / 5; parts.push(bar([-.18, .92 * t, -1.2 + .25 * t], [.18, .92 * t, -1.2 + .25 * t], .02, ladder, 4)); }
@@ -79,8 +87,8 @@ function slide() {
 
 /** Two swings under a bar on A-frames, swinging along z. */
 function swings() {
-  const frame = "#11799d", seat = "#df4937", rope = "#5a5f68", parts: THREE.BufferGeometry[] = [];
-  for (const x of [-.85, .85]) for (const z of [-.38, .38]) parts.push(bar([x, 0, z], [x, 1.3, 0], .035, frame));
+  const frame = "#22a9bd", seat = "#fa7756", rope = "#5a5f68", parts: THREE.BufferGeometry[] = [];
+  for (const x of [-.85, .85]) { for (const z of [-.38, .38]) parts.push(bar([x, 0, z], [x, 1.3, 0], .044, frame)); parts.push(ball(.06, x, 1.3, 0, seat)); }
   parts.push(bar([-.9, 1.3, 0], [.9, 1.3, 0], .04, frame));
   for (const x of [-.4, .4]) {
     for (const dx of [-.13, .13]) parts.push(bar([x + dx, 1.3, 0], [x + dx, .4, 0], .01, rope, 3));
@@ -94,21 +102,21 @@ function swings() {
 
 /** A climbing frame: a cube of bars 1.2 wide with a ladder of rungs and a yellow top. */
 function climber() {
-  const green = "#12865e", parts: THREE.BufferGeometry[] = [];
-  for (const x of [-.6, .6]) for (const z of [-.6, .6]) parts.push(bar([x, 0, z], [x, 1, z], .03, green));
+  const green = "#35b782", parts: THREE.BufferGeometry[] = [];
+  for (const x of [-.6, .6]) for (const z of [-.6, .6]) parts.push(bar([x, 0, z], [x, 1, z], .038, green), ball(.052, x, 1, z, "#ffda62"));
   for (const y of [.5, 1]) for (const [a, b] of [[[-.6, y, -.6], [.6, y, -.6]], [[-.6, y, .6], [.6, y, .6]], [[-.6, y, -.6], [-.6, y, .6]], [[.6, y, -.6], [.6, y, .6]]] as [Vec, Vec][]) parts.push(bar(a, b, .025, green));
-  for (let k = -2; k <= 2; k++) parts.push(bar([k * .24, 1, -.6], [k * .24, 1, .6], .02, "#f4be25", 4));
-  parts.push(cube(.5, .05, .5, -.3, .5, -.3, "#f4be25"));
-  for (const y of [.22, .45, .7]) parts.push(bar([-.6, y, -.6], [.6, y, -.6], .018, "#eab62e", 5));
+  for (let k = -2; k <= 2; k++) parts.push(bar([k * .24, 1, -.6], [k * .24, 1, .6], .02, "#ffda62", 4));
+  parts.push(cube(.5, .05, .5, -.3, .5, -.3, "#ffda62"));
+  for (const y of [.22, .45, .7]) parts.push(bar([-.6, y, -.6], [.6, y, -.6], .018, "#ffc958", 5));
   for (const x of [-.6, .6]) for (const z of [-.6, .6]) parts.push(cube(.08, .025, .08, x, 0, z, IRON));
   return merge(parts);
 }
 
 /** A sandbox with a wooden edge and the classic mushroom sunshade in a corner. */
 function sandbox() {
-  const edge = "#b87a3a", parts = [cube(1.3, .06, 1.3, 0, 0, 0, "#f1d99d")];
+  const edge = "#e4a557", parts = [cube(1.3, .06, 1.3, 0, 0, 0, "#f1d99d")];
   for (const s of [-1, 1]) parts.push(cube(1.3, .14, .1, 0, 0, s * .6, edge), cube(.1, .14, 1.1, s * .6, 0, 0, edge));
-  parts.push(bar([.45, 0, .45], [.45, 1.05, .45], .035, WHITE), paint(new THREE.ConeGeometry(.5, .28, 10, 1).translate(.45, 1.15, .45), "#e5583c"));
+  parts.push(bar([.45, 0, .45], [.45, 1.05, .45], .035, WHITE), paint(new THREE.SphereGeometry(.5, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, .56, 1).translate(.45, 1.01, .45), "#ff8661"), paint(new THREE.CylinderGeometry(.5, .5, .028, 8).translate(.45, 1.01, .45), "#fff4d9"));
   for (const x of [-.54, .54]) for (const z of [-.54, .54]) parts.push(cube(.22, .035, .22, x, .14, z, WOOD));
   for (const x of [-.59, .59]) for (const z of [-.5, .5]) parts.push(paint(new THREE.CylinderGeometry(.012, .012, .004, 5).translate(x, .179, z), IRON));
   return merge(parts);
@@ -140,7 +148,7 @@ function hoop() {
 
 /** A six-sided gazebo 2.3 across with a low rail, a wooden floor and a brown roof. */
 function gazebo() {
-  const parts = [paint(new THREE.CylinderGeometry(1.12, 1.12, .12, 6).translate(0, .06, 0), "#cdb89a")];
+  const parts = [paint(new THREE.CylinderGeometry(1.12, 1.12, .12, 6).translate(0, .06, 0), "#f5d3a0")];
   for (let k = 0; k < 6; k++) {
     const a = k / 6 * Math.PI * 2, b = (k + 1) / 6 * Math.PI * 2, x = Math.cos(a) * .98, z = Math.sin(a) * .98;
     parts.push(bar([x, .12, z], [x, 1.25, z], .045, WHITE));
@@ -149,19 +157,19 @@ function gazebo() {
     const nx = Math.cos(b) * .98, nz = Math.sin(b) * .98;
     if (k !== 1) for (const t of [.25, .5, .75]) parts.push(bar([x + (nx - x) * t, .15, z + (nz - z) * t], [x + (nx - x) * t, .49, z + (nz - z) * t], .014, WHITE, 4));
     parts.push(bar([x, .95, z], [x * .72, 1.23, z * .72], .025, WOOD, 5));
-    parts.push(bar([x * 1.4, 1.24, z * 1.4], [0, 1.87, 0], .012, "#6e5541", 4));
+    parts.push(bar([x * 1.4, 1.24, z * 1.4], [0, 1.87, 0], .012, "#b95c3c", 4));
   }
-  for (let k = -4; k <= 4; k++) { const x = k * .2, length = Math.sqrt(Math.max(0, 1.02 ** 2 - x * x)) * 1.65; parts.push(cube(.185, .018, length, x, .118, 0, k % 2 ? "#c18b49" : "#d0a363")); }
-  parts.push(paint(new THREE.ConeGeometry(1.4, .65, 6, 1).translate(0, 1.55, 0), "#ad4d27"), paint(new THREE.CylinderGeometry(1.42, 1.42, .06, 6).translate(0, 1.22, 0), "#823d25"));
+  for (let k = -4; k <= 4; k++) { const x = k * .2, length = Math.sqrt(Math.max(0, 1.02 ** 2 - x * x)) * 1.65; parts.push(cube(.185, .018, length, x, .118, 0, k % 2 ? "#dfaa61" : "#f4c882")); }
+  parts.push(paint(new THREE.ConeGeometry(1.4, .65, 6, 1).translate(0, 1.55, 0), "#ec8054"), paint(new THREE.CylinderGeometry(1.42, 1.42, .06, 6).translate(0, 1.22, 0), "#b95c3c"));
   return merge(parts);
 }
 
 /** A round flower bed: a stone rim, soil, a clipped shrub in the middle and flowers round it. */
 function flowerbed(detail: boolean) {
-  const parts = [paint(new THREE.CylinderGeometry(.56, .58, .2, detail ? 16 : 8).translate(0, .1, 0), "#bdb5a5"), paint(new THREE.CylinderGeometry(.5, .5, .025, detail ? 16 : 8).translate(0, .21, 0), "#584b3b"),
-    foliageGeometry([0, .36, 0], [.2, .2, .2], "#489951", 5, detail ? 1 : 0)];
+  const parts = [paint(new THREE.CylinderGeometry(.56, .58, .2, detail ? 16 : 8).translate(0, .1, 0), "#f0caa1"), paint(new THREE.CylinderGeometry(.5, .5, .025, detail ? 16 : 8).translate(0, .21, 0), "#584b3b"),
+    foliageGeometry([0, .36, 0], [.2, .2, .2], "#66c556", 5, detail ? 1 : 0)];
   if (detail) {
-    const colours = ["#eb3d78", "#ffc629", "#9b58d4", "#f57437", "#ffffff"];
+    const colours = ["#fc6c9b", "#ffc629", "#ad78ec", "#ff9954", "#ffffff"];
     for (let k = 0; k < 12; k++) { const a = k / 12 * Math.PI * 2, r = k % 2 ? .36 : .27, x = Math.cos(a) * r, z = Math.sin(a) * r; parts.push(bar([x, .22, z], [x, .31, z], .008, "#3c9951", 4), ball(.05, x, .32, z, colours[k % colours.length])); }
   }
   return merge(parts);
@@ -169,37 +177,37 @@ function flowerbed(detail: boolean) {
 
 /** A rounded shrub; copies get shades of green. */
 const bush = (detail: boolean) => merge([
-  foliageGeometry([-.12, .23, -.06], [.25, .24, .27], "#47964f", 3, detail ? 1 : 0),
-  foliageGeometry([.16, .24, .06], [.25, .25, .24], "#60ac5a", 7, detail ? 1 : 0),
-  foliageGeometry([.01, .36, -.03], [.27, .2, .25], "#76b966", 11, detail ? 1 : 0),
+  foliageGeometry([-.12, .23, -.06], [.25, .24, .27], "#3dbb67", 3, detail ? 1 : 0),
+  foliageGeometry([.16, .24, .06], [.25, .25, .24], "#71d15a", 7, detail ? 1 : 0),
+  foliageGeometry([.01, .36, -.03], [.27, .2, .25], "#a0dd63", 11, detail ? 1 : 0),
 ]);
 
 /** A clipped hedge piece 1.05 long (pieces stand end to end along a path), with a lighter top. */
-const hedge = () => merge(Array.from({ length: 6 }, (_, i) => foliageGeometry([-.43 + i * .172, .18 + (i % 2) * .025, 0], [.18, .18, .17], i % 2 ? "#459c56" : "#60ad60", 13 + i, 0)));
+const hedge = () => merge(Array.from({ length: 6 }, (_, i) => foliageGeometry([-.43 + i * .172, .18 + (i % 2) * .025, 0], [.18, .18, .17], i % 2 ? "#45bf6b" : "#79d36b", 13 + i, 0)));
 
 /** A young tree in a square concrete planter, for the paving round the complexes. */
 function planter(detail: boolean) {
-  const parts = [cube(.5, .26, .5, 0, 0, 0, "#d3b681"), cube(.44, .025, .44, 0, .26, 0, "#5f4a3a"), paint(new THREE.CylinderGeometry(.027, .04, .62, 7).translate(0, .6, 0), "#7b5a44")];
-  for (const side of [-1, 1]) parts.push(cube(.5, .045, .04, 0, .26, side * .23, "#ead0a0"), cube(.04, .045, .42, side * .23, .26, 0, "#ead0a0"));
+  const parts = [cube(.5, .26, .5, 0, 0, 0, "#f2c88e"), cube(.44, .025, .44, 0, .26, 0, "#5f4a3a"), paint(new THREE.CylinderGeometry(.027, .04, .62, 7).translate(0, .6, 0), "#7b5a44")];
+  for (const side of [-1, 1]) parts.push(cube(.5, .045, .04, 0, .26, side * .23, "#fff2cd"), cube(.04, .045, .42, side * .23, .26, 0, "#fff2cd"));
   parts.push(bar([0, .65, 0], [-.13, 1.05, .04], .018, "#7b5a44"), bar([0, .77, 0], [.14, 1.16, -.04], .015, "#7b5a44"));
-  parts.push(foliageGeometry([-.1, 1.02, .03], [.23, .25, .24], "#529f55", 17, detail ? 1 : 0), foliageGeometry([.12, 1.15, -.02], [.23, .25, .22], "#85c26d", 19, detail ? 1 : 0));
+  parts.push(foliageGeometry([-.1, 1.02, .03], [.23, .25, .24], "#5cc75d", 17, detail ? 1 : 0), foliageGeometry([.12, 1.15, -.02], [.23, .25, .22], "#a2df63", 19, detail ? 1 : 0));
   return merge(parts);
 }
 
 /** A round fountain: a stone basin with water, a column with a bowl, and jets of spray. */
 function fountain(detail: boolean) {
-  const sides = detail ? 20 : 10, profile = [[.84, .02], [1, .02], [.98, .25], [.94, .32], [.84, .32], [.84, .02]].map(([x, y]) => new THREE.Vector2(x, y));
+  const sides = detail ? 20 : 10, profile = [[.84, .02], [.93, .02], [1, .09], [1, .22], [.95, .31], [.90, .34], [.84, .3], [.84, .02]].map(([x, y]) => new THREE.Vector2(x, y));
   const parts = [
-    paint(new THREE.LatheGeometry(profile, sides), "#d2c8b4"),
+    paint(new THREE.LatheGeometry(profile, sides), "#f2d2ac"),
     paint(new THREE.CylinderGeometry(.835, .835, .018, sides).translate(0, .265, 0), "#20afcf"),
-    paint(new THREE.CylinderGeometry(.11, .16, .62, 10).translate(0, .58, 0), "#d0c9bc"),
-    paint(new THREE.LatheGeometry([[.09, .83], [.26, .85], [.38, .95], [.37, .99], [.25, .91], [.09, .9]].map(([x, y]) => new THREE.Vector2(x, y)), 12), "#d8d2c6"),
+    paint(new THREE.CylinderGeometry(.11, .16, .62, 10).translate(0, .58, 0), "#ffe4bd"),
+    paint(new THREE.LatheGeometry([[.09, .83], [.26, .85], [.38, .95], [.37, .99], [.25, .91], [.09, .9]].map(([x, y]) => new THREE.Vector2(x, y)), 12), "#ffe8ca"),
     paint(new THREE.CylinderGeometry(.018, .035, .44, 6).translate(0, 1.21, 0), "#e3f2fa"), ball(.035, 0, 1.44, 0, "#e3f2fa"),
   ];
   if (detail) for (let k = 0; k < 6; k++) {
     const a = k / 6 * Math.PI * 2, x = Math.cos(a), z = Math.sin(a);
     const curve = new THREE.QuadraticBezierCurve3(new THREE.Vector3(x * .22, .94, z * .22), new THREE.Vector3(x * .48, 1.15, z * .48), new THREE.Vector3(x * .67, .28, z * .67));
-    parts.push(paint(new THREE.TubeGeometry(curve, 5, .012, 4, false), "#dcedf6"));
+    parts.push(paint(new THREE.TubeGeometry(curve, 5, .018, 4, false), "#dcedf6"));
   }
   return merge(parts);
 }

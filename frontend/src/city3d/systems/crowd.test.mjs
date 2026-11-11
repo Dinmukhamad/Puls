@@ -78,7 +78,7 @@ test('authored residents keep the walking rig, modest near budget and determinis
   assert.ok(Math.min(...shade.array) < .55, 'soles and collar carry their own contact shade in the single mesh');
   const headX = [];
   for (let i = 0; i < part.count; i++) if (part.getX(i) === 0 && part.getY(i) === 1 && position.getY(i) > 1.38) headX.push(position.getX(i));
-  assert.ok(Math.max(...headX) - Math.min(...headX) < .24, 'adult head proportions replace the oversized spherical head');
+  assert.ok(Math.max(...headX) - Math.min(...headX) > .25 && Math.max(...headX) - Math.min(...headX) < .32, 'rounded cartoon head stays proportionate to the body and walking clearance');
   for (const attribute of Object.values(body.attributes)) assert.ok(Array.from(attribute.array).every(Number.isFinite), 'all animated attributes stay finite');
   // Stable phases and model-specific palette codes follow the actor when its geometry LOD changes.
   for (const actor of [0, 1, 7, 23]) {

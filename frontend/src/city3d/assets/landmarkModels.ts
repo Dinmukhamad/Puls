@@ -23,7 +23,7 @@ type Kit = LandmarkKit;
 type Model = (k: Kit, level: number) => void;
 
 /** The districts' own colours (as on the map's district shields): flags, awnings, stripes. */
-const ACCENT = { academy: '#5b8def', driver: '#f0a23a', crm: '#7b5cff', dispatch: '#35b6a6', oktell: '#e86aa6', scenarios: '#6fa8c7', voice: '#4fae7a' };
+const ACCENT = { academy: '#4d9df5', driver: '#ffb63c', crm: '#9870eb', dispatch: '#29bfb2', oktell: '#f47eb4', scenarios: '#35a8d0', voice: '#43bc80' };
 
 /** A column h tall on y0: a square base, a round shaft of radius r narrowing a little, a capital. */
 function column(k: Kit, x: number, z: number, y0: number, h: number, r = .09, c: string = C.ivory) {
@@ -58,13 +58,13 @@ function glassFloors(k: Kit, w: number, d: number, x: number, z: number, y0: num
 function piers(k: Kit, w: number, d: number, x: number, z: number, y0: number, h: number, c: string = C.ivory) {
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) k.block(.14, h, .14, c, x + sx * (w / 2 - .04), y0, z + sz * (d / 2 - .04), { r: .02 });
 }
-/** A clock face on the front at (x, y, z): dial, gold rim, hour marks and hands. */
+/** A toy clock: a large cream dial, a gold rim, four bold hour marks and readable hands. */
 function clock(k: Kit, x: number, y: number, z: number, r = .24) {
   k.disc(r, .05, C.ivory, x, y, z, 24);
-  k.torus(r, .025, C.gold, x, y, z + .03, { front: true, seg: 24 });
-  for (let i = 0; i < 12; i++) { const a = i * Math.PI / 6, size = i % 3 ? .017 : .03; k.box(size, size, .02, C.ink, x + Math.sin(a) * r * .78, y + Math.cos(a) * r * .78, z + .035, { r: 0 }); }
-  k.box(.025, r * .75, .02, C.ink, x, y + r * .3, z + .045, { r: 0 });
-  k.box(r * .6, .025, .02, C.ink, x + r * .25, y, z + .045, { r: 0 });
+  k.torus(r, .032, C.gold, x, y, z + .03, { front: true, seg: 24 });
+  for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2; k.box(.045, .045, .02, C.ink, x + Math.sin(a) * r * .72, y + Math.cos(a) * r * .72, z + .035, { r: 0 }); }
+  k.box(.037, r * .75, .02, C.ink, x, y + r * .3, z + .045, { r: 0 });
+  k.box(r * .6, .037, .02, C.ink, x + r * .25, y, z + .045, { r: 0 });
 }
 /** A row of trees along x at z. */
 const trees = (k: Kit, xs: readonly number[], z: number, s = .8) => xs.forEach((x, i) => k.tree(x, z, s * (i % 2 ? .9 : 1)));
